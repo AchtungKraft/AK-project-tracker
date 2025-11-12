@@ -71,16 +71,28 @@ export default function ProjectKanban({ projectId }) {
   });
 
   const handleToggleComplete = (task) => {
-    const completedStatus = taskStatuses.find(s => s.label.toLowerCase().includes('complete'));
-    const todoStatus = taskStatuses.find(s => s.label.toLowerCase().includes('to do') || s.label.toLowerCase() === 'todo');
+    // Look for completed status - try multiple patterns
+    const completedStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes('complete') || label.includes('done') || label === 'completed' || label === 'done';
+    });
+    
+    const todoStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes('to do') || label === 'todo' || label === 'to-do';
+    });
     
     if (!completedStatus) {
-      toast.error('No "Completed" status found. Please create a status with "Complete" in the name.');
+      toast.error('No completed status found. Please create a status like "Done" or "Completed".');
       return;
     }
 
     const currentStatus = statuses.find(s => s.id === task.status_id);
-    const isCurrentlyCompleted = currentStatus?.label?.toLowerCase().includes('complete');
+    const isCurrentlyCompleted = currentStatus && (
+      currentStatus.label.toLowerCase().includes('complete') || 
+      currentStatus.label.toLowerCase().includes('done') ||
+      currentStatus.id === completedStatus.id
+    );
     
     const newStatusId = isCurrentlyCompleted ? (todoStatus?.id || taskStatuses[0]?.id) : completedStatus.id;
     

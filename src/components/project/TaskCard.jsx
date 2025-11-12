@@ -23,7 +23,10 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
   const categoryColor = category?.color;
   
   const taskStatus = statuses.find(s => s.id === task.status_id);
-  const isCompleted = taskStatus?.label?.toLowerCase().includes('complete');
+  const isCompleted = taskStatus && (
+    taskStatus.label.toLowerCase().includes('complete') || 
+    taskStatus.label.toLowerCase().includes('done')
+  );
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
