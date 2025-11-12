@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,8 +31,8 @@ export default function StatusListConfig() {
     },
   });
 
-  const projectStatuses = statuses.filter(s => s.scope === 'Project');
-  const taskStatuses = statuses.filter(s => s.scope === 'Task');
+  const projectStatuses = useMemo(() => statuses.filter(s => s.scope === 'Project'), [statuses]);
+  const taskStatuses = useMemo(() => statuses.filter(s => s.scope === 'Task'), [statuses]);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.StatusList.create(data),
