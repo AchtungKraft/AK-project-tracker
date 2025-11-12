@@ -94,15 +94,17 @@ export default function MyTasks() {
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
-  // Separate active and completed tasks
+  // Find completed status
   const completedStatus = taskStatuses.find(s => {
     const label = s.label.toLowerCase();
     return label.includes('complete') || label.includes('done');
   });
 
+  // Separate active and completed tasks
   const activeTasks = tasks.filter(t => t.status_id !== completedStatus?.id);
   const completedTasks = tasks.filter(t => t.status_id === completedStatus?.id);
 
+  // Filter active tasks
   const filteredActiveTasks = activeTasks.filter(t => {
     const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          t.description?.toLowerCase().includes(searchTerm.toLowerCase());
