@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Calendar, Filter } from "lucide-react";
+import { Search, Calendar, Filter, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
@@ -94,7 +94,16 @@ export default function MyTasks() {
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
-  const filteredTasks = tasks.filter(t => {
+  // Separate active and completed tasks
+  const completedStatus = taskStatuses.find(s => {
+    const label = s.label.toLowerCase();
+    return label.includes('complete') || label.includes('done');
+  });
+
+  const activeTasks = tasks.filter(t => t.status_id !== completedStatus?.id);
+  const completedTasks = tasks.filter(t => t.status_id === completedStatus?.id);
+
+  const filteredActiveTasks = activeTasks.filter(t => {
     const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          t.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesProject = projectFilter === 'all' || t.project_id === projectFilter;
@@ -105,8 +114,18 @@ export default function MyTasks() {
     return matchesSearch && matchesProject && matchesStatus && matchesCategory && matchesAssigned;
   });
 
-  const groupedTasks = {};
-  filteredTasks.forEach(task => {
+  const filteredCompletedTasks = completedTasks.filter(t => {
+    const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         t.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesProject = projectFilter === 'all' || t.project_id === projectFilter;
+    const matchesCategory = categoryFilter === 'all' || t.category_id === categoryFilter;
+    const matchesAssigned = assignedFilter === 'all' || t.assigned_team_member_id === assignedFilter;
+    
+    return matchesSearch && matchesProject && matchesCategory && matchesAssigned;
+  });
+
+  const groupedActiveTasks = {};
+  filteredActiveTasks.forEach(task => {
     let groupKey = 'Ungrouped';
     let groupColor = '#6B7280';
     
@@ -126,10 +145,37 @@ export default function MyTasks() {
       groupColor = category?.color || '#6B7280';
     }
     
-    if (!groupedTasks[groupKey]) {
-      groupedTasks[groupKey] = { tasks: [], color: groupColor };
+    if (!groupedActiveTasks[groupKey]) {
+      groupedActiveTasks[groupKey] = { tasks: [], color: groupColor };
     }
-    groupedTasks[groupKey].tasks.push(task);
+    groupedActiveTasks[groupKey].tasks.push(task);
+  });
+
+  const groupedCompletedTasks = {};
+  filteredCompletedTasks.forEach(task => {
+    let groupKey = 'Ungrouped';
+    let groupColor = '#6B7280';
+    
+    if (groupBy === 'status') {
+      const status = statuses.find(s => s.id === task.status_id);
+      groupKey = status?.label || 'No Status';
+      groupColor = status?.color || '#6B7280';
+    } else if (groupBy === 'project') {
+      const project = projects.find(p => p.id === task.project_id);
+      groupKey = project?.name || 'No Project';
+    } else if (groupBy === 'assigned') {
+      const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+      groupKey = member?.full_name || 'Unassigned';
+    } else if (groupBy === 'category') {
+      const category = categories.find(c => c.id === task.category_id);
+      groupKey = getCategoryPath(task.category_id, categories) || 'No Category';
+      groupColor = category?.color || '#6B7280';
+    }
+    
+    if (!groupedCompletedTasks[groupKey]) {
+      groupedCompletedTasks[groupKey] = { tasks: [], color: groupColor };
+    }
+    groupedCompletedTasks[groupKey].tasks.push(task);
   });
 
   const getTaskProject = (taskProjectId) => {
@@ -278,23 +324,23 @@ export default function MyTasks() {
             </CardContent>
           </Card>
 
-          {/* Tasks Table */}
+          {/* Active Tasks Table */}
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
             <CardHeader className="border-b border-red-900/30 p-4">
               <CardTitle className="text-white text-base">
-                Tasks ({filteredTasks.length})
+                Active Tasks ({filteredActiveTasks.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {tasksLoading ? (
                 <div className="p-4 text-center text-gray-500 text-sm">Loading tasks...</div>
-              ) : filteredTasks.length === 0 ? (
+              ) : filteredActiveTasks.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-sm">
-                  No tasks found matching your filters.
+                  No active tasks found matching your filters.
                 </div>
               ) : (
                 <div className="divide-y divide-red-900/10">
-                  {Object.entries(groupedTasks).map(([groupLabel, groupData]) => {
+                  {Object.entries(groupedActiveTasks).map(([groupLabel, groupData]) => {
                     const { tasks: groupTasks, color: groupColor } = groupData;
                     
                     return (
@@ -386,6 +432,130 @@ export default function MyTasks() {
                                       <span className={`text-sm ${isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}`}>
                                         <Calendar className="w-3 h-3 inline mr-1" />
                                         {format(new Date(task.due_date), 'MMM d')}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-600 text-sm">-</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Completed Tasks Section */}
+          <Card className="bg-black/40 backdrop-blur-xl border border-green-900/30">
+            <CardHeader className="border-b border-green-900/30 p-4">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-400" />
+                Completed Tasks ({filteredCompletedTasks.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {filteredCompletedTasks.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">
+                  No completed tasks found matching your filters.
+                </div>
+              ) : (
+                <div className="divide-y divide-green-900/10">
+                  {Object.entries(groupedCompletedTasks).map(([groupLabel, groupData]) => {
+                    const { tasks: groupTasks, color: groupColor } = groupData;
+                    
+                    return (
+                      <div key={groupLabel}>
+                        <div 
+                          className="px-4 py-2 bg-gray-900/50 border-l-4 border-b-2"
+                          style={{ 
+                            borderLeftColor: groupColor,
+                            borderBottomColor: groupColor
+                          }}
+                        >
+                          <span 
+                            className="text-sm font-medium"
+                            style={{ color: groupColor }}
+                          >
+                            {groupLabel} ({groupTasks.length})
+                          </span>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-b border-green-900/20 hover:bg-transparent">
+                              <TableHead className="text-gray-400 text-xs py-2">Task</TableHead>
+                              <TableHead className="text-gray-400 text-xs py-2 hidden md:table-cell">Project</TableHead>
+                              {groupBy !== 'status' && (
+                                <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Status</TableHead>
+                              )}
+                              {groupBy !== 'category' && (
+                                <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Category</TableHead>
+                              )}
+                              {groupBy !== 'assigned' && (
+                                <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Assigned</TableHead>
+                              )}
+                              <TableHead className="text-gray-400 text-xs py-2">Completed</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {groupTasks.map(task => {
+                              const taskStatus = getTaskStatus(task.status_id);
+                              const categoryColor = getTaskCategoryColor(task.category_id);
+                              
+                              return (
+                                <TableRow 
+                                  key={task.id}
+                                  onClick={() => setSelectedTask(task)}
+                                  className="border-b border-green-900/10 hover:bg-green-950/20 transition-colors cursor-pointer"
+                                >
+                                  <TableCell className="font-medium text-white text-sm py-2 line-through opacity-70">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help">{task.name}</span>
+                                      </TooltipTrigger>
+                                      {task.description && (
+                                        <TooltipContent side="right" className="max-w-md bg-gray-800 border-gray-700">
+                                          <p className="text-sm whitespace-pre-wrap">{task.description}</p>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell className="text-gray-300 text-sm hidden md:table-cell py-2">
+                                    {getTaskProject(task.project_id)}
+                                  </TableCell>
+                                  {groupBy !== 'status' && (
+                                    <TableCell className="hidden lg:table-cell py-2">
+                                      {taskStatus && (
+                                        <Badge 
+                                          style={{ backgroundColor: taskStatus.color }}
+                                          className="text-white text-xs"
+                                        >
+                                          {taskStatus.label}
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {groupBy !== 'category' && (
+                                    <TableCell className="text-sm hidden lg:table-cell py-2">
+                                      <span style={{ color: categoryColor || '#D1D5DB' }}>
+                                        {getTaskCategory(task.category_id)}
+                                      </span>
+                                    </TableCell>
+                                  )}
+                                  {groupBy !== 'assigned' && (
+                                    <TableCell className="text-gray-300 text-sm hidden xl:table-cell py-2">
+                                      {getTaskAssigned(task.assigned_team_member_id)}
+                                    </TableCell>
+                                  )}
+                                  <TableCell className="py-2">
+                                    {task.completed_date ? (
+                                      <span className="text-sm text-green-400">
+                                        <Calendar className="w-3 h-3 inline mr-1" />
+                                        {format(new Date(task.completed_date), 'MMM d')}
                                       </span>
                                     ) : (
                                       <span className="text-gray-600 text-sm">-</span>

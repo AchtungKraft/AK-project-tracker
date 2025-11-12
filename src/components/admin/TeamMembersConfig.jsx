@@ -15,20 +15,24 @@ export default function TeamMembersConfig() {
     team_role: "",
     email: "",
     phone: "",
+    sort_order: 0,
   });
   const [editing, setEditing] = useState(null);
   const [editData, setEditData] = useState({});
 
   const { data: teamMembers = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
+    queryFn: async () => {
+      const members = await base44.entities.TeamMember.list();
+      return members.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.TeamMember.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
-      setNewMember({ full_name: "", team_role: "", email: "", phone: "" });
+      setNewMember({ full_name: "", team_role: "", email: "", phone: "", sort_order: 0 });
       toast.success('Team member added');
     },
   });
@@ -134,6 +138,16 @@ export default function TeamMembersConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+            <div>
+              <Label className="text-gray-400">Sort Order</Label>
+              <Input
+                type="number"
+                value={newMember.sort_order}
+                onChange={(e) => setNewMember({ ...newMember, sort_order: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
           </div>
           <Button 
             type="submit" 
@@ -170,7 +184,7 @@ export default function TeamMembersConfig() {
               >
                 {editing === member.id ? (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2 flex-1">
                       <Input
                         value={editData.full_name}
                         onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
@@ -193,6 +207,13 @@ export default function TeamMembersConfig() {
                         onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
                         className="bg-gray-800 border-gray-700 text-white"
                         placeholder="Phone"
+                      />
+                      <Input
+                        type="number"
+                        value={editData.sort_order || 0}
+                        onChange={(e) => setEditData({ ...editData, sort_order: parseInt(e.target.value) || 0 })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Sort"
                       />
                     </div>
                     <Button
@@ -226,6 +247,7 @@ export default function TeamMembersConfig() {
                       <div className="flex gap-3 text-sm text-gray-500 mt-1">
                         {member.email && <span>{member.email}</span>}
                         {member.phone && <span>{member.phone}</span>}
+                        <span className="text-xs">• Order: {member.sort_order || 0}</span>
                       </div>
                     </div>
                     <Button
