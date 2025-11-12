@@ -63,6 +63,41 @@ export default function TaskCategoriesConfig() {
     handleUpdate(category.id, { active: !category.active });
   };
 
+  const handleReorder = async (parentId, sourceIndex, destIndex) => {
+    const itemsToReorder = parentId 
+      ? categories.filter(c => c.parent_id === parentId)
+      : categories.filter(c => !c.parent_id);
+
+    const reordered = Array.from(itemsToReorder);
+    const [removed] = reordered.splice(sourceIndex, 1);
+    reordered.splice(destIndex, 0, removed);
+
+    // Update sort_order
+    const updates = reordered.map((item, index) => ({
+      id: item.id,
+      data: { ...item, sort_order: index }
+    }));
+
+    // Optimistically update
+    const allCategories = [...categories];
+    updates.forEach(update => {
+      const idx = allCategories.findIndex(c => c.id === update.id);
+      if (idx !== -1) {
+        allCategories[idx] = { ...allCategories[idx], sort_order: update.data.sort_order };
+      }
+    });
+    queryClient.setQueryData(['taskCategories'], allCategories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+
+    // Send to server
+    try {
+      await Promise.all(updates.map(u => base44.entities.TaskCategory.update(u.id, u.data)));
+      toast.success('Order updated');
+    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['taskCategories'] });
+      toast.error('Failed to update order');
+    }
+  };
+
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
@@ -125,6 +160,7 @@ export default function TaskCategoriesConfig() {
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onToggleActive={handleToggleActive}
+            onReorder={handleReorder}
             entityName="Task Category"
             showColor={true}
           />

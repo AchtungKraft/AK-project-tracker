@@ -66,6 +66,41 @@ export default function ProjectTypesConfig() {
     handleUpdate(type.id, { active: !type.active });
   };
 
+  const handleReorder = async (parentId, sourceIndex, destIndex) => {
+    const itemsToReorder = parentId 
+      ? types.filter(t => t.parent_id === parentId)
+      : types.filter(t => !t.parent_id);
+
+    const reordered = Array.from(itemsToReorder);
+    const [removed] = reordered.splice(sourceIndex, 1);
+    reordered.splice(destIndex, 0, removed);
+
+    // Update sort_order
+    const updates = reordered.map((item, index) => ({
+      id: item.id,
+      data: { ...item, sort_order: index }
+    }));
+
+    // Optimistically update
+    const allTypes = [...types];
+    updates.forEach(update => {
+      const idx = allTypes.findIndex(t => t.id === update.id);
+      if (idx !== -1) {
+        allTypes[idx] = { ...allTypes[idx], sort_order: update.data.sort_order };
+      }
+    });
+    queryClient.setQueryData(['projectTypes'], allTypes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+
+    // Send to server
+    try {
+      await Promise.all(updates.map(u => base44.entities.ProjectType.update(u.id, u.data)));
+      toast.success('Order updated');
+    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['projectTypes'] });
+      toast.error('Failed to update order');
+    }
+  };
+
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
@@ -128,6 +163,7 @@ export default function ProjectTypesConfig() {
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onToggleActive={handleToggleActive}
+            onReorder={handleReorder}
             entityName="Project Type"
             showColor={true}
           />
