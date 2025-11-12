@@ -28,31 +28,31 @@ export default function ProjectDetail() {
     queryKey: ['project', projectId],
     queryFn: () => base44.entities.Project.filter({ id: projectId }),
     select: (data) => data[0],
-    enabled: !!projectId,
+    enabled: !!projectId
   });
 
   if (!projectId) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         No project ID provided
-      </div>
-    );
+      </div>);
+
   }
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         Loading...
-      </div>
-    );
+      </div>);
+
   }
 
   if (!project) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         Project not found
-      </div>
-    );
+      </div>);
+
   }
 
   return (
@@ -63,8 +63,8 @@ export default function ProjectDetail() {
             variant="outline"
             size="icon"
             onClick={() => navigate(createPageUrl("Dashboard"))}
-            className="border-gray-700 text-white"
-          >
+            className="border-gray-700 text-white">
+
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
@@ -75,7 +75,7 @@ export default function ProjectDetail() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-gray-900/50 border border-red-900/30">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="overview" className="bg-transparent text-slate-400 px-3 py-1 text-sm font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow">Overview</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="parts">Parts</TabsTrigger>
             <TabsTrigger value="journal">Journal</TabsTrigger>
@@ -98,6 +98,6 @@ export default function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
-  );
+    </div>);
+
 }
