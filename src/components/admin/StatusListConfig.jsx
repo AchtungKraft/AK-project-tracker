@@ -135,7 +135,8 @@ export default function StatusListConfig() {
                   <Input
                     value={status.label}
                     onChange={(e) => {
-                      const updated = statuses.map(s => 
+                      const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                      const updated = currentStatuses.map(s => 
                         s.id === status.id ? { ...s, label: e.target.value } : s
                       );
                       queryClient.setQueryData(['statuses'], updated);
@@ -146,13 +147,13 @@ export default function StatusListConfig() {
                     type="color"
                     value={status.color}
                     onChange={(e) => {
-                      const updated = statuses.map(s => 
+                      const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                      const updated = currentStatuses.map(s => 
                         s.id === status.id ? { ...s, color: e.target.value } : s
                       );
                       queryClient.setQueryData(['statuses'], updated);
                     }}
                     className="w-12 h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
-                    placeholder="Sort"
                   />
                         </>
                       ) : (
