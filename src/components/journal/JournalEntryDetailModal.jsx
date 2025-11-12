@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,12 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Trash2, Upload, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import ImageModal from "../ui/ImageModal";
 
 export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     if (entry) {
@@ -86,124 +89,140 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold">
-            Journal Entry - {entry?.entry_date ? format(new Date(entry.entry_date), 'PPP') : 'Details'}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">
+              Journal Entry - {entry?.entry_date ? format(new Date(entry.entry_date), 'PPP') : 'Details'}
+            </DialogTitle>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div>
-            <Label>Entry Content</Label>
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="What happened today?"
-              className="bg-gray-800 border-gray-700 text-white min-h-[200px]"
-              required
-            />
-          </div>
-
-          <div>
-            <Label>Photos</Label>
-            <div className="mt-2">
-              <input
-                type="file"
-                id="photo-upload"
-                multiple
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="hidden"
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            <div>
+              <Label>Entry Content</Label>
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="What happened today?"
+                className="bg-gray-800 border-gray-700 text-white min-h-[200px]"
+                required
               />
-              <label htmlFor="photo-upload">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="cursor-pointer border-gray-700"
-                  disabled={uploading}
-                  onClick={() => document.getElementById('photo-upload').click()}
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Add Photos
-                    </>
-                  )}
-                </Button>
-              </label>
             </div>
 
-            {photos.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                {photos.map((url, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={url}
-                      alt={`Photo ${idx + 1}`}
-                      className="w-full h-32 object-cover rounded-lg border border-gray-700"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(url)}
-                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+            <div>
+              <Label>Photos</Label>
+              <div className="mt-2">
+                <input
+                  type="file"
+                  id="photo-upload"
+                  multiple
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+                <label htmlFor="photo-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cursor-pointer border-gray-700"
+                    disabled={uploading}
+                    onClick={() => document.getElementById('photo-upload').click()}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Add Photos
+                      </>
+                    )}
+                  </Button>
+                </label>
               </div>
-            )}
-          </div>
 
-          <div className="flex justify-between pt-4 border-t border-gray-700">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Entry
-                </>
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                  {photos.map((url, idx) => (
+                    <div key={idx} className="relative group">
+                      <div 
+                        className="w-full h-32 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
+                        onClick={() => setSelectedImage(url)}
+                      >
+                        <img
+                          src={url}
+                          alt={`Photo ${idx + 1}`}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemovePhoto(url);
+                        }}
+                        className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
-            </Button>
+            </div>
 
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                className="bg-red-600 hover:bg-red-700"
-                disabled={updateMutation.isPending}
+            <div className="flex justify-between pt-4 border-t border-gray-700">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
               >
-                {updateMutation.isPending ? (
+                {deleteMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    Deleting...
                   </>
                 ) : (
-                  'Save Changes'
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Entry
+                  </>
                 )}
               </Button>
+
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="bg-red-600 hover:bg-red-700"
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ImageModal
+        isOpen={!!selectedImage}
+        onClose={() => setSelectedImage(null)}
+        imageUrl={selectedImage}
+      />
+    </>
   );
 }
