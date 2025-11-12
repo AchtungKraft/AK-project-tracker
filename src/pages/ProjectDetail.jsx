@@ -16,6 +16,13 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('id');
+  const tabParam = urlParams.get('tab') || 'overview';
+  const [activeTab, setActiveTab] = useState(tabParam);
+
+  useEffect(() => {
+    const newTab = urlParams.get('tab') || 'overview';
+    setActiveTab(newTab);
+  }, [window.location.search]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -66,7 +73,7 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-gray-900/50 border border-red-900/30">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>

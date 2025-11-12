@@ -5,14 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Calendar, Upload, Loader2, X, Edit2, Check, Image as ImageIcon, FileText, Wrench } from "lucide-react";
+import { Upload, Loader2, X, Edit2, Check, Image as ImageIcon, FileText, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 
 export default function ProjectOverview({ project, projectId }) {
   const queryClient = useQueryClient();
@@ -51,11 +48,6 @@ export default function ProjectOverview({ project, projectId }) {
     queryFn: () => base44.entities.JournalEntry.filter({ project_id: projectId }),
   });
 
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
-  });
-
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
   const currentStatus = statuses.find(s => s.id === project?.status_id);
   const projectType = projectTypes.find(t => t.id === project?.project_type_id);
@@ -83,17 +75,21 @@ export default function ProjectOverview({ project, projectId }) {
     if (files.length === 0) return;
 
     setUploadingImages(true);
-    const uploadPromises = files.map(file => 
-      base44.integrations.Core.UploadFile({ file })
-    );
-
-    const results = await Promise.all(uploadPromises);
-    const imageUrls = results.map(r => r.file_url);
-    
-    updateMutation.mutate({
-      images: [...(project.images || []), ...imageUrls]
-    });
-    setUploadingImages(false);
+    try {
+      const uploadPromises = files.map(file => 
+        base44.integrations.Core.UploadFile({ file })
+      );
+      const results = await Promise.all(uploadPromises);
+      const imageUrls = results.map(r => r.file_url);
+      
+      await updateMutation.mutateAsync({
+        images: [...(project.images || []), ...imageUrls]
+      });
+    } catch (error) {
+      toast.error('Failed to upload images');
+    } finally {
+      setUploadingImages(false);
+    }
   };
 
   const handleRemoveImage = (urlToRemove) => {
@@ -107,18 +103,23 @@ export default function ProjectOverview({ project, projectId }) {
     if (!file) return;
 
     setUploadingAttachment(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    
-    const newAttachment = {
-      name: file.name,
-      url: file_url,
-      uploaded_date: new Date().toISOString(),
-    };
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      
+      const newAttachment = {
+        name: file.name,
+        url: file_url,
+        uploaded_date: new Date().toISOString(),
+      };
 
-    updateMutation.mutate({
-      attachments: [...(project.attachments || []), newAttachment]
-    });
-    setUploadingAttachment(false);
+      await updateMutation.mutateAsync({
+        attachments: [...(project.attachments || []), newAttachment]
+      });
+    } catch (error) {
+      toast.error('Failed to upload attachment');
+    } finally {
+      setUploadingAttachment(false);
+    }
   };
 
   const handleRemoveAttachment = (attachment) => {
@@ -129,6 +130,18 @@ export default function ProjectOverview({ project, projectId }) {
 
   const handleSaveChanges = () => {
     updateMutation.mutate(formData);
+  };
+
+  const handleViewAllTasks = () => {
+    const newUrl = `${window.location.pathname}?id=${projectId}&tab=tasks`;
+    window.history.pushState({}, '', newUrl);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  const handleViewAllJournal = () => {
+    const newUrl = `${window.location.pathname}?id=${projectId}&tab=journal`;
+    window.history.pushState({}, '', newUrl);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
   return (
@@ -353,11 +366,14 @@ export default function ProjectOverview({ project, projectId }) {
                 <Wrench className="w-5 h-5" />
                 Recent Tasks
               </CardTitle>
-              <Link to={createPageUrl(`ProjectDetail?id=${projectId}`)}>
-                <Button variant="ghost" size="sm" className="text-red-400">
-                  View All →
-                </Button>
-              </Link>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-red-400 hover:text-red-300"
+                onClick={handleViewAllTasks}
+              >
+                View All →
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-4">
@@ -366,7 +382,7 @@ export default function ProjectOverview({ project, projectId }) {
             ) : (
               <div className="space-y-2">
                 {recentTasks.map(task => (
-                  <div key={task.id} className="p-3 bg-gray-900/50 rounded-lg">
+                  <div key={task.id} className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer">
                     <p className="text-white text-sm">{task.name}</p>
                     {task.due_date && (
                       <p className="text-xs text-gray-500 mt-1">
@@ -388,11 +404,14 @@ export default function ProjectOverview({ project, projectId }) {
                 <FileText className="w-5 h-5" />
                 Recent Journal Entries
               </CardTitle>
-              <Link to={createPageUrl(`ProjectDetail?id=${projectId}`)}>
-                <Button variant="ghost" size="sm" className="text-red-400">
-                  View All →
-                </Button>
-              </Link>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-red-400 hover:text-red-300"
+                onClick={handleViewAllJournal}
+              >
+                View All →
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-4">
@@ -401,7 +420,7 @@ export default function ProjectOverview({ project, projectId }) {
             ) : (
               <div className="space-y-2">
                 {recentEntries.map(entry => (
-                  <div key={entry.id} className="p-3 bg-gray-900/50 rounded-lg">
+                  <div key={entry.id} className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer">
                     <p className="text-white text-sm line-clamp-2">{entry.content}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {format(new Date(entry.entry_date || entry.created_date), 'MMM d, yyyy')}
