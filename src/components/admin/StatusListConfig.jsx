@@ -71,7 +71,8 @@ export default function StatusListConfig() {
   const handleDragEnd = async (result, scope) => {
     if (!result.destination) return;
 
-    const items = scope === 'Project' ? projectStatuses : taskStatuses;
+    const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+    const items = currentStatuses.filter(s => s.scope === scope);
     const reordered = Array.from(items);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
@@ -83,7 +84,7 @@ export default function StatusListConfig() {
     }));
 
     // Optimistically update UI
-    const allStatuses = [...statuses];
+    const allStatuses = [...currentStatuses];
     updates.forEach(update => {
       const idx = allStatuses.findIndex(s => s.id === update.id);
       if (idx !== -1) {
