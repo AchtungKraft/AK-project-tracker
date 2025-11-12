@@ -5,8 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus, Trash2, Edit2, GripVertical, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -16,7 +14,6 @@ export default function ManageBucketsModal({ projectId, onClose }) {
   const [newBucket, setNewBucket] = useState({
     name: "",
     color: "#3B82F6",
-    associated_status_id: "",
     description: "",
   });
   const [editingId, setEditingId] = useState(null);
@@ -27,19 +24,13 @@ export default function ManageBucketsModal({ projectId, onClose }) {
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
   });
 
-  const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
-  });
-
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectKanbanBucket.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanbanBuckets', projectId] });
-      setNewBucket({ name: "", color: "#3B82F6", associated_status_id: "", description: "" });
+      setNewBucket({ name: "", color: "#3B82F6", description: "" });
       toast.success('Bucket created');
     },
   });
@@ -63,8 +54,8 @@ export default function ManageBucketsModal({ projectId, onClose }) {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    if (!newBucket.name.trim() || !newBucket.associated_status_id) {
-      toast.error('Name and status are required');
+    if (!newBucket.name.trim()) {
+      toast.error('Bucket name is required');
       return;
     }
     createMutation.mutate({
@@ -79,7 +70,7 @@ export default function ManageBucketsModal({ projectId, onClose }) {
   };
 
   const handleDelete = (id) => {
-    if (confirm('Delete this bucket? Tasks will not be deleted, just ungrouped.')) {
+    if (confirm('Delete this bucket? Tasks will move to Unassigned.')) {
       deleteMutation.mutate(id);
     }
   };
@@ -91,7 +82,6 @@ export default function ManageBucketsModal({ projectId, onClose }) {
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    // Update order for all buckets
     items.forEach((item, index) => {
       if (item.order !== index) {
         updateMutation.mutate({ id: item.id, data: { order: index } });
@@ -104,7 +94,6 @@ export default function ManageBucketsModal({ projectId, onClose }) {
     setEditingData({
       name: bucket.name,
       color: bucket.color,
-      associated_status_id: bucket.associated_status_id,
       description: bucket.description || "",
     });
   };
@@ -132,56 +121,30 @@ export default function ManageBucketsModal({ projectId, onClose }) {
                   />
                 </div>
                 <div>
-                  <Label className="text-gray-400 text-xs">Associated Status *</Label>
-                  <Select
-                    value={newBucket.associated_status_id}
-                    onValueChange={(value) => setNewBucket({ ...newBucket, associated_status_id: value })}
-                  >
-                    <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {taskStatuses.map(status => (
-                        <SelectItem key={status.id} value={status.id}>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: status.color }}
-                            />
-                            {status.label}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-gray-400 text-xs">Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={newBucket.color}
-                      onChange={(e) => setNewBucket({ ...newBucket, color: e.target.value })}
-                      className="bg-gray-900/50 border-gray-700 h-10 w-16 cursor-pointer"
-                    />
-                    <Input
-                      type="text"
-                      value={newBucket.color}
-                      onChange={(e) => setNewBucket({ ...newBucket, color: e.target.value })}
-                      placeholder="#3B82F6"
-                      className="bg-gray-900/50 border-gray-700 text-white flex-1"
-                    />
-                  </div>
-                </div>
-                <div>
                   <Label className="text-gray-400 text-xs">Description (optional)</Label>
                   <Input
                     value={newBucket.description}
                     onChange={(e) => setNewBucket({ ...newBucket, description: e.target.value })}
                     placeholder="Bucket description"
                     className="bg-gray-900/50 border-gray-700 text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Color</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="color"
+                    value={newBucket.color}
+                    onChange={(e) => setNewBucket({ ...newBucket, color: e.target.value })}
+                    className="bg-gray-900/50 border-gray-700 h-10 w-16 cursor-pointer"
+                  />
+                  <Input
+                    type="text"
+                    value={newBucket.color}
+                    onChange={(e) => setNewBucket({ ...newBucket, color: e.target.value })}
+                    placeholder="#3B82F6"
+                    className="bg-gray-900/50 border-gray-700 text-white flex-1"
                   />
                 </div>
               </div>
@@ -221,126 +184,104 @@ export default function ManageBucketsModal({ projectId, onClose }) {
                       ref={provided.innerRef}
                       className="space-y-2"
                     >
-                      {sortedBuckets.map((bucket, index) => {
-                        const status = statuses.find(s => s.id === bucket.associated_status_id);
-                        return (
-                          <Draggable key={bucket.id} draggableId={bucket.id} index={index}>
-                            {(provided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                className="p-3 bg-gray-800/50 rounded-lg border border-gray-700"
-                              >
-                                {editingId === bucket.id ? (
-                                  <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div>
-                                        <Label className="text-gray-400 text-xs">Name</Label>
-                                        <Input
-                                          value={editingData.name}
-                                          onChange={(e) => setEditingData({ ...editingData, name: e.target.value })}
-                                          className="bg-gray-900/50 border-gray-700 text-white"
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-gray-400 text-xs">Status</Label>
-                                        <Select
-                                          value={editingData.associated_status_id}
-                                          onValueChange={(value) => setEditingData({ ...editingData, associated_status_id: value })}
-                                        >
-                                          <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {taskStatuses.map(s => (
-                                              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div>
-                                        <Label className="text-gray-400 text-xs">Color</Label>
-                                        <Input
-                                          type="color"
-                                          value={editingData.color}
-                                          onChange={(e) => setEditingData({ ...editingData, color: e.target.value })}
-                                          className="bg-gray-900/50 border-gray-700 h-10 cursor-pointer"
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-gray-400 text-xs">Description</Label>
-                                        <Input
-                                          value={editingData.description}
-                                          onChange={(e) => setEditingData({ ...editingData, description: e.target.value })}
-                                          className="bg-gray-900/50 border-gray-700 text-white"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handleUpdate(bucket.id)}
-                                        className="bg-green-600 hover:bg-green-700 gap-1"
-                                      >
-                                        <Check className="w-3 h-3" />
-                                        Save
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setEditingId(null)}
-                                        className="border-gray-700"
-                                      >
-                                        <X className="w-3 h-3" />
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <div {...provided.dragHandleProps} className="cursor-grab">
-                                        <GripVertical className="w-5 h-5 text-gray-500" />
-                                      </div>
-                                      <div
-                                        className="w-4 h-4 rounded border border-gray-600"
-                                        style={{ backgroundColor: bucket.color }}
+                      {sortedBuckets.map((bucket, index) => (
+                        <Draggable key={bucket.id} draggableId={bucket.id} index={index}>
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className="p-3 bg-gray-800/50 rounded-lg border border-gray-700"
+                            >
+                              {editingId === bucket.id ? (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label className="text-gray-400 text-xs">Name</Label>
+                                      <Input
+                                        value={editingData.name}
+                                        onChange={(e) => setEditingData({ ...editingData, name: e.target.value })}
+                                        className="bg-gray-900/50 border-gray-700 text-white"
                                       />
-                                      <div className="flex-1">
-                                        <p className="text-white font-medium">{bucket.name}</p>
-                                        <p className="text-xs text-gray-500">
-                                          Status: {status?.label || 'Unknown'} 
-                                          {bucket.description && ` • ${bucket.description}`}
-                                        </p>
-                                      </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => startEdit(bucket)}
-                                        className="h-8 w-8 text-blue-400 hover:text-blue-300"
-                                      >
-                                        <Edit2 className="w-4 h-4" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => handleDelete(bucket.id)}
-                                        className="h-8 w-8 text-red-400 hover:text-red-300"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
+                                    <div>
+                                      <Label className="text-gray-400 text-xs">Description</Label>
+                                      <Input
+                                        value={editingData.description}
+                                        onChange={(e) => setEditingData({ ...editingData, description: e.target.value })}
+                                        className="bg-gray-900/50 border-gray-700 text-white"
+                                      />
                                     </div>
                                   </div>
-                                )}
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
+                                  <div>
+                                    <Label className="text-gray-400 text-xs">Color</Label>
+                                    <Input
+                                      type="color"
+                                      value={editingData.color}
+                                      onChange={(e) => setEditingData({ ...editingData, color: e.target.value })}
+                                      className="bg-gray-900/50 border-gray-700 h-10 cursor-pointer"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleUpdate(bucket.id)}
+                                      className="bg-green-600 hover:bg-green-700 gap-1"
+                                    >
+                                      <Check className="w-3 h-3" />
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setEditingId(null)}
+                                      className="border-gray-700"
+                                    >
+                                      <X className="w-3 h-3" />
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div {...provided.dragHandleProps} className="cursor-grab">
+                                      <GripVertical className="w-5 h-5 text-gray-500" />
+                                    </div>
+                                    <div
+                                      className="w-4 h-4 rounded border border-gray-600"
+                                      style={{ backgroundColor: bucket.color }}
+                                    />
+                                    <div className="flex-1">
+                                      <p className="text-white font-medium">{bucket.name}</p>
+                                      {bucket.description && (
+                                        <p className="text-xs text-gray-500">{bucket.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => startEdit(bucket)}
+                                      className="h-8 w-8 text-blue-400 hover:text-blue-300"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => handleDelete(bucket.id)}
+                                      className="h-8 w-8 text-red-400 hover:text-red-300"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
                       {provided.placeholder}
                     </div>
                   )}
