@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,7 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Trash2, Upload, X } from "lucide-react";
+import { Loader2, Trash2, Upload, X, Paperclip, Link2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
@@ -15,13 +15,18 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState([]);
+  const [url, setUrl] = useState("");
+  const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     if (entry) {
       setContent(entry.content || "");
       setPhotos(entry.photos || []);
+      setUrl(entry.url || "");
+      setAttachments(entry.attachments || []);
     }
   }, [entry]);
 
@@ -73,11 +78,38 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
     setPhotos(photos.filter(url => url !== urlToRemove));
   };
 
+  const handleAttachmentUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingAttachment(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const newAttachment = {
+        name: file.name,
+        url: file_url,
+        uploaded_date: new Date().toISOString()
+      };
+      setAttachments([...attachments, newAttachment]);
+      toast.success('Document uploaded successfully');
+    } catch (error) {
+      toast.error('Failed to upload document');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleRemoveAttachment = (attachmentUrl) => {
+    setAttachments(attachments.filter(a => a.url !== attachmentUrl));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     updateMutation.mutate({
       content,
       photos,
+      url,
+      attachments,
       project_id: entry.project_id,
     });
   };
@@ -107,6 +139,16 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
                 placeholder="What happened today?"
                 className="bg-gray-800 border-gray-700 text-white min-h-[200px]"
                 required
+              />
+            </div>
+
+            <div>
+              <Label>URL (Optional)</Label>
+              <Input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
 
@@ -165,6 +207,71 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
                           handleRemovePhoto(url);
                         }}
                         className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label>Document Attachments</Label>
+              <div className="mt-2">
+                <input
+                  type="file"
+                  id="attachment-upload"
+                  onChange={handleAttachmentUpload}
+                  className="hidden"
+                />
+                <label htmlFor="attachment-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cursor-pointer border-gray-700"
+                    disabled={uploadingAttachment}
+                    onClick={() => document.getElementById('attachment-upload').click()}
+                  >
+                    {uploadingAttachment ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Paperclip className="mr-2 h-4 w-4" />
+                        Add Document
+                      </>
+                    )}
+                  </Button>
+                </label>
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="space-y-2 mt-4">
+                  {attachments.map((att, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-white hover:text-red-400 transition-colors text-sm truncate block"
+                        >
+                          {att.name}
+                        </a>
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(att.uploaded_date), 'MMM d, yyyy')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttachment(att.url)}
+                        className="text-red-400 hover:text-red-300 p-1 flex-shrink-0"
                       >
                         <X className="w-4 h-4" />
                       </button>
