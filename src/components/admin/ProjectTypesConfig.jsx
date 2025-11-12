@@ -11,18 +11,21 @@ import HierarchicalList from "./HierarchicalList";
 
 export default function ProjectTypesConfig() {
   const queryClient = useQueryClient();
-  const [newType, setNewType] = useState({ name: "", color: "#3B82F6", parent_id: "" });
+  const [newType, setNewType] = useState({ name: "", color: "#3B82F6", parent_id: "", sort_order: 0 });
 
   const { data: types = [] } = useQuery({
     queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list()
+    queryFn: async () => {
+      const types = await base44.entities.ProjectType.list();
+      return types.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    }
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectType.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectTypes'] });
-      setNewType({ name: "", color: "#3B82F6", parent_id: "" });
+      setNewType({ name: "", color: "#3B82F6", parent_id: "", sort_order: 0 });
       toast.success('Project type created');
     }
   });

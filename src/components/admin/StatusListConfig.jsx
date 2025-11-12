@@ -17,13 +17,17 @@ export default function StatusListConfig() {
     scope: 'Project', 
     label: '', 
     color: '#EF4444', 
-    active: true 
+    active: true,
+    sort_order: 0
   });
   const [editing, setEditing] = useState(null);
 
   const { data: statuses = [], isLoading } = useQuery({
     queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list('sort_order'),
+    queryFn: async () => {
+      const statuses = await base44.entities.StatusList.list();
+      return statuses.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project');
@@ -34,7 +38,7 @@ export default function StatusListConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['statuses'] });
       toast.success('Status created');
-      setNewStatus({ scope: 'Project', label: '', color: '#EF4444', active: true });
+      setNewStatus({ scope: 'Project', label: '', color: '#EF4444', active: true, sort_order: 0 });
       setShowAdd(false);
     },
   });
@@ -131,6 +135,7 @@ export default function StatusListConfig() {
                   <span className={`text-white font-medium ${!status.active && 'opacity-50'}`}>
                     {status.label}
                   </span>
+                  <span className="text-xs text-gray-500 ml-2">• Order: {status.sort_order || 0}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -193,7 +198,7 @@ export default function StatusListConfig() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Label</Label>
                   <Input
@@ -212,13 +217,23 @@ export default function StatusListConfig() {
                     className="w-full h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Sort Order</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={newStatus.sort_order}
+                    onChange={(e) => setNewStatus({ ...newStatus, sort_order: parseInt(e.target.value) || 0 })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
               </div>
               <div className="flex justify-end gap-3">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShowAdd(false);
-                    setNewStatus({ scope: 'Project', label: '', color: '#EF4444', active: true });
+                    setNewStatus({ scope: 'Project', label: '', color: '#EF4444', active: true, sort_order: 0 });
                   }}
                   className="border-gray-700"
                 >
