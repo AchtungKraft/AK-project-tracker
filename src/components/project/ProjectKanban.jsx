@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Plus, Loader2 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export default function ProjectKanban({ projectId }) {
   const [showManageBuckets, setShowManageBuckets] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [groupBy, setGroupBy] = useState('buckets');
 
   const { data: buckets = [], isLoading: bucketsLoading } = useQuery({
     queryKey: ['kanbanBuckets', projectId],
@@ -63,24 +65,89 @@ export default function ProjectKanban({ projectId }) {
       queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      toast.success('Task moved');
+      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
     },
   });
+
+  const handleToggleComplete = (task) => {
+    const completedStatus = taskStatuses.find(s => s.label.toLowerCase().includes('complete'));
+    const todoStatus = taskStatuses.find(s => s.label.toLowerCase().includes('to do') || s.label.toLowerCase() === 'todo');
+    
+    if (!completedStatus) {
+      toast.error('No "Completed" status found');
+      return;
+    }
+
+    const currentStatus = statuses.find(s => s.id === task.status_id);
+    const isCurrentlyCompleted = currentStatus?.label?.toLowerCase().includes('complete');
+    
+    const newStatusId = isCurrentlyCompleted ? (todoStatus?.id || taskStatuses[0]?.id) : completedStatus.id;
+    
+    updateTaskMutation.mutate({
+      taskId: task.id,
+      data: { status_id: newStatusId }
+    });
+  };
 
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
 
-  // Group tasks by bucket based on kanban_bucket_id
-  const tasksByBucket = {};
-  const unassignedTasks = [];
+  // Primary grouping logic (when not using buckets)
+  const getPrimaryGroups = () => {
+    if (groupBy === 'buckets') {
+      // Group by bucket based on kanban_bucket_id
+      const tasksByBucket = {};
+      const unassignedTasks = [];
 
-  sortedBuckets.forEach(bucket => {
-    tasksByBucket[bucket.id] = tasks.filter(t => t.kanban_bucket_id === bucket.id);
-  });
+      sortedBuckets.forEach(bucket => {
+        tasksByBucket[bucket.id] = tasks.filter(t => t.kanban_bucket_id === bucket.id);
+      });
 
-  // Find tasks not in any bucket
-  const bucketIds = sortedBuckets.map(b => b.id);
-  unassignedTasks.push(...tasks.filter(t => !t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
+      const bucketIds = sortedBuckets.map(b => b.id);
+      unassignedTasks.push(...tasks.filter(t => !t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
+
+      return { mode: 'buckets', tasksByBucket, unassignedTasks };
+    }
+
+    // Primary grouping by status, assigned, or category
+    const grouped = {};
+    
+    tasks.forEach(task => {
+      let groupKey, groupLabel, groupColor;
+      
+      if (groupBy === 'status') {
+        const status = statuses.find(s => s.id === task.status_id);
+        groupKey = task.status_id || 'no-status';
+        groupLabel = status?.label || 'No Status';
+        groupColor = status?.color || '#6B7280';
+      } else if (groupBy === 'assigned') {
+        const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+        groupKey = task.assigned_team_member_id || 'unassigned';
+        groupLabel = member?.full_name || 'Unassigned';
+        groupColor = '#6B7280';
+      } else if (groupBy === 'category') {
+        const category = categories.find(c => c.id === task.category_id);
+        groupKey = task.category_id || 'no-category';
+        groupLabel = getCategoryPath(task.category_id, categories) || 'No Category';
+        groupColor = category?.color || '#6B7280';
+      }
+      
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          id: groupKey,
+          label: groupLabel,
+          color: groupColor,
+          tasks: []
+        };
+      }
+      
+      grouped[groupKey].tasks.push(task);
+    });
+
+    return { mode: 'primary', groups: Object.values(grouped) };
+  };
+
+  const groupingData = getPrimaryGroups();
 
   // Helper function to group tasks within a bucket by status then category
   const groupTasksWithinBucket = (bucketTasks) => {
@@ -121,21 +188,42 @@ export default function ProjectKanban({ projectId }) {
 
     const taskId = draggableId;
     
-    // Moving to a bucket
-    if (destination.droppableId !== 'unassigned') {
-      const targetBucket = sortedBuckets.find(b => b.id === destination.droppableId);
-      if (targetBucket) {
+    if (groupBy === 'buckets') {
+      // Bucket mode - update kanban_bucket_id
+      if (destination.droppableId !== 'unassigned') {
+        const targetBucket = sortedBuckets.find(b => b.id === destination.droppableId);
+        if (targetBucket) {
+          updateTaskMutation.mutate({
+            taskId,
+            data: { kanban_bucket_id: targetBucket.id }
+          });
+        }
+      } else {
         updateTaskMutation.mutate({
           taskId,
-          data: { kanban_bucket_id: targetBucket.id }
+          data: { kanban_bucket_id: "" }
         });
       }
     } else {
-      // Moving to unassigned - clear kanban_bucket_id
-      updateTaskMutation.mutate({
-        taskId,
-        data: { kanban_bucket_id: "" }
-      });
+      // Primary grouping mode - update the corresponding field
+      const targetGroupId = destination.droppableId;
+      
+      if (groupBy === 'status') {
+        updateTaskMutation.mutate({
+          taskId,
+          data: { status_id: targetGroupId === 'no-status' ? '' : targetGroupId }
+        });
+      } else if (groupBy === 'assigned') {
+        updateTaskMutation.mutate({
+          taskId,
+          data: { assigned_team_member_id: targetGroupId === 'unassigned' ? '' : targetGroupId }
+        });
+      } else if (groupBy === 'category') {
+        updateTaskMutation.mutate({
+          taskId,
+          data: { category_id: targetGroupId === 'no-category' ? '' : targetGroupId }
+        });
+      }
     }
   };
 
@@ -154,9 +242,20 @@ export default function ProjectKanban({ projectId }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-white">Kanban Board</h2>
-            <p className="text-sm text-gray-400">Drag tasks between buckets to organize</p>
+            <p className="text-sm text-gray-400">Drag tasks to organize</p>
           </div>
           <div className="flex gap-2">
+            <Select value={groupBy} onValueChange={setGroupBy}>
+              <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="buckets">Custom Buckets</SelectItem>
+                <SelectItem value="status">Group by Status</SelectItem>
+                <SelectItem value="assigned">Group by Assigned</SelectItem>
+                <SelectItem value="category">Group by Category</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               onClick={() => setShowCreateTask(true)}
               size="sm"
@@ -165,19 +264,21 @@ export default function ProjectKanban({ projectId }) {
               <Plus className="w-4 h-4" />
               New Task
             </Button>
-            <Button
-              onClick={() => setShowManageBuckets(true)}
-              size="sm"
-              variant="outline"
-              className="border-gray-700 gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              Manage Buckets
-            </Button>
+            {groupBy === 'buckets' && (
+              <Button
+                onClick={() => setShowManageBuckets(true)}
+                size="sm"
+                variant="outline"
+                className="border-gray-700 gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Manage Buckets
+              </Button>
+            )}
           </div>
         </div>
 
-        {sortedBuckets.length === 0 ? (
+        {groupBy === 'buckets' && sortedBuckets.length === 0 ? (
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
             <p className="text-gray-400 mb-4">No Kanban buckets configured yet.</p>
             <Button
@@ -192,10 +293,12 @@ export default function ProjectKanban({ projectId }) {
           <DragDropContext onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto pb-4">
               <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-                {/* Kanban Buckets */}
-                {sortedBuckets.map(bucket => {
-                  const bucketTasks = tasksByBucket[bucket.id] || [];
-                  const groupedTasks = groupTasksWithinBucket(bucketTasks);
+                {groupingData.mode === 'buckets' ? (
+                  <>
+                    {/* Kanban Buckets Mode */}
+                    {sortedBuckets.map(bucket => {
+                      const bucketTasks = groupingData.tasksByBucket[bucket.id] || [];
+                      const groupedTasks = groupTasksWithinBucket(bucketTasks);
                   
                   return (
                     <div key={bucket.id} className="w-80 flex-shrink-0">
@@ -290,6 +393,8 @@ export default function ProjectKanban({ projectId }) {
                                                     task={task}
                                                     categories={categories}
                                                     teamMembers={teamMembers}
+                                                    statuses={statuses}
+                                                    onToggleComplete={handleToggleComplete}
                                                     onClick={() => setSelectedTask(task)}
                                                   />
                                                 </div>
@@ -311,62 +416,170 @@ export default function ProjectKanban({ projectId }) {
                   );
                 })}
 
-                {/* Unassigned Tasks Column */}
-                <div className="w-80 flex-shrink-0">
-                  <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
-                    <div className="p-3 border-b-2 border-gray-600 bg-gray-800/50">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-sm text-gray-400">
-                          Unassigned Tasks
-                        </h3>
-                        <span className="text-xs text-gray-500">
-                          {unassignedTasks.length}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Drag to assign to a bucket
-                      </p>
-                    </div>
+                    {/* Unassigned Tasks Column */}
+                    <div className="w-80 flex-shrink-0">
+                      <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
+                        <div className="p-3 border-b-2 border-gray-600 bg-gray-800/50">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-sm text-gray-400">
+                              Unassigned Tasks
+                            </h3>
+                            <span className="text-xs text-gray-500">
+                              {groupingData.unassignedTasks.length}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Drag to assign to a bucket
+                          </p>
+                        </div>
 
-                    <Droppable droppableId="unassigned">
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.droppableProps}
-                          className={`p-3 space-y-2 min-h-[200px] max-h-[600px] overflow-y-auto ${
-                            snapshot.isDraggingOver ? 'bg-red-950/20' : ''
-                          }`}
-                        >
-                          {unassignedTasks.map((task, index) => (
-                            <Draggable key={task.id} draggableId={task.id} index={index}>
+                        <Droppable droppableId="unassigned">
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.droppableProps}
+                              className={`p-3 space-y-2 min-h-[200px] max-h-[600px] overflow-y-auto ${
+                                snapshot.isDraggingOver ? 'bg-red-950/20' : ''
+                              }`}
+                            >
+                              {groupingData.unassignedTasks.map((task, index) => (
+                                <Draggable key={task.id} draggableId={task.id} index={index}>
+                                  {(provided, snapshot) => (
+                                    <div
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      className={snapshot.isDragging ? 'opacity-50' : ''}
+                                    >
+                                      <TaskCard
+                                        task={task}
+                                        categories={categories}
+                                        teamMembers={teamMembers}
+                                        statuses={statuses}
+                                        onToggleComplete={handleToggleComplete}
+                                        onClick={() => setSelectedTask(task)}
+                                      />
+                                    </div>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                              {groupingData.unassignedTasks.length === 0 && (
+                                <p className="text-center text-gray-600 text-sm py-8">
+                                  No unassigned tasks
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </Droppable>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Primary Grouping Mode (Status/Assigned/Category) */}
+                    {groupingData.groups.map(group => {
+                      const completedStatus = taskStatuses.find(s => s.label.toLowerCase().includes('complete'));
+                      const activeTasks = group.tasks.filter(t => t.status_id !== completedStatus?.id);
+                      const completedTasks = group.tasks.filter(t => t.status_id === completedStatus?.id);
+                      
+                      return (
+                        <div key={group.id} className="w-80 flex-shrink-0">
+                          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
+                            {/* Group Header */}
+                            <div
+                              className="p-3 border-b-2"
+                              style={{
+                                borderBottomColor: group.color,
+                                backgroundColor: `${group.color}15`
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <h3
+                                  className="font-semibold text-sm"
+                                  style={{ color: group.color }}
+                                >
+                                  {group.label}
+                                </h3>
+                                <span className="text-xs text-gray-400">
+                                  {group.tasks.length}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Active Tasks */}
+                            <Droppable droppableId={group.id}>
                               {(provided, snapshot) => (
                                 <div
                                   ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className={snapshot.isDragging ? 'opacity-50' : ''}
+                                  {...provided.droppableProps}
+                                  className={`min-h-[150px] max-h-[400px] overflow-y-auto ${
+                                    snapshot.isDraggingOver ? 'bg-red-950/20' : ''
+                                  }`}
                                 >
-                                  <TaskCard
-                                    task={task}
-                                    categories={categories}
-                                    teamMembers={teamMembers}
-                                    onClick={() => setSelectedTask(task)}
-                                  />
+                                  {activeTasks.length === 0 ? (
+                                    <p className="text-center text-gray-600 text-sm py-8">
+                                      Drag tasks here
+                                    </p>
+                                  ) : (
+                                    <div className="p-3 space-y-2">
+                                      {activeTasks.map((task, index) => (
+                                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                                          {(provided, snapshot) => (
+                                            <div
+                                              ref={provided.innerRef}
+                                              {...provided.draggableProps}
+                                              {...provided.dragHandleProps}
+                                              className={snapshot.isDragging ? 'opacity-50' : ''}
+                                            >
+                                              <TaskCard
+                                                task={task}
+                                                categories={categories}
+                                                teamMembers={teamMembers}
+                                                statuses={statuses}
+                                                onToggleComplete={handleToggleComplete}
+                                                onClick={() => setSelectedTask(task)}
+                                              />
+                                            </div>
+                                          )}
+                                        </Draggable>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {provided.placeholder}
                                 </div>
                               )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                          {unassignedTasks.length === 0 && (
-                            <p className="text-center text-gray-600 text-sm py-8">
-                              No unassigned tasks
-                            </p>
-                          )}
+                            </Droppable>
+
+                            {/* Completed Section */}
+                            {completedTasks.length > 0 && (
+                              <div className="border-t-2 border-green-900/30 bg-gray-900/30">
+                                <div className="px-3 py-2 bg-green-950/20">
+                                  <span className="text-xs text-green-400 font-medium">
+                                    ✓ Completed ({completedTasks.length})
+                                  </span>
+                                </div>
+                                <div className="p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                                  {completedTasks.map((task) => (
+                                    <TaskCard
+                                      key={task.id}
+                                      task={task}
+                                      categories={categories}
+                                      teamMembers={teamMembers}
+                                      statuses={statuses}
+                                      onToggleComplete={handleToggleComplete}
+                                      onClick={() => setSelectedTask(task)}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </Droppable>
-                  </div>
-                </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             </div>
           </DragDropContext>
