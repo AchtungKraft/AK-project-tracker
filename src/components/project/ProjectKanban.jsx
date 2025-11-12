@@ -32,6 +32,7 @@ export default function ProjectKanban({ projectId }) {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('buckets');
+  const [subGroupBy, setSubGroupBy] = useState('status');
 
   const { data: buckets = [], isLoading: bucketsLoading } = useQuery({
     queryKey: ['kanbanBuckets', projectId],
@@ -74,7 +75,7 @@ export default function ProjectKanban({ projectId }) {
     const todoStatus = taskStatuses.find(s => s.label.toLowerCase().includes('to do') || s.label.toLowerCase() === 'todo');
     
     if (!completedStatus) {
-      toast.error('No "Completed" status found');
+      toast.error('No "Completed" status found. Please create a status with "Complete" in the name.');
       return;
     }
 
@@ -87,6 +88,8 @@ export default function ProjectKanban({ projectId }) {
       taskId: task.id,
       data: { status_id: newStatusId }
     });
+    
+    toast.success(isCurrentlyCompleted ? 'Task reopened' : 'Task completed');
   };
 
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -149,27 +152,56 @@ export default function ProjectKanban({ projectId }) {
 
   const groupingData = getPrimaryGroups();
 
-  // Helper function to group tasks within a bucket by status then category
+  // Helper function to group tasks within a bucket based on subGroupBy setting
   const groupTasksWithinBucket = (bucketTasks) => {
     const grouped = {};
     
     bucketTasks.forEach(task => {
-      const status = statuses.find(s => s.id === task.status_id);
-      const statusLabel = status?.label || 'No Status';
-      const statusColor = status?.color || '#6B7280';
+      let primaryKey, primaryLabel, primaryColor, secondaryKey, secondaryLabel, secondaryColor;
       
-      const category = categories.find(c => c.id === task.category_id);
-      const categoryPath = getCategoryPath(task.category_id, categories) || 'No Category';
-      const categoryColor = category?.color || '#6B7280';
+      if (subGroupBy === 'status') {
+        // Primary: Status, Secondary: Category
+        const status = statuses.find(s => s.id === task.status_id);
+        primaryKey = task.status_id || 'no-status';
+        primaryLabel = status?.label || 'No Status';
+        primaryColor = status?.color || '#6B7280';
+        
+        const category = categories.find(c => c.id === task.category_id);
+        secondaryKey = task.category_id || 'no-category';
+        secondaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
+        secondaryColor = category?.color || '#6B7280';
+      } else if (subGroupBy === 'assigned') {
+        // Primary: Assigned, Secondary: Category
+        const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+        primaryKey = task.assigned_team_member_id || 'unassigned';
+        primaryLabel = member?.full_name || 'Unassigned';
+        primaryColor = '#6B7280';
+        
+        const category = categories.find(c => c.id === task.category_id);
+        secondaryKey = task.category_id || 'no-category';
+        secondaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
+        secondaryColor = category?.color || '#6B7280';
+      } else if (subGroupBy === 'category') {
+        // Primary: Category, Secondary: Status
+        const category = categories.find(c => c.id === task.category_id);
+        primaryKey = task.category_id || 'no-category';
+        primaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
+        primaryColor = category?.color || '#6B7280';
+        
+        const status = statuses.find(s => s.id === task.status_id);
+        secondaryKey = task.status_id || 'no-status';
+        secondaryLabel = status?.label || 'No Status';
+        secondaryColor = status?.color || '#6B7280';
+      }
       
-      const groupKey = `${statusLabel}|||${categoryPath}`;
+      const groupKey = `${primaryKey}|||${secondaryKey}`;
       
       if (!grouped[groupKey]) {
         grouped[groupKey] = {
-          statusLabel,
-          statusColor,
-          categoryPath,
-          categoryColor,
+          primaryLabel,
+          primaryColor,
+          secondaryLabel,
+          secondaryColor,
           tasks: []
         };
       }
@@ -246,7 +278,7 @@ export default function ProjectKanban({ projectId }) {
           </div>
           <div className="flex gap-2">
             <Select value={groupBy} onValueChange={setGroupBy}>
-              <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
+              <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -256,6 +288,18 @@ export default function ProjectKanban({ projectId }) {
                 <SelectItem value="category">Group by Category</SelectItem>
               </SelectContent>
             </Select>
+            {groupBy === 'buckets' && (
+              <Select value={subGroupBy} onValueChange={setSubGroupBy}>
+                <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">Sub: Status</SelectItem>
+                  <SelectItem value="assigned">Sub: Assigned</SelectItem>
+                  <SelectItem value="category">Sub: Category</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Button
               onClick={() => setShowCreateTask(true)}
               size="sm"
@@ -347,32 +391,32 @@ export default function ProjectKanban({ projectId }) {
                                   
                                   return (
                                     <div key={groupKey}>
-                                      {/* Status Header */}
+                                      {/* Primary Group Header */}
                                       <div 
                                         className="px-3 py-1.5 bg-gray-900/50 border-l-4 border-b"
                                         style={{ 
-                                          borderLeftColor: statusColor,
-                                          borderBottomColor: statusColor
+                                          borderLeftColor: groupData.primaryColor,
+                                          borderBottomColor: groupData.primaryColor
                                         }}
                                       >
                                         <span 
                                           className="text-xs font-medium"
-                                          style={{ color: statusColor }}
+                                          style={{ color: groupData.primaryColor }}
                                         >
-                                          {statusLabel}
+                                          {groupData.primaryLabel}
                                         </span>
                                       </div>
                                       
-                                      {/* Category Header */}
+                                      {/* Secondary Group Header */}
                                       <div 
                                         className="px-3 py-1 bg-gray-800/30 border-l-2"
-                                        style={{ borderLeftColor: categoryColor }}
+                                        style={{ borderLeftColor: groupData.secondaryColor }}
                                       >
                                         <span 
                                           className="text-xs"
-                                          style={{ color: categoryColor }}
+                                          style={{ color: groupData.secondaryColor }}
                                         >
-                                          {categoryPath}
+                                          {groupData.secondaryLabel}
                                         </span>
                                       </div>
                                       

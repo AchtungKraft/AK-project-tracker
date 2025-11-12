@@ -27,7 +27,9 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
-    onToggleComplete(task);
+    if (onToggleComplete) {
+      onToggleComplete(task);
+    }
   };
 
   return (
