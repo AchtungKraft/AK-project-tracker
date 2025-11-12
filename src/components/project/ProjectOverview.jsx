@@ -7,17 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Loader2, X, Edit2, Check, Calendar, FileText, Paperclip } from "lucide-react";
+import { Upload, Loader2, X, Edit2, Check, Calendar, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 import ProjectKanban from "./ProjectKanban";
+import CompletedTasksSection from "./CompletedTasksSection";
 
 export default function ProjectOverview({ project, projectId }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [formData, setFormData] = useState({
     name: project?.name || "",
@@ -92,35 +93,9 @@ export default function ProjectOverview({ project, projectId }) {
     });
   };
 
-  const handleAttachmentUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
 
-    setUploadingAttachment(true);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
 
-      const newAttachment = {
-        name: file.name,
-        url: file_url,
-        uploaded_date: new Date().toISOString()
-      };
 
-      await updateMutation.mutateAsync({
-        attachments: [...(project.attachments || []), newAttachment]
-      });
-    } catch (error) {
-      toast.error('Failed to upload attachment');
-    } finally {
-      setUploadingAttachment(false);
-    }
-  };
-
-  const handleRemoveAttachment = (attachment) => {
-    updateMutation.mutate({
-      attachments: (project.attachments || []).filter((a) => a.url !== attachment.url)
-    });
-  };
 
   const handleSaveChanges = () => {
     updateMutation.mutate(formData);
@@ -237,137 +212,109 @@ export default function ProjectOverview({ project, projectId }) {
           </CardContent>
         </Card>
 
-        {/* Main Kanban Board */}
+        {/* Project Images Thumbnails */}
+        {project?.images && project.images.length > 0 && (
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <CardHeader className="border-b border-red-900/30 p-4">
+              <CardTitle className="text-white text-base">Project Images</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                {project.images.map((url, idx) => (
+                  <div
+                    key={idx}
+                    className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
+                    onClick={() => setSelectedImage(url)}
+                  >
+                    <img
+                      src={url}
+                      alt={`Project ${idx + 1}`}
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Main Task Groups Board */}
         <ProjectKanban projectId={projectId} />
 
-        {/* Bottom Section: Journal & Attachments Side by Side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Recent Journal Entries */}
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardHeader className="border-b border-red-900/30 p-4">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Recent Journal Entries
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleViewAllJournal}
-                  className="text-red-400 hover:text-red-300 text-xs"
-                >
-                  View All →
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              {recentEntries.length === 0 ? (
-                <p className="text-center text-gray-500 py-4 text-sm">No journal entries yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {recentEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer"
-                      onClick={handleViewAllJournal}
-                    >
-                      <p className="text-white text-sm line-clamp-2">{entry.content}</p>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500">
-                        <Calendar className="w-3 h-3" />
-                        {format(new Date(entry.entry_date || entry.created_date), 'MMM d, yyyy')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Completed Tasks Section */}
+        <CompletedTasksSection projectId={projectId} />
 
-          {/* Attachments */}
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardHeader className="border-b border-red-900/30 p-4">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <Paperclip className="w-4 h-4" />
-                  Attachments
-                </CardTitle>
-                <div>
-                  <input
-                    type="file"
-                    id="attachment-upload"
-                    onChange={handleAttachmentUpload}
-                    className="hidden"
-                  />
-                  <label htmlFor="attachment-upload">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer border-gray-700 gap-2"
-                      disabled={uploadingAttachment}
-                      onClick={() => document.getElementById('attachment-upload').click()}
-                    >
-                      {uploadingAttachment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          Add File
-                        </>
-                      )}
-                    </Button>
-                  </label>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              {project?.attachments && project.attachments.length > 0 ? (
-                <div className="space-y-2">
-                  {project.attachments.slice(0, 5).map((att, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <a
-                          href={att.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white hover:text-red-400 transition-colors text-sm truncate block"
-                        >
-                          {att.name}
-                        </a>
-                        <p className="text-xs text-gray-500">
-                          {format(new Date(att.uploaded_date), 'MMM d, yyyy')}
-                        </p>
+        {/* Recent Journal Entries Grid */}
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardHeader className="border-b border-red-900/30 p-4">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Recent Journal Entries
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleViewAllJournal}
+                className="text-red-400 hover:text-red-300 text-xs"
+              >
+                View All →
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            {recentEntries.length === 0 ? (
+              <p className="text-center text-gray-500 py-4 text-sm">No journal entries yet</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {recentEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer border border-gray-800"
+                    onClick={handleViewAllJournal}
+                  >
+                    <p className="text-white text-sm line-clamp-3 mb-2">{entry.content}</p>
+                    {entry.photos && entry.photos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-1 mb-2">
+                        {entry.photos.slice(0, 3).map((url, idx) => (
+                          <div
+                            key={idx}
+                            className="w-full h-16 bg-gray-800 rounded border border-gray-700 flex items-center justify-center overflow-hidden"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedImage(url);
+                            }}
+                          >
+                            <img
+                              src={url}
+                              alt={`Photo ${idx + 1}`}
+                              className="max-w-full max-h-full object-contain"
+                            />
+                          </div>
+                        ))}
                       </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleRemoveAttachment(att)}
-                        className="text-red-400 hover:text-red-300 h-7 w-7 flex-shrink-0"
+                    )}
+                    {entry.url && (
+                      <a
+                        href={entry.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-red-400 hover:text-red-300 truncate block mb-2"
                       >
-                        <X className="w-4 h-4" />
-                      </Button>
+                        {entry.url}
+                      </a>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Calendar className="w-3 h-3" />
+                      {format(new Date(entry.entry_date || entry.created_date), 'MMM d, yyyy')}
                     </div>
-                  ))}
-                  {project.attachments.length > 5 && (
-                    <p className="text-xs text-gray-500 text-center pt-2">
-                      +{project.attachments.length - 5} more files
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-gray-500 text-sm">
-                  No attachments yet.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <ImageModal
