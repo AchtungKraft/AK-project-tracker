@@ -39,11 +39,19 @@ export default function ProjectKanban({ projectId }) {
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
   });
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
+
+  // Filter out completed tasks from Kanban view
+  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const completedStatus = taskStatuses.find(s => {
+    const label = s.label.toLowerCase();
+    return label.includes('complete') || label.includes('done');
+  });
+  const tasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
@@ -96,16 +104,21 @@ export default function ProjectKanban({ projectId }) {
     
     const newStatusId = isCurrentlyCompleted ? (todoStatus?.id || taskStatuses[0]?.id) : completedStatus.id;
     
+    // Add completed_date when marking as complete, remove when reopening
+    const updateData = {
+      status_id: newStatusId,
+      completed_date: isCurrentlyCompleted ? null : new Date().toISOString()
+    };
+    
     updateTaskMutation.mutate({
       taskId: task.id,
-      data: { status_id: newStatusId }
+      data: updateData
     });
     
     toast.success(isCurrentlyCompleted ? 'Task reopened' : 'Task completed');
   };
 
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
 
   // Primary grouping logic (when not using buckets)
   const getPrimaryGroups = () => {
@@ -263,7 +276,7 @@ export default function ProjectKanban({ projectId }) {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Kanban Board</h2>
+            <h2 className="text-xl font-bold text-white">Task Groups</h2>
             <p className="text-sm text-gray-400">Drag tasks to organize</p>
           </div>
           <div className="flex gap-2">
