@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Loader2, Edit2, Trash2, Check, X } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X, GripVertical } from "lucide-react";
 import { toast } from "sonner";
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function TeamMembersConfig() {
   const queryClient = useQueryClient();
@@ -88,6 +89,35 @@ export default function TeamMembersConfig() {
     }
   };
 
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+
+    const reordered = Array.from(teamMembers);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+
+    // Update sort_order for all items
+    const updates = reordered.map((item, index) => ({
+      id: item.id,
+      data: { ...item, sort_order: index }
+    }));
+
+    // Optimistically update UI
+    queryClient.setQueryData(['teamMembers'], reordered.map((item, index) => ({
+      ...item,
+      sort_order: index
+    })));
+
+    // Send updates to server
+    try {
+      await Promise.all(updates.map(u => base44.entities.TeamMember.update(u.id, u.data)));
+      toast.success('Order updated');
+    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      toast.error('Failed to update order');
+    }
+  };
+
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30">
@@ -138,16 +168,6 @@ export default function TeamMembersConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
-            <div>
-              <Label className="text-gray-400">Sort Order</Label>
-              <Input
-                type="number"
-                value={newMember.sort_order}
-                onChange={(e) => setNewMember({ ...newMember, sort_order: parseInt(e.target.value) || 0 })}
-                placeholder="0"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
           </div>
           <Button 
             type="submit" 
@@ -168,7 +188,7 @@ export default function TeamMembersConfig() {
           </Button>
         </form>
 
-        {/* Team Members List */}
+        {/* Team Members List with Drag and Drop */}
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : teamMembers.length === 0 ? (
@@ -176,109 +196,123 @@ export default function TeamMembersConfig() {
             No team members yet. Add one above.
           </div>
         ) : (
-          <div className="space-y-2">
-            {teamMembers.map(member => (
-              <div
-                key={member.id}
-                className="flex items-center gap-3 p-4 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors"
-              >
-                {editing === member.id ? (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2 flex-1">
-                      <Input
-                        value={editData.full_name}
-                        onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                      />
-                      <Input
-                        value={editData.team_role}
-                        onChange={(e) => setEditData({ ...editData, team_role: e.target.value })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Role"
-                      />
-                      <Input
-                        value={editData.email}
-                        onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Email"
-                      />
-                      <Input
-                        value={editData.phone}
-                        onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Phone"
-                      />
-                      <Input
-                        type="number"
-                        value={editData.sort_order || 0}
-                        onChange={(e) => setEditData({ ...editData, sort_order: parseInt(e.target.value) || 0 })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Sort"
-                      />
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={handleSave}
-                      className="text-green-400"
-                    >
-                      <Check className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setEditing(null)}
-                      className="text-red-400"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`font-medium ${member.active ? 'text-white' : 'text-gray-500 line-through'}`}>
-                          {member.full_name}
-                        </h3>
-                        {member.team_role && (
-                          <span className="text-sm text-gray-400">({member.team_role})</span>
-                        )}
-                      </div>
-                      <div className="flex gap-3 text-sm text-gray-500 mt-1">
-                        {member.email && <span>{member.email}</span>}
-                        {member.phone && <span>{member.phone}</span>}
-                        <span className="text-xs">• Order: {member.sort_order || 0}</span>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleToggleActive(member.id, member)}
-                      className={member.active ? 'text-green-400' : 'text-gray-500'}
-                    >
-                      {member.active ? 'Active' : 'Inactive'}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => startEdit(member)}
-                      className="text-blue-400"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => handleDelete(member.id)}
-                      className="text-red-400"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="team-members">
+              {(provided) => (
+                <div 
+                  {...provided.droppableProps} 
+                  ref={provided.innerRef}
+                  className="space-y-2"
+                >
+                  {teamMembers.map((member, index) => (
+                    <Draggable key={member.id} draggableId={member.id} index={index}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`flex items-center gap-3 p-4 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors ${
+                            snapshot.isDragging ? 'shadow-lg border border-red-900/50' : ''
+                          }`}
+                        >
+                          <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
+                            <GripVertical className="w-5 h-5 text-gray-500" />
+                          </div>
+                          
+                          {editing === member.id ? (
+                            <>
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
+                                <Input
+                                  value={editData.full_name}
+                                  onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                />
+                                <Input
+                                  value={editData.team_role}
+                                  onChange={(e) => setEditData({ ...editData, team_role: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                  placeholder="Role"
+                                />
+                                <Input
+                                  value={editData.email}
+                                  onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                  placeholder="Email"
+                                />
+                                <Input
+                                  value={editData.phone}
+                                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                  placeholder="Phone"
+                                />
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={handleSave}
+                                className="text-green-400"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => setEditing(null)}
+                                className="text-red-400"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className={`font-medium ${member.active ? 'text-white' : 'text-gray-500 line-through'}`}>
+                                    {member.full_name}
+                                  </h3>
+                                  {member.team_role && (
+                                    <span className="text-sm text-gray-400">({member.team_role})</span>
+                                  )}
+                                </div>
+                                <div className="flex gap-3 text-sm text-gray-500 mt-1">
+                                  {member.email && <span>{member.email}</span>}
+                                  {member.phone && <span>{member.phone}</span>}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleToggleActive(member.id, member)}
+                                className={member.active ? 'text-green-400' : 'text-gray-500'}
+                              >
+                                {member.active ? 'Active' : 'Inactive'}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => startEdit(member)}
+                                className="text-blue-400"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDelete(member.id)}
+                                className="text-red-400"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
         )}
       </CardContent>
     </Card>

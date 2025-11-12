@@ -2,13 +2,15 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Edit2, Trash2, Check, X, ChevronRight, ChevronDown } from "lucide-react";
+import { Edit2, Trash2, Check, X, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function HierarchicalList({ 
   items = [], 
   onUpdate, 
   onDelete, 
-  onToggleActive, 
+  onToggleActive,
+  onReorder,
   entityName = "Item",
   showColor = false 
 }) {
@@ -54,130 +56,162 @@ export default function HierarchicalList({
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const renderItem = (item, level = 0) => {
+  const handleDragEnd = (result, parentId = null) => {
+    if (!result.destination || !onReorder) return;
+
+    const sourceIndex = result.source.index;
+    const destIndex = result.destination.index;
+
+    if (sourceIndex === destIndex) return;
+
+    onReorder(parentId, sourceIndex, destIndex);
+  };
+
+  const renderItem = (item, index, parentId = null) => {
     const hasChildren = childrenMap[item.id] && childrenMap[item.id].length > 0;
     const isCollapsed = collapsed[item.id];
 
     return (
-      <div key={item.id}>
-        <div 
-          className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors"
-          style={{ marginLeft: `${level * 24}px` }}
-        >
-          <div className="flex items-center gap-3 flex-1">
-            {hasChildren && (
-              <button
-                onClick={() => toggleCollapse(item.id)}
-                className="text-gray-400 hover:text-white"
-              >
-                {isCollapsed ? (
-                  <ChevronRight className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
+      <Draggable key={item.id} draggableId={item.id} index={index}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+          >
+            <div 
+              className={`flex items-center justify-between p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors ${
+                snapshot.isDragging ? 'shadow-lg border border-red-900/50' : ''
+              }`}
+            >
+              <div className="flex items-center gap-3 flex-1">
+                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
+                  <GripVertical className="w-5 h-5 text-gray-500" />
+                </div>
+                
+                {hasChildren && (
+                  <button
+                    onClick={() => toggleCollapse(item.id)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
                 )}
-              </button>
-            )}
-            
-            {!hasChildren && level > 0 && <div className="w-4" />}
-            
-            {showColor && (
-              <div
-                className="w-4 h-4 rounded border border-gray-600"
-                style={{ backgroundColor: item.color || "#3B82F6" }}
-              />
-            )}
-
-            {editing === item.id ? (
-              <div className="flex items-center gap-2 flex-1">
-                <Input
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="bg-gray-800 border-gray-700 text-white h-8"
-                  autoFocus
-                />
+                
+                {!hasChildren && <div className="w-4" />}
+                
                 {showColor && (
-                  <Input
-                    type="color"
-                    value={editColor}
-                    onChange={(e) => setEditColor(e.target.value)}
-                    className="bg-gray-800 border-gray-700 h-8 w-16 cursor-pointer"
+                  <div
+                    className="w-4 h-4 rounded border border-gray-600"
+                    style={{ backgroundColor: item.color || "#3B82F6" }}
                   />
                 )}
+
+                {editing === item.id ? (
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="bg-gray-800 border-gray-700 text-white h-8"
+                      autoFocus
+                    />
+                    {showColor && (
+                      <Input
+                        type="color"
+                        value={editColor}
+                        onChange={(e) => setEditColor(e.target.value)}
+                        className="bg-gray-800 border-gray-700 h-8 w-16 cursor-pointer"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <span 
+                    className="text-white font-medium"
+                    style={showColor ? { color: item.color || "#FFFFFF" } : {}}
+                  >
+                    {item.name}
+                  </span>
+                )}
+
+                {!item.active && (
+                  <Badge variant="outline" className="text-xs bg-gray-800 text-gray-500">
+                    Inactive
+                  </Badge>
+                )}
               </div>
-            ) : (
-              <span 
-                className="text-white font-medium"
-                style={showColor ? { color: item.color || "#FFFFFF" } : {}}
-              >
-                {item.name}
-              </span>
-            )}
 
-            {!item.active && (
-              <Badge variant="outline" className="text-xs bg-gray-800 text-gray-500">
-                Inactive
-              </Badge>
-            )}
-          </div>
+              <div className="flex items-center gap-2">
+                {editing === item.id ? (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleSave(item.id)}
+                      className="h-8 w-8 text-green-400 hover:text-green-300"
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleCancel}
+                      className="h-8 w-8 text-gray-400 hover:text-gray-300"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => onToggleActive(item)}
+                      className="h-8 w-8 text-gray-400 hover:text-gray-300"
+                    >
+                      <span className="text-xs">{item.active ? '✓' : '○'}</span>
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleEdit(item)}
+                      className="h-8 w-8 text-blue-400 hover:text-blue-300"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => onDelete(item.id)}
+                      className="h-8 w-8 text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
 
-          <div className="flex items-center gap-2">
-            {editing === item.id ? (
-              <>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => handleSave(item.id)}
-                  className="h-8 w-8 text-green-400 hover:text-green-300"
-                >
-                  <Check className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={handleCancel}
-                  className="h-8 w-8 text-gray-400 hover:text-gray-300"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => onToggleActive(item)}
-                  className="h-8 w-8 text-gray-400 hover:text-gray-300"
-                >
-                  <span className="text-xs">{item.active ? '✓' : '○'}</span>
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => handleEdit(item)}
-                  className="h-8 w-8 text-blue-400 hover:text-blue-300"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => onDelete(item.id)}
-                  className="h-8 w-8 text-red-400 hover:text-red-300"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </>
+            {/* Render children */}
+            {hasChildren && !isCollapsed && (
+              <div className="ml-8 mt-2 space-y-2">
+                <DragDropContext onDragEnd={(result) => handleDragEnd(result, item.id)}>
+                  <Droppable droppableId={`children-${item.id}`}>
+                    {(provided) => (
+                      <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                        {childrenMap[item.id].map((child, childIndex) => renderItem(child, childIndex, item.id))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+              </div>
             )}
-          </div>
-        </div>
-
-        {/* Render children */}
-        {hasChildren && !isCollapsed && (
-          <div className="mt-2 space-y-2">
-            {childrenMap[item.id].map(child => renderItem(child, level + 1))}
           </div>
         )}
-      </div>
+      </Draggable>
     );
   };
 
@@ -188,7 +222,16 @@ export default function HierarchicalList({
           No {entityName.toLowerCase()}s yet
         </div>
       ) : (
-        parentItems.map(item => renderItem(item))
+        <DragDropContext onDragEnd={(result) => handleDragEnd(result, null)}>
+          <Droppable droppableId="parents">
+            {(provided) => (
+              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                {parentItems.map((item, index) => renderItem(item, index, null))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
     </div>
   );
