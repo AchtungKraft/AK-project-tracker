@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -7,22 +8,31 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Calendar, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+import TaskDetailModal from "../components/tasks/TaskDetailModal"; // Added import
 
 export default function MyTasks() {
   const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedTask, setSelectedTask] = useState(null); // Added state
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
-  const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ['myTasks', user?.id],
-    queryFn: () => base44.entities.Task.filter({ assigned_user_id: user?.id }),
+  // Added new useQuery for userTeamMember
+  const { data: userTeamMember } = useQuery({
+    queryKey: ['userTeamMember', user?.id],
+    queryFn: () => base44.entities.TeamMember.filter({ user_id: user?.id }),
+    select: (data) => data[0], // Assuming we need the first team member if multiple are returned
     enabled: !!user?.id,
+  });
+
+  // Updated useQuery for tasks to use assigned_team_member_id
+  const { data: tasks = [], isLoading } = useQuery({
+    queryKey: ['myTasks', userTeamMember?.id],
+    queryFn: () => base44.entities.Task.filter({ assigned_team_member_id: userTeamMember?.id }),
+    enabled: !!userTeamMember?.id,
   });
 
   const { data: statuses = [] } = useQuery({
@@ -177,10 +187,11 @@ export default function MyTasks() {
                           const isDueToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
 
                           return (
-                            <Link
+                            // Changed from Link to div and added onClick
+                            <div
                               key={task.id}
-                              to={createPageUrl(`ProjectDetail?id=${task.project_id}`)}
-                              className="block p-6 hover:bg-red-950/20 transition-colors"
+                              onClick={() => setSelectedTask(task)}
+                              className="block p-6 hover:bg-red-950/20 transition-colors cursor-pointer"
                             >
                               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                                 <div className="flex-1">
@@ -213,7 +224,7 @@ export default function MyTasks() {
                                   )}
                                 </div>
                               </div>
-                            </Link>
+                            </div>
                           );
                         })}
                       </div>
@@ -225,6 +236,14 @@ export default function MyTasks() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Added TaskDetailModal */}
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
     </div>
   );
 }

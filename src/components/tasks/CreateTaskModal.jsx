@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,20 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
+import { Calendar } from "@/components/ui/calendar"; // New import
+import { Loader2, CalendarIcon } from "lucide-react"; // CalendarIcon added
 import { toast } from "sonner";
+import { format } from "date-fns"; // New import
 
 export default function CreateTaskModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
+  const [taskData, setTaskData] = useState({
+    name: "",
+    description: "",
     project_id: projectId,
-    category_id: '',
-    assigned_user_id: '',
-    status_id: '',
-    start_date: '',
-    due_date: '',
+    category_id: "",
+    assigned_team_member_id: "", // Changed from assigned_user_id
+    status_id: "",
+    start_date: "",
+    due_date: "",
   });
 
   const { data: categories = [] } = useQuery({
@@ -33,12 +37,14 @@ export default function CreateTaskModal({ projectId, onClose }) {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
+  const { data: teamMembers = [] } = useQuery({ // Changed from users
+    queryKey: ['teamMembers'], // Changed from users
+    queryFn: () => base44.entities.TeamMember.list(), // Changed from User.list()
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const activeCategories = categories.filter(c => c.active); // New filter
+  const activeTeamMembers = teamMembers.filter(tm => tm.active); // New filter
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
@@ -49,59 +55,60 @@ export default function CreateTaskModal({ projectId, onClose }) {
     },
     onError: () => {
       toast.error('Failed to create task');
-    }
+    },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name) {
+    // Frontend validation for task name, `required` attribute also helps
+    if (!taskData.name) {
       toast.error('Task name is required');
       return;
     }
-    createMutation.mutate(formData);
+    createMutation.mutate(taskData);
   };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl bg-gray-900 border-red-900/30 text-white max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">New Task</DialogTitle>
+          <DialogTitle className="text-xl font-bold">Create New Task</DialogTitle> {/* Title changed */}
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Task Name *</Label>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4"> {/* mt-4 added */}
+          <div>
+            <Label>Task Name</Label> {/* htmlFor removed */}
             <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="bg-gray-800 border-gray-700"
-              required
+              value={taskData.name} // Changed from formData
+              onChange={(e) => setTaskData({ ...taskData, name: e.target.value })} // Changed from formData
+              placeholder="Task name" // Added placeholder
+              className="bg-gray-800 border-gray-700 text-white" // ClassName updated
+              required // Added required
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+          <div>
+            <Label>Description</Label> {/* htmlFor removed */}
             <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              className="bg-gray-800 border-gray-700 h-24"
+              value={taskData.description} // Changed from formData
+              onChange={(e) => setTaskData({ ...taskData, description: e.target.value })} // Changed from formData
+              placeholder="Task description" // Added placeholder
+              className="bg-gray-800 border-gray-700 text-white min-h-[100px]" // ClassName updated
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+            <div>
+              <Label>Category</Label> {/* htmlFor removed */}
               <Select
-                value={formData.category_id}
-                onValueChange={(value) => setFormData({...formData, category_id: value})}
+                value={taskData.category_id} // Changed from formData
+                onValueChange={(value) => setTaskData({ ...taskData, category_id: value })} // Changed from formData
               >
-                <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white"> {/* ClassName updated */}
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.filter(c => c.active).map(cat => (
+                  {activeCategories.map(cat => ( // Using activeCategories
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
                     </SelectItem>
@@ -110,32 +117,13 @@ export default function CreateTaskModal({ projectId, onClose }) {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="assigned">Assign To</Label>
+            <div>
+              <Label>Status</Label> {/* htmlFor removed */}
               <Select
-                value={formData.assigned_user_id}
-                onValueChange={(value) => setFormData({...formData, assigned_user_id: value})}
+                value={taskData.status_id} // Changed from formData
+                onValueChange={(value) => setTaskData({ ...taskData, status_id: value })} // Changed from formData
               >
-                <SelectTrigger className="bg-gray-800 border-gray-700">
-                  <SelectValue placeholder="Select user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map(user => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status_id}
-                onValueChange={(value) => setFormData({...formData, status_id: value})}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white"> {/* ClassName updated */}
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -147,27 +135,72 @@ export default function CreateTaskModal({ projectId, onClose }) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          
+          <div>
+            <Label>Assign To</Label> {/* Label text and htmlFor removed */}
+            <Select
+              value={taskData.assigned_team_member_id} // Changed from formData.assigned_user_id
+              onValueChange={(value) => setTaskData({ ...taskData, assigned_team_member_id: value })} // Changed from formData.assigned_user_id
+            >
+              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                <SelectValue placeholder="Assign to team member" /> {/* Placeholder changed */}
+              </SelectTrigger>
+              <SelectContent>
+                {activeTeamMembers.map(member => ( // Using activeTeamMembers
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.full_name} {member.team_role && `(${member.team_role})`} {/* Added team_role */}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="start_date">Start Date</Label>
-              <Input
-                id="start_date"
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                className="bg-gray-800 border-gray-700"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Start Date</Label> {/* htmlFor removed */}
+              <Popover> {/* New component */}
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" /> {/* New icon */}
+                    {taskData.start_date ? format(new Date(taskData.start_date), 'PPP') : 'Pick a date'} {/* Using format */}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={taskData.start_date ? new Date(taskData.start_date) : undefined}
+                    onSelect={(date) => setTaskData({ ...taskData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="due_date">Due Date</Label>
-              <Input
-                id="due_date"
-                type="date"
-                value={formData.due_date}
-                onChange={(e) => setFormData({...formData, due_date: e.target.value})}
-                className="bg-gray-800 border-gray-700"
-              />
+            <div>
+              <Label>Due Date</Label> {/* htmlFor removed */}
+              <Popover> {/* New component */}
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" /> {/* New icon */}
+                    {taskData.due_date ? format(new Date(taskData.due_date), 'PPP') : 'Pick a date'} {/* Using format */}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={taskData.due_date ? new Date(taskData.due_date) : undefined}
+                    onSelect={(date) => setTaskData({ ...taskData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -182,7 +215,7 @@ export default function CreateTaskModal({ projectId, onClose }) {
             </Button>
             <Button 
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || !taskData.name} // Added taskData.name check for disabling
               className="bg-red-600 hover:bg-red-700"
             >
               {createMutation.isPending ? (

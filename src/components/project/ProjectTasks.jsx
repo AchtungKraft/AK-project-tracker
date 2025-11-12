@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import CreateTaskModal from "../tasks/CreateTaskModal";
+import TaskDetailModal from "../tasks/TaskDetailModal";
 
 export default function ProjectTasks({ projectId }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks', projectId],
@@ -27,9 +29,9 @@ export default function ProjectTasks({ projectId }) {
     queryFn: () => base44.entities.TaskCategory.list(),
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -44,27 +46,25 @@ export default function ProjectTasks({ projectId }) {
     groupedTasks[statusLabel].push(task);
   });
 
-  const completedTasks = tasks.filter(t => {
+  const completedCount = tasks.filter(t => {
     const status = statuses.find(s => s.id === t.status_id);
     return status?.label?.toLowerCase() === 'completed' || status?.label?.toLowerCase() === 'done';
-  });
+  }).length;
 
-  const completionPercent = tasks.length > 0 
-    ? Math.round((completedTasks.length / tasks.length) * 100) 
-    : 0;
+  const completionPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
   return (
-    <div>
+    <>
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
         <CardHeader className="border-b border-red-900/30">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex justify-between items-center">
             <div>
-              <CardTitle className="text-white mb-2">Tasks</CardTitle>
-              <p className="text-sm text-gray-400">
-                {completedTasks.length} of {tasks.length} tasks completed ({completionPercent}%)
+              <CardTitle className="text-white">Project Tasks</CardTitle>
+              <p className="text-sm text-gray-400 mt-1">
+                {tasks.length} total tasks • {completionPercent}% complete
               </p>
             </div>
-            <Button 
+            <Button
               onClick={() => setShowCreateModal(true)}
               className="bg-red-600 hover:bg-red-700 gap-2"
             >
@@ -73,21 +73,21 @@ export default function ProjectTasks({ projectId }) {
             </Button>
           </div>
         </CardHeader>
-        
+
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-6 text-center text-gray-500">Loading tasks...</div>
+            <div className="text-center py-12 text-gray-500">Loading tasks...</div>
           ) : tasks.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              No tasks yet. Click "Add Task" to get started.
+            <div className="text-center py-12 text-gray-500">
+              No tasks yet. Add one to get started.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="divide-y divide-red-900/10">
               {Object.entries(groupedTasks).map(([statusLabel, statusTasks]) => {
                 const status = statuses.find(s => s.label === statusLabel);
                 return (
                   <div key={statusLabel}>
-                    <div className="px-6 py-3 bg-gray-900/50 border-b border-red-900/20">
+                    <div className="px-6 py-3 bg-gray-900/50">
                       <Badge 
                         style={{ backgroundColor: status?.color || '#EF4444' }}
                         className="text-white"
@@ -107,34 +107,29 @@ export default function ProjectTasks({ projectId }) {
                       <TableBody>
                         {statusTasks.map(task => {
                           const category = categories.find(c => c.id === task.category_id);
-                          const assignedUser = users.find(u => u.id === task.assigned_user_id);
+                          const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
                           const isOverdue = task.due_date && new Date(task.due_date) < new Date();
-                          
+
                           return (
                             <TableRow 
                               key={task.id}
-                              className="border-b border-red-900/10 hover:bg-red-950/20"
+                              onClick={() => setSelectedTask(task)}
+                              className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
                             >
-                              <TableCell className="text-white">
-                                <div>
-                                  <div className="font-medium">{task.name}</div>
-                                  {task.description && (
-                                    <div className="text-sm text-gray-500 mt-1 line-clamp-1">
-                                      {task.description}
-                                    </div>
-                                  )}
-                                </div>
+                              <TableCell className="font-medium text-white">
+                                {task.name}
                               </TableCell>
-                              <TableCell className="text-gray-400 hidden md:table-cell">
+                              <TableCell className="text-gray-300 hidden md:table-cell">
                                 {category?.name || '-'}
                               </TableCell>
-                              <TableCell className="text-gray-400 hidden lg:table-cell">
-                                {assignedUser?.full_name || 'Unassigned'}
+                              <TableCell className="text-gray-300 hidden lg:table-cell">
+                                {member?.full_name || 'Unassigned'}
                               </TableCell>
                               <TableCell>
                                 {task.due_date ? (
                                   <span className={isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}>
-                                    {format(new Date(task.due_date), 'MMM d, yyyy')}
+                                    <Calendar className="w-4 h-4 inline mr-1" />
+                                    {format(new Date(task.due_date), 'MMM d')}
                                   </span>
                                 ) : (
                                   <span className="text-gray-600">-</span>
@@ -159,6 +154,14 @@ export default function ProjectTasks({ projectId }) {
           onClose={() => setShowCreateModal(false)}
         />
       )}
-    </div>
+
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          projectId={projectId}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
+    </>
   );
 }
