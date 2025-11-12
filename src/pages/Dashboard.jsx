@@ -55,15 +55,15 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-4">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
               PROJECT DASHBOARD
             </h1>
-            <p className="text-gray-400">Ächtung Kraft Project Tracking Platform</p>
+            <p className="text-sm text-gray-400">Ächtung Kraft Project Tracking Platform</p>
           </div>
           <Button
             onClick={() => setShowCreateModal(true)}
@@ -75,8 +75,8 @@ export default function Dashboard() {
         </div>
 
         {/* Filters */}
-        <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Search */}
             <div className="md:col-span-3 lg:col-span-1">
               <div className="relative">
@@ -124,18 +124,18 @@ export default function Dashboard() {
 
         {/* Projects Grid */}
         {projectsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array(6).fill(0).map((_, i) => (
               <Skeleton key={i} className="h-96 bg-gray-800" />
             ))}
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-12 text-center">
+          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
             <p className="text-gray-500 text-lg">No projects found</p>
             <p className="text-gray-600 mt-2">Create your first project to get started</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProjects.map(project => {
               const status = statuses.find(s => s.id === project.status_id);
               const projectType = projectTypes.find(t => t.id === project.project_type_id);

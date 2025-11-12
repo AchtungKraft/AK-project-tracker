@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -183,11 +184,11 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
   return (
     <>
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-        <CardHeader className="border-b border-red-900/30">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <CardTitle className="text-xl font-bold text-white">All Projects</CardTitle>
+        <CardHeader className="border-b border-red-900/30 p-4">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+            <CardTitle className="text-lg font-bold text-white">All Projects</CardTitle>
             
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
               <div className="relative flex-1 lg:w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -198,7 +199,7 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-gray-900/50 border-gray-700 text-white">
+                <SelectTrigger className="w-full sm:w-36 bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -209,7 +210,7 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-gray-900/50 border-gray-700 text-white">
+                <SelectTrigger className="w-full sm:w-36 bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -225,15 +226,15 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
         
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-6 space-y-3">
+            <div className="p-4 space-y-2">
               {Array(5).fill(0).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full bg-gray-800" />
+                <Skeleton key={i} className="h-10 w-full bg-gray-800" />
               ))}
             </div>
           ) : (
             <div className="overflow-x-auto">
               {Object.keys(groupedProjects).length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
+                <div className="text-center py-8 text-gray-500 text-sm">
                   No projects found
                 </div>
               ) : (
@@ -241,24 +242,24 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
                   const status = statuses.find(s => s.label === statusLabel);
                   return (
                     <div key={statusLabel}>
-                      <div className="px-6 py-3 bg-gray-900/50 border-b border-red-900/20">
-                        <Badge 
-                          style={{ backgroundColor: status?.color || '#EF4444' }}
-                          className="text-white"
-                        >
+                      <div 
+                        className="px-4 py-2 bg-gray-900/50 border-b border-red-900/20 border-l-4"
+                        style={{ borderLeftColor: status?.color || '#EF4444' }}
+                      >
+                        <span className="text-white text-sm font-medium">
                           {statusLabel} ({statusProjects.length})
-                        </Badge>
+                        </span>
                       </div>
                       <Table>
                         <TableHeader>
                           <TableRow className="border-b border-red-900/20 hover:bg-transparent">
-                            <TableHead className="text-gray-400">Project</TableHead>
-                            <TableHead className="text-gray-400">Client</TableHead>
-                            <TableHead className="text-gray-400 hidden md:table-cell">Type</TableHead>
-                            <TableHead className="text-gray-400 hidden lg:table-cell">Progress</TableHead>
-                            <TableHead className="text-gray-400 hidden xl:table-cell">Due</TableHead>
-                            <TableHead className="text-gray-400 hidden xl:table-cell">Team</TableHead>
-                            <TableHead className="text-gray-400 w-12"></TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2">Project</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2">Client</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2 hidden md:table-cell">Type</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Progress</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Due</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Team</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-2 w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -274,66 +275,66 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
                                 className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors"
                               >
                                 <TableCell 
-                                  className="font-medium text-white cursor-pointer"
+                                  className="font-medium text-white text-sm cursor-pointer py-2"
                                   onClick={() => setSelectedProject(project.id)}
                                 >
                                   <div>
                                     <div>{project.name}</div>
                                     {project.vin && (
-                                      <div className="text-xs text-gray-500 mt-1">VIN: {project.vin}</div>
+                                      <div className="text-xs text-gray-500 mt-0.5">VIN: {project.vin}</div>
                                     )}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-gray-300">{project.client_name || '-'}</TableCell>
-                                <TableCell className="text-gray-300 hidden md:table-cell">
+                                <TableCell className="text-gray-300 text-sm py-2">{project.client_name || '-'}</TableCell>
+                                <TableCell className="text-gray-300 text-sm hidden md:table-cell py-2">
                                   {projectType?.name || '-'}
                                 </TableCell>
-                                <TableCell className="hidden lg:table-cell">
+                                <TableCell className="hidden lg:table-cell py-2">
                                   <div className="flex items-center gap-2">
                                     <Progress 
                                       value={project.progress_percent || 0} 
-                                      className="h-2 w-20 bg-gray-800"
+                                      className="h-1.5 w-16 bg-gray-800"
                                     />
-                                    <span className="text-sm text-gray-400">
+                                    <span className="text-xs text-gray-400">
                                       {project.progress_percent || 0}%
                                     </span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="hidden xl:table-cell">
+                                <TableCell className="hidden xl:table-cell py-2">
                                   {project.target_completion ? (
-                                    <span className={isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}>
+                                    <span className={`text-sm ${isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}`}>
                                       {format(new Date(project.target_completion), 'MMM d, yyyy')}
                                     </span>
                                   ) : '-'}
                                 </TableCell>
-                                <TableCell className="text-gray-400 text-sm hidden xl:table-cell">
+                                <TableCell className="text-gray-400 text-xs hidden xl:table-cell py-2">
                                   {getTeamNames(project.assigned_team)}
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="py-2">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7">
                                         <MoreVertical className="w-4 h-4 text-gray-400" />
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700">
                                       <DropdownMenuItem 
                                         onClick={() => setSelectedProject(project.id)}
-                                        className="text-white hover:bg-gray-700 cursor-pointer"
+                                        className="text-white hover:bg-gray-700 cursor-pointer text-sm"
                                       >
                                         <Eye className="w-4 h-4 mr-2" />
                                         View
                                       </DropdownMenuItem>
                                       <DropdownMenuItem 
                                         onClick={() => setEditingProject(project)}
-                                        className="text-white hover:bg-gray-700 cursor-pointer"
+                                        className="text-white hover:bg-gray-700 cursor-pointer text-sm"
                                       >
                                         <Edit2 className="w-4 h-4 mr-2" />
                                         Edit
                                       </DropdownMenuItem>
                                       <DropdownMenuItem 
                                         onClick={() => handleDuplicate(project)}
-                                        className="text-white hover:bg-gray-700 cursor-pointer"
+                                        className="text-white hover:bg-gray-700 cursor-pointer text-sm"
                                       >
                                         <Copy className="w-4 h-4 mr-2" />
                                         Duplicate
@@ -341,14 +342,14 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
                                       <DropdownMenuSeparator className="bg-gray-700" />
                                       <DropdownMenuItem 
                                         onClick={() => handleArchive(project.id)}
-                                        className="text-white hover:bg-gray-700 cursor-pointer"
+                                        className="text-white hover:bg-gray-700 cursor-pointer text-sm"
                                       >
                                         <Archive className="w-4 h-4 mr-2" />
                                         Archive
                                       </DropdownMenuItem>
                                       <DropdownMenuItem 
                                         onClick={() => handleDelete(project.id)}
-                                        className="text-red-400 hover:bg-gray-700 cursor-pointer"
+                                        className="text-red-400 hover:bg-gray-700 cursor-pointer text-sm"
                                       >
                                         <Trash2 className="w-4 h-4 mr-2" />
                                         Delete

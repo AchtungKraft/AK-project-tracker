@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +23,6 @@ export default function MyTasks() {
   const [groupBy, setGroupBy] = useState('status');
   const [selectedTask, setSelectedTask] = useState(null);
 
-  // Load filters from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(FILTER_STORAGE_KEY);
@@ -40,7 +38,6 @@ export default function MyTasks() {
     } catch (e) {}
   }, []);
 
-  // Save filters
   useEffect(() => {
     try {
       localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
@@ -81,7 +78,6 @@ export default function MyTasks() {
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
 
-  // Filter tasks
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          t.description?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -93,7 +89,6 @@ export default function MyTasks() {
     return matchesSearch && matchesProject && matchesStatus && matchesCategory && matchesAssigned;
   });
 
-  // Group tasks
   const groupedTasks = {};
   filteredTasks.forEach(task => {
     let groupKey = 'Ungrouped';
@@ -136,26 +131,25 @@ export default function MyTasks() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
               All Tasks
             </h1>
-            <p className="text-gray-400">View and manage all tasks across projects</p>
+            <p className="text-sm text-gray-400">View and manage all tasks across projects</p>
           </div>
 
           {/* Filters */}
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardHeader className="border-b border-red-900/30">
+            <CardHeader className="border-b border-red-900/30 p-4">
               <div className="flex items-center gap-2">
-                <Filter className="w-5 h-5 text-gray-400" />
-                <CardTitle className="text-white">Filters & Grouping</CardTitle>
+                <Filter className="w-4 h-4 text-gray-400" />
+                <CardTitle className="text-white text-base">Filters & Grouping</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Search */}
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div className="lg:col-span-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -168,9 +162,8 @@ export default function MyTasks() {
                   </div>
                 </div>
 
-                {/* Project Filter */}
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Project</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Project</label>
                   <Select value={projectFilter} onValueChange={setProjectFilter}>
                     <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                       <SelectValue placeholder="All Projects" />
@@ -184,9 +177,8 @@ export default function MyTasks() {
                   </Select>
                 </div>
 
-                {/* Status Filter */}
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Status</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Status</label>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                       <SelectValue placeholder="All Status" />
@@ -200,9 +192,8 @@ export default function MyTasks() {
                   </Select>
                 </div>
 
-                {/* Category Filter */}
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Category</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Category</label>
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                     <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                       <SelectValue placeholder="All Categories" />
@@ -216,9 +207,8 @@ export default function MyTasks() {
                   </Select>
                 </div>
 
-                {/* Assigned Filter */}
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Assigned To</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Assigned To</label>
                   <Select value={assignedFilter} onValueChange={setAssignedFilter}>
                     <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                       <SelectValue placeholder="All Members" />
@@ -232,9 +222,8 @@ export default function MyTasks() {
                   </Select>
                 </div>
 
-                {/* Group By */}
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Group By</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Group By</label>
                   <Select value={groupBy} onValueChange={setGroupBy}>
                     <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                       <SelectValue />
@@ -253,16 +242,16 @@ export default function MyTasks() {
 
           {/* Tasks Table */}
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardHeader className="border-b border-red-900/30">
-              <CardTitle className="text-white">
+            <CardHeader className="border-b border-red-900/30 p-4">
+              <CardTitle className="text-white text-base">
                 Tasks ({filteredTasks.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {tasksLoading ? (
-                <div className="p-6 text-center text-gray-500">Loading tasks...</div>
+                <div className="p-4 text-center text-gray-500 text-sm">Loading tasks...</div>
               ) : filteredTasks.length === 0 ? (
-                <div className="p-12 text-center text-gray-500">
+                <div className="p-8 text-center text-gray-500 text-sm">
                   No tasks found matching your filters.
                 </div>
               ) : (
@@ -272,29 +261,29 @@ export default function MyTasks() {
                     
                     return (
                       <div key={groupLabel}>
-                        <div className="px-6 py-3 bg-gray-900/50">
-                          <Badge 
-                            style={status ? { backgroundColor: status.color } : {}}
-                            className={status ? "text-white" : "bg-gray-700 text-white"}
-                          >
+                        <div 
+                          className="px-4 py-2 bg-gray-900/50 border-l-4"
+                          style={{ borderLeftColor: status?.color || '#6B7280' }}
+                        >
+                          <span className="text-white text-sm font-medium">
                             {groupLabel} ({groupTasks.length})
-                          </Badge>
+                          </span>
                         </div>
                         <Table>
                           <TableHeader>
                             <TableRow className="border-b border-red-900/20 hover:bg-transparent">
-                              <TableHead className="text-gray-400">Task</TableHead>
-                              <TableHead className="text-gray-400 hidden md:table-cell">Project</TableHead>
+                              <TableHead className="text-gray-400 text-xs py-2">Task</TableHead>
+                              <TableHead className="text-gray-400 text-xs py-2 hidden md:table-cell">Project</TableHead>
                               {groupBy !== 'status' && (
-                                <TableHead className="text-gray-400 hidden lg:table-cell">Status</TableHead>
+                                <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Status</TableHead>
                               )}
                               {groupBy !== 'category' && (
-                                <TableHead className="text-gray-400 hidden lg:table-cell">Category</TableHead>
+                                <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Category</TableHead>
                               )}
                               {groupBy !== 'assigned' && (
-                                <TableHead className="text-gray-400 hidden xl:table-cell">Assigned</TableHead>
+                                <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Assigned</TableHead>
                               )}
-                              <TableHead className="text-gray-400">Due Date</TableHead>
+                              <TableHead className="text-gray-400 text-xs py-2">Due Date</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -308,7 +297,7 @@ export default function MyTasks() {
                                   onClick={() => setSelectedTask(task)}
                                   className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
                                 >
-                                  <TableCell className="font-medium text-white">
+                                  <TableCell className="font-medium text-white text-sm py-2">
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className="cursor-help">{task.name}</span>
@@ -320,11 +309,11 @@ export default function MyTasks() {
                                       )}
                                     </Tooltip>
                                   </TableCell>
-                                  <TableCell className="text-gray-300 hidden md:table-cell">
+                                  <TableCell className="text-gray-300 text-sm hidden md:table-cell py-2">
                                     {getTaskProject(task.project_id)}
                                   </TableCell>
                                   {groupBy !== 'status' && (
-                                    <TableCell className="hidden lg:table-cell">
+                                    <TableCell className="hidden lg:table-cell py-2">
                                       {taskStatus && (
                                         <Badge 
                                           style={{ backgroundColor: taskStatus.color }}
@@ -336,23 +325,23 @@ export default function MyTasks() {
                                     </TableCell>
                                   )}
                                   {groupBy !== 'category' && (
-                                    <TableCell className="text-gray-300 hidden lg:table-cell">
+                                    <TableCell className="text-gray-300 text-sm hidden lg:table-cell py-2">
                                       {getTaskCategory(task.category_id)}
                                     </TableCell>
                                   )}
                                   {groupBy !== 'assigned' && (
-                                    <TableCell className="text-gray-300 hidden xl:table-cell">
+                                    <TableCell className="text-gray-300 text-sm hidden xl:table-cell py-2">
                                       {getTaskAssigned(task.assigned_team_member_id)}
                                     </TableCell>
                                   )}
-                                  <TableCell>
+                                  <TableCell className="py-2">
                                     {task.due_date ? (
-                                      <span className={isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}>
-                                        <Calendar className="w-4 h-4 inline mr-1" />
+                                      <span className={`text-sm ${isOverdue ? 'text-red-400 font-medium' : 'text-gray-400'}`}>
+                                        <Calendar className="w-3 h-3 inline mr-1" />
                                         {format(new Date(task.due_date), 'MMM d')}
                                       </span>
                                     ) : (
-                                      <span className="text-gray-600">-</span>
+                                      <span className="text-gray-600 text-sm">-</span>
                                     )}
                                   </TableCell>
                                 </TableRow>

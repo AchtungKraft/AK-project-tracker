@@ -32,7 +32,7 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-300 overflow-hidden group">
         {/* Image Section */}
         <div 
-          className="relative h-48 bg-gray-900/50 cursor-pointer overflow-hidden"
+          className="relative h-40 bg-gray-900/50 cursor-pointer overflow-hidden"
           onClick={() => displayImage && setSelectedImage(displayImage)}
         >
           {displayImage ? (
@@ -44,7 +44,7 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-600">
               <div className="text-center">
-                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No Image</p>
               </div>
             </div>
@@ -52,10 +52,10 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
           
           {/* Status Badge Overlay */}
           {status && (
-            <div className="absolute top-3 right-3">
+            <div className="absolute top-2 right-2">
               <Badge 
                 style={{ backgroundColor: status.color }}
-                className="text-white shadow-lg"
+                className="text-white shadow-lg text-xs"
               >
                 {status.label}
               </Badge>
@@ -64,18 +64,18 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
         </div>
 
         {/* Content Section */}
-        <CardContent className="p-5 space-y-4">
+        <CardContent className="p-4 space-y-3">
           {/* Project Name & Type */}
           <div>
-            <h3 className="text-lg font-bold text-white mb-1 line-clamp-1">
+            <h3 className="text-base font-bold text-white mb-0.5 line-clamp-1">
               {project.name}
             </h3>
-            <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-2 text-xs text-gray-400">
               {projectType && <span>{projectType.name}</span>}
               {project.vin && (
                 <>
                   <span>•</span>
-                  <span className="font-mono text-xs">{project.vin}</span>
+                  <span className="font-mono">{project.vin}</span>
                 </>
               )}
             </div>
@@ -84,20 +84,20 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
           {/* Client Info */}
           {project.client_name && (
             <div className="text-sm">
-              <p className="text-gray-500">Client</p>
+              <p className="text-gray-500 text-xs">Client</p>
               <p className="text-white font-medium">{project.client_name}</p>
             </div>
           )}
 
           {/* Progress */}
           <div>
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center mb-1">
               <span className="text-xs text-gray-500">Progress</span>
               <span className="text-xs text-gray-400 font-medium">
                 {project.progress_percent || 0}%
               </span>
             </div>
-            <Progress value={project.progress_percent || 0} className="h-2 bg-gray-800" />
+            <Progress value={project.progress_percent || 0} className="h-1.5 bg-gray-800" />
           </div>
 
           {/* Due Date & Team */}
@@ -127,18 +127,20 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
             <Link to={createPageUrl("ProjectDetail") + `?id=${project.id}`} className="flex-1">
               <Button 
                 variant="outline" 
+                size="sm"
                 className="w-full border-gray-700 hover:bg-red-950/30 hover:border-red-700 text-white gap-2"
               >
-                <Eye className="w-4 h-4" />
+                <Eye className="w-3 h-3" />
                 View
               </Button>
             </Link>
             <Button 
               variant="outline"
+              size="sm"
               onClick={() => onEdit(project)}
               className="flex-1 border-gray-700 hover:bg-red-950/30 hover:border-red-700 text-white gap-2"
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-3 h-3" />
               Edit
             </Button>
           </div>
