@@ -53,6 +53,14 @@ export default function ProjectTasks({ projectId }) {
 
   const completionPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
+  const handleTaskClick = (task) => {
+    console.log('Task clicked:', task);
+    setSelectedTask(task);
+  };
+
+  console.log('ProjectTasks render - selectedTask:', selectedTask);
+  console.log('ProjectTasks render - showCreateModal:', showCreateModal);
+
   return (
     <>
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -113,7 +121,7 @@ export default function ProjectTasks({ projectId }) {
                           return (
                             <TableRow 
                               key={task.id}
-                              onClick={() => setSelectedTask(task)}
+                              onClick={() => handleTaskClick(task)}
                               className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
                             >
                               <TableCell className="font-medium text-white">

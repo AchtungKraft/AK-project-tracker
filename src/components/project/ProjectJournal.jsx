@@ -72,6 +72,13 @@ export default function ProjectJournal({ projectId }) {
     new Date(b.entry_date || b.created_date) - new Date(a.entry_date || a.created_date)
   );
 
+  const handleEntryClick = (entry) => {
+    console.log('Journal entry clicked:', entry);
+    setSelectedEntry(entry);
+  };
+
+  console.log('ProjectJournal render - selectedEntry:', selectedEntry);
+
   return (
     <>
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -171,7 +178,7 @@ export default function ProjectJournal({ projectId }) {
               {sortedEntries.map(entry => (
                 <div
                   key={entry.id}
-                  onClick={() => setSelectedEntry(entry)}
+                  onClick={() => handleEntryClick(entry)}
                   className="p-4 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
