@@ -48,7 +48,7 @@ export default function MyTasks() {
     return matchesSearch && matchesStatus;
   });
 
-  const overdueT asks = filteredTasks.filter(t => {
+  const overdueTasks = filteredTasks.filter(t => {
     if (!t.due_date) return false;
     const status = statuses.find(s => s.id === t.status_id);
     const isCompleted = status?.label?.toLowerCase() === 'completed' || status?.label?.toLowerCase() === 'done';
@@ -179,7 +179,7 @@ export default function MyTasks() {
                           return (
                             <Link
                               key={task.id}
-                              to={createPageUrl(`ProjectDetail?id=${task.project_id}#tasks`)}
+                              to={createPageUrl(`ProjectDetail?id=${task.project_id}`)}
                               className="block p-6 hover:bg-red-950/20 transition-colors"
                             >
                               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
