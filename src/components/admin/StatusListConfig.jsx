@@ -26,8 +26,8 @@ export default function StatusListConfig() {
   const { data: statuses = [], isLoading } = useQuery({
     queryKey: ['statuses'],
     queryFn: async () => {
-      const statuses = await base44.entities.StatusList.list();
-      return statuses.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      const statusList = await base44.entities.StatusList.list();
+      return statusList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
   });
 
