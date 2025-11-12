@@ -152,56 +152,34 @@ export default function ProjectKanban({ projectId }) {
 
   const groupingData = getPrimaryGroups();
 
-  // Helper function to group tasks within a bucket based on subGroupBy setting
+  // Helper function to group tasks within a bucket based on subGroupBy setting (single-level)
   const groupTasksWithinBucket = (bucketTasks) => {
     const grouped = {};
     
     bucketTasks.forEach(task => {
-      let primaryKey, primaryLabel, primaryColor, secondaryKey, secondaryLabel, secondaryColor;
+      let groupKey, groupLabel, groupColor;
       
       if (subGroupBy === 'status') {
-        // Primary: Status, Secondary: Category
         const status = statuses.find(s => s.id === task.status_id);
-        primaryKey = task.status_id || 'no-status';
-        primaryLabel = status?.label || 'No Status';
-        primaryColor = status?.color || '#6B7280';
-        
-        const category = categories.find(c => c.id === task.category_id);
-        secondaryKey = task.category_id || 'no-category';
-        secondaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
-        secondaryColor = category?.color || '#6B7280';
+        groupKey = task.status_id || 'no-status';
+        groupLabel = status?.label || 'No Status';
+        groupColor = status?.color || '#6B7280';
       } else if (subGroupBy === 'assigned') {
-        // Primary: Assigned, Secondary: Category
         const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
-        primaryKey = task.assigned_team_member_id || 'unassigned';
-        primaryLabel = member?.full_name || 'Unassigned';
-        primaryColor = '#6B7280';
-        
-        const category = categories.find(c => c.id === task.category_id);
-        secondaryKey = task.category_id || 'no-category';
-        secondaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
-        secondaryColor = category?.color || '#6B7280';
+        groupKey = task.assigned_team_member_id || 'unassigned';
+        groupLabel = member?.full_name || 'Unassigned';
+        groupColor = '#6B7280';
       } else if (subGroupBy === 'category') {
-        // Primary: Category, Secondary: Status
         const category = categories.find(c => c.id === task.category_id);
-        primaryKey = task.category_id || 'no-category';
-        primaryLabel = getCategoryPath(task.category_id, categories) || 'No Category';
-        primaryColor = category?.color || '#6B7280';
-        
-        const status = statuses.find(s => s.id === task.status_id);
-        secondaryKey = task.status_id || 'no-status';
-        secondaryLabel = status?.label || 'No Status';
-        secondaryColor = status?.color || '#6B7280';
+        groupKey = task.category_id || 'no-category';
+        groupLabel = getCategoryPath(task.category_id, categories) || 'No Category';
+        groupColor = category?.color || '#6B7280';
       }
-      
-      const groupKey = `${primaryKey}|||${secondaryKey}`;
       
       if (!grouped[groupKey]) {
         grouped[groupKey] = {
-          primaryLabel,
-          primaryColor,
-          secondaryLabel,
-          secondaryColor,
+          label: groupLabel,
+          color: groupColor,
           tasks: []
         };
       }
@@ -391,32 +369,19 @@ export default function ProjectKanban({ projectId }) {
                                   
                                   return (
                                     <div key={groupKey}>
-                                      {/* Primary Group Header */}
+                                      {/* Group Header */}
                                       <div 
                                         className="px-3 py-1.5 bg-gray-900/50 border-l-4 border-b"
                                         style={{ 
-                                          borderLeftColor: groupData.primaryColor,
-                                          borderBottomColor: groupData.primaryColor
+                                          borderLeftColor: groupData.color,
+                                          borderBottomColor: groupData.color
                                         }}
                                       >
                                         <span 
                                           className="text-xs font-medium"
-                                          style={{ color: groupData.primaryColor }}
+                                          style={{ color: groupData.color }}
                                         >
-                                          {groupData.primaryLabel}
-                                        </span>
-                                      </div>
-                                      
-                                      {/* Secondary Group Header */}
-                                      <div 
-                                        className="px-3 py-1 bg-gray-800/30 border-l-2"
-                                        style={{ borderLeftColor: groupData.secondaryColor }}
-                                      >
-                                        <span 
-                                          className="text-xs"
-                                          style={{ color: groupData.secondaryColor }}
-                                        >
-                                          {groupData.secondaryLabel}
+                                          {groupData.label}
                                         </span>
                                       </div>
                                       
