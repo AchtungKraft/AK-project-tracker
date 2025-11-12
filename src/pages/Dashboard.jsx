@@ -1,38 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
-import { 
-  Plus, 
-  FolderKanban, 
-  AlertCircle, 
-  TrendingUp,
-  Users,
-  Calendar
-} from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import StatsCard from "../components/dashboard/StatsCard";
-import ProjectsTable from "../components/dashboard/ProjectsTable";
+import { Plus, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import CreateProjectModal from "../components/dashboard/CreateProjectModal";
+import ProjectCard from "../components/dashboard/ProjectCard";
+import EditProjectModal from "../components/dashboard/EditProjectModal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [user, setUser] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
-
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
-  });
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list(),
   });
 
   const { data: statuses = [] } = useQuery({
@@ -40,85 +33,136 @@ export default function Dashboard() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  const activeProjects = projects.filter(p => {
-    const status = statuses.find(s => s.id === p.status_id);
-    return status?.label?.toLowerCase() !== 'completed' && status?.label?.toLowerCase() !== 'archived';
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ['projectTypes'],
+    queryFn: () => base44.entities.ProjectType.list(),
   });
 
-  const overdueProjects = projects.filter(p => {
-    if (!p.target_completion) return false;
-    const status = statuses.find(s => s.id === p.status_id);
-    if (status?.label?.toLowerCase() === 'completed') return false;
-    return new Date(p.target_completion) < new Date();
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
   });
 
-  const avgProgress = projects.length > 0 
-    ? Math.round(projects.reduce((sum, p) => sum + (p.progress_percent || 0), 0) / projects.length)
-    : 0;
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
 
-  const teamLoad = projects.filter(p => 
-    p.assigned_team?.includes(user?.id)
-  ).length;
+  const filteredProjects = projects.filter(p => {
+    const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         p.vin?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || p.status_id === statusFilter;
+    const matchesType = typeFilter === 'all' || p.project_type_id === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-              Project Dashboard
+              PROJECT DASHBOARD
             </h1>
-            <p className="text-gray-400">Craft. Precision. Passion.</p>
+            <p className="text-gray-400">Ächtung Kraft Project Tracking Platform</p>
           </div>
-          <Button 
+          <Button
             onClick={() => setShowCreateModal(true)}
-            className="bg-red-600 hover:bg-red-700 text-white gap-2"
+            className="bg-red-600 hover:bg-red-700 gap-2"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-5 h-5" />
             New Project
           </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            title="Active Projects"
-            value={activeProjects.length}
-            icon={FolderKanban}
-            gradient="from-blue-600 to-blue-800"
-          />
-          <StatsCard
-            title="Overdue Projects"
-            value={overdueProjects.length}
-            icon={AlertCircle}
-            gradient="from-red-600 to-red-800"
-          />
-          <StatsCard
-            title="Avg Progress"
-            value={`${avgProgress}%`}
-            icon={TrendingUp}
-            gradient="from-green-600 to-green-800"
-          />
-          <StatsCard
-            title="My Projects"
-            value={teamLoad}
-            icon={Users}
-            gradient="from-purple-600 to-purple-800"
-          />
+        {/* Filters */}
+        <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Search */}
+            <div className="md:col-span-3 lg:col-span-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Input
+                  placeholder="Search projects..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+                />
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {projectStatuses.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Type Filter */}
+            <div>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {projectTypes.filter(t => t.active).map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
-        {/* Projects Table */}
-        <ProjectsTable 
-          projects={projects}
-          statuses={statuses}
-          isLoading={isLoading}
-        />
+        {/* Projects Grid */}
+        {projectsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array(6).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-96 bg-gray-800" />
+            ))}
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-12 text-center">
+            <p className="text-gray-500 text-lg">No projects found</p>
+            <p className="text-gray-600 mt-2">Create your first project to get started</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProjects.map(project => {
+              const status = statuses.find(s => s.id === project.status_id);
+              const projectType = projectTypes.find(t => t.id === project.project_type_id);
+              
+              return (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  status={status}
+                  projectType={projectType}
+                  teamMembers={teamMembers}
+                  onEdit={setEditingProject}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {showCreateModal && (
-        <CreateProjectModal 
-          onClose={() => setShowCreateModal(false)}
+        <CreateProjectModal onClose={() => setShowCreateModal(false)} />
+      )}
+
+      {editingProject && (
+        <EditProjectModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
         />
       )}
     </div>

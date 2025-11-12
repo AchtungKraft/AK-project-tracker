@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Search, Calendar, Filter, Plus } from "lucide-react";
 import { format } from "date-fns";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
@@ -120,7 +122,7 @@ export default function ProjectTasks({ projectId }) {
   };
 
   return (
-    <>
+    <TooltipProvider>
       <div className="space-y-6">
         {/* Filters */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -277,7 +279,16 @@ export default function ProjectTasks({ projectId }) {
                                 className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
                               >
                                 <TableCell className="font-medium text-white">
-                                  {task.name}
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help">{task.name}</span>
+                                    </TooltipTrigger>
+                                    {task.description && (
+                                      <TooltipContent side="right" className="max-w-md bg-gray-800 border-gray-700">
+                                        <p className="text-sm whitespace-pre-wrap">{task.description}</p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
                                 </TableCell>
                                 {groupBy !== 'status' && (
                                   <TableCell className="hidden lg:table-cell">
@@ -339,6 +350,6 @@ export default function ProjectTasks({ projectId }) {
           onClose={() => setShowCreateModal(false)}
         />
       )}
-    </>
+    </TooltipProvider>
   );
 }

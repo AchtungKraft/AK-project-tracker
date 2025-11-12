@@ -1,16 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, CalendarIcon, Upload, X, Star } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 export default function EditProjectModal({ project, onClose }) {
   const queryClient = useQueryClient();
+  const [uploading, setUploading] = useState(false);
   const [projectData, setProjectData] = useState({
     name: "",
     client_name: "",
@@ -22,6 +34,8 @@ export default function EditProjectModal({ project, onClose }) {
     start_date: "",
     target_completion: "",
     assigned_team: [],
+    images: [],
+    featured_image_url: "",
   });
 
   useEffect(() => {
@@ -37,6 +51,8 @@ export default function EditProjectModal({ project, onClose }) {
         start_date: project.start_date || "",
         target_completion: project.target_completion || "",
         assigned_team: project.assigned_team || [],
+        images: project.images || [],
+        featured_image_url: project.featured_image_url || "",
       });
     }
   }, [project]);
@@ -56,15 +72,15 @@ export default function EditProjectModal({ project, onClose }) {
     queryFn: () => base44.entities.TeamMember.list(),
   });
 
-  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
   const activeTypes = projectTypes.filter(t => t.active);
-  const activeTeamMembers = teamMembers.filter(tm => tm.active);
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+  const activeMembers = teamMembers.filter(tm => tm.active);
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Project.update(project.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      queryClient.invalidateQueries({ queryKey: ['project'] });
+      queryClient.invalidateQueries({ queryKey: ['project', project.id] });
       toast.success('Project updated successfully');
       onClose();
     },
@@ -73,24 +89,62 @@ export default function EditProjectModal({ project, onClose }) {
     },
   });
 
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    try {
+      const uploadPromises = files.map((file) =>
+        base44.integrations.Core.UploadFile({ file })
+      );
+      const results = await Promise.all(uploadPromises);
+      const imageUrls = results.map((r) => r.file_url);
+
+      setProjectData(prev => ({
+        ...prev,
+        images: [...prev.images, ...imageUrls]
+      }));
+      toast.success('Images uploaded');
+    } catch (error) {
+      toast.error('Failed to upload images');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = (urlToRemove) => {
+    setProjectData(prev => {
+      const newImages = prev.images.filter(url => url !== urlToRemove);
+      return {
+        ...prev,
+        images: newImages,
+        // Clear featured image if it's the one being removed
+        featured_image_url: prev.featured_image_url === urlToRemove ? "" : prev.featured_image_url
+      };
+    });
+  };
+
+  const handleSetFeaturedImage = (url) => {
+    setProjectData(prev => ({
+      ...prev,
+      featured_image_url: url
+    }));
+    toast.success('Featured image set');
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     updateMutation.mutate(projectData);
   };
 
-  const toggleTeamMember = (memberId) => {
-    const currentTeam = projectData.assigned_team || [];
-    if (currentTeam.includes(memberId)) {
-      setProjectData({
-        ...projectData,
-        assigned_team: currentTeam.filter(id => id !== memberId)
-      });
-    } else {
-      setProjectData({
-        ...projectData,
-        assigned_team: [...currentTeam, memberId]
-      });
-    }
+  const handleTeamToggle = (memberId) => {
+    setProjectData(prev => ({
+      ...prev,
+      assigned_team: prev.assigned_team.includes(memberId)
+        ? prev.assigned_team.filter(id => id !== memberId)
+        : [...prev.assigned_team, memberId]
+    }));
   };
 
   return (
@@ -100,18 +154,20 @@ export default function EditProjectModal({ project, onClose }) {
           <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+          {/* Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Project Name</Label>
+              <Label>Project Name *</Label>
               <Input
                 value={projectData.name}
                 onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
-                placeholder="e.g., 1973 911 RSR Tribute"
+                placeholder="Project name"
                 className="bg-gray-800 border-gray-700 text-white"
                 required
               />
             </div>
+
             <div>
               <Label>VIN / Chassis Number</Label>
               <Input
@@ -121,9 +177,7 @@ export default function EditProjectModal({ project, onClose }) {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label>Client Name</Label>
               <Input
@@ -133,6 +187,7 @@ export default function EditProjectModal({ project, onClose }) {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+
             <div>
               <Label>Client Email</Label>
               <Input
@@ -143,6 +198,7 @@ export default function EditProjectModal({ project, onClose }) {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+
             <div>
               <Label>Client Phone</Label>
               <Input
@@ -152,9 +208,7 @@ export default function EditProjectModal({ project, onClose }) {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Project Type</Label>
               <Select
@@ -162,7 +216,7 @@ export default function EditProjectModal({ project, onClose }) {
                 onValueChange={(value) => setProjectData({ ...projectData, project_type_id: value })}
               >
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select project type" />
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
                   {activeTypes.map(type => (
@@ -171,6 +225,7 @@ export default function EditProjectModal({ project, onClose }) {
                 </SelectContent>
               </Select>
             </div>
+
             <div>
               <Label>Status</Label>
               <Select
@@ -187,50 +242,165 @@ export default function EditProjectModal({ project, onClose }) {
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Start Date</Label>
-              <Input
-                type="date"
-                value={projectData.start_date}
-                onChange={(e) => setProjectData({ ...projectData, start_date: e.target.value })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {projectData.start_date ? format(new Date(projectData.start_date), 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={projectData.start_date ? new Date(projectData.start_date) : undefined}
+                    onSelect={(date) => setProjectData({ ...projectData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
+
             <div>
               <Label>Target Completion</Label>
-              <Input
-                type="date"
-                value={projectData.target_completion}
-                onChange={(e) => setProjectData({ ...projectData, target_completion: e.target.value })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {projectData.target_completion ? format(new Date(projectData.target_completion), 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={projectData.target_completion ? new Date(projectData.target_completion) : undefined}
+                    onSelect={(date) => setProjectData({ ...projectData, target_completion: date ? format(date, 'yyyy-MM-dd') : '' })}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
+          {/* Project Images */}
           <div>
-            <Label>Assigned Team Members</Label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-              {activeTeamMembers.map(member => (
-                <label
-                  key={member.id}
-                  className="flex items-center gap-2 p-2 rounded-lg border border-gray-700 cursor-pointer hover:bg-gray-800 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={(projectData.assigned_team || []).includes(member.id)}
-                    onChange={() => toggleTeamMember(member.id)}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-white">{member.full_name}</span>
+            <div className="flex justify-between items-center mb-3">
+              <Label>Project Images</Label>
+              <div>
+                <input
+                  type="file"
+                  id="image-upload-edit"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <label htmlFor="image-upload-edit">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cursor-pointer border-gray-700"
+                    disabled={uploading}
+                    onClick={() => document.getElementById('image-upload-edit').click()}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Add Images
+                      </>
+                    )}
+                  </Button>
                 </label>
+              </div>
+            </div>
+
+            {projectData.images.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {projectData.images.map((url, idx) => (
+                  <div key={idx} className="relative group">
+                    <div className={`w-full h-32 bg-gray-800 rounded-lg border ${projectData.featured_image_url === url ? 'border-yellow-500 border-2' : 'border-gray-700'} flex items-center justify-center overflow-hidden`}>
+                      <img
+                        src={url}
+                        alt={`Project ${idx + 1}`}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    
+                    <div className="absolute top-2 left-2 right-2 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => handleSetFeaturedImage(url)}
+                        className={`${projectData.featured_image_url === url ? 'bg-yellow-500' : 'bg-gray-700'} text-white rounded-full p-1.5 z-10`}
+                        title="Set as featured image"
+                      >
+                        <Star className="w-3 h-3" fill={projectData.featured_image_url === url ? "white" : "none"} />
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(url)}
+                        className="bg-red-600 text-white rounded-full p-1.5 z-10"
+                        title="Remove image"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {projectData.featured_image_url === url && (
+                      <div className="absolute bottom-2 left-2 right-2 text-center">
+                        <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded">Featured</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 bg-gray-800/50 rounded-lg border border-gray-700">
+                <p className="text-gray-500">No images yet</p>
+              </div>
+            )}
+          </div>
+
+          {/* Team Assignment */}
+          <div>
+            <Label className="mb-3 block">Assigned Team Members</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+              {activeMembers.map(member => (
+                <div key={member.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`team-${member.id}`}
+                    checked={projectData.assigned_team.includes(member.id)}
+                    onCheckedChange={() => handleTeamToggle(member.id)}
+                  />
+                  <label
+                    htmlFor={`team-${member.id}`}
+                    className="text-sm text-white cursor-pointer flex-1"
+                  >
+                    {member.full_name}
+                    {member.team_role && (
+                      <span className="text-gray-400 ml-2">({member.team_role})</span>
+                    )}
+                  </label>
+                </div>
               ))}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-700">
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
