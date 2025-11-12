@@ -1,31 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Edit2, Check, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import HierarchicalList from "./HierarchicalList";
 
 export default function ProjectTypesConfig() {
   const queryClient = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
-  const [newType, setNewType] = useState({ name: '', active: true });
-  const [editing, setEditing] = useState(null);
+  const [newType, setNewType] = useState({ name: "", parent_id: "" });
 
-  const { data: types = [], isLoading } = useQuery({
+  const { data: projectTypes = [], isLoading } = useQuery({
     queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list('sort_order'),
+    queryFn: () => base44.entities.ProjectType.list(),
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectType.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectTypes'] });
+      setNewType({ name: "", parent_id: "" });
       toast.success('Project type created');
-      setNewType({ name: '', active: true });
-      setShowAdd(false);
     },
   });
 
@@ -34,7 +33,6 @@ export default function ProjectTypesConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectTypes'] });
       toast.success('Project type updated');
-      setEditing(null);
     },
   });
 
@@ -46,150 +44,100 @@ export default function ProjectTypesConfig() {
     },
   });
 
-  const handleToggleActive = (type) => {
+  const handleCreate = (e) => {
+    e.preventDefault();
+    if (!newType.name.trim()) return;
+    createMutation.mutate({
+      name: newType.name,
+      parent_id: newType.parent_id || null,
+      active: true,
+      sort_order: projectTypes.length,
+    });
+  };
+
+  const handleUpdate = (id, updates) => {
+    updateMutation.mutate({ id, data: updates });
+  };
+
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to delete this project type?')) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  const handleToggleActive = (id, item) => {
     updateMutation.mutate({ 
-      id: type.id, 
-      data: { ...type, active: !type.active } 
+      id, 
+      data: { active: !item.active } 
     });
   };
 
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30">
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-white">Project Types</CardTitle>
-          <Button 
-            onClick={() => setShowAdd(!showAdd)}
-            className="bg-red-600 hover:bg-red-700 gap-2"
-            size="sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Type
-          </Button>
-        </div>
+        <CardTitle className="text-white">Project Types</CardTitle>
       </CardHeader>
-      
-      <CardContent className="p-6">
-        {showAdd && (
-          <div className="mb-6 p-4 bg-gray-900/50 rounded-lg border border-red-900/20">
-            <div className="flex gap-3">
+      <CardContent className="p-6 space-y-6">
+        {/* Add New Type Form */}
+        <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <Label className="text-gray-400">New Project Type</Label>
               <Input
-                placeholder="Type name..."
                 value={newType.name}
                 onChange={(e) => setNewType({ ...newType, name: e.target.value })}
+                placeholder="e.g., Restoration, Custom Build"
                 className="bg-gray-800 border-gray-700 text-white"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newType.name.trim()) {
-                    createMutation.mutate(newType);
-                  }
-                }}
               />
-              <Button
-                onClick={() => createMutation.mutate(newType)}
-                disabled={!newType.name.trim() || createMutation.isPending}
-                className="bg-green-600 hover:bg-green-700"
+            </div>
+            <div>
+              <Label className="text-gray-400">Parent Type (Optional)</Label>
+              <Select
+                value={newType.parent_id}
+                onValueChange={(value) => setNewType({ ...newType, parent_id: value })}
               >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowAdd(false);
-                  setNewType({ name: '', active: true });
-                }}
-                className="border-gray-700"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="None (Top Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>None (Top Level)</SelectItem>
+                  {projectTypes.filter(t => t.active).map(type => (
+                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        )}
+          <Button 
+            type="submit" 
+            className="bg-red-600 hover:bg-red-700"
+            disabled={createMutation.isPending || !newType.name.trim()}
+          >
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Project Type
+              </>
+            )}
+          </Button>
+        </form>
 
+        {/* Hierarchical List */}
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
-        ) : types.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No project types yet. Click "Add Type" to create one.
-          </div>
         ) : (
-          <div className="space-y-2">
-            {types.map(type => (
-              <div 
-                key={type.id}
-                className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
-              >
-                {editing === type.id ? (
-                  <>
-                    <Input
-                      value={type.name}
-                      onChange={(e) => {
-                        const updated = types.map(t => 
-                          t.id === type.id ? { ...t, name: e.target.value } : t
-                        );
-                        queryClient.setQueryData(['projectTypes'], updated);
-                      }}
-                      className="bg-gray-800 border-gray-700 text-white mr-3"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ id: type.id, data: type })}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditing(null);
-                          queryClient.invalidateQueries({ queryKey: ['projectTypes'] });
-                        }}
-                        className="border-gray-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className={`text-white font-medium ${!type.active && 'opacity-50'}`}>
-                      {type.name}
-                    </span>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400">Active</span>
-                        <Switch
-                          checked={type.active}
-                          onCheckedChange={() => handleToggleActive(type)}
-                        />
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setEditing(type.id)}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm('Delete this project type?')) {
-                            deleteMutation.mutate(type.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <HierarchicalList
+            items={projectTypes}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            onToggleActive={handleToggleActive}
+            nameField="name"
+          />
         )}
       </CardContent>
     </Card>

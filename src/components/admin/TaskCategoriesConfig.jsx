@@ -1,31 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Edit2, Check, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import HierarchicalList from "./HierarchicalList";
 
 export default function TaskCategoriesConfig() {
   const queryClient = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: '', active: true });
-  const [editing, setEditing] = useState(null);
+  const [newCategory, setNewCategory] = useState({ name: "", parent_id: "" });
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['taskCategories'],
-    queryFn: () => base44.entities.TaskCategory.list('sort_order'),
+    queryFn: () => base44.entities.TaskCategory.list(),
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.TaskCategory.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taskCategories'] });
+      setNewCategory({ name: "", parent_id: "" });
       toast.success('Task category created');
-      setNewCategory({ name: '', active: true });
-      setShowAdd(false);
     },
   });
 
@@ -34,7 +33,6 @@ export default function TaskCategoriesConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taskCategories'] });
       toast.success('Task category updated');
-      setEditing(null);
     },
   });
 
@@ -46,150 +44,100 @@ export default function TaskCategoriesConfig() {
     },
   });
 
-  const handleToggleActive = (category) => {
+  const handleCreate = (e) => {
+    e.preventDefault();
+    if (!newCategory.name.trim()) return;
+    createMutation.mutate({
+      name: newCategory.name,
+      parent_id: newCategory.parent_id || null,
+      active: true,
+      sort_order: categories.length,
+    });
+  };
+
+  const handleUpdate = (id, updates) => {
+    updateMutation.mutate({ id, data: updates });
+  };
+
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to delete this task category?')) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  const handleToggleActive = (id, item) => {
     updateMutation.mutate({ 
-      id: category.id, 
-      data: { ...category, active: !category.active } 
+      id, 
+      data: { active: !item.active } 
     });
   };
 
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30">
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-white">Task Categories</CardTitle>
-          <Button 
-            onClick={() => setShowAdd(!showAdd)}
-            className="bg-red-600 hover:bg-red-700 gap-2"
-            size="sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Category
-          </Button>
-        </div>
+        <CardTitle className="text-white">Task Categories</CardTitle>
       </CardHeader>
-      
-      <CardContent className="p-6">
-        {showAdd && (
-          <div className="mb-6 p-4 bg-gray-900/50 rounded-lg border border-red-900/20">
-            <div className="flex gap-3">
+      <CardContent className="p-6 space-y-6">
+        {/* Add New Category Form */}
+        <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <Label className="text-gray-400">New Task Category</Label>
               <Input
-                placeholder="Category name..."
                 value={newCategory.name}
                 onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                placeholder="e.g., Fabrication, Electrical"
                 className="bg-gray-800 border-gray-700 text-white"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newCategory.name.trim()) {
-                    createMutation.mutate(newCategory);
-                  }
-                }}
               />
-              <Button
-                onClick={() => createMutation.mutate(newCategory)}
-                disabled={!newCategory.name.trim() || createMutation.isPending}
-                className="bg-green-600 hover:bg-green-700"
+            </div>
+            <div>
+              <Label className="text-gray-400">Parent Category (Optional)</Label>
+              <Select
+                value={newCategory.parent_id}
+                onValueChange={(value) => setNewCategory({ ...newCategory, parent_id: value })}
               >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowAdd(false);
-                  setNewCategory({ name: '', active: true });
-                }}
-                className="border-gray-700"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="None (Top Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>None (Top Level)</SelectItem>
+                  {categories.filter(c => c.active).map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        )}
+          <Button 
+            type="submit" 
+            className="bg-red-600 hover:bg-red-700"
+            disabled={createMutation.isPending || !newCategory.name.trim()}
+          >
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Task Category
+              </>
+            )}
+          </Button>
+        </form>
 
+        {/* Hierarchical List */}
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
-        ) : categories.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No task categories yet. Click "Add Category" to create one.
-          </div>
         ) : (
-          <div className="space-y-2">
-            {categories.map(category => (
-              <div 
-                key={category.id}
-                className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
-              >
-                {editing === category.id ? (
-                  <>
-                    <Input
-                      value={category.name}
-                      onChange={(e) => {
-                        const updated = categories.map(c => 
-                          c.id === category.id ? { ...c, name: e.target.value } : c
-                        );
-                        queryClient.setQueryData(['taskCategories'], updated);
-                      }}
-                      className="bg-gray-800 border-gray-700 text-white mr-3"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateMutation.mutate({ id: category.id, data: category })}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditing(null);
-                          queryClient.invalidateQueries({ queryKey: ['taskCategories'] });
-                        }}
-                        className="border-gray-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className={`text-white font-medium ${!category.active && 'opacity-50'}`}>
-                      {category.name}
-                    </span>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400">Active</span>
-                        <Switch
-                          checked={category.active}
-                          onCheckedChange={() => handleToggleActive(category)}
-                        />
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setEditing(category.id)}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm('Delete this category?')) {
-                            deleteMutation.mutate(category.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <HierarchicalList
+            items={categories}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            onToggleActive={handleToggleActive}
+            nameField="name"
+          />
         )}
       </CardContent>
     </Card>
