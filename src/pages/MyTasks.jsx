@@ -1,34 +1,62 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Calendar, AlertCircle } from "lucide-react";
+import { Search, Calendar, AlertCircle, User, CheckCircle, Plus } from "lucide-react";
 import { format } from "date-fns";
-import TaskDetailModal from "../components/tasks/TaskDetailModal"; // Added import
+import { toast } from "sonner";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import CreateTaskModal from "../components/tasks/CreateTaskModal";
+
+const FILTER_STORAGE_KEY = 'achtung_mytasks_filters';
 
 export default function MyTasks() {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedTask, setSelectedTask] = useState(null); // Added state
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedTasks, setSelectedTasks] = useState([]);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
-  // Added new useQuery for userTeamMember
+  // Load filters from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+      if (saved) {
+        const filters = JSON.parse(saved);
+        setSearchTerm(filters.searchTerm || '');
+        setStatusFilter(filters.statusFilter || 'all');
+      }
+    } catch (e) {}
+  }, []);
+
+  // Save filters
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
+        searchTerm,
+        statusFilter,
+      }));
+    } catch (e) {}
+  }, [searchTerm, statusFilter]);
+
   const { data: userTeamMember } = useQuery({
     queryKey: ['userTeamMember', user?.id],
     queryFn: () => base44.entities.TeamMember.filter({ user_id: user?.id }),
-    select: (data) => data[0], // Assuming we need the first team member if multiple are returned
+    select: (data) => data[0],
     enabled: !!user?.id,
   });
 
-  // Updated useQuery for tasks to use assigned_team_member_id
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['myTasks', userTeamMember?.id],
     queryFn: () => base44.entities.Task.filter({ assigned_team_member_id: userTeamMember?.id }),
@@ -48,6 +76,26 @@ export default function MyTasks() {
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
+  });
+
+  const batchCompleteMutation = useMutation({
+    mutationFn: async (taskIds) => {
+      const completedStatus = statuses.find(s => 
+        s.scope === 'Task' && (s.label.toLowerCase() === 'completed' || s.label.toLowerCase() === 'done')
+      );
+      if (!completedStatus) throw new Error('Completed status not found');
+      
+      const promises = taskIds.map(id => 
+        base44.entities.Task.update(id, { status_id: completedStatus.id })
+      );
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setSelectedTasks([]);
+      toast.success('Tasks marked as complete');
+    },
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -82,14 +130,44 @@ export default function MyTasks() {
     groupedTasks[statusLabel].push(task);
   });
 
+  const toggleTaskSelection = (taskId) => {
+    setSelectedTasks(prev => 
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const toggleAllTasks = () => {
+    if (selectedTasks.length === filteredTasks.length) {
+      setSelectedTasks([]);
+    } else {
+      setSelectedTasks(filteredTasks.map(t => t.id));
+    }
+  };
+
+  const handleBatchComplete = () => {
+    if (selectedTasks.length === 0) return;
+    if (confirm(`Mark ${selectedTasks.length} task(s) as complete?`)) {
+      batchCompleteMutation.mutate(selectedTasks);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-            My Tasks
-          </h1>
-          <p className="text-gray-400">Your assigned work items</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+              My Tasks
+            </h1>
+            <p className="text-gray-400">Your assigned work items</p>
+          </div>
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-red-600 hover:bg-red-700 gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Task
+          </Button>
         </div>
 
         {/* Quick Stats */}
@@ -131,30 +209,56 @@ export default function MyTasks() {
           </Card>
         </div>
 
-        {/* Filters */}
+        {/* Filters and Batch Actions */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
           <CardHeader className="border-b border-red-900/30">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input
-                  placeholder="Search tasks..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-gray-900/50 border-gray-700 text-white"
-                />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search tasks..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full md:w-48 bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {taskStatuses.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-48 bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {taskStatuses.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+              {selectedTasks.length > 0 && (
+                <div className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-lg">
+                  <span className="text-sm text-white">
+                    {selectedTasks.length} task(s) selected
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={handleBatchComplete}
+                    className="bg-green-600 hover:bg-green-700 gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark Complete
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedTasks([])}
+                    className="border-gray-600"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
 
@@ -171,7 +275,18 @@ export default function MyTasks() {
                   const status = statuses.find(s => s.label === statusLabel);
                   return (
                     <div key={statusLabel}>
-                      <div className="px-6 py-3 bg-gray-900/50">
+                      <div className="px-6 py-3 bg-gray-900/50 flex items-center gap-3">
+                        <Checkbox
+                          checked={statusTasks.every(t => selectedTasks.includes(t.id))}
+                          onCheckedChange={() => {
+                            const allSelected = statusTasks.every(t => selectedTasks.includes(t.id));
+                            if (allSelected) {
+                              setSelectedTasks(prev => prev.filter(id => !statusTasks.find(t => t.id === id)));
+                            } else {
+                              setSelectedTasks(prev => [...new Set([...prev, ...statusTasks.map(t => t.id)])]);
+                            }
+                          }}
+                        />
                         <Badge 
                           style={{ backgroundColor: status?.color || '#EF4444' }}
                           className="text-white"
@@ -187,41 +302,49 @@ export default function MyTasks() {
                           const isDueToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
 
                           return (
-                            // Changed from Link to div and added onClick
                             <div
                               key={task.id}
-                              onClick={() => setSelectedTask(task)}
-                              className="block p-6 hover:bg-red-950/20 transition-colors cursor-pointer"
+                              className="flex items-start gap-4 p-6 hover:bg-red-950/20 transition-colors"
                             >
-                              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                <div className="flex-1">
-                                  <h3 className="text-lg font-medium text-white mb-1">
-                                    {task.name}
-                                  </h3>
-                                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
-                                    <span className="flex items-center gap-1">
-                                      Project: <span className="text-red-400">{project?.name || 'Unknown'}</span>
-                                    </span>
-                                    {category && (
-                                      <>
-                                        <span>•</span>
-                                        <span>{category.name}</span>
-                                      </>
+                              <Checkbox
+                                checked={selectedTasks.includes(task.id)}
+                                onCheckedChange={() => toggleTaskSelection(task.id)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div 
+                                className="flex-1 cursor-pointer"
+                                onClick={() => setSelectedTask(task)}
+                              >
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-medium text-white mb-1">
+                                      {task.name}
+                                    </h3>
+                                    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
+                                      <span className="flex items-center gap-1">
+                                        Project: <span className="text-red-400">{project?.name || 'Unknown'}</span>
+                                      </span>
+                                      {category && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{category.name}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                    {task.description && (
+                                      <p className="text-sm text-gray-500 mt-2 line-clamp-2">
+                                        {task.description}
+                                      </p>
                                     )}
                                   </div>
-                                  {task.description && (
-                                    <p className="text-sm text-gray-500 mt-2 line-clamp-2">
-                                      {task.description}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  {task.due_date && (
-                                    <div className={`text-sm ${isOverdue ? 'text-red-400 font-medium' : isDueToday ? 'text-yellow-400' : 'text-gray-400'}`}>
-                                      <Calendar className="w-4 h-4 inline mr-1" />
-                                      {format(new Date(task.due_date), 'MMM d')}
-                                    </div>
-                                  )}
+                                  <div className="flex items-center gap-4">
+                                    {task.due_date && (
+                                      <div className={`text-sm ${isOverdue ? 'text-red-400 font-medium' : isDueToday ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                        <Calendar className="w-4 h-4 inline mr-1" />
+                                        {format(new Date(task.due_date), 'MMM d')}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -237,11 +360,16 @@ export default function MyTasks() {
         </Card>
       </div>
 
-      {/* Added TaskDetailModal */}
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateTaskModal
+          onClose={() => setShowCreateModal(false)}
         />
       )}
     </div>

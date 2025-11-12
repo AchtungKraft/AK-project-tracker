@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, Trash2 } from "lucide-react";
+import { CalendarIcon, Loader2, Trash2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 export default function TaskDetailModal({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
+  const [user, setUser] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -25,6 +26,10 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
     start_date: "",
     due_date: "",
   });
+
+  useEffect(() => {
+    base44.auth.me().then(setUser).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (task) {
@@ -54,6 +59,13 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+  });
+
+  const { data: userTeamMember } = useQuery({
+    queryKey: ['userTeamMember', user?.id],
+    queryFn: () => base44.entities.TeamMember.filter({ user_id: user?.id }),
+    select: (data) => data[0],
+    enabled: !!user?.id,
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -96,6 +108,14 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this task?')) {
       deleteMutation.mutate();
+    }
+  };
+
+  const handleAssignToMe = () => {
+    if (userTeamMember) {
+      setFormData({ ...formData, assigned_team_member_id: userTeamMember.id });
+    } else {
+      toast.error('Could not find your team member profile');
     }
   };
 
@@ -165,7 +185,21 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
           </div>
 
           <div>
-            <Label>Assign To</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Assign To</Label>
+              {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAssignToMe}
+                  className="border-gray-700 text-xs gap-1"
+                >
+                  <UserPlus className="w-3 h-3" />
+                  Assign to Me
+                </Button>
+              )}
+            </div>
             <Select
               value={formData.assigned_team_member_id}
               onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
@@ -189,6 +223,7 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     className="w-full justify-start bg-gray-800 border-gray-700 text-white"
                   >
@@ -211,6 +246,7 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     className="w-full justify-start bg-gray-800 border-gray-700 text-white"
                   >
