@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,9 +30,6 @@ export default function StatusListConfig() {
       return statusList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
   });
-
-  const projectStatuses = useMemo(() => statuses.filter(s => s.scope === 'Project'), [statuses]);
-  const taskStatuses = useMemo(() => statuses.filter(s => s.scope === 'Task'), [statuses]);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.StatusList.create(data),
@@ -234,6 +231,10 @@ export default function StatusListConfig() {
       </Droppable>
     </DragDropContext>
   );
+
+  // Calculate filtered lists
+  const projectStatuses = statuses.filter(s => s.scope === 'Project');
+  const taskStatuses = statuses.filter(s => s.scope === 'Task');
 
   return (
     <div className="space-y-6">
