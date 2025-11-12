@@ -15,6 +15,21 @@ import CreateTaskModal from "../tasks/CreateTaskModal";
 
 const FILTER_STORAGE_KEY = 'achtung_project_tasks_filters';
 
+// Helper to get full category path
+const getCategoryPath = (categoryId, categories) => {
+  if (!categoryId) return null;
+  const category = categories.find(c => c.id === categoryId);
+  if (!category) return null;
+  
+  if (category.parent_id) {
+    const parent = categories.find(c => c.id === category.parent_id);
+    if (parent) {
+      return `${parent.name} > ${category.name}`;
+    }
+  }
+  return category.name;
+};
+
 export default function ProjectTasks({ projectId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -72,6 +87,7 @@ export default function ProjectTasks({ projectId }) {
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -86,22 +102,25 @@ export default function ProjectTasks({ projectId }) {
   const groupedTasks = {};
   filteredTasks.forEach(task => {
     let groupKey = 'Ungrouped';
+    let groupColor = '#6B7280';
     
     if (groupBy === 'status') {
       const status = statuses.find(s => s.id === task.status_id);
       groupKey = status?.label || 'No Status';
+      groupColor = status?.color || '#6B7280';
     } else if (groupBy === 'assigned') {
       const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
       groupKey = member?.full_name || 'Unassigned';
     } else if (groupBy === 'category') {
       const category = categories.find(c => c.id === task.category_id);
-      groupKey = category?.name || 'No Category';
+      groupKey = getCategoryPath(task.category_id, categories) || 'No Category';
+      groupColor = category?.color || '#6B7280';
     }
     
     if (!groupedTasks[groupKey]) {
-      groupedTasks[groupKey] = [];
+      groupedTasks[groupKey] = { tasks: [], color: groupColor };
     }
-    groupedTasks[groupKey].push(task);
+    groupedTasks[groupKey].tasks.push(task);
   });
 
   const getTaskStatus = (taskStatusId) => {
@@ -109,7 +128,12 @@ export default function ProjectTasks({ projectId }) {
   };
 
   const getTaskCategory = (taskCategoryId) => {
-    return categories.find(c => c.id === taskCategoryId)?.name || '-';
+    return getCategoryPath(taskCategoryId, categories) || '-';
+  };
+
+  const getTaskCategoryColor = (taskCategoryId) => {
+    const category = categories.find(c => c.id === taskCategoryId);
+    return category?.color;
   };
 
   const getTaskAssigned = (taskMemberId) => {
@@ -174,9 +198,23 @@ export default function ProjectTasks({ projectId }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {categories.filter(c => c.active).map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
+                    {parentCategories.map(parent => {
+                      const children = categories.filter(c => c.parent_id === parent.id && c.active);
+                      return (
+                        <React.Fragment key={parent.id}>
+                          <SelectItem value={parent.id}>
+                            <span style={{ color: parent.color }}>{parent.name}</span>
+                          </SelectItem>
+                          {children.map(child => (
+                            <SelectItem key={child.id} value={child.id}>
+                              <span className="ml-4" style={{ color: child.color }}>
+                                → {child.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -229,16 +267,22 @@ export default function ProjectTasks({ projectId }) {
               </div>
             ) : (
               <div className="divide-y divide-red-900/10">
-                {Object.entries(groupedTasks).map(([groupLabel, groupTasks]) => {
-                  const status = groupBy === 'status' ? statuses.find(s => s.label === groupLabel) : null;
+                {Object.entries(groupedTasks).map(([groupLabel, groupData]) => {
+                  const { tasks: groupTasks, color: groupColor } = groupData;
                   
                   return (
                     <div key={groupLabel}>
                       <div 
-                        className="px-4 py-2 bg-gray-900/50 border-l-4"
-                        style={{ borderLeftColor: status?.color || '#6B7280' }}
+                        className="px-4 py-2 bg-gray-900/50 border-l-4 border-b-2"
+                        style={{ 
+                          borderLeftColor: groupColor,
+                          borderBottomColor: groupColor
+                        }}
                       >
-                        <span className="text-white text-sm font-medium">
+                        <span 
+                          className="text-sm font-medium"
+                          style={{ color: groupColor }}
+                        >
                           {groupLabel} ({groupTasks.length})
                         </span>
                       </div>
@@ -261,6 +305,7 @@ export default function ProjectTasks({ projectId }) {
                         <TableBody>
                           {groupTasks.map(task => {
                             const taskStatus = getTaskStatus(task.status_id);
+                            const categoryColor = getTaskCategoryColor(task.category_id);
                             const isOverdue = task.due_date && new Date(task.due_date) < new Date();
                             
                             return (
@@ -294,8 +339,10 @@ export default function ProjectTasks({ projectId }) {
                                   </TableCell>
                                 )}
                                 {groupBy !== 'category' && (
-                                  <TableCell className="text-gray-300 text-sm hidden lg:table-cell py-2">
-                                    {getTaskCategory(task.category_id)}
+                                  <TableCell className="text-sm hidden lg:table-cell py-2">
+                                    <span style={{ color: categoryColor || '#D1D5DB' }}>
+                                      {getTaskCategory(task.category_id)}
+                                    </span>
                                   </TableCell>
                                 )}
                                 {groupBy !== 'assigned' && (

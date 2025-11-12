@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,21 @@ import { CalendarIcon, Loader2, Trash2, UserPlus, Save, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import TaskCommentsSection from "./TaskCommentsSection";
+
+// Helper to get full category path
+const getCategoryPath = (categoryId, categories) => {
+  if (!categoryId) return null;
+  const category = categories.find(c => c.id === categoryId);
+  if (!category) return null;
+
+  if (category.parent_id) {
+    const parent = categories.find(c => c.id === category.parent_id);
+    if (parent) {
+      return `${parent.name} > ${category.name}`;
+    }
+  }
+  return category.name;
+};
 
 export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
@@ -79,6 +95,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const activeCategories = categories.filter(c => c.active);
+  const parentCategories = activeCategories.filter(c => !c.parent_id);
   const activeTeamMembers = teamMembers.filter(tm => tm.active);
 
   const updateMutation = useMutation({
@@ -142,6 +159,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);
+  const categoryPath = getCategoryPath(task?.category_id, categories);
+  const categoryColor = category?.color;
   const status = statuses.find(s => s.id === task?.status_id);
   const assignedMember = teamMembers.find(m => m.id === task?.assigned_team_member_id);
 
@@ -183,8 +202,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     {taskStatuses.map(status => (
                       <SelectItem key={status.id} value={status.id}>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
+                          <div
+                            className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: status.color }}
                           />
                           {status.label}
@@ -321,9 +340,23 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeCategories.map(cat => (
-                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                        ))}
+                        {parentCategories.map(parent => {
+                          const children = activeCategories.filter(c => c.parent_id === parent.id);
+                          return (
+                            <React.Fragment key={parent.id}>
+                              <SelectItem value={parent.id}>
+                                <span style={{ color: parent.color }}>{parent.name}</span>
+                              </SelectItem>
+                              {children.map(child => (
+                                <SelectItem key={child.id} value={child.id}>
+                                  <span className="ml-4" style={{ color: child.color }}>
+                                    → {child.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -432,7 +465,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Category</p>
-                    <p className="text-white">{category?.name || '-'}</p>
+                    <p style={{ color: categoryColor || '#FFFFFF' }}>{categoryPath || '-'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Due Date</p>
