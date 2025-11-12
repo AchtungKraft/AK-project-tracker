@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +16,7 @@ export default function Reports() {
   const [projectFilter, setProjectFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [userFilter, setUserFilter] = useState('all');
+  const [memberFilter, setMemberFilter] = useState('all');
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['allTasks'],
@@ -37,9 +38,9 @@ export default function Reports() {
     queryFn: () => base44.entities.TaskCategory.list(),
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -49,8 +50,8 @@ export default function Reports() {
     const matchesProject = projectFilter === 'all' || t.project_id === projectFilter;
     const matchesStatus = statusFilter === 'all' || t.status_id === statusFilter;
     const matchesCategory = categoryFilter === 'all' || t.category_id === categoryFilter;
-    const matchesUser = userFilter === 'all' || t.assigned_user_id === userFilter;
-    return matchesSearch && matchesProject && matchesStatus && matchesCategory && matchesUser;
+    const matchesMember = memberFilter === 'all' || t.assigned_team_member_id === memberFilter;
+    return matchesSearch && matchesProject && matchesStatus && matchesCategory && matchesMember;
   });
 
   const openTasks = filteredTasks.filter(t => {
@@ -75,13 +76,13 @@ export default function Reports() {
       const project = projects.find(p => p.id === task.project_id);
       const status = statuses.find(s => s.id === task.status_id);
       const category = categories.find(c => c.id === task.category_id);
-      const user = users.find(u => u.id === task.assigned_user_id);
+      const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
       return [
         project?.name || '',
         task.name,
         category?.name || '',
         status?.label || '',
-        user?.full_name || 'Unassigned',
+        member?.full_name || 'Unassigned',
         task.due_date ? format(new Date(task.due_date), 'yyyy-MM-dd') : '',
         format(new Date(task.created_date), 'yyyy-MM-dd'),
       ];
@@ -194,14 +195,14 @@ export default function Reports() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={userFilter} onValueChange={setUserFilter}>
+              <Select value={memberFilter} onValueChange={setMemberFilter}>
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="Assigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Users</SelectItem>
-                  {users.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                  <SelectItem value="all">All Team Members</SelectItem>
+                  {teamMembers.map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -242,7 +243,7 @@ export default function Reports() {
                       const project = projects.find(p => p.id === task.project_id);
                       const status = statuses.find(s => s.id === task.status_id);
                       const category = categories.find(c => c.id === task.category_id);
-                      const user = users.find(u => u.id === task.assigned_user_id);
+                      const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
                       const isOverdue = task.due_date && new Date(task.due_date) < new Date();
 
                       return (
@@ -270,7 +271,7 @@ export default function Reports() {
                             {category?.name || '-'}
                           </TableCell>
                           <TableCell className="text-gray-400 hidden lg:table-cell">
-                            {user?.full_name || 'Unassigned'}
+                            {member?.full_name || 'Unassigned'}
                           </TableCell>
                           <TableCell>
                             {task.due_date ? (

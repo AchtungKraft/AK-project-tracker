@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProjectTypesConfig from "../components/admin/ProjectTypesConfig";
 import TaskCategoriesConfig from "../components/admin/TaskCategoriesConfig";
 import StatusListConfig from "../components/admin/StatusListConfig";
+import TeamMembersConfig from "../components/admin/TeamMembersConfig";
 
 export default function AdminConfig() {
   return (
@@ -12,7 +13,7 @@ export default function AdminConfig() {
           <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
             Admin Configuration
           </h1>
-          <p className="text-gray-400">Manage dropdown lists and categories</p>
+          <p className="text-gray-400">Manage dropdown lists and team members</p>
         </div>
 
         <Tabs defaultValue="project-types" className="w-full">
@@ -20,6 +21,7 @@ export default function AdminConfig() {
             <TabsTrigger value="project-types">Project Types</TabsTrigger>
             <TabsTrigger value="task-categories">Task Categories</TabsTrigger>
             <TabsTrigger value="statuses">Status Lists</TabsTrigger>
+            <TabsTrigger value="team-members">Team Members</TabsTrigger>
           </TabsList>
 
           <TabsContent value="project-types" className="mt-6">
@@ -32,6 +34,10 @@ export default function AdminConfig() {
 
           <TabsContent value="statuses" className="mt-6">
             <StatusListConfig />
+          </TabsContent>
+
+          <TabsContent value="team-members" className="mt-6">
+            <TeamMembersConfig />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -30,9 +31,9 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
     queryFn: () => base44.entities.ProjectType.list(),
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
@@ -59,8 +60,8 @@ export default function ProjectsTable({ projects, statuses, isLoading }) {
   const getTeamNames = (teamIds) => {
     if (!teamIds || teamIds.length === 0) return '-';
     return teamIds.map(id => {
-      const user = users.find(u => u.id === id);
-      return user?.full_name?.split(' ')[0] || 'Unknown';
+      const member = teamMembers.find(m => m.id === id);
+      return member?.full_name?.split(' ')[0] || 'Unknown';
     }).join(', ');
   };
 
