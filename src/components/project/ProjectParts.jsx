@@ -115,6 +115,24 @@ export default function ProjectParts({ projectId }) {
     queryFn: () => base44.entities.CarYear.list(),
   });
 
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
+  const getPartReserved = (partId) => {
+    return allAssignments
+      .filter(a => a.part_id === partId)
+      .reduce((sum, a) => sum + (a.qty_needed || 0), 0);
+  };
+
+  const getPartAvailable = (partId) => {
+    const part = allParts.find(p => p.id === partId);
+    if (!part) return 0;
+    const reserved = getPartReserved(partId);
+    return (part.quantity_on_hand || 0) - reserved;
+  };
+
   const deleteAssignmentMutation = useMutation({
     mutationFn: (id) => base44.entities.PartBuildAssignment.delete(id),
     onSuccess: () => {
@@ -467,6 +485,18 @@ export default function ProjectParts({ projectId }) {
                                 <span className="text-gray-400">Qty Needed:</span>
                                 <span className="text-white font-semibold">
                                   {assignment.qty_needed || 1}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">Global Stock:</span>
+                                <span className="text-white">
+                                  {part.quantity_on_hand || 0}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">Available:</span>
+                                <span className={`font-semibold ${getPartAvailable(part.id) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {getPartAvailable(part.id)}
                                 </span>
                               </div>
                               {vendor && (
