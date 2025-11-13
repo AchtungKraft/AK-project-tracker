@@ -90,13 +90,30 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     },
   });
 
-  // Filter out already assigned parts
-  const assignedPartIds = existingAssignments.map(a => a.part_id);
+  // Show all parts, not just unassigned
   const availableParts = allParts.filter(p => 
-    !assignedPartIds.includes(p.id) &&
     (p.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
      p.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  // Calculate reserved qty for each part
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
+  const getPartReserved = (partId) => {
+    return allAssignments
+      .filter(a => a.part_id === partId)
+      .reduce((sum, a) => sum + (a.qty_needed || 0), 0);
+  };
+
+  const getPartAvailable = (partId) => {
+    const part = allParts.find(p => p.id === partId);
+    if (!part) return 0;
+    const reserved = getPartReserved(partId);
+    return (part.quantity_on_hand || 0) - reserved;
+  };
 
   const handleAddExisting = () => {
     if (!selectedPartId) {
@@ -104,10 +121,13 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
       return;
     }
 
+    const available = getPartAvailable(selectedPartId);
+    const autoStatus = available >= qtyNeeded ? 'On-Hand' : 'On-Order';
+
     createAssignmentMutation.mutate({
       part_id: selectedPartId,
       project_id: projectId,
-      needed_status: assignmentStatus,
+      needed_status: assignmentStatus || autoStatus,
       qty_needed: qtyNeeded,
       qty_reserved: 0,
       notes: assignmentNotes
@@ -213,7 +233,12 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                     <p className="text-xs text-gray-400 mb-2">Selected Part Details:</p>
                     {(() => {
                       const part = allParts.find(p => p.id === selectedPartId);
-                      return part ? (
+                      if (!part) return null;
+                      
+                      const reserved = getPartReserved(selectedPartId);
+                      const available = getPartAvailable(selectedPartId);
+                      
+                      return (
                         <div className="text-sm space-y-1">
                           <p className="text-white font-medium">{part.part_name}</p>
                           {part.vendor_part_number && (
@@ -222,10 +247,16 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                           {part.part_category_id && (
                             <p className="text-gray-400 text-xs">Category: {getCategoryName(part.part_category_id)}</p>
                           )}
-                          <p className="text-gray-400 text-xs">Status: {part.status}</p>
-                          <p className="text-gray-400 text-xs">Qty on Hand: {part.quantity_on_hand || 0}</p>
+                          <p className="text-gray-400 text-xs">Global Stock: {part.quantity_on_hand || 0}</p>
+                          <p className="text-gray-400 text-xs">Reserved: {reserved}</p>
+                          <p className={`text-xs font-semibold ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            Available: {available}
+                          </p>
+                          {available < qtyNeeded && (
+                            <p className="text-yellow-400 text-xs mt-2">⚠️ Not enough in stock - will be set to Order</p>
+                          )}
                         </div>
-                      ) : null;
+                      );
                     })()}
                   </div>
 
