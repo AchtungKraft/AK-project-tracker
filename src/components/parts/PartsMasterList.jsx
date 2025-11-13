@@ -109,6 +109,23 @@ export default function PartsMasterList() {
     queryFn: () => base44.entities.CarYear.list(),
   });
 
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
+  const getPartReserved = (partId) => {
+    return allAssignments
+      .filter(a => a.part_id === partId)
+      .reduce((sum, a) => sum + (a.qty_needed || 0), 0);
+  };
+
+  const getPartAvailable = (partId, part) => {
+    if (!part) return 0;
+    const reserved = getPartReserved(partId);
+    return (part.quantity_on_hand || 0) - reserved;
+  };
+
   const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
   const filteredParts = parts.filter(part => {
@@ -486,7 +503,7 @@ export default function PartsMasterList() {
                           {groupBy !== 'status' && (
                             <TableHead className="text-gray-400 text-xs py-2">Status</TableHead>
                           )}
-                          <TableHead className="text-gray-400 text-xs py-2">Qty</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-2">Inventory</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -548,8 +565,11 @@ export default function PartsMasterList() {
                                   </Badge>
                                 </TableCell>
                               )}
-                              <TableCell className="text-white text-sm py-2 font-semibold">
-                                {part.quantity_on_hand || 0}
+                              <TableCell className="py-2">
+                                <div className="text-xs space-y-0.5">
+                                  <div className="text-gray-400">Stock: <span className="text-white font-semibold">{part.quantity_on_hand || 0}</span></div>
+                                  <div className="text-gray-400">Avail: <span className={`font-semibold ${getPartAvailable(part.id, part) > 0 ? 'text-green-400' : 'text-red-400'}`}>{getPartAvailable(part.id, part)}</span></div>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
