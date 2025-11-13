@@ -351,7 +351,22 @@ export default function MyTasks() {
                 </div>
               ) : (
                 <div className="divide-y divide-red-900/10">
-                  {Object.entries(groupedActiveTasks).map(([groupLabel, groupData]) => {
+                  {Object.entries(groupedActiveTasks).sort((a, b) => {
+                    if (groupBy === 'status') {
+                      const statusA = statuses.find(s => s.label === a[0]);
+                      const statusB = statuses.find(s => s.label === b[0]);
+                      return (statusA?.sort_order || 0) - (statusB?.sort_order || 0);
+                    } else if (groupBy === 'category') {
+                      const catA = categories.find(c => getCategoryPath(c.id, categories) === a[0]);
+                      const catB = categories.find(c => getCategoryPath(c.id, categories) === b[0]);
+                      return (catA?.sort_order || 0) - (catB?.sort_order || 0);
+                    } else if (groupBy === 'assigned') {
+                      const memberA = teamMembers.find(m => m.full_name === a[0]);
+                      const memberB = teamMembers.find(m => m.full_name === b[0]);
+                      return (memberA?.sort_order || 0) - (memberB?.sort_order || 0);
+                    }
+                    return 0;
+                  }).map(([groupLabel, groupData]) => {
                     const { tasks: groupTasks, color: groupColor } = groupData;
                     
                     return (
@@ -476,7 +491,22 @@ export default function MyTasks() {
                 </div>
               ) : (
                 <div className="divide-y divide-green-900/10">
-                  {Object.entries(groupedCompletedTasks).map(([groupLabel, groupData]) => {
+                  {Object.entries(groupedCompletedTasks).sort((a, b) => {
+                    if (groupBy === 'status') {
+                      const statusA = statuses.find(s => s.label === a[0]);
+                      const statusB = statuses.find(s => s.label === b[0]);
+                      return (statusA?.sort_order || 0) - (statusB?.sort_order || 0);
+                    } else if (groupBy === 'category') {
+                      const catA = categories.find(c => getCategoryPath(c.id, categories) === a[0]);
+                      const catB = categories.find(c => getCategoryPath(c.id, categories) === b[0]);
+                      return (catA?.sort_order || 0) - (catB?.sort_order || 0);
+                    } else if (groupBy === 'assigned') {
+                      const memberA = teamMembers.find(m => m.full_name === a[0]);
+                      const memberB = teamMembers.find(m => m.full_name === b[0]);
+                      return (memberA?.sort_order || 0) - (memberB?.sort_order || 0);
+                    }
+                    return 0;
+                  }).map(([groupLabel, groupData]) => {
                     const { tasks: groupTasks, color: groupColor } = groupData;
                     
                     return (

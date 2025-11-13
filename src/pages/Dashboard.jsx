@@ -181,7 +181,18 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(groupedProjects).map(([groupLabel, groupData]) => {
+            {Object.entries(groupedProjects).sort((a, b) => {
+              if (groupBy === 'projectType') {
+                const typeA = projectTypes.find(t => t.name === a[0]);
+                const typeB = projectTypes.find(t => t.name === b[0]);
+                return (typeA?.sort_order || 0) - (typeB?.sort_order || 0);
+              } else if (groupBy === 'status') {
+                const statusA = statuses.find(s => s.label === a[0]);
+                const statusB = statuses.find(s => s.label === b[0]);
+                return (statusA?.sort_order || 0) - (statusB?.sort_order || 0);
+              }
+              return 0;
+            }).map(([groupLabel, groupData]) => {
               const { projects: groupProjects, color: groupColor } = groupData;
               
               return (
