@@ -14,14 +14,11 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("existing");
   const [searchTerm, setSearchTerm] = useState("");
-
-  // State for adding existing part
   const [selectedPartId, setSelectedPartId] = useState("");
   const [qtyNeeded, setQtyNeeded] = useState(1);
-  const [assignmentStatus, setAssignmentStatus] = useState("Need to Buy");
+  const [assignmentStatus, setAssignmentStatus] = useState("");
   const [assignmentNotes, setAssignmentNotes] = useState("");
 
-  // State for new part
   const [newPart, setNewPart] = useState({
     part_name: "",
     vendor_part_number: "",
@@ -64,6 +61,11 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     enabled: !!projectId,
   });
 
+  const { data: allAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
   const createAssignmentMutation = useMutation({
     mutationFn: (data) => base44.entities.PartBuildAssignment.create(data),
     onSuccess: () => {
@@ -78,7 +80,6 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     mutationFn: (data) => base44.entities.Part.create(data),
     onSuccess: (newPart) => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
-      // Also create assignment
       createAssignmentMutation.mutate({
         part_id: newPart.id,
         project_id: projectId,
@@ -90,17 +91,10 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     },
   });
 
-  // Show all parts, not just unassigned
   const availableParts = allParts.filter(p => 
     (p.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
      p.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-
-  // Calculate reserved qty for each part
-  const { data: allAssignments = [] } = useQuery({
-    queryKey: ['partBuildAssignments'],
-    queryFn: () => base44.entities.PartBuildAssignment.list(),
-  });
 
   const getPartReserved = (partId) => {
     return allAssignments
@@ -161,23 +155,16 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-red-900/30">
           <h2 className="text-white text-lg font-semibold flex items-center gap-2">
             <Package className="w-5 h-5" />
             Add Part to Project
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-          >
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
             <X className="w-5 h-5" />
           </Button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2 mb-4">
@@ -185,7 +172,6 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
               <TabsTrigger value="new">Create New Part</TabsTrigger>
             </TabsList>
 
-            {/* Add from existing inventory */}
             <TabsContent value="existing" className="space-y-4">
               <div>
                 <Label className="text-gray-400 text-xs">Search Parts</Label>
@@ -209,19 +195,35 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                   <SelectContent className="max-h-60">
                     {availableParts.length === 0 ? (
                       <div className="p-4 text-center text-gray-500 text-sm">
-                        {searchTerm ? 'No parts match your search' : 'No available parts to assign'}
+                        {searchTerm ? 'No parts match your search' : 'No parts in inventory'}
                       </div>
                     ) : (
-                      availableParts.map(part => (
-                        <SelectItem key={part.id} value={part.id}>
-                          <div className="flex items-center gap-2">
-                            <span>{part.part_name}</span>
-                            {part.vendor_part_number && (
-                              <span className="text-xs text-gray-400 font-mono">({part.vendor_part_number})</span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))
+                      availableParts.map(part => {
+                        const available = getPartAvailable(part.id);
+                        const assignedPartIds = existingAssignments.map(a => a.part_id);
+                        const isAlreadyAssigned = assignedPartIds.includes(part.id);
+                        
+                        return (
+                          <SelectItem key={part.id} value={part.id} disabled={isAlreadyAssigned}>
+                            <div className="flex items-center justify-between gap-3 w-full">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="truncate">{part.part_name}</span>
+                                {part.vendor_part_number && (
+                                  <span className="text-xs text-gray-400 font-mono shrink-0">({part.vendor_part_number})</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-xs font-semibold ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {available}
+                                </span>
+                                {isAlreadyAssigned && (
+                                  <span className="text-xs text-yellow-400">(Assigned)</span>
+                                )}
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      })
                     )}
                   </SelectContent>
                 </Select>
@@ -247,13 +249,26 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                           {part.part_category_id && (
                             <p className="text-gray-400 text-xs">Category: {getCategoryName(part.part_category_id)}</p>
                           )}
-                          <p className="text-gray-400 text-xs">Global Stock: {part.quantity_on_hand || 0}</p>
-                          <p className="text-gray-400 text-xs">Reserved: {reserved}</p>
-                          <p className={`text-xs font-semibold ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            Available: {available}
-                          </p>
+                          <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-gray-700">
+                            <div>
+                              <p className="text-xs text-gray-500">Global Stock</p>
+                              <p className="text-white font-semibold">{part.quantity_on_hand || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Reserved</p>
+                              <p className="text-yellow-400 font-semibold">{reserved}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Available</p>
+                              <p className={`font-semibold ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {available}
+                              </p>
+                            </div>
+                          </div>
                           {available < qtyNeeded && (
-                            <p className="text-yellow-400 text-xs mt-2">⚠️ Not enough in stock - will be set to Order</p>
+                            <p className="text-yellow-400 text-xs mt-2 bg-yellow-900/20 p-2 rounded">
+                              ⚠️ Not enough available - will default to "On-Order" status
+                            </p>
                           )}
                         </div>
                       );
@@ -272,12 +287,13 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                       />
                     </div>
                     <div>
-                      <Label className="text-gray-400 text-xs">Status for This Build *</Label>
+                      <Label className="text-gray-400 text-xs">Status for This Build</Label>
                       <Select value={assignmentStatus} onValueChange={setAssignmentStatus}>
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                          <SelectValue />
+                          <SelectValue placeholder="Auto-determine" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value={null}>Auto (based on availability)</SelectItem>
                           <SelectItem value="On-Hand">On-Hand</SelectItem>
                           <SelectItem value="Need to Buy">Need to Buy</SelectItem>
                           <SelectItem value="On-Order">On-Order</SelectItem>
@@ -300,7 +316,6 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
               )}
             </TabsContent>
 
-            {/* Create new part */}
             <TabsContent value="new" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -481,7 +496,6 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
           </Tabs>
         </div>
 
-        {/* Footer */}
         <div className="flex gap-3 p-4 border-t border-red-900/30">
           <Button
             variant="outline"
