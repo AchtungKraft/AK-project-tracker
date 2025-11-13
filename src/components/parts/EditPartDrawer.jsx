@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
@@ -253,7 +253,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                 onClick={onClose}
                 className="text-gray-400 hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <XIcon className="w-5 h-5" />
               </Button>
             </div>
             {part?.vendor_part_number && (

@@ -16,7 +16,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, CalendarIcon, Upload, X, Star } from "lucide-react";
+import { Loader2, CalendarIcon, Upload, X as XIcon, Star } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -355,7 +355,7 @@ export default function EditProjectModal({ project, onClose }) {
                         className="bg-red-600 text-white rounded-full p-1.5 z-10"
                         title="Remove image"
                       >
-                        <X className="w-3 h-3" />
+                        <XIcon className="w-3 h-3" />
                       </button>
                     </div>
 
