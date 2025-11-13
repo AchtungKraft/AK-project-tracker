@@ -274,12 +274,14 @@ export default function ProjectKanban({ projectId }) {
     <>
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-white">Task Groups</h2>
-            <p className="text-sm text-gray-400">Drag tasks to organize</p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-white">Task Groups</h2>
+              <p className="text-sm text-gray-400 hidden md:block">Drag tasks to organize</p>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Select value={groupBy} onValueChange={setGroupBy}>
               <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white text-sm">
                 <SelectValue />
@@ -309,7 +311,8 @@ export default function ProjectKanban({ projectId }) {
               className="bg-red-600 hover:bg-red-700 gap-2"
             >
               <Plus className="w-4 h-4" />
-              New Task
+              <span className="hidden sm:inline">New Task</span>
+              <span className="sm:hidden">New</span>
             </Button>
             {groupBy === 'buckets' && (
               <Button
@@ -319,7 +322,8 @@ export default function ProjectKanban({ projectId }) {
                 className="border-gray-700 gap-2"
               >
                 <Settings className="w-4 h-4" />
-                Manage Buckets
+                <span className="hidden sm:inline">Manage Buckets</span>
+                <span className="sm:hidden">Manage</span>
               </Button>
             )}
           </div>
