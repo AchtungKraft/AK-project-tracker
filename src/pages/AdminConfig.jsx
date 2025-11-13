@@ -7,6 +7,9 @@ import TeamMembersConfig from "../components/admin/TeamMembersConfig";
 import PartCategoriesConfig from "../components/admin/PartCategoriesConfig";
 import VendorsConfig from "../components/admin/VendorsConfig";
 import LocationsConfig from "../components/admin/LocationsConfig";
+import CarMakesConfig from "../components/admin/CarMakesConfig";
+import CarModelsConfig from "../components/admin/CarModelsConfig";
+import CarYearsConfig from "../components/admin/CarYearsConfig";
 
 export default function AdminConfig() {
   return (
@@ -28,6 +31,9 @@ export default function AdminConfig() {
             <TabsTrigger value="part-categories">Part Categories</TabsTrigger>
             <TabsTrigger value="vendors">Vendors</TabsTrigger>
             <TabsTrigger value="locations">Locations</TabsTrigger>
+            <TabsTrigger value="car-makes">Car Makes</TabsTrigger>
+            <TabsTrigger value="car-models">Car Models</TabsTrigger>
+            <TabsTrigger value="car-years">Car Years</TabsTrigger>
           </TabsList>
 
           <TabsContent value="project-types" className="mt-6">
@@ -56,6 +62,18 @@ export default function AdminConfig() {
 
           <TabsContent value="locations" className="mt-6">
             <LocationsConfig />
+          </TabsContent>
+
+          <TabsContent value="car-makes" className="mt-6">
+            <CarMakesConfig />
+          </TabsContent>
+
+          <TabsContent value="car-models" className="mt-6">
+            <CarModelsConfig />
+          </TabsContent>
+
+          <TabsContent value="car-years" className="mt-6">
+            <CarYearsConfig />
           </TabsContent>
         </Tabs>
       </div>
