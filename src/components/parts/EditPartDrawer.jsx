@@ -105,15 +105,26 @@ export default function EditPartDrawer({ partId, onClose }) {
 
     setUploading(true);
     try {
-      const uploadPromises = files.map(file => 
-        base44.integrations.Core.UploadFile({ file })
-      );
+      const uploadPromises = files.map(file => {
+        console.log('Uploading file:', file.name, file.type, file.size);
+        return base44.integrations.Core.UploadFile({ file });
+      });
       const results = await Promise.all(uploadPromises);
+      console.log('Upload results:', results);
       const newPhotoUrls = results.map(r => r.file_url);
       
       const updatedPhotos = [...(editedPart.photos || []), ...newPhotoUrls];
       const newFeatured = editedPart.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
       setEditedPart({ ...editedPart, photos: updatedPhotos, featured_photo: newFeatured });
+      
+      // Auto-save photos immediately
+      await base44.entities.Part.update(partId, { 
+        photos: updatedPhotos, 
+        featured_photo: newFeatured 
+      });
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['part', partId] });
+      
       toast.success(`${files.length} photo(s) uploaded`);
     } catch (error) {
       console.error('Upload error:', error);
@@ -586,26 +597,87 @@ export default function EditPartDrawer({ partId, onClose }) {
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <p className="text-xs text-gray-500 mb-1">Vendor Part #</p>
+                      <p className="text-white font-mono">{part?.vendor_part_number || '-'}</p>
+                    </div>
+                    <div>
                       <p className="text-xs text-gray-500 mb-1">Status</p>
                       <p className="text-white">{part?.status || '-'}</p>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Quantity on Hand</p>
-                      <p className="text-white">{part?.quantity_on_hand || 0}</p>
+                      <p className="text-xs text-gray-500 mb-1">Vehicle</p>
+                      <p className="text-white">
+                        {[
+                          makes.find(m => m.id === part?.car_make_id)?.name,
+                          models.find(m => m.id === part?.car_model_id)?.name,
+                          years.find(y => y.id === part?.car_year_id)?.year
+                        ].filter(Boolean).join(' ') || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Category</p>
+                      <p className="text-white">
+                        {(() => {
+                          const category = categories.find(c => c.id === part?.part_category_id);
+                          if (!category) return '-';
+                          if (category.parent_id) {
+                            const parent = categories.find(c => c.id === category.parent_id);
+                            return parent ? `${parent.name} > ${category.name}` : category.name;
+                          }
+                          return category.name;
+                        })()}
+                      </p>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Vendor</p>
+                      <p className="text-white">{vendors.find(v => v.id === part?.vendor_id)?.vendor_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Location</p>
+                      <p className="text-white">
+                        {(() => {
+                          const location = locations.find(l => l.id === part?.location_id);
+                          return location ? (location.bin_description || location.location_area) : '-';
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Cost</p>
+                      <p className="text-white">${part?.cost || '0.00'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Retail</p>
+                      <p className="text-white">${part?.retail || '0.00'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Quantity on Hand</p>
+                      <p className="text-white font-semibold">{part?.quantity_on_hand || 0}</p>
+                    </div>
+                  </div>
+                  {part?.order_url && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Order URL</p>
+                      <a href={part.order_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 break-all text-xs">
+                        {part.order_url}
+                      </a>
+                    </div>
+                  )}
                   {part?.notes && (
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Notes</p>
                       <p className="text-white whitespace-pre-wrap">{part.notes}</p>
                     </div>
                   )}
-                  {part?.order_url && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Order URL</p>
-                      <a href={part.order_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 break-all">
-                        {part.order_url}
-                      </a>
+                  {part?.global_all_builds && (
+                    <div className="flex items-center gap-2 p-2 bg-blue-900/20 rounded border border-blue-800/30">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                      <p className="text-xs text-blue-400">Available for all builds (global)</p>
                     </div>
                   )}
                 </div>

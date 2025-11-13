@@ -102,10 +102,12 @@ export default function AddPartDrawer({ onClose }) {
 
     setUploading(true);
     try {
-      const uploadPromises = files.map((file) =>
-        base44.integrations.Core.UploadFile({ file })
-      );
+      const uploadPromises = files.map((file) => {
+        console.log('Uploading file:', file.name, file.type, file.size);
+        return base44.integrations.Core.UploadFile({ file });
+      });
       const results = await Promise.all(uploadPromises);
+      console.log('Upload results:', results);
       const photoUrls = results.map((r) => r.file_url);
 
       const updatedPhotos = [...(formData.photos || []), ...photoUrls];
