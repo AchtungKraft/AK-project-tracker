@@ -83,14 +83,18 @@ export default function EditPartModal({ partId, onClose }) {
 
     setUploading(true);
     try {
-      const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+      const uploadPromises = files.map(file => 
+        base44.integrations.Core.UploadFile({ file })
+      );
       const results = await Promise.all(uploadPromises);
       const newPhotoUrls = results.map(r => r.file_url);
       
       const updatedPhotos = [...(editedPart.photos || []), ...newPhotoUrls];
-      setEditedPart({ ...editedPart, photos: updatedPhotos });
+      const newFeatured = editedPart.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
+      setEditedPart({ ...editedPart, photos: updatedPhotos, featured_photo: newFeatured });
       toast.success(`${files.length} photo(s) uploaded`);
     } catch (error) {
+      console.error('Upload error:', error);
       toast.error('Failed to upload photos');
     } finally {
       setUploading(false);
@@ -427,9 +431,23 @@ export default function EditPartModal({ partId, onClose }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {categories.filter(c => c.active).map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
+                    {categories.filter(c => c.active && !c.parent_id).map(parent => {
+                      const children = categories.filter(c => c.parent_id === parent.id && c.active);
+                      return (
+                        <React.Fragment key={parent.id}>
+                          <SelectItem value={parent.id}>
+                            <span style={{ color: parent.color }}>{parent.name}</span>
+                          </SelectItem>
+                          {children.map(child => (
+                            <SelectItem key={child.id} value={child.id}>
+                              <span className="ml-4" style={{ color: child.color }}>
+                                → {child.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

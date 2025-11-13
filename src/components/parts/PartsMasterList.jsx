@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Package, Filter } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Search, Plus, Package, Filter, LayoutGrid, List } from "lucide-react";
 import AddPartModal from "./AddPartModal";
 import EditPartModal from "./EditPartModal";
+import ImageModal from "../ui/ImageModal";
+
+const FILTER_STORAGE_KEY = 'achtung_parts_master_filters';
 
 const getCategoryPath = (categoryId, categories) => {
   if (!categoryId) return null;
@@ -28,12 +32,47 @@ export default function PartsMasterList() {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [viewMode, setViewMode] = useState('card');
+  const [groupBy, setGroupBy] = useState('category');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [makeFilter, setMakeFilter] = useState('all');
   const [modelFilter, setModelFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+      if (saved) {
+        const filters = JSON.parse(saved);
+        setSearchTerm(filters.searchTerm || '');
+        setStatusFilter(filters.statusFilter || 'all');
+        setCategoryFilter(filters.categoryFilter || 'all');
+        setMakeFilter(filters.makeFilter || 'all');
+        setModelFilter(filters.modelFilter || 'all');
+        setYearFilter(filters.yearFilter || 'all');
+        setViewMode(filters.viewMode || 'card');
+        setGroupBy(filters.groupBy || 'category');
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
+        searchTerm,
+        statusFilter,
+        categoryFilter,
+        makeFilter,
+        modelFilter,
+        yearFilter,
+        viewMode,
+        groupBy,
+      }));
+    } catch (e) {}
+  }, [searchTerm, statusFilter, categoryFilter, makeFilter, modelFilter, yearFilter, viewMode, groupBy]);
 
   const { data: parts = [], isLoading } = useQuery({
     queryKey: ['parts'],
@@ -88,6 +127,36 @@ export default function PartsMasterList() {
   const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter);
   const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter);
 
+  // Group parts
+  const groupedParts = {};
+  filteredParts.forEach(part => {
+    let groupKey = 'Ungrouped';
+    let groupColor = '#6B7280';
+    
+    if (groupBy === 'category') {
+      groupKey = getCategoryPath(part.part_category_id, categories) || 'No Category';
+      const category = categories.find(c => c.id === part.part_category_id);
+      groupColor = category?.color || '#6B7280';
+    } else if (groupBy === 'status') {
+      groupKey = part.status || 'No Status';
+      groupColor = part.status === 'On-Hand' ? '#10B981' :
+                   part.status === 'Need to Buy' ? '#EF4444' : '#F59E0B';
+    } else if (groupBy === 'make') {
+      const make = makes.find(m => m.id === part.car_make_id);
+      groupKey = make?.name || 'No Make';
+      groupColor = make?.color || '#6B7280';
+    } else if (groupBy === 'vendor') {
+      const vendor = vendors.find(v => v.id === part.vendor_id);
+      groupKey = vendor?.vendor_name || 'No Vendor';
+      groupColor = vendor?.color || '#6B7280';
+    }
+    
+    if (!groupedParts[groupKey]) {
+      groupedParts[groupKey] = { parts: [], color: groupColor };
+    }
+    groupedParts[groupKey].parts.push(part);
+  });
+
   const statusColors = {
     'On-Hand': '#10B981',
     'Need to Buy': '#EF4444',
@@ -103,22 +172,42 @@ export default function PartsMasterList() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-gray-400" />
-                <CardTitle className="text-white text-base">Filters</CardTitle>
+                <CardTitle className="text-white text-base">Filters & View</CardTitle>
               </div>
-              <Button
-                onClick={() => setShowAddModal(true)}
-                size="sm"
-                className="bg-red-600 hover:bg-red-700 gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Add Part</span>
-                <span className="sm:hidden">Add</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-gray-900/50 rounded-lg p-1 border border-gray-700">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setViewMode('card')}
+                    className={`h-7 px-2 ${viewMode === 'card' ? 'bg-red-600 text-white' : 'text-gray-400'}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setViewMode('list')}
+                    className={`h-7 px-2 ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400'}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </Button>
+                </div>
+                <Button
+                  onClick={() => setShowAddModal(true)}
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Add Part</span>
+                  <span className="sm:hidden">Add</span>
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div className="lg:col-span-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+              <div className="lg:col-span-6">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                   <Input
@@ -128,6 +217,21 @@ export default function PartsMasterList() {
                     className="pl-10 bg-gray-900/50 border-gray-700 text-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Group By</label>
+                <Select value={groupBy} onValueChange={setGroupBy}>
+                  <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="category">Category</SelectItem>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="make">Make</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -222,110 +326,242 @@ export default function PartsMasterList() {
           </CardContent>
         </Card>
 
-        {/* Parts Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {isLoading ? (
-            <div className="col-span-full text-center py-8 text-gray-500">Loading parts...</div>
-          ) : filteredParts.length === 0 ? (
-            <div className="col-span-full text-center py-8 text-gray-500">
-              No parts found matching your filters.
-            </div>
-          ) : (
-            filteredParts.map(part => {
-              const vendor = vendors.find(v => v.id === part.vendor_id);
-              const location = locations.find(l => l.id === part.location_id);
-              const categoryPath = getCategoryPath(part.part_category_id, categories);
-              const category = categories.find(c => c.id === part.part_category_id);
-              const make = makes.find(m => m.id === part.car_make_id);
-              const model = models.find(m => m.id === part.car_model_id);
-              const year = years.find(y => y.id === part.car_year_id);
-              const featuredPhoto = part.featured_photo || (part.photos && part.photos[0]);
+        {/* Parts Display */}
+        {isLoading ? (
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <CardContent className="p-8">
+              <div className="text-center text-gray-500">Loading parts...</div>
+            </CardContent>
+          </Card>
+        ) : filteredParts.length === 0 ? (
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <CardContent className="p-8">
+              <div className="text-center text-gray-500">
+                No parts found matching your filters.
+              </div>
+            </CardContent>
+          </Card>
+        ) : viewMode === 'card' ? (
+          <div className="space-y-4">
+            {Object.entries(groupedParts).map(([groupLabel, groupData]) => {
+              const { parts: groupParts, color: groupColor } = groupData;
               
               return (
-                <Card 
-                  key={part.id}
-                  className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-900/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedPart(part.id)}
-                >
-                  <CardHeader className="border-b border-red-900/30 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-white text-base truncate">
-                          {part.part_name}
-                        </CardTitle>
-                        {part.vendor_part_number && (
-                          <p className="text-xs text-gray-400 font-mono mt-1">
-                            {part.vendor_part_number}
-                          </p>
-                        )}
-                      </div>
-                      <Badge 
-                        style={{ backgroundColor: statusColors[part.status] }}
-                        className="text-white text-xs shrink-0"
-                      >
-                        {part.status}
-                      </Badge>
-                    </div>
+                <Card key={groupLabel} className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+                  <CardHeader 
+                    className="border-b border-red-900/30 p-4 border-l-4"
+                    style={{ borderLeftColor: groupColor }}
+                  >
+                    <CardTitle className="text-base" style={{ color: groupColor }}>
+                      {groupLabel} ({groupParts.length})
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4">
-                    {featuredPhoto && (
-                      <div className="w-full h-32 bg-gray-800 rounded mb-3 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={featuredPhoto}
-                          alt={part.part_name}
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      {(make || model || year) && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Vehicle:</span>
-                          <span className="text-white text-right">
-                            {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
-                          </span>
-                        </div>
-                      )}
-                      {categoryPath && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Category:</span>
-                          <span style={{ color: category?.color || '#fff' }}>
-                            {categoryPath}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Qty On Hand:</span>
-                        <span className="text-white font-semibold">
-                          {part.quantity_on_hand || 0}
-                        </span>
-                      </div>
-                      {vendor && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Vendor:</span>
-                          <span className="text-white">{vendor.vendor_name}</span>
-                        </div>
-                      )}
-                      {location && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Location:</span>
-                          <span className="text-white text-right">
-                            {location.bin_description || location.location_area}
-                          </span>
-                        </div>
-                      )}
-                      {part.global_all_builds && (
-                        <Badge variant="outline" className="border-green-500 text-green-400 text-xs">
-                          Global/All Builds
-                        </Badge>
-                      )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {groupParts.map(part => {
+                        const vendor = vendors.find(v => v.id === part.vendor_id);
+                        const location = locations.find(l => l.id === part.location_id);
+                        const categoryPath = getCategoryPath(part.part_category_id, categories);
+                        const category = categories.find(c => c.id === part.part_category_id);
+                        const make = makes.find(m => m.id === part.car_make_id);
+                        const model = models.find(m => m.id === part.car_model_id);
+                        const year = years.find(y => y.id === part.car_year_id);
+                        const featuredPhoto = part.featured_photo || (part.photos && part.photos[0]);
+                        
+                        return (
+                          <Card 
+                            key={part.id}
+                            className="bg-gray-900/50 border border-gray-800 hover:border-red-900/50 transition-colors"
+                          >
+                            <CardHeader className="border-b border-gray-800 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedPart(part.id)}>
+                                  <CardTitle className="text-white text-sm truncate">
+                                    {part.part_name}
+                                  </CardTitle>
+                                  {part.vendor_part_number && (
+                                    <p className="text-xs text-gray-400 font-mono mt-1">
+                                      {part.vendor_part_number}
+                                    </p>
+                                  )}
+                                </div>
+                                <Badge 
+                                  style={{ backgroundColor: statusColors[part.status] }}
+                                  className="text-white text-xs shrink-0"
+                                >
+                                  {part.status}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-3">
+                              {featuredPhoto && (
+                                <div 
+                                  className="w-full h-32 bg-gray-800 rounded mb-3 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedImage(featuredPhoto);
+                                  }}
+                                >
+                                  <img
+                                    src={featuredPhoto}
+                                    alt={part.part_name}
+                                    className="max-w-full max-h-full object-contain"
+                                  />
+                                </div>
+                              )}
+                              <div className="space-y-1.5 text-xs">
+                                {(make || model || year) && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Vehicle:</span>
+                                    <span className="text-white text-right">
+                                      {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {groupBy !== 'category' && categoryPath && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Category:</span>
+                                    <span style={{ color: category?.color || '#fff' }}>
+                                      {categoryPath}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between">
+                                  <span className="text-gray-400">Qty:</span>
+                                  <span className="text-white font-semibold">
+                                    {part.quantity_on_hand || 0}
+                                  </span>
+                                </div>
+                                {groupBy !== 'vendor' && vendor && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Vendor:</span>
+                                    <span className="text-white">{vendor.vendor_name}</span>
+                                  </div>
+                                )}
+                                {location && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Location:</span>
+                                    <span className="text-white text-right truncate max-w-[60%]">
+                                      {location.bin_description || location.location_area}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupedParts).map(([groupLabel, groupData]) => {
+              const { parts: groupParts, color: groupColor } = groupData;
+              
+              return (
+                <Card key={groupLabel} className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+                  <CardHeader 
+                    className="border-b border-red-900/30 p-3 border-l-4"
+                    style={{ borderLeftColor: groupColor }}
+                  >
+                    <CardTitle className="text-sm" style={{ color: groupColor }}>
+                      {groupLabel} ({groupParts.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-b border-red-900/20 hover:bg-transparent">
+                          <TableHead className="text-gray-400 text-xs py-2">Photo</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-2">Part Name</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Part #</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Vehicle</TableHead>
+                          {groupBy !== 'category' && (
+                            <TableHead className="text-gray-400 text-xs py-2 hidden 2xl:table-cell">Category</TableHead>
+                          )}
+                          {groupBy !== 'status' && (
+                            <TableHead className="text-gray-400 text-xs py-2">Status</TableHead>
+                          )}
+                          <TableHead className="text-gray-400 text-xs py-2">Qty</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {groupParts.map(part => {
+                          const vendor = vendors.find(v => v.id === part.vendor_id);
+                          const categoryPath = getCategoryPath(part.part_category_id, categories);
+                          const category = categories.find(c => c.id === part.part_category_id);
+                          const make = makes.find(m => m.id === part.car_make_id);
+                          const model = models.find(m => m.id === part.car_model_id);
+                          const year = years.find(y => y.id === part.car_year_id);
+                          const featuredPhoto = part.featured_photo || (part.photos && part.photos[0]);
+                          
+                          return (
+                            <TableRow 
+                              key={part.id}
+                              className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
+                              onClick={() => setSelectedPart(part.id)}
+                            >
+                              <TableCell className="py-2">
+                                {featuredPhoto && (
+                                  <div 
+                                    className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedImage(featuredPhoto);
+                                    }}
+                                  >
+                                    <img
+                                      src={featuredPhoto}
+                                      alt={part.part_name}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium text-white text-sm py-2">
+                                {part.part_name}
+                              </TableCell>
+                              <TableCell className="text-gray-400 text-xs font-mono py-2 hidden lg:table-cell">
+                                {part.vendor_part_number || '-'}
+                              </TableCell>
+                              <TableCell className="text-white text-xs py-2 hidden xl:table-cell">
+                                {[make?.name, model?.name, year?.year].filter(Boolean).join(' ') || '-'}
+                              </TableCell>
+                              {groupBy !== 'category' && (
+                                <TableCell className="text-sm py-2 hidden 2xl:table-cell">
+                                  <span style={{ color: category?.color || '#D1D5DB' }}>
+                                    {categoryPath || '-'}
+                                  </span>
+                                </TableCell>
+                              )}
+                              {groupBy !== 'status' && (
+                                <TableCell className="py-2">
+                                  <Badge 
+                                    style={{ backgroundColor: statusColors[part.status] }}
+                                    className="text-white text-xs"
+                                  >
+                                    {part.status}
+                                  </Badge>
+                                </TableCell>
+                              )}
+                              <TableCell className="text-white text-sm py-2 font-semibold">
+                                {part.quantity_on_hand || 0}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {showAddModal && (
@@ -336,6 +572,14 @@ export default function PartsMasterList() {
         <EditPartModal
           partId={selectedPart}
           onClose={() => setSelectedPart(null)}
+        />
+      )}
+
+      {selectedImage && (
+        <ImageModal
+          isOpen={!!selectedImage}
+          imageUrl={selectedImage}
+          onClose={() => setSelectedImage(null)}
         />
       )}
     </>
