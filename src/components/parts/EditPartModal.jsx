@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import { X, Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
+import PartJournalSection from "./PartJournalSection";
 
 export default function EditPartModal({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -199,19 +201,323 @@ export default function EditPartModal({ partId, onClose }) {
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
         <div className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col my-8">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-red-900/30 sticky top-0 bg-gray-900 z-10">
+          <div className="flex items-center justify-between p-4 border-b border-red-900/30">
             <h2 className="text-white text-lg font-semibold">Edit Part</h2>
             <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
               <X className="w-5 h-5" />
             </Button>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            {/* Photos Section */}
-            <div className="space-y-3">
-              <Label className="text-gray-400 text-xs">Photos</Label>
-              
+          {/* Tabs */}
+          <Tabs defaultValue="details" className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="grid w-full grid-cols-3 bg-gray-900/50 border-b border-red-900/30">
+              <TabsTrigger value="details">Part Details</TabsTrigger>
+              <TabsTrigger value="photos">Photos</TabsTrigger>
+              <TabsTrigger value="journal">Journal</TabsTrigger>
+            </TabsList>
+
+            {/* Details Tab */}
+            <TabsContent value="details" className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label className="text-gray-400 text-xs">Part Name *</Label>
+                  <Input
+                    value={editedPart.part_name}
+                    onChange={(e) => setEditedPart({ ...editedPart, part_name: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-gray-400 text-xs">Vendor Part #</Label>
+                  <Input
+                    value={editedPart.vendor_part_number || ''}
+                    onChange={(e) => setEditedPart({ ...editedPart, vendor_part_number: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-gray-400 text-xs">Order URL</Label>
+                  <Input
+                    type="url"
+                    value={editedPart.order_url || ''}
+                    onChange={(e) => setEditedPart({ ...editedPart, order_url: e.target.value })}
+                    placeholder="https://..."
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Car Make/Model/Year */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Car Make
+                    <button type="button" onClick={() => setShowCreateModal('CarMake')} className="text-xs text-blue-400 hover:text-blue-300">
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.car_make_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select make..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {makes.filter(m => m.active).map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Car Model
+                    <button type="button" onClick={() => setShowCreateModal('CarModel')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!editedPart.car_make_id}>
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.car_model_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
+                    disabled={!editedPart.car_make_id}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select model..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {availableModels.filter(m => m.active).map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Year/Series
+                    <button type="button" onClick={() => setShowCreateModal('CarYear')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!editedPart.car_model_id}>
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.car_year_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, car_year_id: value === 'none' ? '' : value })}
+                    disabled={!editedPart.car_model_id}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select year..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {availableYears.filter(y => y.active).map(y => (
+                        <SelectItem key={y.id} value={y.id}>{y.year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Category, Vendor, Location */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Category
+                    <button type="button" onClick={() => setShowCreateModal('PartCategory')} className="text-xs text-blue-400 hover:text-blue-300">
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.part_category_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, part_category_id: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {categories.filter(c => c.active && !c.parent_id).map(parent => {
+                        const children = categories.filter(c => c.parent_id === parent.id && c.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.name}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Vendor
+                    <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.vendor_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, vendor_id: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {vendors.filter(v => v.active && !v.parent_id).map(parent => {
+                        const children = vendors.filter(v => v.parent_id === parent.id && v.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.vendor_name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs flex items-center justify-between">
+                    Location
+                    <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">
+                      + New
+                    </button>
+                  </Label>
+                  <Select
+                    value={editedPart.location_id || 'none'}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, location_id: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {locations.filter(l => l.active && !l.parent_id).map(parent => {
+                        const children = locations.filter(l => l.parent_id === parent.id && l.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.location_area}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.location_area}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Pricing & Inventory */}
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-gray-400 text-xs">Cost</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editedPart.cost || ''}
+                    onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-gray-400 text-xs">Retail</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editedPart.retail || ''}
+                    onChange={(e) => setEditedPart({ ...editedPart, retail: parseFloat(e.target.value) || 0 })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs">Qty on Hand</Label>
+                  <Input
+                    type="number"
+                    value={editedPart.quantity_on_hand || 0}
+                    onChange={(e) => setEditedPart({ ...editedPart, quantity_on_hand: parseInt(e.target.value) || 0 })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs">Status</Label>
+                  <Select
+                    value={editedPart.status}
+                    onValueChange={(value) => setEditedPart({ ...editedPart, status: value })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="On-Hand">On-Hand</SelectItem>
+                      <SelectItem value="Need to Buy">Need to Buy</SelectItem>
+                      <SelectItem value="On-Order">On-Order</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label className="text-gray-400 text-xs">Notes</Label>
+                <Textarea
+                  value={editedPart.notes || ''}
+                  onChange={(e) => setEditedPart({ ...editedPart, notes: e.target.value })}
+                  className="bg-gray-800 border-gray-700 text-white"
+                  rows={3}
+                />
+              </div>
+
+              {/* Global Flag */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="global"
+                  checked={editedPart.global_all_builds || false}
+                  onChange={(e) => setEditedPart({ ...editedPart, global_all_builds: e.target.checked })}
+                  className="rounded border-gray-700"
+                />
+                <Label htmlFor="global" className="text-gray-400 text-xs cursor-pointer">
+                  Make available for all builds (global)
+                </Label>
+              </div>
+            </TabsContent>
+
+            {/* Photos Tab */}
+            <TabsContent value="photos" className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="flex gap-2">
                 <label className="cursor-pointer">
                   <input
@@ -269,6 +575,7 @@ export default function EditPartModal({ partId, onClose }) {
                                 
                                 <div className="absolute top-1 right-1 flex gap-1">
                                   <button
+                                    type="button"
                                     onClick={() => handleSetFeatured(url)}
                                     className={`p-1 rounded ${
                                       editedPart.featured_photo === url ? 'bg-yellow-500' : 'bg-black/50 hover:bg-yellow-500'
@@ -278,6 +585,7 @@ export default function EditPartModal({ partId, onClose }) {
                                     <Star className="w-3 h-3 text-white" fill={editedPart.featured_photo === url ? 'white' : 'none'} />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => handleRemovePhoto(url)}
                                     className="p-1 bg-black/50 hover:bg-red-600 rounded"
                                     title="Remove photo"
@@ -305,280 +613,16 @@ export default function EditPartModal({ partId, onClose }) {
                   No photos yet. Upload or take photos to add them.
                 </div>
               )}
-            </div>
+            </TabsContent>
 
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label className="text-gray-400 text-xs">Part Name *</Label>
-                <Input
-                  value={editedPart.part_name}
-                  onChange={(e) => setEditedPart({ ...editedPart, part_name: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-gray-400 text-xs">Vendor Part #</Label>
-                <Input
-                  value={editedPart.vendor_part_number || ''}
-                  onChange={(e) => setEditedPart({ ...editedPart, vendor_part_number: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-gray-400 text-xs">Order URL</Label>
-                <Input
-                  type="url"
-                  value={editedPart.order_url || ''}
-                  onChange={(e) => setEditedPart({ ...editedPart, order_url: e.target.value })}
-                  placeholder="https://..."
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-            </div>
-
-            {/* Car Make/Model/Year */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Car Make
-                  <button type="button" onClick={() => setShowCreateModal('CarMake')} className="text-xs text-blue-400 hover:text-blue-300">
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.car_make_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select make..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {makes.filter(m => m.active).map(m => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Car Model
-                  <button type="button" onClick={() => setShowCreateModal('CarModel')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!editedPart.car_make_id}>
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.car_model_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
-                  disabled={!editedPart.car_make_id}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select model..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {availableModels.filter(m => m.active).map(m => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Year/Series
-                  <button type="button" onClick={() => setShowCreateModal('CarYear')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!editedPart.car_model_id}>
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.car_year_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, car_year_id: value === 'none' ? '' : value })}
-                  disabled={!editedPart.car_model_id}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select year..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {availableYears.filter(y => y.active).map(y => (
-                      <SelectItem key={y.id} value={y.id}>{y.year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Category, Vendor, Location */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Category
-                  <button type="button" onClick={() => setShowCreateModal('PartCategory')} className="text-xs text-blue-400 hover:text-blue-300">
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.part_category_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, part_category_id: value === 'none' ? '' : value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {categories.filter(c => c.active && !c.parent_id).map(parent => {
-                      const children = categories.filter(c => c.parent_id === parent.id && c.active);
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color }}>{parent.name}</span>
-                          </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="ml-4" style={{ color: child.color }}>
-                                → {child.name}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Vendor
-                  <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.vendor_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, vendor_id: value === 'none' ? '' : value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {vendors.filter(v => v.active).map(v => (
-                      <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs flex items-center justify-between">
-                  Location
-                  <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">
-                    + New
-                  </button>
-                </Label>
-                <Select
-                  value={editedPart.location_id || 'none'}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, location_id: value === 'none' ? '' : value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {locations.filter(l => l.active).map(l => (
-                      <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Pricing & Inventory */}
-            <div className="grid grid-cols-4 gap-4">
-              <div>
-                <Label className="text-gray-400 text-xs">Cost</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={editedPart.cost || ''}
-                  onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-gray-400 text-xs">Retail</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={editedPart.retail || ''}
-                  onChange={(e) => setEditedPart({ ...editedPart, retail: parseFloat(e.target.value) || 0 })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs">Qty on Hand</Label>
-                <Input
-                  type="number"
-                  value={editedPart.quantity_on_hand || 0}
-                  onChange={(e) => setEditedPart({ ...editedPart, quantity_on_hand: parseInt(e.target.value) || 0 })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-
-              <div>
-                <Label className="text-gray-400 text-xs">Status</Label>
-                <Select
-                  value={editedPart.status}
-                  onValueChange={(value) => setEditedPart({ ...editedPart, status: value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="On-Hand">On-Hand</SelectItem>
-                    <SelectItem value="Need to Buy">Need to Buy</SelectItem>
-                    <SelectItem value="On-Order">On-Order</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <Label className="text-gray-400 text-xs">Notes</Label>
-              <Textarea
-                value={editedPart.notes || ''}
-                onChange={(e) => setEditedPart({ ...editedPart, notes: e.target.value })}
-                className="bg-gray-800 border-gray-700 text-white"
-                rows={3}
-              />
-            </div>
-
-            {/* Global Flag */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="global"
-                checked={editedPart.global_all_builds || false}
-                onChange={(e) => setEditedPart({ ...editedPart, global_all_builds: e.target.checked })}
-                className="rounded border-gray-700"
-              />
-              <Label htmlFor="global" className="text-gray-400 text-xs cursor-pointer">
-                Make available for all builds (global)
-              </Label>
-            </div>
-          </div>
+            {/* Journal Tab */}
+            <TabsContent value="journal" className="flex-1 overflow-y-auto p-4">
+              <PartJournalSection partId={partId} />
+            </TabsContent>
+          </Tabs>
 
           {/* Footer */}
-          <div className="flex gap-3 p-4 border-t border-red-900/30 sticky bottom-0 bg-gray-900">
+          <div className="flex gap-3 p-4 border-t border-red-900/30">
             <Button variant="outline" onClick={onClose} className="flex-1 border-gray-700 text-white" disabled={updateMutation.isPending}>
               Cancel
             </Button>
