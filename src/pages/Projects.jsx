@@ -11,7 +11,10 @@ export default function Projects() {
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
+    queryFn: async () => {
+      const list = await base44.entities.StatusList.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   return (

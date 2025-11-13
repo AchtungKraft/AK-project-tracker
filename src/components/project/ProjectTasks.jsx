@@ -73,21 +73,30 @@ export default function ProjectTasks({ projectId }) {
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
+    queryFn: async () => {
+      const list = await base44.entities.StatusList.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
-    queryFn: () => base44.entities.TaskCategory.list(),
+    queryFn: async () => {
+      const list = await base44.entities.TaskCategory.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
+    queryFn: async () => {
+      const list = await base44.entities.TeamMember.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-  const parentCategories = categories.filter(c => !c.parent_id && c.active);
+  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -31,20 +31,29 @@ export default function Dashboard() {
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
+    queryFn: async () => {
+      const list = await base44.entities.StatusList.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: projectTypes = [] } = useQuery({
     queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list(),
+    queryFn: async () => {
+      const list = await base44.entities.ProjectType.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
+    queryFn: async () => {
+      const list = await base44.entities.TeamMember.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
-  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
