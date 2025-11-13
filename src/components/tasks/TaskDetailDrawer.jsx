@@ -179,73 +179,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         </SheetHeader>
 
         <div className="py-6 space-y-6">
-          {/* Quick Actions - Status and Assignment */}
-          {!editing && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div>
-                <Label className="text-xs text-gray-400 mb-2 block">Status</Label>
-                <Select
-                  value={optimisticStatusId || task?.status_id}
-                  onValueChange={handleQuickStatusChange}
-                  disabled={updateMutation.isPending}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taskStatuses.map(status => (
-                      <SelectItem key={status.id} value={status.id}>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          {status.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs text-gray-400">Assigned To</Label>
-                  {userTeamMember && task?.assigned_team_member_id !== userTeamMember.id && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleAssignToMe}
-                      disabled={updateMutation.isPending}
-                      className="text-xs gap-1 h-6 text-red-400 hover:text-red-300"
-                    >
-                      <UserPlus className="w-3 h-3" />
-                      Me
-                    </Button>
-                  )}
-                </div>
-                <Select
-                  value={optimisticAssignedId !== null ? (optimisticAssignedId || "unassigned") : (task?.assigned_team_member_id || "unassigned")}
-                  onValueChange={(value) => handleQuickAssignmentChange(value === "unassigned" ? "" : value)}
-                  disabled={updateMutation.isPending}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Assign to team member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {activeTeamMembers.map(member => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.full_name} {member.team_role && `(${member.team_role})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
           {/* Task Details Section */}
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -456,6 +389,24 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               </form>
             ) : (
               <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Status</p>
+                    {status ? (
+                      <Badge style={{ backgroundColor: status.color }} className="text-white">
+                        {status.label}
+                      </Badge>
+                    ) : (
+                      <p className="text-white">-</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Assigned To</p>
+                    <p className="text-white">
+                      {assignedMember ? `${assignedMember.full_name}${assignedMember.team_role ? ` (${assignedMember.team_role})` : ''}` : 'Unassigned'}
+                    </p>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Category</p>
