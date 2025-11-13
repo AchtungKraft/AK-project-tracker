@@ -12,6 +12,7 @@ export default function HierarchicalList({
   onToggleActive,
   onReorder,
   entityName = "Item",
+  nameKey = "name",
   showColor = false 
 }) {
   const [editing, setEditing] = useState(null);
@@ -33,12 +34,12 @@ export default function HierarchicalList({
 
   const handleEdit = (item) => {
     setEditing(item.id);
-    setEditValue(item.name);
+    setEditValue(item[nameKey]);
     setEditColor(item.color || "#3B82F6");
   };
 
-  const handleSave = (id) => {
-    const updateData = { name: editValue };
+  const handleSave = (id, originalItem) => {
+    const updateData = { ...originalItem, [nameKey]: editValue };
     if (showColor) {
       updateData.color = editColor;
     }
@@ -132,7 +133,7 @@ export default function HierarchicalList({
                     className="text-white font-medium"
                     style={showColor ? { color: item.color || "#FFFFFF" } : {}}
                   >
-                    {item.name}
+                    {item[nameKey]}
                   </span>
                 )}
 
@@ -149,7 +150,7 @@ export default function HierarchicalList({
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => handleSave(item.id)}
+                      onClick={() => handleSave(item.id, item)}
                       className="h-8 w-8 text-green-400 hover:text-green-300"
                     >
                       <Check className="w-4 h-4" />
