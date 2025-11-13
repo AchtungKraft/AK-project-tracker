@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Edit2, Trash2, Check, X, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -253,7 +253,7 @@ export default function VendorsConfig() {
                       <Button size="icon" variant="ghost" 
                               onClick={() => { setEditing(null); queryClient.invalidateQueries({ queryKey: ['vendors'] }); }}
                               className="h-8 w-8 text-gray-400">
-                        <X className="w-4 h-4" />
+                        <XIcon className="w-4 h-4" />
                       </Button>
                     </>
                   ) : (
