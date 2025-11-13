@@ -171,7 +171,13 @@ export default function StatusListConfig() {
                           <>
                             <Button
                               size="sm"
-                              onClick={() => updateMutation.mutate({ id: status.id, data: status })}
+                              onClick={() => {
+                                const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                                const statusToUpdate = currentStatuses.find(s => s.id === status.id);
+                                if (statusToUpdate) {
+                                  updateMutation.mutate({ id: status.id, data: statusToUpdate });
+                                }
+                              }}
                               className="bg-green-600 hover:bg-green-700"
                             >
                               <Check className="w-4 h-4" />
