@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Plus, Package, Filter } from "lucide-react";
 import AddPartModal from "./AddPartModal";
-import PartDetailModal from "./PartDetailModal";
+import EditPartModal from "./EditPartModal";
 
 const getCategoryPath = (categoryId, categories) => {
   if (!categoryId) return null;
@@ -31,6 +31,8 @@ export default function PartsMasterList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [makeFilter, setMakeFilter] = useState('all');
+  const [modelFilter, setModelFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
 
   const { data: parts = [], isLoading } = useQuery({
@@ -53,6 +55,21 @@ export default function PartsMasterList() {
     queryFn: () => base44.entities.Location.list(),
   });
 
+  const { data: makes = [] } = useQuery({
+    queryKey: ['carMakes'],
+    queryFn: () => base44.entities.CarMake.list(),
+  });
+
+  const { data: models = [] } = useQuery({
+    queryKey: ['carModels'],
+    queryFn: () => base44.entities.CarModel.list(),
+  });
+
+  const { data: years = [] } = useQuery({
+    queryKey: ['carYears'],
+    queryFn: () => base44.entities.CarYear.list(),
+  });
+
   const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
   const filteredParts = parts.filter(part => {
@@ -61,12 +78,15 @@ export default function PartsMasterList() {
       part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || part.status === statusFilter;
     const matchesCategory = categoryFilter === 'all' || part.part_category_id === categoryFilter;
-    const matchesYear = yearFilter === 'all' || part.car_year === yearFilter;
+    const matchesMake = makeFilter === 'all' || part.car_make_id === makeFilter;
+    const matchesModel = modelFilter === 'all' || part.car_model_id === modelFilter;
+    const matchesYear = yearFilter === 'all' || part.car_year_id === yearFilter;
     
-    return matchesSearch && matchesStatus && matchesCategory && matchesYear;
+    return matchesSearch && matchesStatus && matchesCategory && matchesMake && matchesModel && matchesYear;
   });
 
-  const uniqueYears = [...new Set(parts.map(p => p.car_year).filter(Boolean))].sort();
+  const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter);
+  const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter);
 
   const statusColors = {
     'On-Hand': '#10B981',
@@ -97,8 +117,8 @@ export default function PartsMasterList() {
             </div>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="lg:col-span-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="lg:col-span-5">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                   <Input
@@ -155,15 +175,45 @@ export default function PartsMasterList() {
               </div>
 
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Year</label>
-                <Select value={yearFilter} onValueChange={setYearFilter}>
+                <label className="text-xs text-gray-400 mb-1 block">Make</label>
+                <Select value={makeFilter} onValueChange={(v) => { setMakeFilter(v); setModelFilter('all'); setYearFilter('all'); }}>
+                  <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue placeholder="All Makes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Makes</SelectItem>
+                    {makes.filter(m => m.active).map(make => (
+                      <SelectItem key={make.id} value={make.id}>{make.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Model</label>
+                <Select value={modelFilter} onValueChange={(v) => { setModelFilter(v); setYearFilter('all'); }} disabled={makeFilter === 'all'}>
+                  <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue placeholder="All Models" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Models</SelectItem>
+                    {availableModels.filter(m => m.active).map(model => (
+                      <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Year/Series</label>
+                <Select value={yearFilter} onValueChange={setYearFilter} disabled={modelFilter === 'all'}>
                   <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                     <SelectValue placeholder="All Years" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Years</SelectItem>
-                    {uniqueYears.map(year => (
-                      <SelectItem key={year} value={year}>{year}</SelectItem>
+                    {availableYears.filter(y => y.active).map(year => (
+                      <SelectItem key={year.id} value={year.id}>{year.year}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -186,12 +236,16 @@ export default function PartsMasterList() {
               const location = locations.find(l => l.id === part.location_id);
               const categoryPath = getCategoryPath(part.part_category_id, categories);
               const category = categories.find(c => c.id === part.part_category_id);
+              const make = makes.find(m => m.id === part.car_make_id);
+              const model = models.find(m => m.id === part.car_model_id);
+              const year = years.find(y => y.id === part.car_year_id);
+              const featuredPhoto = part.featured_photo || (part.photos && part.photos[0]);
               
               return (
                 <Card 
                   key={part.id}
                   className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-900/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedPart(part)}
+                  onClick={() => setSelectedPart(part.id)}
                 >
                   <CardHeader className="border-b border-red-900/30 p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -214,21 +268,21 @@ export default function PartsMasterList() {
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
-                    {part.photos && part.photos.length > 0 && (
+                    {featuredPhoto && (
                       <div className="w-full h-32 bg-gray-800 rounded mb-3 flex items-center justify-center overflow-hidden">
                         <img
-                          src={part.photos[0]}
+                          src={featuredPhoto}
                           alt={part.part_name}
                           className="max-w-full max-h-full object-contain"
                         />
                       </div>
                     )}
                     <div className="space-y-2">
-                      {part.car_year && (
+                      {(make || model || year) && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Year/Model:</span>
-                          <span className="text-white">
-                            {part.car_year} {part.car_model}
+                          <span className="text-gray-400">Vehicle:</span>
+                          <span className="text-white text-right">
+                            {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
                           </span>
                         </div>
                       )}
@@ -279,8 +333,8 @@ export default function PartsMasterList() {
       )}
 
       {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
+        <EditPartModal
+          partId={selectedPart}
           onClose={() => setSelectedPart(null)}
         />
       )}
