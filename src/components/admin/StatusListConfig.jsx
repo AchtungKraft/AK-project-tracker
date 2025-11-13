@@ -238,10 +238,6 @@ export default function StatusListConfig() {
     </DragDropContext>
   );
 
-  // Calculate filtered lists
-  const projectStatuses = statuses.filter(s => s.scope === 'Project');
-  const taskStatuses = statuses.filter(s => s.scope === 'Task');
-
   return (
     <div className="space-y-6">
       {showAdd && (
@@ -340,7 +336,7 @@ export default function StatusListConfig() {
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : (
-            renderStatusList(projectStatuses, 'Project')
+            renderStatusList(statuses.filter(s => s.scope === 'Project'), 'Project')
           )}
         </CardContent>
       </Card>
@@ -353,7 +349,7 @@ export default function StatusListConfig() {
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : (
-            renderStatusList(taskStatuses, 'Task')
+            renderStatusList(statuses.filter(s => s.scope === 'Task'), 'Task')
           )}
         </CardContent>
       </Card>
