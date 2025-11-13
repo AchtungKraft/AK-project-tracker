@@ -35,8 +35,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [optimisticStatusId, setOptimisticStatusId] = useState(null);
-  const [optimisticAssignedId, setOptimisticAssignedId] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -64,9 +62,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         start_date: task.start_date || "",
         due_date: task.due_date || "",
       });
-      // Reset optimistic values when task changes
-      setOptimisticStatusId(null);
-      setOptimisticAssignedId(null);
     }
   }, [task, projectId]);
 
@@ -125,13 +120,9 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
       setEditing(false);
-      setOptimisticStatusId(null);
-      setOptimisticAssignedId(null);
       toast.success('Task updated successfully');
     },
     onError: () => {
-      setOptimisticStatusId(null);
-      setOptimisticAssignedId(null);
       toast.error('Failed to update task');
     },
   });
@@ -164,35 +155,18 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const handleAssignToMe = useCallback(() => {
     if (userTeamMember) {
-      const newData = { assigned_team_member_id: userTeamMember.id };
-      updateMutation.mutate(newData);
+      setFormData({ ...formData, assigned_team_member_id: userTeamMember.id });
     } else {
       toast.error('Could not find your team member profile');
     }
-  }, [userTeamMember, updateMutation]);
-
-  // Quick update handlers for status and assignment
-  const handleQuickStatusChange = useCallback((newStatusId) => {
-    setOptimisticStatusId(newStatusId);
-    updateMutation.mutate({ status_id: newStatusId });
-  }, [updateMutation]);
-
-  const handleQuickAssignmentChange = useCallback((newMemberId) => {
-    setOptimisticAssignedId(newMemberId);
-    updateMutation.mutate({ assigned_team_member_id: newMemberId });
-  }, [updateMutation]);
+  }, [userTeamMember, formData]);
 
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);
   const categoryPath = getCategoryPath(task?.category_id, categories);
   const categoryColor = category?.color;
-  
-  // Use optimistic values for immediate UI updates
-  const displayStatusId = optimisticStatusId !== null ? optimisticStatusId : task?.status_id;
-  const displayAssignedId = optimisticAssignedId !== null ? optimisticAssignedId : task?.assigned_team_member_id;
-  
-  const status = statuses.find(s => s.id === displayStatusId);
-  const assignedMember = teamMembers.find(m => m.id === displayAssignedId);
+  const status = statuses.find(s => s.id === task?.status_id);
+  const assignedMember = teamMembers.find(m => m.id === task?.assigned_team_member_id);
 
   return (
     <Sheet open onOpenChange={onClose}>
