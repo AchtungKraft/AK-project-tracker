@@ -165,12 +165,6 @@ export default function ProjectParts({ projectId }) {
   const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  
-  // Get unique locations from filtered parts for location filter dropdown
-  const availableLocations = [...new Set(filteredParts.map(({ part }) => part.location_id).filter(Boolean))]
-    .map(locId => locations.find(l => l.id === locId))
-    .filter(Boolean)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const partsWithAssignments = assignments.map(assignment => {
     const part = allParts.find(p => p.id === assignment.part_id);
