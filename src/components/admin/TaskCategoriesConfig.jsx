@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import HierarchicalList from "./HierarchicalList";
@@ -106,7 +107,7 @@ export default function TaskCategoriesConfig() {
       <CardContent className="p-4 space-y-6">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
+            <div>
               <Label className="text-gray-400 text-xs">Category Name</Label>
               <Input
                 value={newCategory.name}
@@ -114,6 +115,25 @@ export default function TaskCategoriesConfig() {
                 placeholder="Enter category name"
                 className="bg-gray-900/50 border-gray-700 text-white"
               />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Parent Category (Optional)</Label>
+              <Select
+                value={newCategory.parent_id || "none"}
+                onValueChange={(value) => setNewCategory({ ...newCategory, parent_id: value === "none" ? "" : value })}
+              >
+                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="No parent (top-level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No parent (top-level)</SelectItem>
+                  {categories.filter(c => !c.parent_id).map(parent => (
+                    <SelectItem key={parent.id} value={parent.id}>
+                      <span style={{ color: parent.color }}>{parent.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-gray-400 text-xs">Color</Label>
