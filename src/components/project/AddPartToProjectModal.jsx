@@ -43,32 +43,50 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list(),
+    queryFn: async () => {
+      const list = await base44.entities.PartCategory.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Location.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: makes = [] } = useQuery({
     queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarMake.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: models = [] } = useQuery({
     queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarModel.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: years = [] } = useQuery({
     queryKey: ['carYears'],
-    queryFn: () => base44.entities.CarYear.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarYear.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: existingAssignments = [] } = useQuery({
@@ -168,8 +186,8 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     createPartMutation.mutate(partData);
   };
 
-  const availableModels = models.filter(m => m.car_make_id === newPart.car_make_id);
-  const availableYears = years.filter(y => y.car_model_id === newPart.car_model_id);
+  const availableModels = models.filter(m => m.car_make_id === newPart.car_make_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const availableYears = years.filter(y => y.car_model_id === newPart.car_model_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const getCategoryName = (catId) => {
     const cat = categories.find(c => c.id === catId);
@@ -181,9 +199,9 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     return cat.name;
   };
 
-  const parentCategories = categories.filter(c => !c.parent_id && c.active);
-  const parentLocations = locations.filter(l => !l.parent_id && l.active);
-  const parentVendors = vendors.filter(v => !v.parent_id && v.active);
+  const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const parentLocations = locations.filter(l => !l.parent_id && l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const parentVendors = vendors.filter(v => !v.parent_id && v.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">

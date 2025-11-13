@@ -29,31 +29,46 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list(),
+    queryFn: async () => {
+      const list = await base44.entities.PartCategory.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
     enabled: entityType === 'PartCategory',
   });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Location.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
     enabled: entityType === 'Location',
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
     enabled: entityType === 'Vendor',
   });
 
   const { data: makes = [] } = useQuery({
     queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarMake.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
     enabled: entityType === 'CarModel' || entityType === 'CarYear',
   });
 
   const { data: models = [] } = useQuery({
     queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarModel.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
     enabled: entityType === 'CarYear',
   });
 

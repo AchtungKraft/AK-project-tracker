@@ -81,32 +81,50 @@ export default function PartsMasterList() {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list(),
+    queryFn: async () => {
+      const list = await base44.entities.PartCategory.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Location.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: makes = [] } = useQuery({
     queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarMake.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: models = [] } = useQuery({
     queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarModel.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: years = [] } = useQuery({
     queryKey: ['carYears'],
-    queryFn: () => base44.entities.CarYear.list(),
+    queryFn: async () => {
+      const list = await base44.entities.CarYear.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: allAssignments = [] } = useQuery({
@@ -126,7 +144,7 @@ export default function PartsMasterList() {
     return (part.quantity_on_hand || 0) - reserved;
   };
 
-  const parentCategories = categories.filter(c => !c.parent_id && c.active);
+  const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const filteredParts = parts.filter(part => {
     const matchesSearch = 
@@ -141,8 +159,8 @@ export default function PartsMasterList() {
     return matchesSearch && matchesStatus && matchesCategory && matchesMake && matchesModel && matchesYear;
   });
 
-  const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter);
-  const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter);
+  const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const groupedParts = {};
   filteredParts.forEach(part => {
