@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Loader2, Edit2, Trash2, Check, X, GripVertical } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -259,7 +259,7 @@ export default function TeamMembersConfig() {
                                 onClick={() => setEditing(null)}
                                 className="text-red-400"
                               >
-                                <X className="w-4 h-4" />
+                                <XIcon className="w-4 h-4" />
                               </Button>
                             </>
                           ) : (
