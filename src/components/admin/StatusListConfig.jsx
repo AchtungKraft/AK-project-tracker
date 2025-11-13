@@ -100,143 +100,145 @@ export default function StatusListConfig() {
     }
   };
 
-  const renderStatusList = (statusList, scope) => (
-    <DragDropContext onDragEnd={(result) => handleDragEnd(result, scope)}>
-      <Droppable droppableId={`status-list-${scope}`}>
-        {(provided) => (
-          <div 
-            {...provided.droppableProps} 
-            ref={provided.innerRef}
-            className="space-y-2"
-          >
-            {statusList.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No {scope.toLowerCase()} statuses yet
-              </div>
-            ) : (
-              statusList.map((status, index) => (
-                <Draggable key={status.id} draggableId={status.id} index={index}>
-                  {(provided, snapshot) => (
-                    <div 
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      className={`flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors ${
-                        snapshot.isDragging ? 'shadow-lg border-red-900/50' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
-                          <GripVertical className="w-5 h-5 text-gray-500" />
-                        </div>
-                      {editing === status.id ? (
-                        <>
-                  <Input
-                    value={status.label}
-                    onChange={(e) => {
-                      const currentStatuses = queryClient.getQueryData(['statuses']) || [];
-                      const updated = currentStatuses.map(s => 
-                        s.id === status.id ? { ...s, label: e.target.value } : s
-                      );
-                      queryClient.setQueryData(['statuses'], updated);
-                    }}
-                    className="bg-gray-800 border-gray-700 text-white max-w-xs"
-                  />
-                  <input
-                    type="color"
-                    value={status.color}
-                    onChange={(e) => {
-                      const currentStatuses = queryClient.getQueryData(['statuses']) || [];
-                      const updated = currentStatuses.map(s => 
-                        s.id === status.id ? { ...s, color: e.target.value } : s
-                      );
-                      queryClient.setQueryData(['statuses'], updated);
-                    }}
-                    className="w-12 h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
-                  />
-                        </>
-                      ) : (
-                        <>
-                          <div 
-                            className="w-4 h-4 rounded"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          <span className={`text-white font-medium ${!status.active && 'opacity-50'}`}>
-                            {status.label}
-                          </span>
-                        </>
-                      )}
-                      </div>
-                      <div className="flex items-center gap-4">
+  function renderStatusList(statusList, scope) {
+    return (
+      <DragDropContext onDragEnd={(result) => handleDragEnd(result, scope)}>
+        <Droppable droppableId={`status-list-${scope}`}>
+          {(provided) => (
+            <div 
+              {...provided.droppableProps} 
+              ref={provided.innerRef}
+              className="space-y-2"
+            >
+              {statusList.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No {scope.toLowerCase()} statuses yet
+                </div>
+              ) : (
+                statusList.map((status, index) => (
+                  <Draggable key={status.id} draggableId={status.id} index={index}>
+                    {(provided, snapshot) => (
+                      <div 
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors ${
+                          snapshot.isDragging ? 'shadow-lg border-red-900/50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
+                            <GripVertical className="w-5 h-5 text-gray-500" />
+                          </div>
                         {editing === status.id ? (
                           <>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const currentStatuses = queryClient.getQueryData(['statuses']) || [];
-                                const statusToUpdate = currentStatuses.find(s => s.id === status.id);
-                                if (statusToUpdate) {
-                                  updateMutation.mutate({ id: status.id, data: statusToUpdate });
-                                }
-                              }}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <Check className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditing(null);
-                                queryClient.invalidateQueries({ queryKey: ['statuses'] });
-                              }}
-                              className="border-gray-700"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
+                    <Input
+                      value={status.label}
+                      onChange={(e) => {
+                        const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                        const updated = currentStatuses.map(s => 
+                          s.id === status.id ? { ...s, label: e.target.value } : s
+                        );
+                        queryClient.setQueryData(['statuses'], updated);
+                      }}
+                      className="bg-gray-800 border-gray-700 text-white max-w-xs"
+                    />
+                    <input
+                      type="color"
+                      value={status.color}
+                      onChange={(e) => {
+                        const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                        const updated = currentStatuses.map(s => 
+                          s.id === status.id ? { ...s, color: e.target.value } : s
+                        );
+                        queryClient.setQueryData(['statuses'], updated);
+                      }}
+                      className="w-12 h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
+                    />
                           </>
                         ) : (
                           <>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Active</span>
-                              <Switch
-                                checked={status.active}
-                                onCheckedChange={() => handleToggleActive(status)}
-                              />
-                            </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => setEditing(status.id)}
-                              className="text-gray-400 hover:text-white"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => {
-                                if (confirm('Delete this status?')) {
-                                  deleteMutation.mutate(status.id);
-                                }
-                              }}
-                              className="text-gray-400 hover:text-red-400"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <div 
+                              className="w-4 h-4 rounded"
+                              style={{ backgroundColor: status.color }}
+                            />
+                            <span className={`text-white font-medium ${!status.active && 'opacity-50'}`}>
+                              {status.label}
+                            </span>
                           </>
                         )}
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {editing === status.id ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  const currentStatuses = queryClient.getQueryData(['statuses']) || [];
+                                  const statusToUpdate = currentStatuses.find(s => s.id === status.id);
+                                  if (statusToUpdate) {
+                                    updateMutation.mutate({ id: status.id, data: statusToUpdate });
+                                  }
+                                }}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditing(null);
+                                  queryClient.invalidateQueries({ queryKey: ['statuses'] });
+                                }}
+                                className="border-gray-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-400">Active</span>
+                                <Switch
+                                  checked={status.active}
+                                  onCheckedChange={() => handleToggleActive(status)}
+                                />
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => setEditing(status.id)}
+                                className="text-gray-400 hover:text-white"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (confirm('Delete this status?')) {
+                                    deleteMutation.mutate(status.id);
+                                  }
+                                }}
+                                className="text-gray-400 hover:text-red-400"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))
-            )}
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
-    </DragDropContext>
-  );
+                    )}
+                  </Draggable>
+                ))
+              )}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+    );
+  }
 
   return (
     <div className="space-y-6">
