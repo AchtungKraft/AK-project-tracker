@@ -186,8 +186,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const category = categories.find(c => c.id === task?.category_id);
   const categoryPath = getCategoryPath(task?.category_id, categories);
   const categoryColor = category?.color;
-  const status = statuses.find(s => s.id === task?.status_id);
-  const assignedMember = teamMembers.find(m => m.id === task?.assigned_team_member_id);
+  
+  // Use optimistic values for immediate UI updates
+  const displayStatusId = optimisticStatusId !== null ? optimisticStatusId : task?.status_id;
+  const displayAssignedId = optimisticAssignedId !== null ? optimisticAssignedId : task?.assigned_team_member_id;
+  
+  const status = statuses.find(s => s.id === displayStatusId);
+  const assignedMember = teamMembers.find(m => m.id === displayAssignedId);
 
   return (
     <Sheet open onOpenChange={onClose}>
