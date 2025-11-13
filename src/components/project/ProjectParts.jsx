@@ -33,6 +33,7 @@ export default function ProjectParts({ projectId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
   const [makeFilter, setMakeFilter] = useState('all');
   const [modelFilter, setModelFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -50,6 +51,7 @@ export default function ProjectParts({ projectId }) {
         setSearchTerm(filters.searchTerm || '');
         setCategoryFilter(filters.categoryFilter || 'all');
         setStatusFilter(filters.statusFilter || 'all');
+        setLocationFilter(filters.locationFilter || 'all');
         setMakeFilter(filters.makeFilter || 'all');
         setModelFilter(filters.modelFilter || 'all');
         setYearFilter(filters.yearFilter || 'all');
@@ -65,6 +67,7 @@ export default function ProjectParts({ projectId }) {
         searchTerm,
         categoryFilter,
         statusFilter,
+        locationFilter,
         makeFilter,
         modelFilter,
         yearFilter,
@@ -72,7 +75,7 @@ export default function ProjectParts({ projectId }) {
         viewMode,
       }));
     } catch (e) {}
-  }, [searchTerm, categoryFilter, statusFilter, makeFilter, modelFilter, yearFilter, groupBy, viewMode]);
+  }, [searchTerm, categoryFilter, statusFilter, locationFilter, makeFilter, modelFilter, yearFilter, groupBy, viewMode]);
 
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
     queryKey: ['partBuildAssignments', projectId],
@@ -162,6 +165,12 @@ export default function ProjectParts({ projectId }) {
   const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  
+  // Get unique locations from filtered parts for location filter dropdown
+  const availableLocations = [...new Set(filteredParts.map(({ part }) => part.location_id).filter(Boolean))]
+    .map(locId => locations.find(l => l.id === locId))
+    .filter(Boolean)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const partsWithAssignments = assignments.map(assignment => {
     const part = allParts.find(p => p.id === assignment.part_id);
@@ -173,11 +182,12 @@ export default function ProjectParts({ projectId }) {
                          part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || part.part_category_id === categoryFilter;
     const matchesStatus = statusFilter === 'all' || assignment.needed_status === statusFilter;
+    const matchesLocation = locationFilter === 'all' || part.location_id === locationFilter;
     const matchesMake = makeFilter === 'all' || part.car_make_id === makeFilter;
     const matchesModel = modelFilter === 'all' || part.car_model_id === modelFilter;
     const matchesYear = yearFilter === 'all' || part.car_year_id === yearFilter;
     
-    return matchesSearch && matchesCategory && matchesStatus && matchesMake && matchesModel && matchesYear;
+    return matchesSearch && matchesCategory && matchesStatus && matchesLocation && matchesMake && matchesModel && matchesYear;
   });
 
   const groupedParts = {};
@@ -197,6 +207,20 @@ export default function ProjectParts({ projectId }) {
       const make = makes.find(m => m.id === part.car_make_id);
       groupKey = make?.name || 'No Make';
       groupColor = make?.color || '#6B7280';
+    } else if (groupBy === 'location') {
+      const location = locations.find(l => l.id === part.location_id);
+      if (location) {
+        if (location.parent_id) {
+          const parent = locations.find(l => l.id === location.parent_id);
+          groupKey = parent ? `${parent.location_area} > ${location.location_area}` : location.location_area;
+        } else {
+          groupKey = location.location_area;
+        }
+        groupColor = location.color || '#6B7280';
+      } else {
+        groupKey = 'No Location';
+        groupColor = '#6B7280';
+      }
     }
     
     if (!groupedParts[groupKey]) {
@@ -257,8 +281,8 @@ export default function ProjectParts({ projectId }) {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
-            <div className="lg:col-span-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3">
+            <div className="lg:col-span-7">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -280,6 +304,7 @@ export default function ProjectParts({ projectId }) {
                   <SelectItem value="category">Category</SelectItem>
                   <SelectItem value="status">Status</SelectItem>
                   <SelectItem value="make">Make</SelectItem>
+                  <SelectItem value="location">Location</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -324,6 +349,28 @@ export default function ProjectParts({ projectId }) {
                       </React.Fragment>
                     );
                   })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Location</label>
+              <Select value={locationFilter} onValueChange={setLocationFilter}>
+                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {availableLocations.map(location => (
+                    <SelectItem key={location.id} value={location.id}>
+                      <span style={{ color: location.color }}>
+                        {location.parent_id ? 
+                          `${locations.find(l => l.id === location.parent_id)?.location_area} > ${location.location_area}` :
+                          location.location_area
+                        }
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
