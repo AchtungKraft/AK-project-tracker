@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Filter, Plus, Package, Trash2, LayoutGrid, List } from "lucide-react";
 import AddPartToProjectModal from "./AddPartToProjectModal";
-import EditPartModal from "../parts/EditPartModal";
+import EditPartDrawer from "../parts/EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 
 const FILTER_STORAGE_KEY = 'achtung_project_parts_filters';
@@ -654,7 +654,7 @@ export default function ProjectParts({ projectId }) {
       )}
 
       {selectedPart && (
-        <EditPartModal
+        <EditPartDrawer
           partId={selectedPart}
           onClose={() => setSelectedPart(null)}
         />

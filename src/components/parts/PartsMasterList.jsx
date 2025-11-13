@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Plus, Package, Filter, LayoutGrid, List } from "lucide-react";
-import AddPartModal from "./AddPartModal";
-import EditPartModal from "./EditPartModal";
+import AddPartDrawer from "./AddPartDrawer";
+import EditPartDrawer from "./EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 
 const FILTER_STORAGE_KEY = 'achtung_parts_master_filters';
@@ -612,11 +612,11 @@ export default function PartsMasterList() {
       </div>
 
       {showAddModal && (
-        <AddPartModal onClose={() => setShowAddModal(false)} />
+        <AddPartDrawer onClose={() => setShowAddModal(false)} />
       )}
 
       {selectedPart && (
-        <EditPartModal
+        <EditPartDrawer
           partId={selectedPart}
           onClose={() => setSelectedPart(null)}
         />
