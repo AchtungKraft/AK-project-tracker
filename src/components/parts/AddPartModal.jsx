@@ -64,7 +64,7 @@ export default function AddPartModal({ onClose }) {
   });
 
   const handlePhotoUpload = async (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setUploading(true);
@@ -75,12 +75,17 @@ export default function AddPartModal({ onClose }) {
       const results = await Promise.all(uploadPromises);
       const photoUrls = results.map((r) => r.file_url);
 
+      const updatedPhotos = [...(formData.photos || []), ...photoUrls];
+      const newFeatured = formData.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
+      
       setFormData({
         ...formData,
-        photos: [...formData.photos, ...photoUrls]
+        photos: updatedPhotos,
+        featured_photo: newFeatured
       });
-      toast.success('Photos uploaded');
+      toast.success(`${files.length} photo(s) uploaded`);
     } catch (error) {
+      console.error('Photo upload error:', error);
       toast.error('Failed to upload photos');
     } finally {
       setUploading(false);

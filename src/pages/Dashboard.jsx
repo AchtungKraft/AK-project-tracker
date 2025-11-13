@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [groupBy, setGroupBy] = useState('projectType');
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
@@ -54,6 +55,28 @@ export default function Dashboard() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
+  // Group projects
+  const groupedProjects = {};
+  filteredProjects.forEach(project => {
+    let groupKey = 'Ungrouped';
+    let groupColor = '#6B7280';
+    
+    if (groupBy === 'projectType') {
+      const projectType = projectTypes.find(t => t.id === project.project_type_id);
+      groupKey = projectType?.name || 'No Type';
+      groupColor = projectType?.color || '#6B7280';
+    } else if (groupBy === 'status') {
+      const status = statuses.find(s => s.id === project.status_id);
+      groupKey = status?.label || 'No Status';
+      groupColor = status?.color || '#6B7280';
+    }
+    
+    if (!groupedProjects[groupKey]) {
+      groupedProjects[groupKey] = { projects: [], color: groupColor };
+    }
+    groupedProjects[groupKey].projects.push(project);
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -76,9 +99,9 @@ export default function Dashboard() {
 
         {/* Filters */}
         <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {/* Search */}
-            <div className="md:col-span-3 lg:col-span-1">
+            <div className="md:col-span-4 lg:col-span-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -88,6 +111,19 @@ export default function Dashboard() {
                   className="pl-10 bg-gray-900/50 border-gray-700 text-white"
                 />
               </div>
+            </div>
+
+            {/* Group By */}
+            <div>
+              <Select value={groupBy} onValueChange={setGroupBy}>
+                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="Group By" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="projectType">Group by Type</SelectItem>
+                  <SelectItem value="status">Group by Status</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Status Filter */}
@@ -135,20 +171,35 @@ export default function Dashboard() {
             <p className="text-gray-600 mt-2">Create your first project to get started</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects.map(project => {
-              const status = statuses.find(s => s.id === project.status_id);
-              const projectType = projectTypes.find(t => t.id === project.project_type_id);
+          <div className="space-y-6">
+            {Object.entries(groupedProjects).map(([groupLabel, groupData]) => {
+              const { projects: groupProjects, color: groupColor } = groupData;
               
               return (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  status={status}
-                  projectType={projectType}
-                  teamMembers={teamMembers}
-                  onEdit={setEditingProject}
-                />
+                <div key={groupLabel}>
+                  <div className="mb-4 pb-2 border-b-2 border-l-4 pl-3" style={{ borderColor: groupColor }}>
+                    <h2 className="text-xl font-bold" style={{ color: groupColor }}>
+                      {groupLabel} ({groupProjects.length})
+                    </h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {groupProjects.map(project => {
+                      const status = statuses.find(s => s.id === project.status_id);
+                      const projectType = projectTypes.find(t => t.id === project.project_type_id);
+                      
+                      return (
+                        <ProjectCard
+                          key={project.id}
+                          project={project}
+                          status={status}
+                          projectType={projectType}
+                          teamMembers={teamMembers}
+                          onEdit={setEditingProject}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </div>

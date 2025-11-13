@@ -33,6 +33,18 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     enabled: entityType === 'PartCategory',
   });
 
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => base44.entities.Location.list(),
+    enabled: entityType === 'Location',
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => base44.entities.Vendor.list(),
+    enabled: entityType === 'Vendor',
+  });
+
   const { data: makes = [] } = useQuery({
     queryKey: ['carMakes'],
     queryFn: () => base44.entities.CarMake.list(),
@@ -122,6 +134,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
         );
 
       case 'Vendor':
+        const parentVendors = vendors.filter(v => !v.parent_id && v.active);
         return (
           <>
             <div>
@@ -133,6 +146,23 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 className="bg-gray-800 border-gray-700 text-white"
                 autoFocus
               />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Parent Vendor</Label>
+              <Select
+                value={formData.parent_id || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, parent_id: value === 'none' ? '' : value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="None (Top Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (Top Level)</SelectItem>
+                  {parentVendors.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-gray-400 text-xs">Website</Label>
@@ -167,6 +197,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
         );
 
       case 'Location':
+        const parentLocations = locations.filter(l => !l.parent_id && l.active);
         return (
           <>
             <div>
@@ -178,6 +209,23 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 className="bg-gray-800 border-gray-700 text-white"
                 autoFocus
               />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Parent Location</Label>
+              <Select
+                value={formData.parent_id || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, parent_id: value === 'none' ? '' : value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="None (Top Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (Top Level)</SelectItem>
+                  {parentLocations.map(l => (
+                    <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-gray-400 text-xs">Storage Type</Label>
