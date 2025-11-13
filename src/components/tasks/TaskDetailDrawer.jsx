@@ -182,17 +182,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     <Sheet open onOpenChange={onClose}>
       <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader className="border-b border-gray-700 pb-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-white text-xl">{task?.name}</SheetTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+          <SheetTitle className="text-white text-xl">{task?.name}</SheetTitle>
           {project && (
             <p className="text-sm text-gray-400">Project: {project.name}</p>
           )}
