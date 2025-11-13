@@ -47,7 +47,6 @@ export default function ProjectOverview({ project, projectId }) {
     queryFn: () => base44.entities.JournalEntry.filter({ project_id: projectId })
   });
 
-  const projectStatuses = statuses.filter((s) => s.scope === 'Project' && s.active);
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
   const projectType = projectTypes.find((t) => t.id === project?.project_type_id);
 
