@@ -4,6 +4,7 @@ import ProjectDetail from './pages/ProjectDetail';
 import MyTasks from './pages/MyTasks';
 import Reports from './pages/Reports';
 import AdminConfig from './pages/AdminConfig';
+import PartsTracker from './pages/PartsTracker';
 import Layout from './Layout.jsx';
 
 
@@ -14,6 +15,7 @@ export const PAGES = {
     "MyTasks": MyTasks,
     "Reports": Reports,
     "AdminConfig": AdminConfig,
+    "PartsTracker": PartsTracker,
 }
 
 export const pagesConfig = {
