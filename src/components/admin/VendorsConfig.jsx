@@ -1,34 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit2, Check, X, GripVertical } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import HierarchicalList from "./HierarchicalList";
 
 export default function VendorsConfig() {
   const queryClient = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
-  const [newVendor, setNewVendor] = useState({ 
-    vendor_name: '', 
-    website: '', 
-    contact_info: '', 
-    notes: '',
-    active: true,
-    sort_order: 0
+  const [newVendor, setNewVendor] = useState({
+    vendor_name: "",
+    parent_id: "",
+    website: "",
+    contact_info: "",
+    notes: "",
+    color: "#3B82F6",
+    sort_order: 0,
   });
-  const [editing, setEditing] = useState(null);
 
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ['vendors'],
     queryFn: async () => {
-      const vendorList = await base44.entities.Vendor.list();
-      return vendorList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      const vendorsList = await base44.entities.Vendor.list();
+      return vendorsList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
   });
 
@@ -36,9 +35,16 @@ export default function VendorsConfig() {
     mutationFn: (data) => base44.entities.Vendor.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      setNewVendor({ 
+        vendor_name: "", 
+        parent_id: "",
+        website: "", 
+        contact_info: "", 
+        notes: "",
+        color: "#3B82F6",
+        sort_order: 0 
+      });
       toast.success('Vendor created');
-      setNewVendor({ vendor_name: '', website: '', contact_info: '', notes: '', active: true, sort_order: 0 });
-      setShowAdd(false);
     },
   });
 
@@ -47,7 +53,6 @@ export default function VendorsConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       toast.success('Vendor updated');
-      setEditing(null);
     },
   });
 
@@ -59,26 +64,39 @@ export default function VendorsConfig() {
     },
   });
 
-  const handleToggleActive = (vendor) => {
-    updateMutation.mutate({ 
-      id: vendor.id, 
-      data: { ...vendor, active: !vendor.active } 
+  const handleCreate = (e) => {
+    e.preventDefault();
+    if (!newVendor.vendor_name.trim()) return;
+    createMutation.mutate({
+      ...newVendor,
+      active: true,
     });
   };
 
-  const handleDragEnd = async (result) => {
-    if (!result.destination) return;
+  const handleUpdate = (id, data) => {
+    updateMutation.mutate({ id, data });
+  };
 
-    const items = Array.from(vendors);
-    const [reordered] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reordered);
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to delete this vendor? This may affect existing parts.')) {
+      deleteMutation.mutate(id);
+    }
+  };
 
-    const updates = items.map((item, index) => ({
+  const handleToggleActive = (id, vendor) => {
+    updateMutation.mutate({
+      id,
+      data: { ...vendor, active: !vendor.active },
+    });
+  };
+
+  const handleReorder = async (reorderedItems) => {
+    const updates = reorderedItems.map((item, index) => ({
       id: item.id,
       data: { ...item, sort_order: index }
     }));
 
-    queryClient.setQueryData(['vendors'], items.map((item, index) => ({
+    queryClient.setQueryData(['vendors'], reorderedItems.map((item, index) => ({
       ...item,
       sort_order: index
     })));
@@ -92,263 +110,139 @@ export default function VendorsConfig() {
     }
   };
 
+  const parentVendors = vendors.filter(v => !v.parent_id);
+
   return (
-    <div className="space-y-6">
-      {showAdd && (
-        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardHeader className="border-b border-red-900/30">
-            <CardTitle className="text-white">Add New Vendor</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Vendor Name</Label>
-                  <Input
-                    placeholder="Vendor name..."
-                    value={newVendor.vendor_name}
-                    onChange={(e) => setNewVendor({ ...newVendor, vendor_name: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Website/Ordering Link</Label>
-                  <Input
-                    placeholder="https://..."
-                    value={newVendor.website}
-                    onChange={(e) => setNewVendor({ ...newVendor, website: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Contact Info</Label>
-                <Input
-                  placeholder="Phone, email, contact person..."
-                  value={newVendor.contact_info}
-                  onChange={(e) => setNewVendor({ ...newVendor, contact_info: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea
-                  placeholder="Additional notes..."
-                  value={newVendor.notes}
-                  onChange={(e) => setNewVendor({ ...newVendor, notes: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowAdd(false);
-                    setNewVendor({ vendor_name: '', website: '', contact_info: '', notes: '', active: true, sort_order: 0 });
-                  }}
-                  className="border-gray-700"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => createMutation.mutate(newVendor)}
-                  disabled={!newVendor.vendor_name.trim() || createMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  Create Vendor
-                </Button>
-              </div>
+    <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+      <CardHeader className="border-b border-red-900/30">
+        <CardTitle className="text-white">Vendors & Suppliers</CardTitle>
+        <p className="text-sm text-gray-400 mt-1">
+          Manage vendor hierarchy (e.g., Supplier Groups → Individual Vendors)
+        </p>
+      </CardHeader>
+      <CardContent className="p-6 space-y-6">
+        {/* Add New Vendor Form */}
+        <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-gray-400">Vendor Name *</Label>
+              <Input
+                value={newVendor.vendor_name}
+                onChange={(e) => setNewVendor({ ...newVendor, vendor_name: e.target.value })}
+                placeholder="e.g., OEM Parts Supplier"
+                className="bg-gray-800 border-gray-700 text-white"
+                required
+              />
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {!showAdd && (
-        <div className="flex justify-end">
+            <div>
+              <Label className="text-gray-400">Parent Vendor/Group</Label>
+              <Select
+                value={newVendor.parent_id}
+                onValueChange={(value) => setNewVendor({ ...newVendor, parent_id: value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="None (Top Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>None (Top Level)</SelectItem>
+                  {parentVendors.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-gray-400">Website</Label>
+              <Input
+                type="url"
+                value={newVendor.website}
+                onChange={(e) => setNewVendor({ ...newVendor, website: e.target.value })}
+                placeholder="https://vendor.com"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400">Contact Info</Label>
+              <Input
+                value={newVendor.contact_info}
+                onChange={(e) => setNewVendor({ ...newVendor, contact_info: e.target.value })}
+                placeholder="Phone, email, etc."
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400">Color</Label>
+              <input
+                type="color"
+                value={newVendor.color}
+                onChange={(e) => setNewVendor({ ...newVendor, color: e.target.value })}
+                className="w-full h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400">Sort Order</Label>
+              <Input
+                type="number"
+                value={newVendor.sort_order}
+                onChange={(e) => setNewVendor({ ...newVendor, sort_order: parseInt(e.target.value) || 0 })}
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-gray-400">Notes</Label>
+              <Textarea
+                value={newVendor.notes}
+                onChange={(e) => setNewVendor({ ...newVendor, notes: e.target.value })}
+                placeholder="Additional vendor notes..."
+                className="bg-gray-800 border-gray-700 text-white"
+                rows={2}
+              />
+            </div>
+          </div>
           <Button 
-            onClick={() => setShowAdd(true)}
-            className="bg-red-600 hover:bg-red-700 gap-2"
+            type="submit" 
+            className="bg-red-600 hover:bg-red-700"
+            disabled={createMutation.isPending || !newVendor.vendor_name.trim()}
           >
-            <Plus className="w-4 h-4" />
-            Add Vendor
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Vendor
+              </>
+            )}
           </Button>
-        </div>
-      )}
+        </form>
 
-      <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-        <CardHeader className="border-b border-red-900/30">
-          <CardTitle className="text-white">Vendors</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : (
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="vendors-list">
-                {(provided) => (
-                  <div 
-                    {...provided.droppableProps} 
-                    ref={provided.innerRef}
-                    className="space-y-2"
-                  >
-                    {vendors.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        No vendors yet
-                      </div>
-                    ) : (
-                      vendors.map((vendor, index) => (
-                        <Draggable key={vendor.id} draggableId={vendor.id} index={index}>
-                          {(provided, snapshot) => (
-                            <div 
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`p-4 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors ${
-                                snapshot.isDragging ? 'shadow-lg border-red-900/50' : ''
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing pt-1">
-                                  <GripVertical className="w-5 h-5 text-gray-500" />
-                                </div>
-                                <div className="flex-1">
-                                  {editing === vendor.id ? (
-                                    <div className="space-y-3">
-                                      <Input
-                                        value={vendor.vendor_name}
-                                        onChange={(e) => {
-                                          const currentVendors = queryClient.getQueryData(['vendors']) || [];
-                                          const updated = currentVendors.map(v => 
-                                            v.id === vendor.id ? { ...v, vendor_name: e.target.value } : v
-                                          );
-                                          queryClient.setQueryData(['vendors'], updated);
-                                        }}
-                                        className="bg-gray-800 border-gray-700 text-white"
-                                      />
-                                      <Input
-                                        placeholder="Website..."
-                                        value={vendor.website || ''}
-                                        onChange={(e) => {
-                                          const currentVendors = queryClient.getQueryData(['vendors']) || [];
-                                          const updated = currentVendors.map(v => 
-                                            v.id === vendor.id ? { ...v, website: e.target.value } : v
-                                          );
-                                          queryClient.setQueryData(['vendors'], updated);
-                                        }}
-                                        className="bg-gray-800 border-gray-700 text-white"
-                                      />
-                                      <Input
-                                        placeholder="Contact info..."
-                                        value={vendor.contact_info || ''}
-                                        onChange={(e) => {
-                                          const currentVendors = queryClient.getQueryData(['vendors']) || [];
-                                          const updated = currentVendors.map(v => 
-                                            v.id === vendor.id ? { ...v, contact_info: e.target.value } : v
-                                          );
-                                          queryClient.setQueryData(['vendors'], updated);
-                                        }}
-                                        className="bg-gray-800 border-gray-700 text-white"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <h3 className={`font-semibold text-white ${!vendor.active && 'opacity-50'}`}>
-                                          {vendor.vendor_name}
-                                        </h3>
-                                      </div>
-                                      {vendor.website && (
-                                        <a 
-                                          href={vendor.website} 
-                                          target="_blank" 
-                                          rel="noopener noreferrer"
-                                          className="text-sm text-red-400 hover:text-red-300 block mb-1"
-                                        >
-                                          {vendor.website}
-                                        </a>
-                                      )}
-                                      {vendor.contact_info && (
-                                        <p className="text-sm text-gray-400">{vendor.contact_info}</p>
-                                      )}
-                                      {vendor.notes && (
-                                        <p className="text-sm text-gray-500 mt-2">{vendor.notes}</p>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  {editing === vendor.id ? (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => {
-                                          const currentVendors = queryClient.getQueryData(['vendors']) || [];
-                                          const vendorToUpdate = currentVendors.find(v => v.id === vendor.id);
-                                          if (vendorToUpdate) {
-                                            updateMutation.mutate({ id: vendor.id, data: vendorToUpdate });
-                                          }
-                                        }}
-                                        className="bg-green-600 hover:bg-green-700"
-                                      >
-                                        <Check className="w-4 h-4" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          setEditing(null);
-                                          queryClient.invalidateQueries({ queryKey: ['vendors'] });
-                                        }}
-                                        className="border-gray-700"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm text-gray-400">Active</span>
-                                        <Switch
-                                          checked={vendor.active}
-                                          onCheckedChange={() => handleToggleActive(vendor)}
-                                        />
-                                      </div>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => setEditing(vendor.id)}
-                                        className="text-gray-400 hover:text-white"
-                                      >
-                                        <Edit2 className="w-4 h-4" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => {
-                                          if (confirm('Delete this vendor?')) {
-                                            deleteMutation.mutate(vendor.id);
-                                          }
-                                        }}
-                                        className="text-gray-400 hover:text-red-400"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))
-                    )}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        {/* Vendors Hierarchical List */}
+        {isLoading ? (
+          <div className="text-center py-8 text-gray-500">Loading...</div>
+        ) : vendors.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No vendors yet. Add one above.
+          </div>
+        ) : (
+          <HierarchicalList
+            items={vendors}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            onToggleActive={handleToggleActive}
+            onReorder={handleReorder}
+            nameKey="vendor_name"
+            colorKey="color"
+            showColor={true}
+            additionalFields={[
+              { key: 'website', label: 'Website', type: 'url' },
+              { key: 'contact_info', label: 'Contact', type: 'text' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
