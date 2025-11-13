@@ -144,7 +144,6 @@ export default function PartsMasterList() {
   const availableModels = models.filter(m => makeFilter === 'all' || m.car_make_id === makeFilter);
   const availableYears = years.filter(y => modelFilter === 'all' || y.car_model_id === modelFilter);
 
-  // Group parts
   const groupedParts = {};
   filteredParts.forEach(part => {
     let groupKey = 'Ungrouped';
@@ -183,7 +182,6 @@ export default function PartsMasterList() {
   return (
     <>
       <div className="space-y-4">
-        {/* Filters */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
           <CardHeader className="border-b border-red-900/30 p-4">
             <div className="flex items-center justify-between">
@@ -343,7 +341,6 @@ export default function PartsMasterList() {
           </CardContent>
         </Card>
 
-        {/* Parts Display */}
         {isLoading ? (
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
             <CardContent className="p-8">
@@ -444,9 +441,21 @@ export default function PartsMasterList() {
                                   </div>
                                 )}
                                 <div className="flex justify-between">
-                                  <span className="text-gray-400">Qty:</span>
+                                  <span className="text-gray-400">Global Stock:</span>
                                   <span className="text-white font-semibold">
                                     {part.quantity_on_hand || 0}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-400">Reserved:</span>
+                                  <span className="text-yellow-400 font-semibold">
+                                    {getPartReserved(part.id)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-400">Available:</span>
+                                  <span className={`font-semibold ${getPartAvailable(part.id, part) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {getPartAvailable(part.id, part)}
                                   </span>
                                 </div>
                                 {groupBy !== 'vendor' && vendor && (
