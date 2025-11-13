@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -10,7 +9,8 @@ import {
   Settings, 
   BarChart3,
   Menu,
-  Plus
+  Plus,
+  Package
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,6 +46,11 @@ const navigationItems = [
     icon: ListChecks,
   },
   {
+    title: "Parts Tracker",
+    url: createPageUrl("PartsTracker"),
+    icon: Package,
+  },
+  {
     title: "Reports",
     url: createPageUrl("Reports"),
     icon: BarChart3,
@@ -63,7 +68,7 @@ const MobileBottomNav = ({ currentPath }) => {
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Tasks", url: createPageUrl("MyTasks"), icon: ListChecks },
     { title: "Projects", url: createPageUrl("Projects"), icon: FolderKanban },
-    { title: "Reports", url: createPageUrl("Reports"), icon: BarChart3 },
+    { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
   ];
 
   return (
