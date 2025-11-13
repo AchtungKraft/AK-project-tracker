@@ -338,8 +338,8 @@ export default function ProjectKanban({ projectId }) {
           </div>
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="overflow-x-auto pb-4">
-              <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+            <div className="pb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {groupingData.mode === 'buckets' ? (
                   <>
                     {/* Kanban Buckets Mode */}
@@ -348,7 +348,7 @@ export default function ProjectKanban({ projectId }) {
                       const groupedTasks = groupTasksWithinBucket(bucketTasks);
                   
                   return (
-                    <div key={bucket.id} className="w-80 flex-shrink-0">
+                    <div key={bucket.id} className="w-full">
                       <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
                         {/* Bucket Header */}
                         <div
@@ -451,7 +451,7 @@ export default function ProjectKanban({ projectId }) {
                 })}
 
                     {/* Unassigned Tasks Column */}
-                    <div className="w-80 flex-shrink-0">
+                    <div className="w-full">
                       <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
                         <div className="p-3 border-b-2 border-gray-600 bg-gray-800/50">
                           <div className="flex items-center justify-between">
@@ -518,7 +518,7 @@ export default function ProjectKanban({ projectId }) {
                       const completedTasks = group.tasks.filter(t => t.status_id === completedStatus?.id);
                       
                       return (
-                        <div key={group.id} className="w-80 flex-shrink-0">
+                        <div key={group.id} className="w-full">
                           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
                             {/* Group Header */}
                             <div
