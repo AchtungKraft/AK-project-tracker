@@ -45,14 +45,6 @@ export default function ProjectKanban({ projectId }) {
     enabled: !!projectId,
   });
 
-  // Filter out completed tasks from Kanban view
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-  const completedStatus = taskStatuses.find(s => {
-    const label = s.label.toLowerCase();
-    return label.includes('complete') || label.includes('done');
-  });
-  const tasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
-
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
@@ -67,6 +59,14 @@ export default function ProjectKanban({ projectId }) {
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
   });
+
+  // Filter out completed tasks from Kanban view
+  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const completedStatus = taskStatuses.find(s => {
+    const label = s.label.toLowerCase();
+    return label.includes('complete') || label.includes('done');
+  });
+  const tasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ taskId, data }) => base44.entities.Task.update(taskId, data),
