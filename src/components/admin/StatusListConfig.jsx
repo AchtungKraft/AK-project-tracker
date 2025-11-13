@@ -100,6 +100,9 @@ export default function StatusListConfig() {
     }
   };
 
+  const projectStatuses = statuses.filter(s => s.scope === 'Project');
+  const taskStatuses = statuses.filter(s => s.scope === 'Task');
+
   const renderStatusList = (statusList, scope) => (
     <DragDropContext onDragEnd={(result) => handleDragEnd(result, scope)}>
       <Droppable droppableId={`status-list-${scope}`}>
@@ -336,7 +339,7 @@ export default function StatusListConfig() {
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : (
-            renderStatusList(statuses.filter(s => s.scope === 'Project'), 'Project')
+            renderStatusList(projectStatuses, 'Project')
           )}
         </CardContent>
       </Card>
@@ -349,7 +352,7 @@ export default function StatusListConfig() {
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : (
-            renderStatusList(statuses.filter(s => s.scope === 'Task'), 'Task')
+            renderStatusList(taskStatuses, 'Task')
           )}
         </CardContent>
       </Card>
