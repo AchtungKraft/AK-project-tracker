@@ -2,16 +2,16 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
-import { 
-  LayoutDashboard, 
-  FolderKanban, 
-  ListChecks, 
-  Settings, 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  ListChecks,
+  Settings,
   BarChart3,
   Menu,
   Plus,
-  Package
-} from "lucide-react";
+  Package } from
+"lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,52 +24,52 @@ import {
   SidebarHeader,
   SidebarFooter,
   SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+  SidebarTrigger } from
+"@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
-  {
-    title: "Dashboard",
-    url: createPageUrl("Dashboard"),
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Projects",
-    url: createPageUrl("Projects"),
-    icon: FolderKanban,
-  },
-  {
-    title: "My Tasks",
-    url: createPageUrl("MyTasks"),
-    icon: ListChecks,
-  },
-  {
-    title: "Parts Tracker",
-    url: createPageUrl("PartsTracker"),
-    icon: Package,
-  },
-  {
-    title: "Reports",
-    url: createPageUrl("Reports"),
-    icon: BarChart3,
-  },
-  {
-    title: "Admin Config",
-    url: createPageUrl("AdminConfig"),
-    icon: Settings,
-  },
-];
+{
+  title: "Dashboard",
+  url: createPageUrl("Dashboard"),
+  icon: LayoutDashboard
+},
+{
+  title: "Projects",
+  url: createPageUrl("Projects"),
+  icon: FolderKanban
+},
+{
+  title: "My Tasks",
+  url: createPageUrl("MyTasks"),
+  icon: ListChecks
+},
+{
+  title: "Parts Tracker",
+  url: createPageUrl("PartsTracker"),
+  icon: Package
+},
+{
+  title: "Reports",
+  url: createPageUrl("Reports"),
+  icon: BarChart3
+},
+{
+  title: "Admin Config",
+  url: createPageUrl("AdminConfig"),
+  icon: Settings
+}];
+
 
 // Mobile bottom nav
 const MobileBottomNav = ({ currentPath }) => {
   const mobileItems = [
-    { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-    { title: "Tasks", url: createPageUrl("MyTasks"), icon: ListChecks },
-    { title: "Projects", url: createPageUrl("Projects"), icon: FolderKanban },
-    { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
-  ];
+  { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
+  { title: "Tasks", url: createPageUrl("MyTasks"), icon: ListChecks },
+  { title: "Projects", url: createPageUrl("Projects"), icon: FolderKanban },
+  { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package }];
+
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-xl border-t border-red-900/30 z-50">
@@ -84,16 +84,16 @@ const MobileBottomNav = ({ currentPath }) => {
               className={cn(
                 "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors",
                 isActive ? "text-red-500" : "text-gray-400"
-              )}
-            >
+              )}>
+
               <Icon className="w-5 h-5" />
               <span className="text-xs">{item.title}</span>
-            </Link>
-          );
+            </Link>);
+
         })}
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default function Layout({ children, currentPageName }) {
@@ -130,11 +130,11 @@ export default function Layout({ children, currentPageName }) {
         <header className="sticky top-0 bg-black/80 backdrop-blur-xl border-b border-red-900/30 px-3 py-2 z-40">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <img 
+              <img
                 src="https://achtungkraft.com/cdn/shop/files/AchtungLogoSticker_39633eb9-a276-4e81-8376-b8fef51b08d6.png"
                 alt="Ächtung Kraft"
-                className="h-7"
-              />
+                className="h-7" />
+
               <div>
                 <h1 className="text-xs font-bold text-white">ÄCHTUNG KRAFT</h1>
                 <p className="text-xs text-gray-400">Built. Not Bought.</p>
@@ -148,8 +148,8 @@ export default function Layout({ children, currentPageName }) {
         </main>
 
         <MobileBottomNav currentPath={location.pathname} />
-      </div>
-    );
+      </div>);
+
   }
 
   return (
@@ -172,11 +172,11 @@ export default function Layout({ children, currentPageName }) {
         <Sidebar className="border-r border-red-900/30 bg-black/40 backdrop-blur-xl">
           <SidebarHeader className="border-b border-red-900/30 p-4">
             <div className="flex items-center gap-2">
-              <img 
+              <img
                 src="https://achtungkraft.com/cdn/shop/files/AchtungLogoSticker_39633eb9-a276-4e81-8376-b8fef51b08d6.png"
                 alt="Ächtung Kraft"
-                className="h-8"
-              />
+                className="h-8" />
+
               <div>
                 <h2 className="font-bold text-white text-base">ÄCHTUNG KRAFT</h2>
                 <p className="text-xs text-gray-400">Built. Not Bought.</p>
@@ -191,22 +191,22 @@ export default function Layout({ children, currentPageName }) {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        className={cn(
-                          "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
-                          location.pathname === item.url && "bg-red-950/40 text-red-400"
-                        )}
-                      >
-                        <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
+                  {navigationItems.map((item) =>
+                  <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                      asChild
+                      className={cn(
+                        "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
+                        location.pathname === item.url && "bg-red-950/40 text-red-400"
+                      )}>
+
+                        <Link to={item.url} className="bg-red-950/40 text-slate-800 mb-0.5 px-2 py-1.5 text-sm text-left rounded-lg peer/menu-button flex w-full items-center gap-2 overflow-hidden outline-none ring-sidebar-ring focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 h-8 hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200">
                           <item.icon className="w-4 h-4" />
-                          <span className="font-medium text-sm">{item.title}</span>
+                          <span className="bg-transparent text-sm font-medium">{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                  ))}
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -237,6 +237,6 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </main>
       </div>
-    </SidebarProvider>
-  );
+    </SidebarProvider>);
+
 }
