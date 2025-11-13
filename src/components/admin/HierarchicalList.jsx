@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit2, Trash2, Check, X, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function HierarchicalList({ 
@@ -186,7 +186,7 @@ export default function HierarchicalList({
                       onClick={handleCancel}
                       className="h-8 w-8 text-gray-400 hover:text-gray-300"
                     >
-                      <X className="w-4 h-4" />
+                      <XIcon className="w-4 h-4" />
                     </Button>
                   </>
                 ) : (
