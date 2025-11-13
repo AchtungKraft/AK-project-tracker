@@ -4,6 +4,9 @@ import ProjectTypesConfig from "../components/admin/ProjectTypesConfig";
 import TaskCategoriesConfig from "../components/admin/TaskCategoriesConfig";
 import StatusListConfig from "../components/admin/StatusListConfig";
 import TeamMembersConfig from "../components/admin/TeamMembersConfig";
+import PartCategoriesConfig from "../components/admin/PartCategoriesConfig";
+import VendorsConfig from "../components/admin/VendorsConfig";
+import LocationsConfig from "../components/admin/LocationsConfig";
 
 export default function AdminConfig() {
   return (
@@ -17,11 +20,14 @@ export default function AdminConfig() {
         </div>
 
         <Tabs defaultValue="project-types" className="w-full">
-          <TabsList className="bg-gray-900/50 border border-red-900/30">
+          <TabsList className="bg-gray-900/50 border border-red-900/30 flex-wrap">
             <TabsTrigger value="project-types">Project Types</TabsTrigger>
             <TabsTrigger value="task-categories">Task Categories</TabsTrigger>
             <TabsTrigger value="statuses">Status Lists</TabsTrigger>
             <TabsTrigger value="team-members">Team Members</TabsTrigger>
+            <TabsTrigger value="part-categories">Part Categories</TabsTrigger>
+            <TabsTrigger value="vendors">Vendors</TabsTrigger>
+            <TabsTrigger value="locations">Locations</TabsTrigger>
           </TabsList>
 
           <TabsContent value="project-types" className="mt-6">
@@ -38,6 +44,18 @@ export default function AdminConfig() {
 
           <TabsContent value="team-members" className="mt-6">
             <TeamMembersConfig />
+          </TabsContent>
+
+          <TabsContent value="part-categories" className="mt-6">
+            <PartCategoriesConfig />
+          </TabsContent>
+
+          <TabsContent value="vendors" className="mt-6">
+            <VendorsConfig />
+          </TabsContent>
+
+          <TabsContent value="locations" className="mt-6">
+            <LocationsConfig />
           </TabsContent>
         </Tabs>
       </div>
