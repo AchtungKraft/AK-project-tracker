@@ -22,8 +22,9 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   const [newPart, setNewPart] = useState({
     part_name: "",
     vendor_part_number: "",
-    car_year: "",
-    car_model: "",
+    car_make_id: "",
+    car_model_id: "",
+    car_year_id: "",
     part_category_id: "",
     location_id: "",
     cost: "",
@@ -53,6 +54,21 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
+  });
+
+  const { data: makes = [] } = useQuery({
+    queryKey: ['carMakes'],
+    queryFn: () => base44.entities.CarMake.list(),
+  });
+
+  const { data: models = [] } = useQuery({
+    queryKey: ['carModels'],
+    queryFn: () => base44.entities.CarModel.list(),
+  });
+
+  const { data: years = [] } = useQuery({
+    queryKey: ['carYears'],
+    queryFn: () => base44.entities.CarYear.list(),
   });
 
   const { data: existingAssignments = [] } = useQuery({
@@ -134,13 +150,26 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
       return;
     }
 
-    createPartMutation.mutate({
+    const partData = {
       ...newPart,
       cost: newPart.cost ? parseFloat(newPart.cost) : undefined,
       retail: newPart.retail ? parseFloat(newPart.retail) : undefined,
       quantity_on_hand: parseInt(newPart.quantity_on_hand) || 0,
-    });
+    };
+
+    // Remove empty string IDs
+    if (!partData.car_make_id) delete partData.car_make_id;
+    if (!partData.car_model_id) delete partData.car_model_id;
+    if (!partData.car_year_id) delete partData.car_year_id;
+    if (!partData.part_category_id) delete partData.part_category_id;
+    if (!partData.location_id) delete partData.location_id;
+    if (!partData.vendor_id) delete partData.vendor_id;
+
+    createPartMutation.mutate(partData);
   };
+
+  const availableModels = models.filter(m => m.car_make_id === newPart.car_make_id);
+  const availableYears = years.filter(y => y.car_model_id === newPart.car_model_id);
 
   const getCategoryName = (catId) => {
     const cat = categories.find(c => c.id === catId);
@@ -151,6 +180,10 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     }
     return cat.name;
   };
+
+  const parentCategories = categories.filter(c => !c.parent_id && c.active);
+  const parentLocations = locations.filter(l => !l.parent_id && l.active);
+  const parentVendors = vendors.filter(v => !v.parent_id && v.active);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -338,101 +371,177 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-gray-400 text-xs">Car Year</Label>
-                  <Input
-                    value={newPart.car_year}
-                    onChange={(e) => setNewPart({ ...newPart, car_year: e.target.value })}
-                    placeholder="e.g., 1989"
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
+                  <Label className="text-gray-400 text-xs">Car Make</Label>
+                  <Select
+                    value={newPart.car_make_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select make..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {makes.filter(m => m.active).map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 <div>
                   <Label className="text-gray-400 text-xs">Car Model</Label>
-                  <Input
-                    value={newPart.car_model}
-                    onChange={(e) => setNewPart({ ...newPart, car_model: e.target.value })}
-                    placeholder="e.g., 911 Carrera"
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
+                  <Select
+                    value={newPart.car_model_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
+                    disabled={!newPart.car_make_id}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select model..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {availableModels.filter(m => m.active).map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs">Year/Series</Label>
+                  <Select
+                    value={newPart.car_year_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, car_year_id: value === 'none' ? '' : value })}
+                    disabled={!newPart.car_model_id}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select year..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {availableYears.filter(y => y.active).map(y => (
+                        <SelectItem key={y.id} value={y.id}>{y.year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label className="text-gray-400 text-xs">Category</Label>
                   <Select
-                    value={newPart.part_category_id}
-                    onValueChange={(value) => setNewPart({ ...newPart, part_category_id: value })}
+                    value={newPart.part_category_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, part_category_id: value === 'none' ? '' : value })}
                   >
                     <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                      <SelectValue placeholder="Select category..." />
+                      <SelectValue placeholder="Select..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.filter(c => c.active).map(cat => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          <span style={{ color: cat.color }}>{getCategoryName(cat.id)}</span>
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="none">None</SelectItem>
+                      {parentCategories.map(parent => {
+                        const children = categories.filter(c => c.parent_id === parent.id && c.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.name}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div>
                   <Label className="text-gray-400 text-xs">Vendor</Label>
                   <Select
-                    value={newPart.vendor_id}
-                    onValueChange={(value) => setNewPart({ ...newPart, vendor_id: value })}
+                    value={newPart.vendor_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, vendor_id: value === 'none' ? '' : value })}
                   >
                     <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                      <SelectValue placeholder="Select vendor..." />
+                      <SelectValue placeholder="Select..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {vendors.filter(v => v.active).map(vendor => (
-                        <SelectItem key={vendor.id} value={vendor.id}>
-                          {vendor.vendor_name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="none">None</SelectItem>
+                      {parentVendors.map(parent => {
+                        const children = vendors.filter(v => v.parent_id === parent.id && v.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.vendor_name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs">Location</Label>
+                  <Select
+                    value={newPart.location_id || 'none'}
+                    onValueChange={(value) => setNewPart({ ...newPart, location_id: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {parentLocations.map(parent => {
+                        const children = locations.filter(l => l.parent_id === parent.id && l.active);
+                        return (
+                          <React.Fragment key={parent.id}>
+                            <SelectItem value={parent.id}>
+                              <span style={{ color: parent.color }}>{parent.location_area}</span>
+                            </SelectItem>
+                            {children.map(child => (
+                              <SelectItem key={child.id} value={child.id}>
+                                <span className="ml-4" style={{ color: child.color }}>
+                                  → {child.location_area}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-gray-400 text-xs">Location</Label>
-                  <Select
-                    value={newPart.location_id}
-                    onValueChange={(value) => setNewPart({ ...newPart, location_id: value })}
-                  >
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                      <SelectValue placeholder="Select location..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.filter(l => l.active).map(loc => (
-                        <SelectItem key={loc.id} value={loc.id}>
-                          {loc.location_area}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-gray-400 text-xs">Status</Label>
-                  <Select
-                    value={newPart.status}
-                    onValueChange={(value) => setNewPart({ ...newPart, status: value })}
-                  >
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="On-Hand">On-Hand</SelectItem>
-                      <SelectItem value="Need to Buy">Need to Buy</SelectItem>
-                      <SelectItem value="On-Order">On-Order</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Status</Label>
+                <Select
+                  value={newPart.status}
+                  onValueChange={(value) => setNewPart({ ...newPart, status: value })}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="On-Hand">On-Hand</SelectItem>
+                    <SelectItem value="Need to Buy">Need to Buy</SelectItem>
+                    <SelectItem value="On-Order">On-Order</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
