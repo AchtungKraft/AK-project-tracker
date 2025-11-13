@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit2, Trash2, Check, X, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -18,6 +19,7 @@ export default function HierarchicalList({
   const [editing, setEditing] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [editParentId, setEditParentId] = useState("");
   const [collapsed, setCollapsed] = useState({});
 
   const parentItems = items.filter(item => !item.parent_id);
@@ -36,10 +38,15 @@ export default function HierarchicalList({
     setEditing(item.id);
     setEditValue(item[nameKey]);
     setEditColor(item.color || "#3B82F6");
+    setEditParentId(item.parent_id || "none");
   };
 
   const handleSave = (id, originalItem) => {
-    const updateData = { ...originalItem, [nameKey]: editValue };
+    const updateData = { 
+      ...originalItem, 
+      [nameKey]: editValue,
+      parent_id: editParentId === "none" ? null : editParentId
+    };
     if (showColor) {
       updateData.color = editColor;
     }
@@ -51,6 +58,7 @@ export default function HierarchicalList({
     setEditing(null);
     setEditValue("");
     setEditColor("");
+    setEditParentId("");
   };
 
   const toggleCollapse = (id) => {
@@ -118,7 +126,24 @@ export default function HierarchicalList({
                       onChange={(e) => setEditValue(e.target.value)}
                       className="bg-gray-800 border-gray-700 text-white h-8"
                       autoFocus
+                      placeholder="Name"
                     />
+                    <Select
+                      value={editParentId}
+                      onValueChange={setEditParentId}
+                    >
+                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-8 w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No parent</SelectItem>
+                        {parentItems.filter(p => p.id !== item.id).map(parent => (
+                          <SelectItem key={parent.id} value={parent.id}>
+                            {parent[nameKey]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {showColor && (
                       <Input
                         type="color"
