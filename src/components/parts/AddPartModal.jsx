@@ -38,17 +38,26 @@ export default function AddPartModal({ onClose }) {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list(),
+    queryFn: async () => {
+      const list = await base44.entities.PartCategory.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
+    queryFn: async () => {
+      const list = await base44.entities.Location.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
   });
 
   const createMutation = useMutation({
@@ -104,9 +113,9 @@ export default function AddPartModal({ onClose }) {
     createMutation.mutate(formData);
   };
 
-  const activeCategories = categories.filter(c => c.active);
-  const activeVendors = vendors.filter(v => v.active);
-  const activeLocations = locations.filter(l => l.active);
+  const activeCategories = categories.filter(c => c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const activeVendors = vendors.filter(v => v.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const activeLocations = locations.filter(l => l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
