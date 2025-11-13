@@ -402,7 +402,7 @@ export default function InventoryLocations() {
               )}
             </CardContent>
           </Card>
-        ))}
+        )}
 
         {/* Unassigned Parts */}
         {unassignedParts.length > 0 && (
