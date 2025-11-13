@@ -35,6 +35,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [optimisticStatusId, setOptimisticStatusId] = useState(null);
+  const [optimisticAssignedId, setOptimisticAssignedId] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -62,6 +64,9 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         start_date: task.start_date || "",
         due_date: task.due_date || "",
       });
+      // Reset optimistic values when task changes
+      setOptimisticStatusId(null);
+      setOptimisticAssignedId(null);
     }
   }, [task, projectId]);
 
@@ -120,9 +125,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
       setEditing(false);
+      setOptimisticStatusId(null);
+      setOptimisticAssignedId(null);
       toast.success('Task updated successfully');
     },
     onError: () => {
+      setOptimisticStatusId(null);
+      setOptimisticAssignedId(null);
       toast.error('Failed to update task');
     },
   });
@@ -164,10 +173,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   // Quick update handlers for status and assignment
   const handleQuickStatusChange = useCallback((newStatusId) => {
+    setOptimisticStatusId(newStatusId);
     updateMutation.mutate({ status_id: newStatusId });
   }, [updateMutation]);
 
   const handleQuickAssignmentChange = useCallback((newMemberId) => {
+    setOptimisticAssignedId(newMemberId);
     updateMutation.mutate({ assigned_team_member_id: newMemberId });
   }, [updateMutation]);
 
@@ -195,7 +206,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               <div>
                 <Label className="text-xs text-gray-400 mb-2 block">Status</Label>
                 <Select
-                  value={task?.status_id}
+                  value={optimisticStatusId || task?.status_id}
                   onValueChange={handleQuickStatusChange}
                   disabled={updateMutation.isPending}
                 >
@@ -236,7 +247,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   )}
                 </div>
                 <Select
-                  value={task?.assigned_team_member_id || "unassigned"}
+                  value={optimisticAssignedId !== null ? (optimisticAssignedId || "unassigned") : (task?.assigned_team_member_id || "unassigned")}
                   onValueChange={(value) => handleQuickAssignmentChange(value === "unassigned" ? "" : value)}
                   disabled={updateMutation.isPending}
                 >
