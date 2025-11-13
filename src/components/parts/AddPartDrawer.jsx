@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Upload, X, Camera, Trash2, Star } from "lucide-react";
+import { Loader2, Upload, Camera, Trash2, Star } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -127,56 +127,66 @@ export default function AddPartDrawer({ onClose }) {
     }
   };
 
-  const handleRemovePhoto = (urlToRemove) => {
-    const updatedPhotos = formData.photos.filter((url) => url !== urlToRemove);
-    const newFeatured = formData.featured_photo === urlToRemove ? '' : formData.featured_photo;
-    setFormData({
-      ...formData,
-      photos: updatedPhotos,
-      featured_photo: newFeatured
+  const handleRemovePhoto = useCallback((urlToRemove) => {
+    setFormData(prev => {
+      const updatedPhotos = prev.photos.filter((url) => url !== urlToRemove);
+      const newFeatured = prev.featured_photo === urlToRemove ? '' : prev.featured_photo;
+      return { ...prev, photos: updatedPhotos, featured_photo: newFeatured };
     });
-  };
+  }, []);
 
-  const handleSetFeatured = (url) => {
-    setFormData({ ...formData, featured_photo: url });
-  };
+  const handleSetFeatured = useCallback((url) => {
+    setFormData(prev => ({ ...prev, featured_photo: url }));
+  }, []);
 
-  const handlePhotoDragEnd = (result) => {
+  const handlePhotoDragEnd = useCallback((result) => {
     if (!result.destination) return;
     
-    const photos = Array.from(formData.photos);
-    const [removed] = photos.splice(result.source.index, 1);
-    photos.splice(result.destination.index, 0, removed);
-    
-    setFormData({ ...formData, photos });
-  };
+    setFormData(prev => {
+      const photos = Array.from(prev.photos);
+      const [removed] = photos.splice(result.source.index, 1);
+      photos.splice(result.destination.index, 0, removed);
+      return { ...prev, photos };
+    });
+  }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
     createMutation.mutate(formData);
-  };
+  }, [formData, createMutation]);
 
-  const activeCategories = categories.filter(c => c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const activeVendors = vendors.filter(v => v.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const activeLocations = locations.filter(l => l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const availableModels = models.filter(m => m.car_make_id === formData.car_make_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const availableYears = years.filter(y => y.car_model_id === formData.car_model_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const activeCategories = useMemo(() => 
+    categories.filter(c => c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [categories]
+  );
+  
+  const activeVendors = useMemo(() => 
+    vendors.filter(v => v.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [vendors]
+  );
+  
+  const activeLocations = useMemo(() => 
+    locations.filter(l => l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [locations]
+  );
+  
+  const availableModels = useMemo(() => 
+    models.filter(m => m.car_make_id === formData.car_make_id)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [models, formData.car_make_id]
+  );
+  
+  const availableYears = useMemo(() => 
+    years.filter(y => y.car_model_id === formData.car_model_id)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [years, formData.car_model_id]
+  );
 
   return (
     <Sheet open onOpenChange={onClose}>
       <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader className="border-b border-gray-700 pb-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-white text-xl">Add New Part</SheetTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+          <SheetTitle className="text-white text-xl">Add New Part</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="py-6 space-y-6">

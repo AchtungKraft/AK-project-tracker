@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -12,7 +11,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CalendarIcon, Loader2, Trash2, UserPlus, Save, X } from "lucide-react";
+import { CalendarIcon, Loader2, Trash2, UserPlus, Save } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import TaskCommentsSection from "./TaskCommentsSection";
@@ -93,10 +92,25 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     enabled: !!user?.id,
   });
 
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-  const activeCategories = categories.filter(c => c.active);
-  const parentCategories = activeCategories.filter(c => !c.parent_id);
-  const activeTeamMembers = teamMembers.filter(tm => tm.active);
+  const taskStatuses = useMemo(() => 
+    statuses.filter(s => s.scope === 'Task' && s.active),
+    [statuses]
+  );
+  
+  const activeCategories = useMemo(() => 
+    categories.filter(c => c.active),
+    [categories]
+  );
+  
+  const parentCategories = useMemo(() => 
+    activeCategories.filter(c => !c.parent_id),
+    [activeCategories]
+  );
+  
+  const activeTeamMembers = useMemo(() => 
+    teamMembers.filter(tm => tm.active),
+    [teamMembers]
+  );
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.update(task.id, data),
@@ -128,34 +142,34 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     },
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
     updateMutation.mutate(formData);
-  };
+  }, [formData, updateMutation]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     if (confirm('Are you sure you want to delete this task?')) {
       deleteMutation.mutate();
     }
-  };
+  }, [deleteMutation]);
 
-  const handleAssignToMe = () => {
+  const handleAssignToMe = useCallback(() => {
     if (userTeamMember) {
       const newData = { assigned_team_member_id: userTeamMember.id };
       updateMutation.mutate(newData);
     } else {
       toast.error('Could not find your team member profile');
     }
-  };
+  }, [userTeamMember, updateMutation]);
 
   // Quick update handlers for status and assignment
-  const handleQuickStatusChange = (newStatusId) => {
+  const handleQuickStatusChange = useCallback((newStatusId) => {
     updateMutation.mutate({ status_id: newStatusId });
-  };
+  }, [updateMutation]);
 
-  const handleQuickAssignmentChange = (newMemberId) => {
+  const handleQuickAssignmentChange = useCallback((newMemberId) => {
     updateMutation.mutate({ assigned_team_member_id: newMemberId });
-  };
+  }, [updateMutation]);
 
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);

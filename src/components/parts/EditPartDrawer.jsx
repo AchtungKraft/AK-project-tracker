@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { X, Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
@@ -134,33 +134,36 @@ export default function EditPartDrawer({ partId, onClose }) {
     }
   };
 
-  const handleRemovePhoto = (url) => {
-    const updatedPhotos = editedPart.photos.filter(p => p !== url);
-    const newFeatured = editedPart.featured_photo === url ? '' : editedPart.featured_photo;
-    setEditedPart({ ...editedPart, photos: updatedPhotos, featured_photo: newFeatured });
-  };
+  const handleRemovePhoto = useCallback((url) => {
+    setEditedPart(prev => {
+      const updatedPhotos = prev.photos.filter(p => p !== url);
+      const newFeatured = prev.featured_photo === url ? '' : prev.featured_photo;
+      return { ...prev, photos: updatedPhotos, featured_photo: newFeatured };
+    });
+  }, []);
 
-  const handleSetFeatured = (url) => {
-    setEditedPart({ ...editedPart, featured_photo: url });
-  };
+  const handleSetFeatured = useCallback((url) => {
+    setEditedPart(prev => ({ ...prev, featured_photo: url }));
+  }, []);
 
-  const handlePhotoDragEnd = (result) => {
+  const handlePhotoDragEnd = useCallback((result) => {
     if (!result.destination) return;
     
-    const photos = Array.from(editedPart.photos);
-    const [removed] = photos.splice(result.source.index, 1);
-    photos.splice(result.destination.index, 0, removed);
-    
-    setEditedPart({ ...editedPart, photos });
-  };
+    setEditedPart(prev => {
+      const photos = Array.from(prev.photos);
+      const [removed] = photos.splice(result.source.index, 1);
+      photos.splice(result.destination.index, 0, removed);
+      return { ...prev, photos };
+    });
+  }, []);
 
-  const handleSave = () => {
-    if (!editedPart.part_name?.trim()) {
+  const handleSave = useCallback(() => {
+    if (!editedPart?.part_name?.trim()) {
       toast.error('Part name is required');
       return;
     }
     updateMutation.mutate(editedPart);
-  };
+  }, [editedPart, updateMutation]);
 
   const handleInlineCreate = async (entityType, data) => {
     let mutation;
@@ -213,8 +216,17 @@ export default function EditPartDrawer({ partId, onClose }) {
     }
   };
 
-  const availableModels = models.filter(m => m.car_make_id === editedPart?.car_make_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const availableYears = years.filter(y => y.car_model_id === editedPart?.car_model_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const availableModels = useMemo(() => 
+    models.filter(m => m.car_make_id === editedPart?.car_make_id)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [models, editedPart?.car_make_id]
+  );
+  
+  const availableYears = useMemo(() => 
+    years.filter(y => y.car_model_id === editedPart?.car_model_id)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [years, editedPart?.car_model_id]
+  );
 
   if (isLoading || !editedPart) {
     return (
