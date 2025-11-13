@@ -190,6 +190,12 @@ export default function ProjectParts({ projectId }) {
     return matchesSearch && matchesCategory && matchesStatus && matchesLocation && matchesMake && matchesModel && matchesYear;
   });
 
+  // Get unique locations from filtered parts for location filter dropdown
+  const availableLocations = [...new Set(filteredParts.map(({ part }) => part.location_id).filter(Boolean))]
+    .map(locId => locations.find(l => l.id === locId))
+    .filter(Boolean)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
   const groupedParts = {};
   filteredParts.forEach(({ part, assignment }) => {
     let groupKey = 'Ungrouped';
