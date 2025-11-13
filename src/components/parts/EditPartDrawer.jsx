@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { X, Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
@@ -144,15 +144,16 @@ export default function EditPartDrawer({ partId, onClose }) {
     setEditedPart({ ...editedPart, featured_photo: url });
   };
 
-  const handlePhotoDragEnd = (result) => {
-    if (!result.destination) return;
+  const handlePhotoDragEnd = useCallback((result) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
     
-    const photos = Array.from(editedPart.photos);
-    const [removed] = photos.splice(result.source.index, 1);
-    photos.splice(result.destination.index, 0, removed);
-    
-    setEditedPart({ ...editedPart, photos });
-  };
+    setEditedPart(prev => {
+      const photos = Array.from(prev.photos);
+      const [removed] = photos.splice(result.source.index, 1);
+      photos.splice(result.destination.index, 0, removed);
+      return { ...prev, photos };
+    });
+  }, []);
 
   const handleSave = () => {
     if (!editedPart.part_name?.trim()) {
@@ -213,8 +214,15 @@ export default function EditPartDrawer({ partId, onClose }) {
     }
   };
 
-  const availableModels = models.filter(m => m.car_make_id === editedPart?.car_make_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const availableYears = years.filter(y => y.car_model_id === editedPart?.car_model_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const availableModels = useMemo(() => 
+    models.filter(m => m.car_make_id === editedPart?.car_make_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [models, editedPart?.car_make_id]
+  );
+  
+  const availableYears = useMemo(() => 
+    years.filter(y => y.car_model_id === editedPart?.car_model_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [years, editedPart?.car_model_id]
+  );
 
   if (isLoading || !editedPart) {
     return (
@@ -233,17 +241,7 @@ export default function EditPartDrawer({ partId, onClose }) {
       <Sheet open onOpenChange={onClose}>
         <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto">
           <SheetHeader className="border-b border-gray-700 pb-4">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-white text-xl">{part?.part_name}</SheetTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
+            <SheetTitle className="text-white text-xl">{part?.part_name}</SheetTitle>
             {part?.vendor_part_number && (
               <p className="text-sm text-gray-400 font-mono">Part #: {part.vendor_part_number}</p>
             )}
@@ -307,7 +305,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <Label className="text-gray-400 text-xs">Part Name *</Label>
                       <Input
                         value={editedPart.part_name}
-                        onChange={(e) => setEditedPart({ ...editedPart, part_name: e.target.value })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, part_name: e.target.value }))}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
                     </div>
@@ -316,7 +314,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <Label className="text-gray-400 text-xs">Vendor Part #</Label>
                       <Input
                         value={editedPart.vendor_part_number || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, vendor_part_number: e.target.value })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, vendor_part_number: e.target.value }))}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
                     </div>
@@ -326,7 +324,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <Input
                         type="url"
                         value={editedPart.order_url || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, order_url: e.target.value })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, order_url: e.target.value }))}
                         placeholder="https://..."
                         className="bg-gray-800 border-gray-700 text-white"
                       />
@@ -343,7 +341,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.car_make_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' }))}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue placeholder="Select make..." />
@@ -366,7 +364,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.car_model_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, car_model_id: value === 'none' ? '' : value, car_year_id: '' }))}
                         disabled={!editedPart.car_make_id}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
@@ -390,7 +388,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.car_year_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, car_year_id: value === 'none' ? '' : value })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, car_year_id: value === 'none' ? '' : value }))}
                         disabled={!editedPart.car_model_id}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
@@ -416,7 +414,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.part_category_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, part_category_id: value === 'none' ? '' : value })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, part_category_id: value === 'none' ? '' : value }))}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue placeholder="Select..." />
@@ -453,7 +451,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.vendor_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, vendor_id: value === 'none' ? '' : value })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, vendor_id: value === 'none' ? '' : value }))}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue placeholder="Select..." />
@@ -490,7 +488,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       </Label>
                       <Select
                         value={editedPart.location_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, location_id: value === 'none' ? '' : value })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, location_id: value === 'none' ? '' : value }))}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue placeholder="Select..." />
@@ -526,7 +524,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                         type="number"
                         step="0.01"
                         value={editedPart.cost || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, cost: parseFloat(e.target.value) || 0 }))}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
                     </div>
@@ -537,7 +535,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                         type="number"
                         step="0.01"
                         value={editedPart.retail || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, retail: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, retail: parseFloat(e.target.value) || 0 }))}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
                     </div>
@@ -547,7 +545,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <Input
                         type="number"
                         value={editedPart.quantity_on_hand || 0}
-                        onChange={(e) => setEditedPart({ ...editedPart, quantity_on_hand: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => setEditedPart(prev => ({ ...prev, quantity_on_hand: parseInt(e.target.value) || 0 }))}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
                     </div>
@@ -556,7 +554,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <Label className="text-gray-400 text-xs">Status</Label>
                       <Select
                         value={editedPart.status}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, status: value })}
+                        onValueChange={(value) => setEditedPart(prev => ({ ...prev, status: value }))}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue />
@@ -574,7 +572,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                     <Label className="text-gray-400 text-xs">Notes</Label>
                     <Textarea
                       value={editedPart.notes || ''}
-                      onChange={(e) => setEditedPart({ ...editedPart, notes: e.target.value })}
+                      onChange={(e) => setEditedPart(prev => ({ ...prev, notes: e.target.value }))}
                       className="bg-gray-800 border-gray-700 text-white"
                       rows={3}
                     />
@@ -585,7 +583,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       type="checkbox"
                       id="global"
                       checked={editedPart.global_all_builds || false}
-                      onChange={(e) => setEditedPart({ ...editedPart, global_all_builds: e.target.checked })}
+                      onChange={(e) => setEditedPart(prev => ({ ...prev, global_all_builds: e.target.checked }))}
                       className="rounded border-gray-700"
                     />
                     <Label htmlFor="global" className="text-gray-400 text-xs cursor-pointer">
@@ -738,7 +736,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                           className="flex gap-3 overflow-x-auto pb-2"
                         >
                           {editedPart.photos.map((url, index) => (
-                            <Draggable key={url} draggableId={url} index={index}>
+                            <Draggable key={`photo-${index}-${url.substring(url.length - 10)}`} draggableId={`photo-${index}-${url.substring(url.length - 10)}`} index={index}>
                               {(provided, snapshot) => (
                                 <div
                                   ref={provided.innerRef}
