@@ -66,9 +66,14 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
         </button>
         
         <div className="flex-1 min-w-0" onClick={onClick}>
-          <h4 className={`text-white font-medium text-sm leading-tight mb-1 line-clamp-2 group-hover:text-red-400 transition-colors ${isCompleted ? 'line-through opacity-60' : ''}`}>
-            {task.name}
-          </h4>
+          <div className="flex items-start gap-1.5 mb-1">
+            <h4 className={`text-white font-medium text-sm leading-tight line-clamp-2 group-hover:text-red-400 transition-colors flex-1 ${isCompleted ? 'line-through opacity-60' : ''}`}>
+              {task.name}
+            </h4>
+            {hasComments && (
+              <MessageSquare className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
+            )}
+          </div>
           
           {categoryPath && (
             <div className="flex items-center gap-1 text-xs mb-0.5">
