@@ -1,5 +1,7 @@
 import React from "react";
-import { User, CheckCircle2, Circle } from "lucide-react";
+import { User, CheckCircle2, Circle, MessageSquare } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -27,6 +29,14 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
     taskStatus.label.toLowerCase().includes('complete') || 
     taskStatus.label.toLowerCase().includes('done')
   );
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ['taskComments', task.id],
+    queryFn: () => base44.entities.TaskComment.filter({ task_id: task.id }),
+    enabled: !!task.id,
+  });
+
+  const hasComments = comments.length > 0 || task.description;
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();

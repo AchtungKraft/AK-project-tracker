@@ -437,7 +437,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           <Separator className="bg-gray-700" />
 
           {/* Delete Action */}
-          <div className="pt-4">
+          <div className="pt-4 space-y-3">
             <Button
               variant="destructive"
               onClick={handleDelete}
@@ -455,6 +455,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   Delete Task
                 </>
               )}
+            </Button>
+            <Button
+              onClick={onClose}
+              variant="outline"
+              className="w-full border-gray-700"
+            >
+              Close
             </Button>
           </div>
         </div>
