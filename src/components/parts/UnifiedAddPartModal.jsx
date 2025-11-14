@@ -9,14 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, X, Plus } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import CreateInlineModal from "../common/CreateInlineModal";
 
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
-  const [showInlineCreate, setShowInlineCreate] = useState(null);
   
   const [formData, setFormData] = useState({
     part_name: "",
@@ -219,18 +217,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Car Make</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('make')}
-                    className="h-6 px-2 text-xs text-red-400"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Car Make</Label>
                 <Select
                   value={formData.car_make_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
@@ -248,19 +235,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Car Model</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('model')}
-                    className="h-6 px-2 text-xs text-red-400"
-                    disabled={!formData.car_make_id}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Car Model</Label>
                 <Select
                   value={formData.car_model_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
@@ -279,19 +254,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Year/Series</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('year')}
-                    className="h-6 px-2 text-xs text-red-400"
-                    disabled={!formData.car_model_id}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Year/Series</Label>
                 <Select
                   value={formData.car_year_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_year_id: value === 'none' ? '' : value })}
@@ -312,18 +275,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Category</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('category')}
-                    className="h-6 px-2 text-xs text-red-400"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Category</Label>
                 <Select
                   value={formData.part_category_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, part_category_id: value === 'none' ? '' : value })}
@@ -353,18 +305,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Vendor</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('vendor')}
-                    className="h-6 px-2 text-xs text-red-400"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Vendor</Label>
                 <Select
                   value={formData.vendor_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, vendor_id: value === 'none' ? '' : value })}
@@ -394,18 +335,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-gray-400">Location</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowInlineCreate('location')}
-                    className="h-6 px-2 text-xs text-red-400"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
+                <Label className="text-gray-400">Location</Label>
                 <Select
                   value={formData.location_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, location_id: value === 'none' ? '' : value })}
@@ -583,14 +513,6 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           </form>
         </DialogContent>
       </Dialog>
-
-      {showInlineCreate && (
-        <CreateInlineModal
-          type={showInlineCreate}
-          onClose={() => setShowInlineCreate(null)}
-          parentId={showInlineCreate === 'model' ? formData.car_make_id : showInlineCreate === 'year' ? formData.car_model_id : null}
-        />
-      )}
     </>
   );
 }
