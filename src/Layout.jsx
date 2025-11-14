@@ -73,8 +73,8 @@ const MobileBottomNav = ({ currentPath }) => {
   const mobileItems = [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priority", url: createPageUrl("PriorityDashboard"), icon: Flame },
-    { title: "Projects", url: createPageUrl("Projects"), icon: FolderKanban },
-    { title: "Tasks", url: createPageUrl("MyTasks"), icon: ListChecks },
+    { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
+    { title: "Admin", url: createPageUrl("AdminConfig"), icon: Settings },
   ];
 
   return (

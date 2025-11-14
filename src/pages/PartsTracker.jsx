@@ -20,7 +20,7 @@ export default function PartsTracker() {
           <p className="text-sm text-gray-400">Manage parts inventory, orders, and build assignments</p>
         </div>
 
-        <Tabs defaultValue="builds" className="w-full">
+        <Tabs defaultValue="parts-master" className="w-full">
           <TabsList className="bg-gray-900/50 border border-red-900/30 flex-wrap h-auto">
             <TabsTrigger value="builds" className="gap-2">
               <FolderTree className="w-4 h-4" />
