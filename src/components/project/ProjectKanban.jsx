@@ -105,9 +105,11 @@ export default function ProjectKanban({ projectId }) {
     const newStatusId = isCurrentlyCompleted ? (todoStatus?.id || taskStatuses[0]?.id) : completedStatus.id;
     
     // Add completed_date when marking as complete, remove when reopening
+    // Also remove is_priority flag when completing
     const updateData = {
       status_id: newStatusId,
-      completed_date: isCurrentlyCompleted ? null : new Date().toISOString()
+      completed_date: isCurrentlyCompleted ? null : new Date().toISOString(),
+      is_priority: isCurrentlyCompleted ? task.is_priority : false
     };
     
     updateTaskMutation.mutate({
@@ -126,6 +128,7 @@ export default function ProjectKanban({ projectId }) {
       // Group by bucket based on kanban_bucket_id
       const tasksByBucket = {};
       const unassignedTasks = [];
+      const priorityTasks = tasks.filter(t => t.is_priority);
 
       sortedBuckets.forEach(bucket => {
         tasksByBucket[bucket.id] = tasks.filter(t => t.kanban_bucket_id === bucket.id);
@@ -134,7 +137,7 @@ export default function ProjectKanban({ projectId }) {
       const bucketIds = sortedBuckets.map(b => b.id);
       unassignedTasks.push(...tasks.filter(t => !t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
 
-      return { mode: 'buckets', tasksByBucket, unassignedTasks };
+      return { mode: 'buckets', tasksByBucket, unassignedTasks, priorityTasks };
     }
 
     // Primary grouping by status, assigned, or category
@@ -224,6 +227,35 @@ export default function ProjectKanban({ projectId }) {
     const taskId = draggableId;
     
     if (groupBy === 'buckets') {
+      // Handle PRIORITY bucket
+      if (destination.droppableId === 'priority') {
+        // Dragging into PRIORITY bucket - set is_priority flag
+        updateTaskMutation.mutate({
+          taskId,
+          data: { is_priority: true }
+        });
+        return;
+      }
+
+      // If dragging FROM priority bucket to another bucket, keep is_priority flag and update kanban_bucket_id
+      if (source.droppableId === 'priority' && destination.droppableId !== 'priority') {
+        if (destination.droppableId !== 'unassigned') {
+          const targetBucket = sortedBuckets.find(b => b.id === destination.droppableId);
+          if (targetBucket) {
+            updateTaskMutation.mutate({
+              taskId,
+              data: { kanban_bucket_id: targetBucket.id, is_priority: true }
+            });
+          }
+        } else {
+          updateTaskMutation.mutate({
+            taskId,
+            data: { kanban_bucket_id: "", is_priority: true }
+          });
+        }
+        return;
+      }
+
       // Bucket mode - update kanban_bucket_id
       if (destination.droppableId !== 'unassigned') {
         const targetBucket = sortedBuckets.find(b => b.id === destination.droppableId);
@@ -346,6 +378,76 @@ export default function ProjectKanban({ projectId }) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {groupingData.mode === 'buckets' ? (
                   <>
+                    {/* PRIORITY Bucket - Always First */}
+                    <div className="w-full">
+                      <div className="bg-black/40 backdrop-blur-xl border-2 border-red-600 rounded-lg overflow-hidden shadow-lg shadow-red-600/20">
+                        {/* Priority Bucket Header */}
+                        <div
+                          className="p-3 border-b-2 bg-red-950/30"
+                          style={{
+                            borderBottomColor: '#EF4444',
+                            backgroundColor: '#EF444415'
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <h3
+                              className="font-semibold text-sm text-red-500"
+                            >
+                              🔥 PRIORITY
+                            </h3>
+                            <span className="text-xs text-gray-400">
+                              {groupingData.priorityTasks.length}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">High priority tasks</p>
+                        </div>
+
+                        {/* Priority Tasks */}
+                        <Droppable droppableId="priority">
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.droppableProps}
+                              className={`min-h-[200px] max-h-[600px] overflow-y-auto ${
+                                snapshot.isDraggingOver ? 'bg-red-950/30' : ''
+                              }`}
+                            >
+                              {groupingData.priorityTasks.length === 0 ? (
+                                <p className="text-center text-gray-600 text-sm py-8">
+                                  Drag priority tasks here
+                                </p>
+                              ) : (
+                                <div className="p-2 space-y-2">
+                                  {groupingData.priorityTasks.map((task, index) => (
+                                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                                      {(provided, snapshot) => (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                          className={snapshot.isDragging ? 'opacity-50' : ''}
+                                        >
+                                          <TaskCard
+                                            task={task}
+                                            categories={categories}
+                                            teamMembers={teamMembers}
+                                            statuses={statuses}
+                                            onToggleComplete={handleToggleComplete}
+                                            onClick={() => setSelectedTask(task)}
+                                          />
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                </div>
+                              )}
+                              {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
+                      </div>
+                    </div>
+
                     {/* Kanban Buckets Mode */}
                     {sortedBuckets.map(bucket => {
                       const bucketTasks = groupingData.tasksByBucket[bucket.id] || [];

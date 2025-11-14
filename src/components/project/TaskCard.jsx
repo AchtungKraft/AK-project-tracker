@@ -37,7 +37,11 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
 
   return (
     <div
-      className="bg-gray-800/50 rounded-lg p-2 border border-gray-700 hover:border-red-700/50 hover:bg-gray-800/70 transition-all cursor-pointer group"
+      className={`bg-gray-800/50 rounded-lg p-2 border ${
+        task.is_priority 
+          ? 'border-red-500 border-2 shadow-lg shadow-red-500/20' 
+          : 'border-gray-700 hover:border-red-700/50'
+      } hover:bg-gray-800/70 transition-all cursor-pointer group`}
     >
       <div className="flex items-start gap-2">
         <button
