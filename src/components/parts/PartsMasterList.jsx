@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Plus, Package, Filter, LayoutGrid, List } from "lucide-react";
-import AddPartDrawer from "./AddPartDrawer";
+import UnifiedAddPartModal from "./UnifiedAddPartModal";
 import EditPartDrawer from "./EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 
@@ -659,7 +659,7 @@ export default function PartsMasterList() {
       </div>
 
       {showAddModal && (
-        <AddPartDrawer onClose={() => setShowAddModal(false)} />
+        <UnifiedAddPartModal onClose={() => setShowAddModal(false)} />
       )}
 
       {selectedPart && (

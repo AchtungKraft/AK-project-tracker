@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X, Plus, Package, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import UnifiedAddPartModal from "../parts/UnifiedAddPartModal";
 
 export default function AddPartToProjectModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
@@ -18,6 +19,7 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   const [qtyNeeded, setQtyNeeded] = useState(1);
   const [assignmentStatus, setAssignmentStatus] = useState("");
   const [assignmentNotes, setAssignmentNotes] = useState("");
+  const [showUnifiedModal, setShowUnifiedModal] = useState(false);
 
   const [newPart, setNewPart] = useState({
     part_name: "",
@@ -217,7 +219,13 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={(val) => {
+            if (val === "new") {
+              setShowUnifiedModal(true);
+            } else {
+              setActiveTab(val);
+            }
+          }}>
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="existing">From Inventory</TabsTrigger>
               <TabsTrigger value="new">Create New Part</TabsTrigger>
@@ -656,6 +664,16 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
           </Button>
         </div>
       </div>
+
+      {showUnifiedModal && (
+        <UnifiedAddPartModal
+          projectId={projectId}
+          onClose={() => {
+            setShowUnifiedModal(false);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }
