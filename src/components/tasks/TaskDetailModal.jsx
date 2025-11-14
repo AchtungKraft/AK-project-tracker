@@ -265,45 +265,55 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
             </div>
           </div>
 
-          <div className="flex justify-between pt-4 border-t border-gray-700">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Task
-                </>
-              )}
-            </Button>
-
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                className="bg-red-600 hover:bg-red-700"
-                disabled={updateMutation.isPending}
+          <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
+            <div className="flex justify-between">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
               >
-                {updateMutation.isPending ? (
+                {deleteMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    Deleting...
                   </>
                 ) : (
-                  'Save Changes'
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Task
+                  </>
                 )}
               </Button>
+
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="bg-red-600 hover:bg-red-700"
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </Button>
+              </div>
             </div>
+            <Button
+              type="button"
+              onClick={onClose}
+              variant="outline"
+              className="w-full border-gray-700"
+            >
+              Close
+            </Button>
           </div>
         </form>
       </DialogContent>

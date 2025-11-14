@@ -339,23 +339,33 @@ export default function PartDetailModal({ part, onClose }) {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-between gap-3 pt-4 border-t border-gray-700">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setEditing(false)}
+                onClick={onClose}
                 className="border-gray-700"
               >
-                Cancel
+                Close
               </Button>
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save Changes
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditing(false)}
+                  className="border-gray-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateMutation.isPending}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save Changes
+                </Button>
+              </div>
             </div>
           </form>
         ) : (
@@ -444,6 +454,16 @@ export default function PartDetailModal({ part, onClose }) {
                 Global/All Builds
               </Badge>
             )}
+
+            <div className="pt-4 border-t border-gray-700">
+              <Button
+                onClick={onClose}
+                variant="outline"
+                className="w-full border-gray-700"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>
