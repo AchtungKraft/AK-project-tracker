@@ -237,20 +237,20 @@ export default function ProjectKanban({ projectId }) {
         return;
       }
 
-      // If dragging FROM priority bucket to another bucket, keep is_priority flag and update kanban_bucket_id
+      // If dragging FROM priority bucket to another bucket, remove is_priority flag and update kanban_bucket_id
       if (source.droppableId === 'priority' && destination.droppableId !== 'priority') {
         if (destination.droppableId !== 'unassigned') {
           const targetBucket = sortedBuckets.find(b => b.id === destination.droppableId);
           if (targetBucket) {
             updateTaskMutation.mutate({
               taskId,
-              data: { kanban_bucket_id: targetBucket.id, is_priority: true }
+              data: { kanban_bucket_id: targetBucket.id, is_priority: false }
             });
           }
         } else {
           updateTaskMutation.mutate({
             taskId,
-            data: { kanban_bucket_id: "", is_priority: true }
+            data: { kanban_bucket_id: "", is_priority: false }
           });
         }
         return;
