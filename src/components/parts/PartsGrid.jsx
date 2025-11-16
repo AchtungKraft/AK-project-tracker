@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box } from "lucide-react";
+import { Package, MapPin, Box, Image as ImageIcon } from "lucide-react";
+import ImageGallery from "./ImageGallery";
 
 const statusColors = {
   'On-Hand': '#10B981',
@@ -15,8 +16,12 @@ export default function PartsGrid({
   categories,
   selectedCategoryId,
   onPartClick,
-  onImageClick 
 }) {
+  const [galleryState, setGalleryState] = useState({
+    open: false,
+    images: [],
+    currentIndex: 0,
+  });
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
@@ -58,6 +63,32 @@ export default function PartsGrid({
     return (part.quantity_on_hand || 0) - reserved;
   };
 
+  const openGallery = (images, index = 0) => {
+    setGalleryState({
+      open: true,
+      images,
+      currentIndex: index,
+    });
+  };
+
+  const closeGallery = () => {
+    setGalleryState(prev => ({ ...prev, open: false }));
+  };
+
+  const navigateGallery = (direction) => {
+    setGalleryState(prev => {
+      if (typeof direction === 'number') {
+        return { ...prev, currentIndex: direction };
+      }
+      
+      const newIndex = direction === 'next' 
+        ? Math.min(prev.currentIndex + 1, prev.images.length - 1)
+        : Math.max(prev.currentIndex - 1, 0);
+      
+      return { ...prev, currentIndex: newIndex };
+    });
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-4">
       {parts.length === 0 ? (
@@ -78,9 +109,11 @@ export default function PartsGrid({
             const make = makes.find(m => m.id === part.car_make_id);
             const model = models.find(m => m.id === part.car_model_id);
             const year = years.find(y => y.id === part.car_year_id);
-            const featuredPhoto = part.featured_photo || (part.photos && part.photos[0]);
+            const images = part.photos || [];
+            const featuredPhoto = part.featured_photo || images[0];
             const available = getPartAvailable(part);
             const reserved = getPartReserved(part.id);
+            const hasMultipleImages = images.length > 1;
 
             return (
               <div
@@ -89,19 +122,29 @@ export default function PartsGrid({
                 className="bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
               >
                 {/* Image Section */}
-                {featuredPhoto && (
+                {featuredPhoto ? (
                   <div 
-                    className="h-32 bg-gray-800 rounded-t-lg flex items-center justify-center overflow-hidden"
+                    className="relative h-32 bg-gray-800 rounded-t-lg flex items-center justify-center overflow-hidden cursor-pointer group"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onImageClick(featuredPhoto);
+                      openGallery(images, 0);
                     }}
                   >
                     <img
                       src={featuredPhoto}
                       alt={part.part_name}
-                      className="max-w-full max-h-full object-contain hover:scale-105 transition-transform"
+                      className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform"
                     />
+                    {hasMultipleImages && (
+                      <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3" />
+                        {images.length}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-32 bg-gray-800 rounded-t-lg flex items-center justify-center">
+                    <Package className="w-12 h-12 text-gray-600" />
                   </div>
                 )}
 
@@ -186,6 +229,14 @@ export default function PartsGrid({
           })}
         </div>
       )}
+
+      <ImageGallery
+        isOpen={galleryState.open}
+        images={galleryState.images}
+        currentIndex={galleryState.currentIndex}
+        onClose={closeGallery}
+        onNavigate={navigateGallery}
+      />
     </div>
   );
 }

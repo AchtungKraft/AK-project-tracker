@@ -8,7 +8,6 @@ import PartsGrid from "./PartsGrid";
 import PartsBreadcrumb from "./PartsBreadcrumb";
 import UnifiedAddPartModal from "./UnifiedAddPartModal";
 import EditPartDrawer from "./EditPartDrawer";
-import ImageModal from "../ui/ImageModal";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -20,7 +19,6 @@ export default function PartsExplorerLayout() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
-  const [selectedImage, setSelectedImage] = useState(null);
 
   // Load saved state
   useEffect(() => {
@@ -181,7 +179,6 @@ export default function PartsExplorerLayout() {
               categories={categories}
               selectedCategoryId={selectedCategoryId}
               onPartClick={(partId) => setSelectedPart(partId)}
-              onImageClick={setSelectedImage}
             />
           </div>
         </div>
@@ -198,13 +195,7 @@ export default function PartsExplorerLayout() {
         />
       )}
 
-      {selectedImage && (
-        <ImageModal
-          isOpen={!!selectedImage}
-          imageUrl={selectedImage}
-          onClose={() => setSelectedImage(null)}
-        />
-      )}
+
     </>
   );
 }

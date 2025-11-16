@@ -13,16 +13,39 @@ export default function CategoryTree({
   onToggleExpand,
   onSearchChange,
 }) {
-  // Calculate part counts for each category
+  const [showEmptyCategories, setShowEmptyCategories] = React.useState(false);
+
+  // Calculate part counts for each category (including descendants)
   const categoryCounts = useMemo(() => {
     const counts = {};
+    
+    // Direct counts
     parts.forEach(part => {
       if (part.part_category_id) {
         counts[part.part_category_id] = (counts[part.part_category_id] || 0) + 1;
       }
     });
+
+    // Recursive count for parent categories
+    const addDescendantCounts = (categoryId) => {
+      const children = categories.filter(c => c.parent_id === categoryId);
+      let totalCount = counts[categoryId] || 0;
+      
+      children.forEach(child => {
+        totalCount += addDescendantCounts(child.id);
+      });
+      
+      counts[categoryId] = totalCount;
+      return totalCount;
+    };
+
+    // Calculate for all root categories
+    categories.filter(c => !c.parent_id).forEach(cat => {
+      addDescendantCounts(cat.id);
+    });
+
     return counts;
-  }, [parts]);
+  }, [parts, categories]);
 
   // Filter categories based on search
   const filteredCategories = useMemo(() => {
@@ -40,6 +63,10 @@ export default function CategoryTree({
     const isExpanded = expandedCategories[category.id];
     const isSelected = selectedCategoryId === category.id;
     const partCount = categoryCounts[category.id] || 0;
+    const isEmpty = partCount === 0;
+
+    // Hide empty categories if toggle is off
+    if (isEmpty && !showEmptyCategories && !searchTerm) return null;
 
     return (
       <div key={category.id}>
@@ -47,13 +74,15 @@ export default function CategoryTree({
           className={cn(
             "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors group",
             isSelected ? "bg-red-950/40 text-red-400" : "hover:bg-gray-800/50 text-gray-300",
-            level > 0 && "border-l-2 border-gray-800"
+            level > 0 && "border-l-2 border-gray-800",
+            isEmpty && "opacity-50"
           )}
           style={{
             paddingLeft: `${(level * 16) + 12}px`,
             borderLeftColor: level > 0 ? category.color + '40' : 'transparent'
           }}
-          onClick={() => onCategorySelect(category.id)}
+          onClick={() => !isEmpty && onCategorySelect(category.id)}
+          title={isEmpty ? "No parts in this category" : undefined}
         >
           {/* Expand/Collapse Icon */}
           {hasChildren && (
@@ -149,17 +178,26 @@ export default function CategoryTree({
         )}
       </div>
 
-      {/* Clear Selection */}
-      {selectedCategoryId && (
-        <div className="p-3 border-t border-red-900/20">
+      {/* Controls */}
+      <div className="p-3 border-t border-red-900/20 space-y-2">
+        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer hover:text-white transition-colors">
+          <input
+            type="checkbox"
+            checked={showEmptyCategories}
+            onChange={(e) => setShowEmptyCategories(e.target.checked)}
+            className="rounded border-gray-700 bg-gray-900 text-red-600 focus:ring-red-600"
+          />
+          Show empty categories
+        </label>
+        {selectedCategoryId && (
           <button
             onClick={() => onCategorySelect(null)}
-            className="w-full text-sm text-gray-400 hover:text-red-400 transition-colors"
+            className="w-full text-sm text-gray-400 hover:text-red-400 transition-colors text-left"
           >
             Clear Selection (Show All)
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
