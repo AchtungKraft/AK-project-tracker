@@ -2,13 +2,12 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { useDebounce } from "../parts/useDebounce";
 import TaskHierarchyTree from "./TaskHierarchyTree";
-import TasksGrid from "./TasksGrid";
-import TasksListView from "./TasksListView";
-import TasksViewToolbar from "./TasksViewToolbar";
 import TasksBreadcrumb from "./TasksBreadcrumb";
+import TaskCard from "../project/TaskCard";
 import CreateTaskModal from "./CreateTaskModal";
 import TaskDetailDrawer from "./TaskDetailDrawer";
 
@@ -20,12 +19,9 @@ export default function TasksExplorerLayout() {
   const [hierarchyPath, setHierarchyPath] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('list');
-  const [showGrouping, setShowGrouping] = useState(true);
+  const [groupBy, setGroupBy] = useState('status');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 25;
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -38,8 +34,7 @@ export default function TasksExplorerLayout() {
         setSelectedNodeId(state.selectedNodeId || null);
         setSelectedNodeType(state.selectedNodeType || null);
         setExpandedNodes(state.expandedNodes || {});
-        setViewMode(state.viewMode || 'list');
-        setShowGrouping(state.showGrouping !== undefined ? state.showGrouping : true);
+        setGroupBy(state.groupBy || 'status');
       }
     } catch (e) {}
   }, []);
@@ -51,11 +46,10 @@ export default function TasksExplorerLayout() {
         selectedNodeId,
         selectedNodeType,
         expandedNodes,
-        viewMode,
-        showGrouping,
+        groupBy,
       }));
     } catch (e) {}
-  }, [selectedNodeId, selectedNodeType, expandedNodes, viewMode, showGrouping]);
+  }, [selectedNodeId, selectedNodeType, expandedNodes, groupBy]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -81,6 +75,16 @@ export default function TasksExplorerLayout() {
       const list = await base44.entities.TaskCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+  });
+
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
+  });
+
+  const { data: statuses = [] } = useQuery({
+    queryKey: ['statuses'],
+    queryFn: () => base44.entities.StatusList.list(),
   });
 
   // Build hierarchy path
@@ -165,16 +169,67 @@ export default function TasksExplorerLayout() {
     return matchesSearch;
   });
 
-  // Pagination
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
+  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearchTerm, selectedNodeId]);
+  // Grouping logic
+  const getCategoryPath = (categoryId) => {
+    if (!categoryId) return null;
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return null;
+    
+    if (category.parent_id) {
+      const parent = categories.find(c => c.id === category.parent_id);
+      if (parent) {
+        return `${parent.name} > ${category.name}`;
+      }
+    }
+    return category.name;
+  };
+
+  const getGroups = () => {
+    const grouped = {};
+    
+    filteredTasks.forEach(task => {
+      let groupKey, groupLabel, groupColor;
+      
+      if (groupBy === 'status') {
+        const status = statuses.find(s => s.id === task.status_id);
+        groupKey = task.status_id || 'no-status';
+        groupLabel = status?.label || 'No Status';
+        groupColor = status?.color || '#6B7280';
+      } else if (groupBy === 'assigned') {
+        const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+        groupKey = task.assigned_team_member_id || 'unassigned';
+        groupLabel = member?.full_name || 'Unassigned';
+        groupColor = '#6B7280';
+      } else if (groupBy === 'category') {
+        const category = categories.find(c => c.id === task.category_id);
+        groupKey = task.category_id || 'no-category';
+        groupLabel = getCategoryPath(task.category_id) || 'No Category';
+        groupColor = category?.color || '#6B7280';
+      } else if (groupBy === 'project') {
+        const project = projects.find(p => p.id === task.project_id);
+        groupKey = task.project_id || 'no-project';
+        groupLabel = project?.name || 'No Project';
+        groupColor = '#3B82F6';
+      }
+      
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          id: groupKey,
+          label: groupLabel,
+          color: groupColor,
+          tasks: []
+        };
+      }
+      
+      grouped[groupKey].tasks.push(task);
+    });
+
+    return Object.values(grouped);
+  };
+
+  const groups = getGroups();
 
   return (
     <>
@@ -239,73 +294,83 @@ export default function TasksExplorerLayout() {
             />
           </div>
 
-          {/* Right Pane - Tasks List */}
+          {/* Right Pane - Tasks Kanban */}
           <div className="flex-1 flex flex-col md:overflow-hidden">
             {/* Toolbar */}
             <div className="p-3 border-b border-red-900/20 bg-gray-900/30">
-              <TasksViewToolbar
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-                showGrouping={showGrouping}
-                onToggleGrouping={() => setShowGrouping(!showGrouping)}
-                tasksCount={filteredTasks.length}
-              />
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-gray-400">
+                  {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Select value={groupBy} onValueChange={setGroupBy}>
+                    <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="status">Group by Status</SelectItem>
+                      <SelectItem value="assigned">Group by Assigned</SelectItem>
+                      <SelectItem value="category">Group by Category</SelectItem>
+                      <SelectItem value="project">Group by Project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
 
-            {/* Tasks Display */}
-            <div className="flex-1 flex flex-col md:overflow-hidden">
-              <div className="flex-1 p-4 md:overflow-y-auto">
-                {viewMode === 'cards' ? (
-                  <TasksGrid
-                    tasks={paginatedTasks}
-                    projects={projects}
-                    categories={categories}
-                    selectedNodeId={selectedNodeId}
-                    onTaskClick={(task) => setSelectedTask(task)}
-                  />
-                ) : (
-                  <TasksListView
-                    tasks={paginatedTasks}
-                    projects={projects}
-                    categories={categories}
-                    selectedNodeId={selectedNodeId}
-                    onTaskClick={(task) => setSelectedTask(task)}
-                    showGrouping={showGrouping}
-                  />
-                )}
-              </div>
+            {/* Tasks Kanban Display */}
+            <div className="flex-1 p-4 md:overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {groups.map(group => (
+                  <div key={group.id} className="w-full">
+                    <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
+                      {/* Group Header */}
+                      <div
+                        className="p-3 border-b-2"
+                        style={{
+                          borderBottomColor: group.color,
+                          backgroundColor: `${group.color}15`
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <h3
+                            className="font-semibold text-sm"
+                            style={{ color: group.color }}
+                          >
+                            {group.label}
+                          </h3>
+                          <span className="text-xs text-gray-400">
+                            {group.tasks.length}
+                          </span>
+                        </div>
+                      </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="border-t border-red-900/20 bg-gray-900/30 p-3 flex items-center justify-between">
-                  <div className="text-xs text-gray-400">
-                    Showing {startIndex + 1}-{Math.min(endIndex, filteredTasks.length)} of {filteredTasks.length}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="h-8 px-3 text-xs"
-                    >
-                      Previous
-                    </Button>
-                    <div className="text-xs text-gray-400">
-                      Page {currentPage} of {totalPages}
+                      {/* Tasks */}
+                      <div className="min-h-[200px] max-h-[600px] overflow-y-auto">
+                        {group.tasks.length === 0 ? (
+                          <p className="text-center text-gray-600 text-sm py-8">
+                            No tasks
+                          </p>
+                        ) : (
+                          <div className="p-3 space-y-2">
+                            {group.tasks.map(task => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                categories={categories}
+                                teamMembers={teamMembers}
+                                statuses={statuses}
+                                onClick={() => setSelectedTask(task)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="h-8 px-3 text-xs"
-                    >
-                      Next
-                    </Button>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -321,7 +386,7 @@ export default function TasksExplorerLayout() {
       {selectedTask && (
         <TaskDetailDrawer
           task={selectedTask}
-          projectId={selectedTask.project_id}
+          projectId={selectedTask?.project_id}
           onClose={() => setSelectedTask(null)}
         />
       )}
