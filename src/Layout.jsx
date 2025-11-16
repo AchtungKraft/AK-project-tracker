@@ -52,6 +52,11 @@ const navigationItems = [
     icon: ListChecks,
   },
   {
+    title: "Tasks Explorer",
+    url: createPageUrl("TasksExplorer"),
+    icon: ListChecks,
+  },
+  {
     title: "Parts Tracker",
     url: createPageUrl("PartsTracker"),
     icon: Package,
