@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Menu, Plus, X } from "lucide-react";
-import { useDebounce } from "@/hooks/useDebounce";
+import { useDebounce } from "./useDebounce";
 import CategoryTree from "./CategoryTree";
 import PartsGrid from "./PartsGrid";
 import PartsListView from "./PartsListView";
