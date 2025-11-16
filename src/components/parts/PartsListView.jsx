@@ -105,25 +105,64 @@ export default function PartsListView({
     setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
-  // Group parts by category
-  const groupedParts = {};
-  if (showGrouping) {
-    parts.forEach(part => {
-      const categoryPath = getCategoryPath(part.part_category_id);
-      const groupKey = categoryPath || 'No Category';
-      const category = categories.find(c => c.id === part.part_category_id);
-      
-      if (!groupedParts[groupKey]) {
-        groupedParts[groupKey] = {
-          parts: [],
-          color: category?.color || '#6B7280'
-        };
+  // Group parts hierarchically by category
+  const buildHierarchicalGroups = () => {
+    if (!showGrouping) {
+      return [{ label: 'All Parts', parts, color: '#6B7280', children: [] }];
+    }
+
+    const parentCategories = categories
+      .filter(c => !c.parent_id && c.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    const groups = [];
+
+    // Group for parts with no category
+    const noCategoryParts = parts.filter(p => !p.part_category_id);
+    if (noCategoryParts.length > 0) {
+      groups.push({
+        label: 'No Category',
+        parts: noCategoryParts,
+        color: '#6B7280',
+        children: []
+      });
+    }
+
+    // Build hierarchy for each parent category
+    parentCategories.forEach(parent => {
+      const childCategories = categories
+        .filter(c => c.parent_id === parent.id && c.active)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      const parentParts = parts.filter(p => p.part_category_id === parent.id);
+      const children = [];
+
+      childCategories.forEach(child => {
+        const childParts = parts.filter(p => p.part_category_id === child.id);
+        if (childParts.length > 0) {
+          children.push({
+            label: child.name,
+            parts: childParts,
+            color: child.color || parent.color || '#6B7280',
+            children: []
+          });
+        }
+      });
+
+      if (parentParts.length > 0 || children.length > 0) {
+        groups.push({
+          label: parent.name,
+          parts: parentParts,
+          color: parent.color || '#6B7280',
+          children
+        });
       }
-      groupedParts[groupKey].parts.push(part);
     });
-  } else {
-    groupedParts['All Parts'] = { parts, color: '#6B7280' };
-  }
+
+    return groups;
+  };
+
+  const hierarchicalGroups = buildHierarchicalGroups();
 
   const PartRow = ({ part }) => {
     const images = part.photos || [];
@@ -232,47 +271,51 @@ export default function PartsListView({
     );
   };
 
+  const renderGroup = (group, level = 0) => {
+    const groupKey = `${level}-${group.label}`;
+    const isExpanded = expandedGroups[groupKey] !== false;
+    const totalParts = group.parts.length + group.children.reduce((sum, child) => sum + child.parts.length, 0);
+
+    return (
+      <div key={groupKey} className={level > 0 ? 'ml-4' : ''}>
+        {showGrouping && (
+          <button
+            onClick={() => toggleGroup(groupKey)}
+            className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            )}
+            <div 
+              className="w-3 h-3 rounded"
+              style={{ backgroundColor: group.color }}
+            />
+            <span className="text-sm font-medium text-white flex-1 text-left">
+              {group.label}
+            </span>
+            <span className="text-xs text-gray-400">
+              {totalParts} part{totalParts !== 1 ? 's' : ''}
+            </span>
+          </button>
+        )}
+
+        {isExpanded && (
+          <div className="space-y-2 mb-3">
+            {group.parts.map(part => (
+              <PartRow key={part.id} part={part} />
+            ))}
+            {group.children.map(child => renderGroup(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3">
-      {Object.entries(groupedParts).map(([groupLabel, groupData]) => {
-        const isExpanded = expandedGroups[groupLabel] !== false;
-        const { parts: groupParts, color } = groupData;
-
-        return (
-          <div key={groupLabel}>
-            {showGrouping && (
-              <button
-                onClick={() => toggleGroup(groupLabel)}
-                className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
-              >
-                {isExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                )}
-                <div 
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="text-sm font-medium text-white flex-1 text-left">
-                  {groupLabel}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {groupParts.length} parts
-                </span>
-              </button>
-            )}
-
-            {isExpanded && (
-              <div className="space-y-2">
-                {groupParts.map(part => (
-                  <PartRow key={part.id} part={part} />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {hierarchicalGroups.map(group => renderGroup(group))}
 
       <ImageGallery
         isOpen={galleryState.open}
