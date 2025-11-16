@@ -24,6 +24,8 @@ export default function PartsExplorerLayout() {
   const [showGrouping, setShowGrouping] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -135,6 +137,17 @@ export default function PartsExplorerLayout() {
     return matchesSearch && matchesCategory;
   });
 
+  // Pagination
+  const totalPages = Math.ceil(filteredParts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedParts = filteredParts.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, selectedCategoryId]);
+
   return (
     <>
       <div className="h-[calc(100vh-8rem)] flex flex-col bg-black/20 rounded-lg overflow-hidden border border-red-900/30">
@@ -210,22 +223,56 @@ export default function PartsExplorerLayout() {
             </div>
 
             {/* Parts Display */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {viewMode === 'cards' ? (
-                <PartsGrid
-                  parts={filteredParts}
-                  categories={categories}
-                  selectedCategoryId={selectedCategoryId}
-                  onPartClick={(partId) => setSelectedPart(partId)}
-                />
-              ) : (
-                <PartsListView
-                  parts={filteredParts}
-                  categories={categories}
-                  selectedCategoryId={selectedCategoryId}
-                  onPartClick={(partId) => setSelectedPart(partId)}
-                  showGrouping={showGrouping}
-                />
+            <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col">
+              <div className="flex-1 md:overflow-y-auto p-4">
+                {viewMode === 'cards' ? (
+                  <PartsGrid
+                    parts={paginatedParts}
+                    categories={categories}
+                    selectedCategoryId={selectedCategoryId}
+                    onPartClick={(partId) => setSelectedPart(partId)}
+                  />
+                ) : (
+                  <PartsListView
+                    parts={paginatedParts}
+                    categories={categories}
+                    selectedCategoryId={selectedCategoryId}
+                    onPartClick={(partId) => setSelectedPart(partId)}
+                    showGrouping={showGrouping}
+                  />
+                )}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="border-t border-red-900/20 bg-gray-900/30 p-3 flex items-center justify-between">
+                  <div className="text-xs text-gray-400">
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredParts.length)} of {filteredParts.length}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="h-8 px-3 text-xs"
+                    >
+                      Previous
+                    </Button>
+                    <div className="text-xs text-gray-400">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="h-8 px-3 text-xs"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
