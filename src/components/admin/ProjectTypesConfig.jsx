@@ -81,13 +81,10 @@ export default function ProjectTypesConfig() {
       data: { ...item, sort_order: index }
     }));
 
-    // Optimistically update
-    const allTypes = [...types];
-    updates.forEach(update => {
-      const idx = allTypes.findIndex(t => t.id === update.id);
-      if (idx !== -1) {
-        allTypes[idx] = { ...allTypes[idx], sort_order: update.data.sort_order };
-      }
+    // Optimistically update with proper sorting
+    const allTypes = types.map(t => {
+      const update = updates.find(u => u.id === t.id);
+      return update ? { ...t, ...update.data } : t;
     });
     queryClient.setQueryData(['projectTypes'], allTypes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 

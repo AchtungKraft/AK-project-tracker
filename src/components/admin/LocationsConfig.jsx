@@ -87,14 +87,11 @@ export default function LocationsConfig() {
       data: { ...item, sort_order: index }
     }));
 
-    const allLocations = [...locations];
-    updates.forEach(update => {
-      const idx = allLocations.findIndex(l => l.id === update.id);
-      if (idx !== -1) {
-        allLocations[idx] = { ...allLocations[idx], sort_order: update.data.sort_order };
-      }
+    const allLocations = locations.map(l => {
+      const update = updates.find(u => u.id === l.id);
+      return update ? { ...l, ...update.data } : l;
     });
-    queryClient.setQueryData(['locations'], allLocations);
+    queryClient.setQueryData(['locations'], allLocations.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
     try {
       await Promise.all(updates.map(u => base44.entities.Location.update(u.id, u.data)));

@@ -86,14 +86,11 @@ export default function VendorsConfig() {
       data: { ...item, sort_order: index }
     }));
 
-    const allVendors = [...vendors];
-    updates.forEach(update => {
-      const idx = allVendors.findIndex(v => v.id === update.id);
-      if (idx !== -1) {
-        allVendors[idx] = { ...allVendors[idx], sort_order: update.data.sort_order };
-      }
+    const allVendors = vendors.map(v => {
+      const update = updates.find(u => u.id === v.id);
+      return update ? { ...v, ...update.data } : v;
     });
-    queryClient.setQueryData(['vendors'], allVendors);
+    queryClient.setQueryData(['vendors'], allVendors.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
     try {
       await Promise.all(updates.map(u => base44.entities.Vendor.update(u.id, u.data)));

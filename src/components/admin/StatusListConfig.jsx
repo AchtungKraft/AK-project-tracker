@@ -80,15 +80,12 @@ export default function StatusListConfig() {
       data: { ...item, sort_order: index }
     }));
 
-    // Optimistically update UI
-    const allStatuses = [...currentStatuses];
-    updates.forEach(update => {
-      const idx = allStatuses.findIndex(s => s.id === update.id);
-      if (idx !== -1) {
-        allStatuses[idx] = { ...allStatuses[idx], sort_order: update.data.sort_order };
-      }
+    // Optimistically update UI with proper sorting
+    const allStatuses = currentStatuses.map(s => {
+      const update = updates.find(u => u.id === s.id);
+      return update ? { ...s, ...update.data } : s;
     });
-    queryClient.setQueryData(['statuses'], allStatuses);
+    queryClient.setQueryData(['statuses'], allStatuses.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
     // Send updates to server
     try {

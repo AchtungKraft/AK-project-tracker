@@ -79,13 +79,10 @@ export default function TaskCategoriesConfig() {
       data: { ...item, sort_order: index }
     }));
 
-    // Optimistically update
-    const allCategories = [...categories];
-    updates.forEach(update => {
-      const idx = allCategories.findIndex(c => c.id === update.id);
-      if (idx !== -1) {
-        allCategories[idx] = { ...allCategories[idx], sort_order: update.data.sort_order };
-      }
+    // Optimistically update with proper sorting
+    const allCategories = categories.map(c => {
+      const update = updates.find(u => u.id === c.id);
+      return update ? { ...c, ...update.data } : c;
     });
     queryClient.setQueryData(['taskCategories'], allCategories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
