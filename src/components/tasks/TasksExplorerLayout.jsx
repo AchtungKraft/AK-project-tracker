@@ -34,7 +34,7 @@ export default function TasksExplorerLayout() {
         setSelectedNodeId(state.selectedNodeId || null);
         setSelectedNodeType(state.selectedNodeType || null);
         setExpandedNodes(state.expandedNodes || {});
-        setGroupBy(state.groupBy || 'buckets');
+        setGroupBy(state.groupBy || 'status');
       }
     } catch (e) {}
   }, []);
@@ -85,11 +85,6 @@ export default function TasksExplorerLayout() {
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
-  });
-
-  const { data: allBuckets = [] } = useQuery({
-    queryKey: ['allKanbanBuckets'],
-    queryFn: () => base44.entities.ProjectKanbanBucket.list(),
   });
 
   // Build hierarchy path
@@ -192,62 +187,6 @@ export default function TasksExplorerLayout() {
   };
 
   const getGroups = () => {
-    if (groupBy === 'buckets') {
-      const priorityTasks = filteredTasks.filter(t => t.is_priority);
-      const bucketGroups = [];
-      
-      // Priority bucket always first
-      bucketGroups.push({
-        id: 'priority',
-        label: '🔥 PRIORITY',
-        color: '#EF4444',
-        tasks: priorityTasks,
-        isPriority: true
-      });
-
-      // Group by kanban buckets
-      const sortedBuckets = [...allBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
-      const bucketTasksMap = {};
-      
-      sortedBuckets.forEach(bucket => {
-        bucketTasksMap[bucket.id] = {
-          id: bucket.id,
-          label: bucket.name,
-          color: bucket.color,
-          description: bucket.description,
-          tasks: []
-        };
-      });
-
-      const unassignedTasks = [];
-      
-      filteredTasks.forEach(task => {
-        if (task.is_priority) return; // Skip priority tasks, already in priority bucket
-        
-        if (task.kanban_bucket_id && bucketTasksMap[task.kanban_bucket_id]) {
-          bucketTasksMap[task.kanban_bucket_id].tasks.push(task);
-        } else {
-          unassignedTasks.push(task);
-        }
-      });
-
-      // Add bucket groups with tasks
-      Object.values(bucketTasksMap).forEach(bucket => {
-        bucketGroups.push(bucket);
-      });
-
-      // Unassigned bucket last
-      bucketGroups.push({
-        id: 'unassigned',
-        label: 'Unassigned Tasks',
-        color: '#6B7280',
-        tasks: unassignedTasks,
-        isUnassigned: true
-      });
-
-      return bucketGroups;
-    }
-
     const grouped = {};
     
     filteredTasks.forEach(task => {
@@ -370,7 +309,6 @@ export default function TasksExplorerLayout() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="buckets">Custom Buckets</SelectItem>
                       <SelectItem value="status">Group by Status</SelectItem>
                       <SelectItem value="assigned">Group by Assigned</SelectItem>
                       <SelectItem value="category">Group by Category</SelectItem>
@@ -386,32 +324,23 @@ export default function TasksExplorerLayout() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {groups.map(group => (
                   <div key={group.id} className="w-full">
-                    <div className={`backdrop-blur-xl rounded-lg overflow-hidden ${
-                      group.isPriority 
-                        ? 'bg-black/40 border-2 border-red-600 shadow-lg shadow-red-600/20' 
-                        : 'bg-black/40 border border-red-900/30'
-                    }`}>
+                    <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
                       {/* Group Header */}
                       <div
-                        className={`p-3 border-b-2 ${group.isPriority ? 'bg-red-950/30' : ''}`}
+                        className="p-3 border-b-2"
                         style={{
                           borderBottomColor: group.color,
-                          backgroundColor: group.isPriority ? '#EF444415' : `${group.color}15`
+                          backgroundColor: `${group.color}15`
                         }}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3
-                              className="font-semibold text-sm"
-                              style={{ color: group.isPriority ? '#EF4444' : group.color }}
-                            >
-                              {group.label}
-                            </h3>
-                            {group.description && (
-                              <p className="text-xs text-gray-500 mt-1">{group.description}</p>
-                            )}
-                          </div>
-                          <span className="text-xs text-gray-400 ml-2">
+                          <h3
+                            className="font-semibold text-sm"
+                            style={{ color: group.color }}
+                          >
+                            {group.label}
+                          </h3>
+                          <span className="text-xs text-gray-400">
                             {group.tasks.length}
                           </span>
                         </div>
@@ -421,7 +350,7 @@ export default function TasksExplorerLayout() {
                       <div className="min-h-[200px] max-h-[600px] overflow-y-auto">
                         {group.tasks.length === 0 ? (
                           <p className="text-center text-gray-600 text-sm py-8">
-                            {group.isPriority ? 'Drag priority tasks here' : group.isUnassigned ? 'No unassigned tasks' : 'No tasks'}
+                            No tasks
                           </p>
                         ) : (
                           <div className="p-3 space-y-2">
