@@ -10,7 +10,7 @@ import TasksBreadcrumb from "./TasksBreadcrumb";
 import TaskCard from "../project/TaskCard";
 import CreateTaskModal from "./CreateTaskModal";
 import TaskDetailDrawer from "./TaskDetailDrawer";
-import CompletedTasksSection from "../project/CompletedTasksSection";
+import CompletedTasksView from "./CompletedTasksView";
 
 const EXPLORER_STORAGE_KEY = 'achtung_tasks_explorer_state';
 
@@ -434,7 +434,7 @@ export default function TasksExplorerLayout() {
 
               {/* Completed Tasks Section */}
               {completedTasks.length > 0 && (
-                <CompletedTasksSection 
+                <CompletedTasksView 
                   projectId={selectedNodeType === 'project' ? selectedNodeId : null}
                   tasks={completedTasks}
                   categories={categories}
