@@ -20,8 +20,8 @@ export default function PartsExplorerLayout() {
   const [expandedCategories, setExpandedCategories] = useState({});
   const [showLeftPane, setShowLeftPane] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('cards');
-  const [showGrouping, setShowGrouping] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
+  const [showGrouping, setShowGrouping] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
   
@@ -36,8 +36,8 @@ export default function PartsExplorerLayout() {
         setSelectedCategoryId(state.selectedCategoryId || null);
         setExpandedCategories(state.expandedCategories || {});
         setShowLeftPane(state.showLeftPane !== false);
-        setViewMode(state.viewMode || 'cards');
-        setShowGrouping(state.showGrouping || false);
+        setViewMode(state.viewMode || 'list');
+        setShowGrouping(state.showGrouping !== undefined ? state.showGrouping : true);
       }
     } catch (e) {}
   }, []);
@@ -102,16 +102,35 @@ export default function PartsExplorerLayout() {
     }));
   };
 
-  const filteredParts = parts.filter(part => {
-    if (!selectedCategoryId && !debouncedSearchTerm) return true;
+  // Helper to get all descendant category IDs
+  const getAllDescendantCategoryIds = (categoryId, allCategories) => {
+    const descendants = new Set();
+    const queue = [categoryId];
     
+    while (queue.length > 0) {
+      const current = queue.shift();
+      descendants.add(current);
+      allCategories.forEach(cat => {
+        if (cat.parent_id === current && !descendants.has(cat.id)) {
+          queue.push(cat.id);
+        }
+      });
+    }
+    return Array.from(descendants);
+  };
+
+  const filteredParts = parts.filter(part => {
     const matchesSearch = debouncedSearchTerm ? (
       part.part_name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       part.vendor_part_number?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     ) : true;
     
-    const matchesCategory = selectedCategoryId ? 
-      part.part_category_id === selectedCategoryId : true;
+    if (!selectedCategoryId) {
+      return matchesSearch;
+    }
+    
+    const relevantCategoryIds = getAllDescendantCategoryIds(selectedCategoryId, categories);
+    const matchesCategory = relevantCategoryIds.includes(part.part_category_id);
     
     return matchesSearch && matchesCategory;
   });
