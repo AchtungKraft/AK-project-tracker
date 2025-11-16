@@ -10,6 +10,7 @@ import TasksBreadcrumb from "./TasksBreadcrumb";
 import TaskCard from "../project/TaskCard";
 import CreateTaskModal from "./CreateTaskModal";
 import TaskDetailDrawer from "./TaskDetailDrawer";
+import CompletedTasksSection from "../project/CompletedTasksSection";
 
 const EXPLORER_STORAGE_KEY = 'achtung_tasks_explorer_state';
 
@@ -176,6 +177,14 @@ export default function TasksExplorerLayout() {
   });
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const completedStatus = taskStatuses.find(s => {
+    const label = s.label.toLowerCase();
+    return label.includes('complete') || label.includes('done');
+  });
+
+  // Filter out completed tasks for the kanban view
+  const activeTasks = filteredTasks.filter(t => t.status_id !== completedStatus?.id);
+  const completedTasks = filteredTasks.filter(t => t.status_id === completedStatus?.id);
 
   // Grouping logic
   const getCategoryPath = (categoryId) => {
@@ -195,7 +204,7 @@ export default function TasksExplorerLayout() {
   const getGroups = () => {
     if (groupBy === 'buckets') {
       const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
-      const priorityTasks = filteredTasks.filter(t => t.is_priority);
+      const priorityTasks = activeTasks.filter(t => t.is_priority);
       const grouped = [
         {
           id: 'priority',
@@ -212,12 +221,12 @@ export default function TasksExplorerLayout() {
           label: bucket.name,
           color: bucket.color,
           description: bucket.description,
-          tasks: filteredTasks.filter(t => t.kanban_bucket_id === bucket.id)
+          tasks: activeTasks.filter(t => t.kanban_bucket_id === bucket.id)
         });
       });
 
       const bucketIds = sortedBuckets.map(b => b.id);
-      const unassignedTasks = filteredTasks.filter(t => !t.is_priority && (!t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
+      const unassignedTasks = activeTasks.filter(t => !t.is_priority && (!t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
       
       grouped.push({
         id: 'unassigned',
@@ -231,7 +240,7 @@ export default function TasksExplorerLayout() {
 
     const grouped = {};
     
-    filteredTasks.forEach(task => {
+    activeTasks.forEach(task => {
       let groupKey, groupLabel, groupColor;
       
       if (groupBy === 'status') {
@@ -342,7 +351,8 @@ export default function TasksExplorerLayout() {
             <div className="p-3 border-b border-red-900/20 bg-gray-900/30">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-gray-400">
-                  {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
+                  {activeTasks.length} active {activeTasks.length === 1 ? 'task' : 'tasks'}
+                  {completedTasks.length > 0 && ` • ${completedTasks.length} completed`}
                 </div>
                 
                 <div className="flex items-center gap-2">
@@ -365,7 +375,7 @@ export default function TasksExplorerLayout() {
             </div>
 
             {/* Tasks Kanban Display */}
-            <div className="flex-1 p-4 md:overflow-y-auto">
+            <div className="flex-1 p-4 md:overflow-y-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {groups.map(group => (
                   <div key={group.id} className="w-full">
@@ -421,6 +431,17 @@ export default function TasksExplorerLayout() {
                   </div>
                 ))}
               </div>
+
+              {/* Completed Tasks Section */}
+              {completedTasks.length > 0 && (
+                <CompletedTasksSection 
+                  projectId={selectedNodeType === 'project' ? selectedNodeId : null}
+                  tasks={completedTasks}
+                  categories={categories}
+                  teamMembers={teamMembers}
+                  statuses={statuses}
+                />
+              )}
             </div>
           </div>
         </div>
