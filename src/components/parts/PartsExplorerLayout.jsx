@@ -150,7 +150,7 @@ export default function PartsExplorerLayout() {
 
   return (
     <>
-      <div className="h-[calc(100vh-8rem)] flex flex-col bg-black/20 rounded-lg overflow-hidden border border-red-900/30">
+      <div className="flex flex-col bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-8rem)] md:overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div className="flex items-center gap-3">
@@ -184,7 +184,7 @@ export default function PartsExplorerLayout() {
         )}
 
         {/* Split Pane Layout - Desktop: side-by-side, Mobile: stacked */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
           {/* Left Pane - Category Tree */}
           <div 
             className="
@@ -223,8 +223,8 @@ export default function PartsExplorerLayout() {
             </div>
 
             {/* Parts Display */}
-            <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col">
-              <div className="flex-1 md:overflow-y-auto p-4">
+            <div className="flex-1 flex flex-col md:overflow-hidden">
+              <div className="flex-1 p-4 md:overflow-y-auto">
                 {viewMode === 'cards' ? (
                   <PartsGrid
                     parts={paginatedParts}
