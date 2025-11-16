@@ -3,8 +3,11 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Menu, Plus, X } from "lucide-react";
+import { useDebounce } from "@/hooks/useDebounce";
 import CategoryTree from "./CategoryTree";
 import PartsGrid from "./PartsGrid";
+import PartsListView from "./PartsListView";
+import PartsViewToolbar from "./PartsViewToolbar";
 import PartsBreadcrumb from "./PartsBreadcrumb";
 import UnifiedAddPartModal from "./UnifiedAddPartModal";
 import EditPartDrawer from "./EditPartDrawer";
@@ -17,8 +20,12 @@ export default function PartsExplorerLayout() {
   const [expandedCategories, setExpandedCategories] = useState({});
   const [showLeftPane, setShowLeftPane] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState('cards');
+  const [showGrouping, setShowGrouping] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
+  
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   // Load saved state
   useEffect(() => {
@@ -29,6 +36,8 @@ export default function PartsExplorerLayout() {
         setSelectedCategoryId(state.selectedCategoryId || null);
         setExpandedCategories(state.expandedCategories || {});
         setShowLeftPane(state.showLeftPane !== false);
+        setViewMode(state.viewMode || 'cards');
+        setShowGrouping(state.showGrouping || false);
       }
     } catch (e) {}
   }, []);
@@ -40,9 +49,11 @@ export default function PartsExplorerLayout() {
         selectedCategoryId,
         expandedCategories,
         showLeftPane,
+        viewMode,
+        showGrouping,
       }));
     } catch (e) {}
-  }, [selectedCategoryId, expandedCategories, showLeftPane]);
+  }, [selectedCategoryId, expandedCategories, showLeftPane, viewMode, showGrouping]);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
@@ -92,11 +103,11 @@ export default function PartsExplorerLayout() {
   };
 
   const filteredParts = parts.filter(part => {
-    if (!selectedCategoryId && !searchTerm) return true;
+    if (!selectedCategoryId && !debouncedSearchTerm) return true;
     
-    const matchesSearch = searchTerm ? (
-      part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = debouncedSearchTerm ? (
+      part.part_name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      part.vendor_part_number?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     ) : true;
     
     const matchesCategory = selectedCategoryId ? 
@@ -174,12 +185,36 @@ export default function PartsExplorerLayout() {
             ${showLeftPane ? 'hidden md:flex' : 'flex'}
             flex-1 flex-col overflow-hidden
           `}>
-            <PartsGrid
-              parts={filteredParts}
-              categories={categories}
-              selectedCategoryId={selectedCategoryId}
-              onPartClick={(partId) => setSelectedPart(partId)}
-            />
+            {/* Toolbar */}
+            <div className="p-3 border-b border-red-900/20 bg-gray-900/30">
+              <PartsViewToolbar
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                showGrouping={showGrouping}
+                onToggleGrouping={() => setShowGrouping(!showGrouping)}
+                partsCount={filteredParts.length}
+              />
+            </div>
+
+            {/* Parts Display */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {viewMode === 'cards' ? (
+                <PartsGrid
+                  parts={filteredParts}
+                  categories={categories}
+                  selectedCategoryId={selectedCategoryId}
+                  onPartClick={(partId) => setSelectedPart(partId)}
+                />
+              ) : (
+                <PartsListView
+                  parts={filteredParts}
+                  categories={categories}
+                  selectedCategoryId={selectedCategoryId}
+                  onPartClick={(partId) => setSelectedPart(partId)}
+                  showGrouping={showGrouping}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
