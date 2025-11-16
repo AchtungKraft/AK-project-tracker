@@ -87,6 +87,12 @@ export default function TasksExplorerLayout() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
+  const { data: buckets = [] } = useQuery({
+    queryKey: ['kanbanBuckets', selectedNodeType === 'project' ? selectedNodeId : null],
+    queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: selectedNodeId }),
+    enabled: selectedNodeType === 'project' && !!selectedNodeId,
+  });
+
   // Build hierarchy path
   useEffect(() => {
     if (selectedNodeId && selectedNodeType) {
@@ -187,6 +193,42 @@ export default function TasksExplorerLayout() {
   };
 
   const getGroups = () => {
+    if (groupBy === 'buckets') {
+      const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
+      const priorityTasks = filteredTasks.filter(t => t.is_priority);
+      const grouped = [
+        {
+          id: 'priority',
+          label: '🔥 PRIORITY',
+          color: '#EF4444',
+          tasks: priorityTasks,
+          isPriority: true
+        }
+      ];
+
+      sortedBuckets.forEach(bucket => {
+        grouped.push({
+          id: bucket.id,
+          label: bucket.name,
+          color: bucket.color,
+          description: bucket.description,
+          tasks: filteredTasks.filter(t => t.kanban_bucket_id === bucket.id)
+        });
+      });
+
+      const bucketIds = sortedBuckets.map(b => b.id);
+      const unassignedTasks = filteredTasks.filter(t => !t.is_priority && (!t.kanban_bucket_id || !bucketIds.includes(t.kanban_bucket_id)));
+      
+      grouped.push({
+        id: 'unassigned',
+        label: 'Unassigned Tasks',
+        color: '#6B7280',
+        tasks: unassignedTasks
+      });
+
+      return grouped;
+    }
+
     const grouped = {};
     
     filteredTasks.forEach(task => {
@@ -309,6 +351,9 @@ export default function TasksExplorerLayout() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      {selectedNodeType === 'project' && (
+                        <SelectItem value="buckets">Custom Buckets</SelectItem>
+                      )}
                       <SelectItem value="status">Group by Status</SelectItem>
                       <SelectItem value="assigned">Group by Assigned</SelectItem>
                       <SelectItem value="category">Group by Category</SelectItem>
@@ -324,7 +369,9 @@ export default function TasksExplorerLayout() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {groups.map(group => (
                   <div key={group.id} className="w-full">
-                    <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
+                    <div className={`bg-black/40 backdrop-blur-xl rounded-lg overflow-hidden ${
+                      group.isPriority ? 'border-2 border-red-600 shadow-lg shadow-red-600/20' : 'border border-red-900/30'
+                    }`}>
                       {/* Group Header */}
                       <div
                         className="p-3 border-b-2"
@@ -344,13 +391,16 @@ export default function TasksExplorerLayout() {
                             {group.tasks.length}
                           </span>
                         </div>
+                        {group.description && (
+                          <p className="text-xs text-gray-500 mt-1">{group.description}</p>
+                        )}
                       </div>
 
                       {/* Tasks */}
                       <div className="min-h-[200px] max-h-[600px] overflow-y-auto">
                         {group.tasks.length === 0 ? (
                           <p className="text-center text-gray-600 text-sm py-8">
-                            No tasks
+                            {group.isPriority ? 'No priority tasks' : group.id === 'unassigned' ? 'No unassigned tasks' : 'No tasks'}
                           </p>
                         ) : (
                           <div className="p-3 space-y-2">
