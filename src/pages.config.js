@@ -6,7 +6,7 @@ import Reports from './pages/Reports';
 import AdminConfig from './pages/AdminConfig';
 import PartsTracker from './pages/PartsTracker';
 import PriorityDashboard from './pages/PriorityDashboard';
-import Layout from './Layout.jsx';
+import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
@@ -23,5 +23,5 @@ export const PAGES = {
 export const pagesConfig = {
     mainPage: "Dashboard",
     Pages: PAGES,
-    Layout: Layout,
+    Layout: __Layout,
 };
