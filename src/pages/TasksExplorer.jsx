@@ -7,7 +7,7 @@ export default function TasksExplorer() {
       <div className="max-w-7xl mx-auto space-y-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
-            TASKS EXPLORER
+            TASKS
           </h1>
           <p className="text-sm text-gray-400">Navigate and manage tasks by project and category</p>
         </div>

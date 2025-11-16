@@ -62,6 +62,14 @@ export default function TasksExplorerLayout() {
     queryFn: () => base44.entities.Project.list('-created_date'),
   });
 
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ['projectTypes'],
+    queryFn: async () => {
+      const list = await base44.entities.ProjectType.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
+  });
+
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-created_date'),
@@ -175,7 +183,7 @@ export default function TasksExplorerLayout() {
         <div className="flex items-center justify-between p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div className="flex items-center gap-3">
             <div>
-              <h2 className="text-lg font-bold text-white">Tasks Explorer</h2>
+              <h2 className="text-lg font-bold text-white">Tasks</h2>
               <p className="text-xs text-gray-400">
                 {filteredTasks.length} tasks {selectedNodeId ? 'filtered' : 'total'}
               </p>
@@ -218,6 +226,7 @@ export default function TasksExplorerLayout() {
           >
             <TaskHierarchyTree
               projects={projects}
+              projectTypes={projectTypes}
               tasks={tasks}
               categories={categories}
               selectedNodeId={selectedNodeId}

@@ -47,12 +47,7 @@ const navigationItems = [
     icon: FolderKanban,
   },
   {
-    title: "My Tasks",
-    url: createPageUrl("MyTasks"),
-    icon: ListChecks,
-  },
-  {
-    title: "Tasks Explorer",
+    title: "Tasks",
     url: createPageUrl("TasksExplorer"),
     icon: ListChecks,
   },
@@ -78,7 +73,7 @@ const MobileBottomNav = ({ currentPath }) => {
   const mobileItems = [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priority", url: createPageUrl("PriorityDashboard"), icon: Flame },
-    { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
+    { title: "Tasks", url: createPageUrl("TasksExplorer"), icon: ListChecks },
     { title: "Admin", url: createPageUrl("AdminConfig"), icon: Settings },
   ];
 

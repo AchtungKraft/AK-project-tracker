@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 export default function TaskHierarchyTree({
   projects,
+  projectTypes,
   tasks,
   categories,
   selectedNodeId,
@@ -69,12 +70,14 @@ export default function TaskHierarchyTree({
     return categories.filter(c => c.name?.toLowerCase().includes(term));
   }, [categories, searchTerm]);
 
-  const renderProject = (project) => {
+  const renderProject = (project, level = 0) => {
     const isSelected = selectedNodeType === 'project' && selectedNodeId === project.id;
     const taskCount = nodeCounts.projects[project.id] || 0;
     const isEmpty = taskCount === 0;
 
     if (isEmpty && !showEmptyNodes && !searchTerm) return null;
+
+    const projectType = projectTypes.find(pt => pt.id === project.project_type_id);
 
     return (
       <div
@@ -82,12 +85,17 @@ export default function TaskHierarchyTree({
         className={cn(
           "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors group",
           isSelected ? "bg-red-950/40 text-red-400" : "hover:bg-gray-800/50 text-gray-300",
+          level > 0 && "border-l-2 border-gray-800",
           isEmpty && "opacity-50"
         )}
+        style={{
+          paddingLeft: `${(level * 16) + 12}px`,
+          borderLeftColor: level > 0 && projectType?.color ? projectType.color + '40' : 'transparent'
+        }}
         onClick={() => !isEmpty && onNodeSelect(project.id, 'project')}
         title={isEmpty ? "No tasks in this project" : undefined}
       >
-        <FolderKanban className="w-4 h-4 text-blue-500 shrink-0" />
+        <FolderKanban className="w-4 h-4 shrink-0" style={{ color: projectType?.color || '#3B82F6' }} />
         
         <span 
           className={cn(
@@ -107,6 +115,97 @@ export default function TaskHierarchyTree({
           >
             {taskCount}
           </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderProjectType = (projectType, level = 0) => {
+    const children = projectTypes.filter(pt => pt.parent_id === projectType.id && pt.active);
+    const hasChildren = children.length > 0;
+    const nodeKey = `type-${projectType.id}`;
+    const isExpanded = expandedNodes[nodeKey];
+
+    // Get projects for this type
+    const typeProjects = filteredProjects.filter(p => p.project_type_id === projectType.id);
+    
+    // Calculate total tasks for this type (including child types)
+    const getAllTypeProjects = (typeId) => {
+      const directProjects = projects.filter(p => p.project_type_id === typeId);
+      const childTypes = projectTypes.filter(pt => pt.parent_id === typeId);
+      let allProjects = [...directProjects];
+      childTypes.forEach(ct => {
+        allProjects = allProjects.concat(getAllTypeProjects(ct.id));
+      });
+      return allProjects;
+    };
+
+    const allTypeProjects = getAllTypeProjects(projectType.id);
+    const totalTasks = allTypeProjects.reduce((sum, p) => sum + (nodeCounts.projects[p.id] || 0), 0);
+    const isEmpty = totalTasks === 0;
+
+    if (isEmpty && !showEmptyNodes && !searchTerm) return null;
+
+    return (
+      <div key={projectType.id}>
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 transition-colors group",
+            level > 0 && "border-l-2 border-gray-800",
+            isEmpty && "opacity-50"
+          )}
+          style={{
+            paddingLeft: `${(level * 16) + 12}px`,
+            borderLeftColor: level > 0 ? projectType.color + '40' : 'transparent'
+          }}
+        >
+          {(hasChildren || typeProjects.length > 0) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(nodeKey);
+              }}
+              className="shrink-0 hover:text-red-400 transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+          )}
+
+          <div className="shrink-0">
+            {hasChildren ? (
+              isExpanded ? (
+                <FolderOpen className="w-4 h-4" style={{ color: projectType.color }} />
+              ) : (
+                <Folder className="w-4 h-4" style={{ color: projectType.color }} />
+              )
+            ) : (
+              <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: projectType.color + '50' }} />
+            )}
+          </div>
+
+          <span 
+            className="flex-1 text-sm font-medium text-gray-300 truncate"
+            style={{ color: projectType.color }}
+          >
+            {projectType.name}
+          </span>
+
+          {totalTasks > 0 && (
+            <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">
+              {totalTasks}
+            </span>
+          )}
+        </div>
+
+        {isExpanded && (
+          <div>
+            {typeProjects.map(project => renderProject(project, level + 1))}
+            {children.map(child => renderProjectType(child, level + 1))}
+          </div>
         )}
       </div>
     );
@@ -222,12 +321,16 @@ export default function TaskHierarchyTree({
           <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Projects
           </div>
-          {filteredProjects.length === 0 ? (
+          {projectTypes.filter(pt => !pt.parent_id && pt.active).length === 0 ? (
             <div className="px-3 py-4 text-center text-gray-500 text-sm">
               {searchTerm ? 'No projects found' : 'No projects'}
             </div>
           ) : (
-            filteredProjects.map(project => renderProject(project))
+            <div>
+              {projectTypes
+                .filter(pt => !pt.parent_id && pt.active)
+                .map(projectType => renderProjectType(projectType, 0))}
+            </div>
           )}
         </div>
 
