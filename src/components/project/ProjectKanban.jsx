@@ -69,12 +69,23 @@ export default function ProjectKanban({ projectId }) {
   const tasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, data }) => base44.entities.Task.update(taskId, data),
+    mutationFn: ({ taskId, data }) => {
+      // Optimistically update
+      const currentTasks = queryClient.getQueryData(['projectTasks', projectId]) || [];
+      const updatedTasks = currentTasks.map(t => 
+        t.id === taskId ? { ...t, ...data } : t
+      );
+      queryClient.setQueryData(['projectTasks', projectId], updatedTasks);
+      
+      return base44.entities.Task.update(taskId, data);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
     },
   });
 
