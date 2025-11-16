@@ -343,7 +343,7 @@ export default function CarYearsConfig() {
         </form>
 
         <div>
-          <Label className="text-gray-400 text-xs mb-3 block">Existing Years (Grouped by Make > Model)</Label>
+          <Label className="text-gray-400 text-xs mb-3 block">Existing Years (Grouped by Make &gt; Model)</Label>
           {makes.filter(m => m.active).length === 0 ? (
             <div className="text-center py-8 text-gray-500">No car makes configured. Add makes first.</div>
           ) : (
