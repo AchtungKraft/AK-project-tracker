@@ -141,14 +141,7 @@ export default function PartsExplorerLayout() {
         {/* Header */}
         <div className="flex items-center justify-between p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowLeftPane(!showLeftPane)}
-              className="md:hidden text-gray-400 hover:text-white"
-            >
-              {showLeftPane ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </Button>
+
             <div>
               <h2 className="text-lg font-bold text-white">Parts Master</h2>
               <p className="text-xs text-gray-400">
@@ -177,15 +170,16 @@ export default function PartsExplorerLayout() {
           </div>
         )}
 
-        {/* Split Pane Layout */}
-        <div className="flex-1 flex overflow-hidden">
+        {/* Split Pane Layout - Desktop: side-by-side, Mobile: stacked */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Left Pane - Category Tree */}
           <div 
-            className={`
-              ${showLeftPane ? 'flex' : 'hidden md:flex'}
+            className="
+              flex
               w-full md:w-[30%] lg:w-[25%] 
-              flex-col border-r border-red-900/30 bg-black/20
-            `}
+              flex-col border-b md:border-b-0 md:border-r border-red-900/30 bg-black/20
+              max-h-[40vh] md:max-h-none
+            "
           >
             <CategoryTree
               categories={categories}
@@ -200,10 +194,10 @@ export default function PartsExplorerLayout() {
           </div>
 
           {/* Right Pane - Parts List */}
-          <div className={`
-            ${showLeftPane ? 'hidden md:flex' : 'flex'}
+          <div className="
+            flex
             flex-1 flex-col overflow-hidden
-          `}>
+          ">
             {/* Toolbar */}
             <div className="p-3 border-b border-red-900/20 bg-gray-900/30">
               <PartsViewToolbar
