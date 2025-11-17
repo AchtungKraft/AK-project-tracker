@@ -223,44 +223,44 @@ export default function PartsListView({
             </Badge>
           </div>
           
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
+          <div className="flex flex-wrap gap-x-2 md:gap-x-4 gap-y-1 text-xs text-gray-400">
             {part.vendor_part_number && (
-              <span className="font-mono">{part.vendor_part_number}</span>
+              <span className="font-mono truncate max-w-[120px] md:max-w-none">{part.vendor_part_number}</span>
             )}
             {(make || model || year) && (
-              <span className="text-blue-400">
+              <span className="text-blue-400 truncate max-w-[150px] md:max-w-none">
                 {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
               </span>
             )}
             {location && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                {location.bin_description || location.location_area}
+              <span className="flex items-center gap-1 truncate max-w-[100px] md:max-w-none">
+                <MapPin className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{location.bin_description || location.location_area}</span>
               </span>
             )}
             {vendor && (
-              <span className="flex items-center gap-1">
-                <Box className="w-3 h-3" />
-                {vendor.vendor_name}
+              <span className="flex items-center gap-1 truncate max-w-[100px] md:max-w-none">
+                <Box className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{vendor.vendor_name}</span>
               </span>
             )}
           </div>
         </div>
 
         {/* Inventory Stats */}
-        <div className="flex gap-4 text-xs shrink-0">
+        <div className="flex gap-2 md:gap-4 text-xs shrink-0">
           <div className="text-center">
-            <div className="text-gray-500">Stock</div>
-            <div className="text-white font-semibold">{part.quantity_on_hand || 0}</div>
+            <div className="text-gray-500 text-[10px] md:text-xs">Stock</div>
+            <div className="text-white font-semibold text-xs md:text-sm">{part.quantity_on_hand || 0}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500">Reserved</div>
-            <div className="text-yellow-400 font-semibold">{reserved}</div>
+            <div className="text-gray-500 text-[10px] md:text-xs">Rsrv</div>
+            <div className="text-yellow-400 font-semibold text-xs md:text-sm">{reserved}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500">Available</div>
+            <div className="text-gray-500 text-[10px] md:text-xs">Avail</div>
             <div className={cn(
-              "font-semibold",
+              "font-semibold text-xs md:text-sm",
               available > 0 ? "text-green-400" : "text-red-400"
             )}>
               {available}
