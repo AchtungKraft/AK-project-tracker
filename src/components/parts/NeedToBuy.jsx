@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, CheckCircle, Package } from "lucide-react";
+import { ShoppingCart, Search, Filter, CheckCircle, Package, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import PartDetailModal from "./PartDetailModal";
 
@@ -31,7 +31,16 @@ export default function NeedToBuy() {
   const [projectFilter, setProjectFilter] = useState('all');
   const [selectedPart, setSelectedPart] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [filtersExpanded, setFiltersExpanded] = useState(() => {
+    const saved = localStorage.getItem('needToBuy_filtersExpanded');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const itemsPerPage = 25;
+
+  // Save filter state
+  useEffect(() => {
+    localStorage.setItem('needToBuy_filtersExpanded', JSON.stringify(filtersExpanded));
+  }, [filtersExpanded]);
 
   const { data: parts = [], isLoading } = useQuery({
     queryKey: ['parts'],
@@ -134,14 +143,23 @@ export default function NeedToBuy() {
 
         {/* Filters */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardHeader className="border-b border-red-900/30 p-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <CardTitle className="text-white text-base">Filters</CardTitle>
+          <CardHeader 
+            className="border-b border-red-900/30 p-4 cursor-pointer md:cursor-default"
+            onClick={() => setFiltersExpanded(!filtersExpanded)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-gray-400" />
+                <CardTitle className="text-white text-base">Filters</CardTitle>
+              </div>
+              <button className="md:hidden text-gray-400">
+                {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
             </div>
           </CardHeader>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {filtersExpanded && (
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -197,7 +215,8 @@ export default function NeedToBuy() {
                 </Select>
               </div>
             </div>
-          </CardContent>
+            </CardContent>
+          )}
         </Card>
 
         {/* Parts Grid */}
