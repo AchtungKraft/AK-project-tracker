@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical, Upload, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import ImageGallery from "../parts/ImageGallery";
 
 export default function LocationsConfig() {
   const queryClient = useQueryClient();
@@ -21,11 +22,16 @@ export default function LocationsConfig() {
     bin_description: "",
     qr_code_value: "",
     notes: "",
+    photos: [],
     color: "#8B5CF6",
     sort_order: 0
   });
   const [editing, setEditing] = useState(null);
   const [collapsed, setCollapsed] = useState({});
+  const [uploading, setUploading] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations'],
@@ -39,7 +45,7 @@ export default function LocationsConfig() {
     mutationFn: (data) => base44.entities.Location.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
-      setNewLocation({ location_area: "", parent_id: "", storage_type: "", bin_description: "", qr_code_value: "", notes: "", color: "#8B5CF6", sort_order: 0 });
+      setNewLocation({ location_area: "", parent_id: "", storage_type: "", bin_description: "", qr_code_value: "", notes: "", photos: [], color: "#8B5CF6", sort_order: 0 });
       toast.success('Location created');
     },
   });
@@ -65,6 +71,69 @@ export default function LocationsConfig() {
     e.preventDefault();
     if (!newLocation.location_area.trim()) return;
     createMutation.mutate({ ...newLocation, active: true });
+  };
+
+  const handleFileUpload = async (e, isEditing = false, locationId = null) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    try {
+      const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+      const results = await Promise.all(uploadPromises);
+      const newPhotoUrls = results.map(r => r.file_url);
+
+      if (isEditing && locationId) {
+        const location = locations.find(l => l.id === locationId);
+        const updatedPhotos = [...(location.photos || []), ...newPhotoUrls];
+        const updated = locations.map(l => 
+          l.id === locationId ? { ...l, photos: updatedPhotos } : l
+        );
+        queryClient.setQueryData(['locations'], updated);
+      } else {
+        setNewLocation(prev => ({
+          ...prev,
+          photos: [...(prev.photos || []), ...newPhotoUrls]
+        }));
+      }
+      toast.success(`${files.length} photo(s) uploaded`);
+    } catch (error) {
+      toast.error('Failed to upload photos');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = (photoUrl, isEditing = false, locationId = null) => {
+    if (isEditing && locationId) {
+      const location = locations.find(l => l.id === locationId);
+      const updatedPhotos = (location.photos || []).filter(p => p !== photoUrl);
+      const updated = locations.map(l => 
+        l.id === locationId ? { ...l, photos: updatedPhotos } : l
+      );
+      queryClient.setQueryData(['locations'], updated);
+    } else {
+      setNewLocation(prev => ({
+        ...prev,
+        photos: (prev.photos || []).filter(p => p !== photoUrl)
+      }));
+    }
+  };
+
+  const handleOpenGallery = (photos, startIndex = 0) => {
+    setGalleryImages(photos);
+    setCurrentImageIndex(startIndex);
+    setGalleryOpen(true);
+  };
+
+  const handleNavigateGallery = (direction) => {
+    if (typeof direction === 'number') {
+      setCurrentImageIndex(direction);
+    } else if (direction === 'next') {
+      setCurrentImageIndex((prev) => Math.min(prev + 1, galleryImages.length - 1));
+    } else if (direction === 'prev') {
+      setCurrentImageIndex((prev) => Math.max(prev - 1, 0));
+    }
   };
 
   const handleToggleActive = (location) => {
@@ -226,6 +295,50 @@ export default function LocationsConfig() {
                           </SelectContent>
                         </Select>
                       </div>
+                      <div>
+                        <Label className="text-gray-400 text-xs">Photos</Label>
+                        <div className="space-y-2">
+                          {location.photos && location.photos.length > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {location.photos.map((photo, idx) => (
+                                <div key={idx} className="relative">
+                                  <img
+                                    src={photo}
+                                    alt={`Photo ${idx + 1}`}
+                                    className="w-20 h-20 object-cover rounded border border-gray-700 cursor-pointer"
+                                    onClick={() => handleOpenGallery(location.photos, idx)}
+                                  />
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemovePhoto(photo, true, location.id);
+                                    }}
+                                    className="absolute -top-1 -right-1 bg-red-600 rounded-full w-5 h-5 flex items-center justify-center text-white hover:bg-red-700"
+                                  >
+                                    <XIcon className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <label className="cursor-pointer">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border border-gray-700 rounded hover:bg-gray-750 transition-colors">
+                              <Upload className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-400">
+                                {uploading ? 'Uploading...' : 'Upload Photos'}
+                              </span>
+                            </div>
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleFileUpload(e, true, location.id)}
+                              disabled={uploading}
+                            />
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -237,6 +350,19 @@ export default function LocationsConfig() {
                         {!location.active && (
                           <Badge variant="outline" className="text-xs bg-gray-800 text-gray-500">Inactive</Badge>
                         )}
+                        {location.photos && location.photos.length > 0 && (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs border-blue-500 text-blue-400 cursor-pointer hover:bg-blue-950/30"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenGallery(location.photos, 0);
+                            }}
+                          >
+                            <ImageIcon className="w-3 h-3 mr-1" />
+                            {location.photos.length} photo{location.photos.length !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-sm text-gray-400 mt-1 space-y-1">
                         {location.storage_type && <p>Type: {location.storage_type}</p>}
@@ -244,6 +370,27 @@ export default function LocationsConfig() {
                         {location.qr_code_value && <p className="font-mono text-xs">QR: {location.qr_code_value}</p>}
                         {location.notes && <p className="italic text-gray-500">{location.notes}</p>}
                       </div>
+                      {location.photos && location.photos.length > 0 && (
+                        <div className="flex gap-1 mt-2 flex-wrap">
+                          {location.photos.slice(0, 3).map((photo, idx) => (
+                            <img
+                              key={idx}
+                              src={photo}
+                              alt={`Location photo ${idx + 1}`}
+                              className="w-12 h-12 object-cover rounded border border-gray-700 cursor-pointer hover:border-red-500 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenGallery(location.photos, idx);
+                              }}
+                            />
+                          ))}
+                          {location.photos.length > 3 && (
+                            <div className="w-12 h-12 bg-gray-800 rounded border border-gray-700 flex items-center justify-center text-xs text-gray-400">
+                              +{location.photos.length - 3}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -397,6 +544,47 @@ export default function LocationsConfig() {
                 rows={2}
               />
             </div>
+            <div className="md:col-span-2">
+              <Label className="text-gray-400 text-xs">Photos</Label>
+              <div className="space-y-2">
+                {newLocation.photos && newLocation.photos.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {newLocation.photos.map((photo, idx) => (
+                      <div key={idx} className="relative">
+                        <img
+                          src={photo}
+                          alt={`Photo ${idx + 1}`}
+                          className="w-20 h-20 object-cover rounded border border-gray-700 cursor-pointer"
+                          onClick={() => handleOpenGallery(newLocation.photos, idx)}
+                        />
+                        <button
+                          onClick={() => handleRemovePhoto(photo)}
+                          className="absolute -top-1 -right-1 bg-red-600 rounded-full w-5 h-5 flex items-center justify-center text-white hover:bg-red-700"
+                        >
+                          <XIcon className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded hover:bg-gray-750 transition-colors">
+                    <Upload className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-400">
+                      {uploading ? 'Uploading...' : 'Upload Photos'}
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileUpload(e, false)}
+                    disabled={uploading}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
           <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
             {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add Location</>}
@@ -423,6 +611,14 @@ export default function LocationsConfig() {
           )}
         </div>
       </CardContent>
+
+      <ImageGallery
+        isOpen={galleryOpen}
+        images={galleryImages}
+        currentIndex={currentImageIndex}
+        onClose={() => setGalleryOpen(false)}
+        onNavigate={handleNavigateGallery}
+      />
     </Card>
   );
 }

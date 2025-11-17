@@ -1,42 +1,57 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Search, Package, QrCode, ChevronDown, ChevronRight, X as XIcon } from "lucide-react";
-import PartDetailModal from "./PartDetailModal";
+import { Search, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
+import LocationTree from "../inventory/LocationTree";
+import InventoryBreadcrumb from "../inventory/InventoryBreadcrumb";
+import PartsListView from "./PartsListView";
+import ImageGallery from "./ImageGallery";
 
-const getCategoryPath = (categoryId, categories) => {
-  if (!categoryId) return null;
-  const category = categories.find(c => c.id === categoryId);
-  if (!category) return null;
-  
-  if (category.parent_id) {
-    const parent = categories.find(c => c.id === category.parent_id);
-    if (parent) {
-      return `${parent.name} > ${category.name}`;
-    }
-  }
-  return category.name;
-};
+const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
 export default function InventoryLocations() {
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [expandedLocations, setExpandedLocations] = useState(new Set());
+  const [currentPath, setCurrentPath] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPart, setSelectedPart] = useState(null);
-  const [selectedLocationId, setSelectedLocationId] = useState(null);
-  const [collapsedAreas, setCollapsedAreas] = useState({});
-  const [collapsedLocations, setCollapsedLocations] = useState({});
+  const [showLeftPane, setShowLeftPane] = useState(true);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  const { data: parts = [], isLoading: partsLoading } = useQuery({
-    queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list('-created_date'),
-  });
+  // Load state from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LOCATIONS_STATE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.expandedLocations) {
+          setExpandedLocations(new Set(state.expandedLocations));
+        }
+      }
+    } catch (e) {}
+  }, []);
 
-  const { data: locations = [], isLoading: locationsLoading } = useQuery({
+  // Save state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCATIONS_STATE_KEY, JSON.stringify({
+        expandedLocations: Array.from(expandedLocations),
+      }));
+    } catch (e) {}
+  }, [expandedLocations]);
+
+  const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: () => base44.entities.Location.list(),
+  });
+
+  const { data: allParts = [] } = useQuery({
+    queryKey: ['parts'],
+    queryFn: () => base44.entities.Part.list(),
   });
 
   const { data: categories = [] } = useQuery({
@@ -44,446 +59,218 @@ export default function InventoryLocations() {
     queryFn: () => base44.entities.PartCategory.list(),
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+  // Build location path when selection changes
+  useEffect(() => {
+    if (!selectedLocation) {
+      setCurrentPath([]);
+      return;
+    }
+
+    const buildPath = (locId) => {
+      const path = [];
+      let current = locations.find(l => l.id === locId);
+      
+      while (current) {
+        path.unshift({ id: current.id, name: current.location_area, color: current.color });
+        current = locations.find(l => l.id === current.parent_id);
+      }
+      
+      return path;
+    };
+
+    setCurrentPath(buildPath(selectedLocation));
+  }, [selectedLocation, locations]);
+
+  // Get all descendant location IDs
+  const getDescendantLocationIds = (locationId) => {
+    const descendants = new Set([locationId]);
+    
+    const addChildren = (parentId) => {
+      locations
+        .filter(loc => loc.parent_id === parentId)
+        .forEach(child => {
+          descendants.add(child.id);
+          addChildren(child.id);
+        });
+    };
+    
+    addChildren(locationId);
+    return Array.from(descendants);
+  };
+
+  // Filter parts based on selected location and search
+  const filteredParts = allParts.filter(part => {
+    // Search filter
+    const matchesSearch = !searchTerm || 
+      part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Location filter
+    if (!selectedLocation) {
+      return matchesSearch;
+    }
+
+    const locationIds = getDescendantLocationIds(selectedLocation);
+    const matchesLocation = part.location_id && locationIds.includes(part.location_id);
+
+    return matchesSearch && matchesLocation;
   });
 
-  const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
-  });
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
-  });
-
-  const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
-    queryFn: () => base44.entities.CarYear.list(),
-  });
-
-  const activeLocations = locations.filter(l => l.active);
-
-  // Build hierarchy: parent locations and children
-  const parentLocations = activeLocations
-    .filter(l => !l.parent_id)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-  const getChildLocations = (parentId) => {
-    return activeLocations
-      .filter(l => l.parent_id === parentId)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const handleLocationSelect = (locationId) => {
+    setSelectedLocation(locationId === selectedLocation ? null : locationId);
   };
 
-  // Get parts for a location
-  const getPartsForLocation = (locationId) => {
-    return parts.filter(p => p.location_id === locationId);
+  const handleBreadcrumbClick = (locationId) => {
+    setSelectedLocation(locationId);
   };
 
-  // Get parts without location
-  const unassignedParts = parts.filter(p => !p.location_id);
-
-  // Filter based on search
-  const filterParts = (partsList) => {
-    if (!searchTerm) return partsList;
-    return partsList.filter(p => 
-      p.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  const handleClearSelection = () => {
+    setSelectedLocation(null);
+    setCurrentPath([]);
   };
 
-  const statusColors = {
-    'On-Hand': '#10B981',
-    'Need to Buy': '#EF4444',
-    'On-Order': '#F59E0B'
+  const handleViewLocationImages = () => {
+    const location = locations.find(l => l.id === selectedLocation);
+    if (location?.photos && location.photos.length > 0) {
+      setGalleryImages(location.photos);
+      setCurrentImageIndex(0);
+      setGalleryOpen(true);
+    }
   };
 
-  const totalOnHandParts = parts.filter(p => p.status === 'On-Hand').length;
-  const totalOnHandQty = parts.reduce((sum, p) => sum + (p.quantity_on_hand || 0), 0);
-
-  const toggleArea = (locationId) => {
-    setCollapsedLocations(prev => ({
-      ...prev,
-      [locationId]: !prev[locationId]
-    }));
+  const handleNavigateGallery = (direction) => {
+    if (typeof direction === 'number') {
+      setCurrentImageIndex(direction);
+    } else if (direction === 'next') {
+      setCurrentImageIndex((prev) => Math.min(prev + 1, galleryImages.length - 1));
+    } else if (direction === 'prev') {
+      setCurrentImageIndex((prev) => Math.max(prev - 1, 0));
+    }
   };
 
-  const handleLocationClick = (locationId) => {
-    setSelectedLocationId(locationId);
-  };
-
-  const selectedLocationParts = selectedLocationId 
-    ? parts.filter(p => p.location_id === selectedLocationId)
-    : [];
-
-  const getPartsCountForLocation = (locationId) => {
-    return parts.filter(p => p.location_id === locationId).length;
-  };
-
-  const getPartsCountRecursive = (locationId) => {
-    let count = getPartsCountForLocation(locationId);
-    const children = getChildLocations(locationId);
-    children.forEach(child => {
-      count += getPartsCountRecursive(child.id);
-    });
-    return count;
-  };
+  const selectedLocationData = locations.find(l => l.id === selectedLocation);
+  const hasLocationImages = selectedLocationData?.photos && selectedLocationData.photos.length > 0;
 
   return (
     <>
-      <div className="space-y-4">
-        {/* Summary Card */}
-        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardHeader className="border-b border-red-900/30 p-4">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-gray-400" />
-                <CardTitle className="text-white text-base">Inventory by Location</CardTitle>
-              </div>
-              <div className="flex gap-6">
-                <div className="text-center">
-                  <p className="text-xs text-gray-400">Locations</p>
-                  <p className="text-xl font-bold text-white">{activeLocations.length}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-400">On-Hand Parts</p>
-                  <p className="text-xl font-bold text-white">{totalOnHandParts}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-400">Total Qty</p>
-                  <p className="text-xl font-bold text-white">{totalOnHandQty}</p>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <Input
-                placeholder="Search parts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-gray-900/50 border-gray-700 text-white"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Hierarchical Locations */}
-        <div className="space-y-4">
-          {parentLocations.map(parent => {
-            const children = getChildLocations(parent.id);
-            const directPartsCount = getPartsCountForLocation(parent.id);
-            const totalCount = getPartsCountRecursive(parent.id);
-            const isCollapsed = collapsedLocations[parent.id];
-
-            return (
-              <Card key={parent.id} className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-                <CardHeader 
-                  className="border-b border-red-900/30 p-4 cursor-pointer hover:bg-gray-900/20 transition-colors"
-                  style={{ 
-                    borderColor: parent.color + '40',
-                    backgroundColor: parent.color + '10'
-                  }}
-                  onClick={() => toggleArea(parent.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {(children.length > 0 || directPartsCount > 0) && (
-                        isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
-                      <MapPin className="w-4 h-4" style={{ color: parent.color }} />
-                      <CardTitle className="text-base" style={{ color: parent.color }}>
-                        {parent.location_area}
-                      </CardTitle>
-                      {parent.qr_code_value && (
-                        <Badge variant="outline" className="border-blue-500 text-blue-400 text-xs">
-                          <QrCode className="w-3 h-3 mr-1" />
-                          QR
-                        </Badge>
-                      )}
-                    </div>
-                    <Badge 
-                      style={{ 
-                        backgroundColor: parent.color + '30',
-                        color: parent.color,
-                        borderColor: parent.color
-                      }}
-                      className="border"
-                    >
-                      {totalCount} parts
-                    </Badge>
+      <div className="flex gap-4 h-[calc(100vh-12rem)]">
+        {/* Left Pane - Location Tree */}
+        <div 
+          className={`transition-all duration-300 ${
+            showLeftPane ? 'w-[30%]' : 'w-0'
+          } overflow-hidden`}
+        >
+          {showLeftPane && (
+            <Card className="h-full bg-black/40 backdrop-blur-xl border border-red-900/30 flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col overflow-hidden">
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <Input
+                      placeholder="Search locations..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+                    />
                   </div>
-                  {(parent.storage_type || parent.bin_description) && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      {[parent.storage_type, parent.bin_description].filter(Boolean).join(' - ')}
-                    </p>
-                  )}
-                </CardHeader>
-                
-                {!isCollapsed && (
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      {/* Direct parts in parent location */}
-                      {directPartsCount > 0 && (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLocationClick(parent.id);
-                          }}
-                          className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${
-                            selectedLocationId === parent.id 
-                              ? 'bg-red-900/30 border-red-600' 
-                              : 'bg-gray-900/50 border-gray-800 hover:border-red-900/50'
-                          }`}
-                        >
-                          <span className="text-sm text-white">
-                            Direct (in {parent.location_area})
-                          </span>
-                          <Badge 
-                            variant="outline"
-                            className="text-xs border-gray-700"
-                            style={{ color: parent.color }}
-                          >
-                            {directPartsCount}
-                          </Badge>
-                        </div>
-                      )}
+                </div>
 
-                      {/* Child locations */}
-                      {children.map(child => {
-                        const childPartsCount = getPartsCountForLocation(child.id);
-                        
-                        return (
-                          <div
-                            key={child.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLocationClick(child.id);
-                            }}
-                            className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${
-                              selectedLocationId === child.id 
-                                ? 'bg-red-900/30 border-red-600' 
-                                : 'bg-gray-900/50 border-gray-800 hover:border-red-900/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 flex-1">
-                              <div 
-                                className="w-3 h-3 rounded"
-                                style={{ backgroundColor: child.color }}
-                              />
-                              <div>
-                                <span className="text-sm text-white">
-                                  {child.bin_description || child.location_area}
-                                </span>
-                                {child.storage_type && (
-                                  <p className="text-xs text-gray-500">{child.storage_type}</p>
-                                )}
-                              </div>
-                            </div>
-                            <Badge 
-                              variant="outline"
-                              className="text-xs border-gray-700"
-                              style={{ color: child.color }}
-                            >
-                              {childPartsCount}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-
-                      {children.length === 0 && directPartsCount === 0 && (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-gray-500">No parts in this location</p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
+                <div className="flex-1 overflow-auto">
+                  <LocationTree
+                    locations={locations}
+                    parts={allParts}
+                    selectedLocation={selectedLocation}
+                    expandedLocations={expandedLocations}
+                    onLocationSelect={handleLocationSelect}
+                    onToggleExpand={(locId) => {
+                      const newExpanded = new Set(expandedLocations);
+                      if (newExpanded.has(locId)) {
+                        newExpanded.delete(locId);
+                      } else {
+                        newExpanded.add(locId);
+                      }
+                      setExpandedLocations(newExpanded);
+                    }}
+                    searchTerm={searchTerm}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Selected Location Parts List */}
-        {selectedLocationId && (
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-600/50">
-            <CardHeader className="border-b border-red-900/30 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Package className="w-5 h-5 text-red-400" />
-                  <CardTitle className="text-white text-base">
-                    Parts in {locations.find(l => l.id === selectedLocationId)?.location_area || 'Location'}
-                    {locations.find(l => l.id === selectedLocationId)?.bin_description && 
-                      ` - ${locations.find(l => l.id === selectedLocationId)?.bin_description}`
-                    }
-                  </CardTitle>
-                  <Badge variant="outline" className="border-red-600 text-red-400">
-                    {selectedLocationParts.length} parts
-                  </Badge>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedLocationId(null)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <XIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              {selectedLocationParts.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No parts in this location
+        {/* Toggle Button */}
+        <div className="flex items-start pt-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowLeftPane(!showLeftPane)}
+            className="bg-black/40 border border-red-900/30 hover:bg-red-950/30"
+          >
+            {showLeftPane ? (
+              <ChevronLeft className="w-4 h-4 text-white" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-white" />
+            )}
+          </Button>
+        </div>
+
+        {/* Right Pane - Parts Display */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Breadcrumb and Location Images */}
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <InventoryBreadcrumb
+                path={currentPath}
+                onPathClick={handleBreadcrumbClick}
+                onClearSelection={handleClearSelection}
+              />
+            </div>
+            {hasLocationImages && (
+              <Button
+                onClick={handleViewLocationImages}
+                variant="outline"
+                className="border-red-900/30 hover:bg-red-950/30 gap-2"
+              >
+                <ImageIcon className="w-4 h-4" />
+                View Location Photos ({selectedLocationData.photos.length})
+              </Button>
+            )}
+          </div>
+
+          {/* Parts List */}
+          <Card className="flex-1 bg-black/40 backdrop-blur-xl border border-red-900/30 overflow-hidden">
+            <CardContent className="p-4 h-full overflow-auto">
+              {filteredParts.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  {selectedLocation ? 'No parts found in this location' : 'Select a location to view parts'}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {selectedLocationParts.map(part => {
-                    const vendor = vendors.find(v => v.id === part.vendor_id);
-                    const category = categories.find(c => c.id === part.part_category_id);
-                    const categoryPath = getCategoryPath(part.part_category_id, categories);
-                    const make = makes.find(m => m.id === part.car_make_id);
-                    const model = models.find(m => m.id === part.car_model_id);
-                    const year = years.find(y => y.id === part.car_year_id);
-                    
-                    return (
-                      <div
-                        key={part.id}
-                        onClick={() => setSelectedPart(part)}
-                        className="p-3 bg-gray-900/50 rounded border border-gray-700 hover:border-red-900/50 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h5 className="text-white text-sm font-medium flex-1">
-                            {part.part_name}
-                          </h5>
-                          <Badge 
-                            style={{ backgroundColor: statusColors[part.status] }}
-                            className="text-white text-xs shrink-0"
-                          >
-                            {part.status}
-                          </Badge>
-                        </div>
-                        {part.vendor_part_number && (
-                          <p className="text-xs text-gray-400 font-mono mb-2">
-                            {part.vendor_part_number}
-                          </p>
-                        )}
-                        {categoryPath && (
-                          <p className="text-xs mb-2" style={{ color: category?.color || '#9CA3AF' }}>
-                            {categoryPath}
-                          </p>
-                        )}
-                        {(make || model || year) && (
-                          <p className="text-xs text-blue-400 mb-2">
-                            {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-gray-500">Qty:</span>
-                          <span className="text-white font-semibold">
-                            {part.quantity_on_hand || 0}
-                          </span>
-                        </div>
-                        {vendor && (
-                          <p className="text-xs text-gray-500">Vendor: {vendor.vendor_name}</p>
-                        )}
-                        {part.global_all_builds && (
-                          <Badge variant="outline" className="border-green-500 text-green-400 text-xs mt-2">
-                            Global
-                          </Badge>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div>
+                  <div className="mb-4 text-sm text-gray-400">
+                    {filteredParts.length} part{filteredParts.length !== 1 ? 's' : ''} found
+                  </div>
+                  <PartsListView
+                    parts={filteredParts}
+                    categories={categories}
+                    selectedCategoryId={null}
+                    onPartClick={() => {}}
+                    showGrouping={false}
+                  />
                 </div>
               )}
             </CardContent>
           </Card>
-        )}
-
-        {/* Unassigned Parts */}
-        {unassignedParts.length > 0 && (
-          <Card className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
-            <CardHeader className="border-b border-yellow-900/30 p-4">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-yellow-400" />
-                <CardTitle className="text-white text-base">Unassigned Location</CardTitle>
-                <Badge variant="outline" className="border-yellow-500 text-yellow-400">
-                  {filterParts(unassignedParts).length} parts
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filterParts(unassignedParts).map(part => {
-                  const category = categories.find(c => c.id === part.part_category_id);
-                  const categoryPath = getCategoryPath(part.part_category_id, categories);
-                  
-                  return (
-                    <div
-                      key={part.id}
-                      onClick={() => setSelectedPart(part)}
-                      className="p-3 bg-gray-900/50 rounded border border-gray-700 hover:border-yellow-900/50 transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h5 className="text-white text-sm font-medium flex-1 truncate">
-                          {part.part_name}
-                        </h5>
-                        <Badge 
-                          style={{ backgroundColor: statusColors[part.status] }}
-                          className="text-white text-xs shrink-0"
-                        >
-                          {part.status}
-                        </Badge>
-                      </div>
-                      {part.vendor_part_number && (
-                        <p className="text-xs text-gray-400 font-mono mb-2">
-                          {part.vendor_part_number}
-                        </p>
-                      )}
-                      {categoryPath && (
-                        <p className="text-xs mb-2" style={{ color: category?.color || '#9CA3AF' }}>
-                          {categoryPath}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">Quantity:</span>
-                        <span className="text-white font-semibold">
-                          {part.quantity_on_hand || 0}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {partsLoading || locationsLoading ? (
-          <div className="text-center py-8 text-gray-500">Loading inventory...</div>
-        ) : activeLocations.length === 0 ? (
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardContent className="p-8 text-center">
-              <MapPin className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400">No locations configured yet.</p>
-              <p className="text-sm text-gray-600 mt-2">
-                Add locations in Admin Config → Locations
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
+        </div>
       </div>
 
-      {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
-          onClose={() => setSelectedPart(null)}
-        />
-      )}
+      <ImageGallery
+        isOpen={galleryOpen}
+        images={galleryImages}
+        currentIndex={currentImageIndex}
+        onClose={() => setGalleryOpen(false)}
+        onNavigate={handleNavigateGallery}
+      />
     </>
   );
 }
