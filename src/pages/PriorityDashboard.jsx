@@ -1,20 +1,14 @@
 import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Flame, Loader2, FolderKanban, LayoutGrid, List } from "lucide-react";
-import { createPageUrl } from "@/utils";
+import { Flame, Loader2, FolderKanban } from "lucide-react";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
-import PriorityTaskList from "../components/priority/PriorityTaskList";
 
 export default function PriorityDashboard() {
   const [selectedTask, setSelectedTask] = useState(null);
-  const [viewMode, setViewMode] = useState('cards');
-  const [listGroupBy, setListGroupBy] = useState('category');
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
@@ -85,37 +79,15 @@ export default function PriorityDashboard() {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-12 h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
-                <Flame className="w-6 h-6 text-red-500" />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white">PRIORITY DASHBOARD</h1>
-                <p className="text-sm text-gray-400">
-                  {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
+              <Flame className="w-6 h-6 text-red-500" />
             </div>
-            
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-2 bg-gray-900/50 border border-red-900/30 rounded-lg p-1">
-              <Button
-                variant={viewMode === 'cards' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('cards')}
-                className={viewMode === 'cards' ? 'bg-red-600 hover:bg-red-700' : ''}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('list')}
-                className={viewMode === 'list' ? 'bg-red-600 hover:bg-red-700' : ''}
-              >
-                <List className="w-4 h-4" />
-              </Button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">PRIORITY DASHBOARD</h1>
+              <p className="text-sm text-gray-400">
+                {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
+              </p>
             </div>
           </div>
 
@@ -132,7 +104,7 @@ export default function PriorityDashboard() {
                 </p>
               </CardContent>
             </Card>
-          ) : viewMode === 'cards' ? (
+          ) : (
             <div className="space-y-6">
               {Object.entries(tasksByProject).map(([projectId, tasks]) => {
                 const project = projects.find(p => p.id === projectId);
@@ -145,12 +117,7 @@ export default function PriorityDashboard() {
                         <div className="flex items-center gap-3">
                           <FolderKanban className="w-5 h-5 text-red-400" />
                           <div>
-                            <Link 
-                              to={createPageUrl("ProjectDetail") + `?id=${project.id}`}
-                              className="hover:text-red-400 transition-colors"
-                            >
-                              <CardTitle className="text-white text-lg hover:text-red-400 transition-colors">{project.name}</CardTitle>
-                            </Link>
+                            <CardTitle className="text-white text-lg">{project.name}</CardTitle>
                             {project.client_name && (
                               <p className="text-sm text-gray-400">{project.client_name}</p>
                             )}
@@ -183,17 +150,6 @@ export default function PriorityDashboard() {
                 );
               })}
             </div>
-          ) : (
-            <PriorityTaskList
-              tasks={activePriorityTasks}
-              projects={projects}
-              categories={categories}
-              teamMembers={teamMembers}
-              statuses={statuses}
-              groupBy={listGroupBy}
-              onGroupByChange={setListGroupBy}
-              onTaskClick={setSelectedTask}
-            />
           )}
         </div>
       </div>
