@@ -61,30 +61,37 @@ export default function PartsTracker() {
           </div>
 
           <TabsContent value="parts-master" className="mt-4">
-            <PartsMasterList />
+            <PartsMasterList onPartClick={handlePartClick} />
           </TabsContent>
 
           <TabsContent value="need-to-buy" className="mt-4">
-            <NeedToBuy />
+            <NeedToBuy onPartClick={handlePartClick} />
           </TabsContent>
 
           <TabsContent value="on-order" className="mt-4">
-            <OnOrder />
+            <OnOrder onPartClick={handlePartClick} />
           </TabsContent>
 
           <TabsContent value="inventory" className="mt-4">
-            <InventoryLocations />
+            <InventoryLocations onPartClick={handlePartClick} />
           </TabsContent>
 
           <TabsContent value="builds" className="mt-4">
-            <BuildsDashboard />
+            <BuildsDashboard onPartClick={handlePartClick} />
           </TabsContent>
 
           <TabsContent value="inventory-explorer" className="mt-4">
-            <InventoryExplorerLayout />
+            <InventoryExplorerLayout onPartClick={handlePartClick} />
           </TabsContent>
         </Tabs>
       </div>
     </div>
+
+    {selectedPart && (
+      <PartDetailModal
+        part={selectedPart}
+        onClose={() => setSelectedPart(null)}
+      />
+    )}
   );
 }
