@@ -74,6 +74,7 @@ const MobileBottomNav = ({ currentPath }) => {
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priority", url: createPageUrl("PriorityDashboard"), icon: Flame },
     { title: "Tasks", url: createPageUrl("TasksExplorer"), icon: ListChecks },
+    { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
     { title: "Admin", url: createPageUrl("AdminConfig"), icon: Settings },
   ];
 
