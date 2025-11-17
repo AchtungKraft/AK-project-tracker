@@ -20,38 +20,38 @@ export default function PartsTracker() {
         </div>
 
         <Tabs defaultValue="parts-master" className="w-full">
-          <TabsList className="bg-gray-900/50 border border-red-900/30 flex-wrap h-auto">
-            <TabsTrigger value="parts-master" className="gap-2">
-              <List className="w-4 h-4" />
-              <span className="hidden sm:inline">PARTS MASTER</span>
-              <span className="sm:hidden">MASTER</span>
-            </TabsTrigger>
-            <TabsTrigger value="need-to-buy" className="gap-2">
-              <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline">NEED TO BUY</span>
-              <span className="sm:hidden">BUY</span>
-            </TabsTrigger>
-            <TabsTrigger value="on-order" className="gap-2">
-              <Truck className="w-4 h-4" />
-              <span className="hidden sm:inline">ON ORDER</span>
-              <span className="sm:hidden">ORDERS</span>
-            </TabsTrigger>
-            <TabsTrigger value="inventory" className="gap-2">
-              <MapPin className="w-4 h-4" />
-              <span className="hidden sm:inline">LOCATIONS</span>
-              <span className="sm:hidden">LOCATIONS</span>
-            </TabsTrigger>
-            <TabsTrigger value="builds" className="gap-2">
-              <FolderTree className="w-4 h-4" />
-              <span className="hidden sm:inline">BUILDS</span>
-              <span className="sm:hidden">BUILDS</span>
-            </TabsTrigger>
-            <TabsTrigger value="inventory-explorer" className="gap-2">
-              <Warehouse className="w-4 h-4" />
-              <span className="hidden sm:inline">INVENTORY EXPLORER</span>
-              <span className="sm:hidden">EXPLORER</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+            <TabsList className="bg-gray-900/50 border border-red-900/30 inline-flex md:flex md:flex-wrap h-auto min-w-max md:min-w-0 md:w-full">
+              <TabsTrigger value="parts-master" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">PARTS MASTER</span>
+                <span className="sm:hidden">MASTER</span>
+              </TabsTrigger>
+              <TabsTrigger value="need-to-buy" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <ShoppingCart className="w-4 h-4" />
+                <span className="hidden sm:inline">NEED TO BUY</span>
+                <span className="sm:hidden">BUY</span>
+              </TabsTrigger>
+              <TabsTrigger value="on-order" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <Truck className="w-4 h-4" />
+                <span className="hidden sm:inline">ON ORDER</span>
+                <span className="sm:hidden">ORDERS</span>
+              </TabsTrigger>
+              <TabsTrigger value="inventory" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <MapPin className="w-4 h-4" />
+                <span>LOCATIONS</span>
+              </TabsTrigger>
+              <TabsTrigger value="builds" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <FolderTree className="w-4 h-4" />
+                <span>BUILDS</span>
+              </TabsTrigger>
+              <TabsTrigger value="inventory-explorer" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <Warehouse className="w-4 h-4" />
+                <span className="hidden sm:inline">INVENTORY EXPLORER</span>
+                <span className="sm:hidden">EXPLORER</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="parts-master" className="mt-4">
             <PartsMasterList />
