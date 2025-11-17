@@ -505,7 +505,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                 type="button"
                 onClick={onClose}
                 variant="outline"
-                className="w-full border-gray-700"
+                className="w-full border-gray-700 min-h-[44px]"
               >
                 Close
               </Button>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,8 @@ export default function NeedToBuy() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
   const [selectedPart, setSelectedPart] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
 
   const { data: parts = [], isLoading } = useQuery({
     queryKey: ['parts'],
@@ -96,6 +98,17 @@ export default function NeedToBuy() {
   };
 
   const totalEstimatedCost = filteredParts.reduce((sum, part) => sum + (part.cost || 0), 0);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredParts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedParts = filteredParts.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, projectFilter]);
 
   return (
     <>
@@ -197,7 +210,7 @@ export default function NeedToBuy() {
               <p className="text-gray-400">All caught up! No parts need to be bought.</p>
             </div>
           ) : (
-            filteredParts.map(part => {
+            paginatedParts.map(part => {
               const vendor = vendors.find(v => v.id === part.vendor_id);
               const categoryPath = getCategoryPath(part.part_category_id, categories);
               const category = categories.find(c => c.id === part.part_category_id);
@@ -312,6 +325,66 @@ export default function NeedToBuy() {
             })
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {filteredParts.length > 0 && totalPages > 1 && (
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="text-sm text-gray-400">
+                  Showing {startIndex + 1}-{Math.min(endIndex, filteredParts.length)} of {filteredParts.length} parts
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="border-gray-700 hover:bg-red-950/30"
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-10 border-gray-700 ${
+                            currentPage === pageNum ? 'bg-red-600 text-white' : 'hover:bg-red-950/30'
+                          }`}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="border-gray-700 hover:bg-red-950/30"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {selectedPart && (

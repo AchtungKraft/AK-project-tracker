@@ -810,6 +810,17 @@ export default function EditPartDrawer({ partId, onClose }) {
             {/* Journal Section */}
             <PartJournalSection partId={partId} />
           </div>
+
+          {/* Bottom Close Button for Mobile */}
+          <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700">
+            <Button
+              onClick={onClose}
+              variant="outline"
+              className="w-full border-gray-700 min-h-[44px]"
+            >
+              Close
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
 
