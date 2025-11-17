@@ -162,15 +162,15 @@ export default function InventoryLocations() {
 
   return (
     <>
-      <div className="flex gap-4 h-[calc(100vh-12rem)]">
+      <div className="flex flex-col md:flex-row gap-4 h-auto md:h-[calc(100vh-12rem)]">
         {/* Left Pane - Location Tree */}
         <div 
           className={`transition-all duration-300 ${
-            showLeftPane ? 'w-[30%]' : 'w-0'
+            showLeftPane ? 'w-full md:w-[30%]' : 'w-0'
           } overflow-hidden`}
         >
           {showLeftPane && (
-            <Card className="h-full bg-black/40 backdrop-blur-xl border border-red-900/30 flex flex-col">
+            <Card className="h-[400px] md:h-full bg-black/40 backdrop-blur-xl border border-red-900/30 flex flex-col">
               <CardContent className="p-4 flex-1 flex flex-col overflow-hidden">
                 <div className="mb-4">
                   <div className="relative">
@@ -209,7 +209,7 @@ export default function InventoryLocations() {
         </div>
 
         {/* Toggle Button */}
-        <div className="flex items-start pt-4">
+        <div className="flex items-start pt-0 md:pt-4">
           <Button
             variant="ghost"
             size="icon"
@@ -225,9 +225,9 @@ export default function InventoryLocations() {
         </div>
 
         {/* Right Pane - Parts Display */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden w-full md:w-auto">
           {/* Breadcrumb and Location Images */}
-          <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="mb-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-4">
             <div className="flex-1">
               <InventoryBreadcrumb
                 path={currentPath}
@@ -248,7 +248,7 @@ export default function InventoryLocations() {
           </div>
 
           {/* Parts List */}
-          <Card className="flex-1 bg-black/40 backdrop-blur-xl border border-red-900/30 overflow-hidden">
+          <Card className="flex-1 bg-black/40 backdrop-blur-xl border border-red-900/30 overflow-hidden min-h-[400px]">
             <CardContent className="p-4 h-full overflow-auto">
               {filteredParts.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
