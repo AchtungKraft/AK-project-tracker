@@ -1,22 +1,32 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Flame, Loader2, FolderKanban } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function PriorityDashboard() {
   const [selectedTask, setSelectedTask] = useState(null);
-  const [groupBy, setGroupBy] = useState('status');
+  const [groupBy, setGroupBy] = useState('category');
+  const queryClient = useQueryClient();
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
     queryFn: () => base44.entities.Task.filter({ is_priority: true }),
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 
   const { data: projects = [] } = useQuery({
@@ -101,10 +111,41 @@ export default function PriorityDashboard() {
     return grouped;
   }, [activePriorityTasks, groupBy, statuses, teamMembers, categories]);
 
-  const handleToggleComplete = (task) => {
-    // This function is passed to TaskCard but we'll handle it via TaskDetailDrawer
-    // since we want to maintain consistency
-    setSelectedTask(task);
+  const handleToggleComplete = async (task) => {
+    const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+    const completedStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes('complete') || label.includes('done');
+    });
+
+    const isCurrentlyComplete = task.status_id === completedStatus?.id;
+    
+    if (isCurrentlyComplete) {
+      // Reopen task - set to first non-complete status
+      const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
+      if (firstStatus) {
+        await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: {
+            status_id: firstStatus.id,
+            completed_date: null,
+          }
+        });
+        toast.success('Task reopened');
+      }
+    } else {
+      // Complete task
+      if (completedStatus) {
+        await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: {
+            status_id: completedStatus.id,
+            completed_date: new Date().toISOString(),
+          }
+        });
+        toast.success('Task completed');
+      }
+    }
   };
 
   if (tasksLoading) {
