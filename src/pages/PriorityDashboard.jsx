@@ -1,14 +1,18 @@
 import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Flame, Loader2, FolderKanban } from "lucide-react";
+import { createPageUrl } from "@/utils";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function PriorityDashboard() {
   const [selectedTask, setSelectedTask] = useState(null);
+  const [groupBy, setGroupBy] = useState('status');
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
@@ -43,20 +47,59 @@ export default function PriorityDashboard() {
   });
   const activePriorityTasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
 
-  // Group tasks by project
+  // Group tasks by project, then sub-group by selected filter
   const tasksByProject = useMemo(() => {
     const grouped = {};
     
     activePriorityTasks.forEach(task => {
       const projectId = task.project_id;
       if (!grouped[projectId]) {
-        grouped[projectId] = [];
+        grouped[projectId] = { tasks: [], groups: {} };
       }
-      grouped[projectId].push(task);
+      grouped[projectId].tasks.push(task);
+    });
+    
+    // Sub-group tasks within each project
+    Object.keys(grouped).forEach(projectId => {
+      const projectTasks = grouped[projectId].tasks;
+      const groups = {};
+      
+      projectTasks.forEach(task => {
+        let groupKey, groupLabel, groupColor;
+        
+        if (groupBy === 'status') {
+          const status = statuses.find(s => s.id === task.status_id);
+          groupKey = task.status_id || 'no-status';
+          groupLabel = status?.label || 'No Status';
+          groupColor = status?.color || '#6B7280';
+        } else if (groupBy === 'assigned') {
+          const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+          groupKey = task.assigned_team_member_id || 'unassigned';
+          groupLabel = member?.full_name || 'Unassigned';
+          groupColor = '#6B7280';
+        } else if (groupBy === 'category') {
+          const category = categories.find(c => c.id === task.category_id);
+          groupKey = task.category_id || 'no-category';
+          groupLabel = category?.name || 'No Category';
+          groupColor = category?.color || '#6B7280';
+        }
+        
+        if (!groups[groupKey]) {
+          groups[groupKey] = {
+            label: groupLabel,
+            color: groupColor,
+            tasks: []
+          };
+        }
+        
+        groups[groupKey].tasks.push(task);
+      });
+      
+      grouped[projectId].groups = groups;
     });
     
     return grouped;
-  }, [activePriorityTasks]);
+  }, [activePriorityTasks, groupBy, statuses, teamMembers, categories]);
 
   const handleToggleComplete = (task) => {
     // This function is passed to TaskCard but we'll handle it via TaskDetailDrawer
@@ -91,6 +134,22 @@ export default function PriorityDashboard() {
             </div>
           </div>
 
+          {/* Group By Filter */}
+          {activePriorityTasks.length > 0 && (
+            <div className="flex justify-end">
+              <Select value={groupBy} onValueChange={setGroupBy}>
+                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">Group by Status</SelectItem>
+                  <SelectItem value="assigned">Group by Assigned</SelectItem>
+                  <SelectItem value="category">Group by Category</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Priority Tasks by Project */}
           {activePriorityTasks.length === 0 ? (
             <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -106,9 +165,11 @@ export default function PriorityDashboard() {
             </Card>
           ) : (
             <div className="space-y-6">
-              {Object.entries(tasksByProject).map(([projectId, tasks]) => {
+              {Object.entries(tasksByProject).map(([projectId, projectData]) => {
                 const project = projects.find(p => p.id === projectId);
                 if (!project) return null;
+                
+                const { tasks, groups } = projectData;
 
                 return (
                   <Card key={projectId} className="bg-black/40 backdrop-blur-xl border-2 border-red-600/50 shadow-lg shadow-red-600/10">
@@ -117,7 +178,12 @@ export default function PriorityDashboard() {
                         <div className="flex items-center gap-3">
                           <FolderKanban className="w-5 h-5 text-red-400" />
                           <div>
-                            <CardTitle className="text-white text-lg">{project.name}</CardTitle>
+                            <Link 
+                              to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                              className="hover:text-red-400 transition-colors"
+                            >
+                              <CardTitle className="text-white text-lg hover:underline">{project.name}</CardTitle>
+                            </Link>
                             {project.client_name && (
                               <p className="text-sm text-gray-400">{project.client_name}</p>
                             )}
@@ -132,17 +198,45 @@ export default function PriorityDashboard() {
                       </div>
                     </CardHeader>
                     <CardContent className="p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {tasks.map(task => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            categories={categories}
-                            teamMembers={teamMembers}
-                            statuses={statuses}
-                            onToggleComplete={handleToggleComplete}
-                            onClick={() => setSelectedTask(task)}
-                          />
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(groups).map(([groupKey, groupData]) => (
+                          <div key={groupKey} className="col-span-1">
+                            <div 
+                              className="bg-black/40 rounded-lg border-2 overflow-hidden"
+                              style={{ borderColor: groupData.color }}
+                            >
+                              <div 
+                                className="p-3 border-b-2"
+                                style={{ 
+                                  borderBottomColor: groupData.color,
+                                  backgroundColor: `${groupData.color}15`
+                                }}
+                              >
+                                <h3 
+                                  className="font-semibold text-sm"
+                                  style={{ color: groupData.color }}
+                                >
+                                  {groupData.label}
+                                </h3>
+                                <span className="text-xs text-gray-400">
+                                  {groupData.tasks.length} {groupData.tasks.length === 1 ? 'task' : 'tasks'}
+                                </span>
+                              </div>
+                              <div className="p-3 space-y-2">
+                                {groupData.tasks.map(task => (
+                                  <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    categories={categories}
+                                    teamMembers={teamMembers}
+                                    statuses={statuses}
+                                    onToggleComplete={handleToggleComplete}
+                                    onClick={() => setSelectedTask(task)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </CardContent>
