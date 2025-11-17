@@ -46,6 +46,11 @@ export default function PartsTracker() {
               <span className="hidden sm:inline">BUILDS</span>
               <span className="sm:hidden">BUILDS</span>
             </TabsTrigger>
+            <TabsTrigger value="inventory-explorer" className="gap-2">
+              <Warehouse className="w-4 h-4" />
+              <span className="hidden sm:inline">INVENTORY EXPLORER</span>
+              <span className="sm:hidden">EXPLORER</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="parts-master" className="mt-4">
@@ -66,6 +71,10 @@ export default function PartsTracker() {
 
           <TabsContent value="builds" className="mt-4">
             <BuildsDashboard />
+          </TabsContent>
+
+          <TabsContent value="inventory-explorer" className="mt-4">
+            <InventoryExplorerLayout />
           </TabsContent>
         </Tabs>
       </div>
