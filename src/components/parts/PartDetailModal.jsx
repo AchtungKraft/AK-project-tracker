@@ -23,6 +23,12 @@ export default function PartDetailModal({ part, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({ ...part });
 
+  // Update formData when part changes
+  React.useEffect(() => {
+    setFormData({ ...part });
+    setEditing(false);
+  }, [part]);
+
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: () => base44.entities.PartCategory.list(),
