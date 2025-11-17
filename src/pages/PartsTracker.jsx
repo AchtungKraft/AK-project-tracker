@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse } from "lucide-react";
+import { ShoppingCart, Truck, MapPin, List, FolderTree } from "lucide-react";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import NeedToBuy from "../components/parts/NeedToBuy";
 import OnOrder from "../components/parts/OnOrder";
 import InventoryLocations from "../components/parts/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
-import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
 
 export default function PartsTracker() {
   return (
