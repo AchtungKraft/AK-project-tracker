@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShoppingCart, Search, Filter, CheckCircle, Package, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
-import PartDetailModal from "./PartDetailModal";
 
 const getCategoryPath = (categoryId, categories) => {
   if (!categoryId) return null;
