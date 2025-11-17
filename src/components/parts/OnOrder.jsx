@@ -247,7 +247,7 @@ export default function OnOrder({ onPartClick }) {
                 <Card 
                   key={part.id}
                   className="bg-black/40 backdrop-blur-xl border border-yellow-900/30 hover:border-yellow-900/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedPart(part)}
+                  onClick={() => onPartClick(part)}
                 >
                   <CardHeader className="border-b border-yellow-900/30 p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -414,13 +414,6 @@ export default function OnOrder({ onPartClick }) {
           </Card>
         )}
       </div>
-
-      {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
-          onClose={() => setSelectedPart(null)}
-        />
-      )}
     </>
   );
 }
