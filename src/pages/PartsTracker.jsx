@@ -7,13 +7,13 @@ import OnOrder from "../components/parts/OnOrder";
 import InventoryLocations from "../components/parts/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
 import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
-import PartDetailModal from "../components/parts/PartDetailModal";
+import EditPartDrawer from "../components/parts/EditPartDrawer";
 
 export default function PartsTracker() {
-  const [selectedPart, setSelectedPart] = useState(null);
+  const [selectedPartId, setSelectedPartId] = useState(null);
 
   const handlePartClick = (part) => {
-    setSelectedPart(part);
+    setSelectedPartId(part.id);
   };
 
   return (
@@ -88,10 +88,10 @@ export default function PartsTracker() {
         </div>
       </div>
 
-      {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
-          onClose={() => setSelectedPart(null)}
+      {selectedPartId && (
+        <EditPartDrawer
+          partId={selectedPartId}
+          onClose={() => setSelectedPartId(null)}
         />
       )}
     </>
