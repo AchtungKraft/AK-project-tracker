@@ -9,6 +9,7 @@ import LocationTree from "../inventory/LocationTree";
 import InventoryBreadcrumb from "../inventory/InventoryBreadcrumb";
 import PartsListView from "./PartsListView";
 import ImageGallery from "./ImageGallery";
+import PartDetailModal from "./PartDetailModal";
 
 const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
@@ -21,6 +22,7 @@ export default function InventoryLocations() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [selectedPart, setSelectedPart] = useState(null);
 
   // Load state from localStorage
   useEffect(() => {
@@ -114,6 +116,14 @@ export default function InventoryLocations() {
     const matchesLocation = part.location_id && locationIds.includes(part.location_id);
 
     return matchesSearch && matchesLocation;
+  });
+
+  // Unassigned parts
+  const unassignedParts = allParts.filter(part => {
+    const matchesSearch = !searchTerm || 
+      part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
+    return !part.location_id && matchesSearch;
   });
 
   const handleLocationSelect = (locationId) => {
@@ -254,13 +264,39 @@ export default function InventoryLocations() {
                     parts={filteredParts}
                     categories={categories}
                     selectedCategoryId={null}
-                    onPartClick={() => {}}
+                    onPartClick={setSelectedPart}
                     showGrouping={false}
                   />
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Unassigned Parts Section */}
+          {unassignedParts.length > 0 && (
+            <Card className="mt-4 bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center justify-center w-8 h-8 bg-yellow-600/20 rounded border border-yellow-600/30">
+                    <span className="text-yellow-400 text-lg">⚠</span>
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold">Unassigned Location</h3>
+                    <p className="text-sm text-gray-400">
+                      {unassignedParts.length} part{unassignedParts.length !== 1 ? 's' : ''} without a location - click to assign
+                    </p>
+                  </div>
+                </div>
+                <PartsListView
+                  parts={unassignedParts}
+                  categories={categories}
+                  selectedCategoryId={null}
+                  onPartClick={setSelectedPart}
+                  showGrouping={false}
+                />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -271,6 +307,13 @@ export default function InventoryLocations() {
         onClose={() => setGalleryOpen(false)}
         onNavigate={handleNavigateGallery}
       />
+
+      {selectedPart && (
+        <PartDetailModal
+          part={selectedPart}
+          onClose={() => setSelectedPart(null)}
+        />
+      )}
     </>
   );
 }
