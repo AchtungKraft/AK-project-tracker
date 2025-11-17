@@ -66,6 +66,11 @@ export default function InventoryLocations() {
       return;
     }
 
+    if (selectedLocation === 'unassigned') {
+      setCurrentPath([{ id: 'unassigned', name: 'Unassigned Location', color: '#EAB308' }]);
+      return;
+    }
+
     const buildPath = (locId) => {
       const path = [];
       let current = locations.find(l => l.id === locId);
@@ -110,6 +115,10 @@ export default function InventoryLocations() {
       return matchesSearch;
     }
 
+    if (selectedLocation === 'unassigned') {
+      return matchesSearch && !part.location_id;
+    }
+
     const locationIds = getDescendantLocationIds(selectedLocation);
     const matchesLocation = part.location_id && locationIds.includes(part.location_id);
 
@@ -148,7 +157,7 @@ export default function InventoryLocations() {
     }
   };
 
-  const selectedLocationData = locations.find(l => l.id === selectedLocation);
+  const selectedLocationData = selectedLocation === 'unassigned' ? null : locations.find(l => l.id === selectedLocation);
   const hasLocationImages = selectedLocationData?.photos && selectedLocationData.photos.length > 0;
 
   return (
@@ -243,7 +252,9 @@ export default function InventoryLocations() {
             <CardContent className="p-4 h-full overflow-auto">
               {filteredParts.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  {selectedLocation ? 'No parts found in this location' : 'Select a location to view parts'}
+                  {selectedLocation 
+                    ? (selectedLocation === 'unassigned' ? 'No unassigned parts found' : 'No parts found in this location')
+                    : 'Select a location to view parts'}
                 </div>
               ) : (
                 <div>
