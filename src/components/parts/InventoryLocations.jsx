@@ -12,7 +12,7 @@ import ImageGallery from "./ImageGallery";
 
 const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
-export default function InventoryLocations() {
+export default function InventoryLocations({ onPartClick }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [expandedLocations, setExpandedLocations] = useState(new Set());
   const [currentPath, setCurrentPath] = useState([]);
@@ -265,7 +265,7 @@ export default function InventoryLocations() {
                     parts={filteredParts}
                     categories={categories}
                     selectedCategoryId={null}
-                    onPartClick={() => {}}
+                    onPartClick={onPartClick}
                     showGrouping={false}
                   />
                 </div>

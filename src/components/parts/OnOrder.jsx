@@ -24,12 +24,11 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function OnOrder() {
+export default function OnOrder({ onPartClick }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
-  const [selectedPart, setSelectedPart] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filtersExpanded, setFiltersExpanded] = useState(() => {
     const saved = localStorage.getItem('onOrder_filtersExpanded');

@@ -14,7 +14,7 @@ import EditPartDrawer from "./EditPartDrawer";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
-export default function PartsExplorerLayout() {
+export default function PartsExplorerLayout({ onPartClick }) {
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [categoryPath, setCategoryPath] = useState([]);
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -23,7 +23,6 @@ export default function PartsExplorerLayout() {
   const [viewMode, setViewMode] = useState('list');
   const [showGrouping, setShowGrouping] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedPart, setSelectedPart] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
   
@@ -230,14 +229,14 @@ export default function PartsExplorerLayout() {
                     parts={paginatedParts}
                     categories={categories}
                     selectedCategoryId={selectedCategoryId}
-                    onPartClick={(partId) => setSelectedPart(partId)}
+                    onPartClick={onPartClick}
                   />
                 ) : (
                   <PartsListView
                     parts={paginatedParts}
                     categories={categories}
                     selectedCategoryId={selectedCategoryId}
-                    onPartClick={(partId) => setSelectedPart(partId)}
+                    onPartClick={onPartClick}
                     showGrouping={showGrouping}
                   />
                 )}
@@ -282,15 +281,6 @@ export default function PartsExplorerLayout() {
       {showAddModal && (
         <UnifiedAddPartModal onClose={() => setShowAddModal(false)} />
       )}
-
-      {selectedPart && (
-        <EditPartDrawer
-          partId={selectedPart}
-          onClose={() => setSelectedPart(null)}
-        />
-      )}
-
-
     </>
   );
 }

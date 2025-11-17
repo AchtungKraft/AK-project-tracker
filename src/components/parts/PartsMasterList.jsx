@@ -30,6 +30,6 @@ const getCategoryPath = (categoryId, categories) => {
 
 import PartsExplorerLayout from "./PartsExplorerLayout";
 
-export default function PartsMasterList() {
-  return <PartsExplorerLayout />;
+export default function PartsMasterList({ onPartClick }) {
+  return <PartsExplorerLayout onPartClick={onPartClick} />;
 }

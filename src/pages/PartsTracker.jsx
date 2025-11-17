@@ -7,8 +7,15 @@ import OnOrder from "../components/parts/OnOrder";
 import InventoryLocations from "../components/parts/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
 import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
+import PartDetailModal from "../components/parts/PartDetailModal";
 
 export default function PartsTracker() {
+  const [selectedPart, setSelectedPart] = useState(null);
+
+  const handlePartClick = (part) => {
+    setSelectedPart(part);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">

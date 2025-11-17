@@ -9,7 +9,7 @@ import { FolderTree, Search, Package, Plus, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-export default function BuildsDashboard() {
+export default function BuildsDashboard({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -94,7 +94,8 @@ export default function BuildsDashboard() {
               {globalParts.map((part) =>
             <div
               key={part.id}
-              className="p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-green-900/50 transition-colors">
+              onClick={() => onPartClick(part)}
+              className="p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-green-900/50 transition-colors cursor-pointer">
 
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h4 className="text-white text-sm font-medium">{part.part_name}</h4>
@@ -207,7 +208,8 @@ export default function BuildsDashboard() {
                           {assignedParts.slice(0, 5).map(({ assignment, part }) =>
                       <div
                         key={assignment.id}
-                        className="flex items-center justify-between p-2 bg-gray-900/30 rounded text-xs">
+                        onClick={() => onPartClick(part)}
+                        className="flex items-center justify-between p-2 bg-gray-900/30 rounded text-xs cursor-pointer hover:bg-gray-900/50">
 
                               <span className="text-white truncate flex-1">{part.part_name}</span>
                               <Badge

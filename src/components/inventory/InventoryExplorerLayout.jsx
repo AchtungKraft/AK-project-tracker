@@ -11,7 +11,7 @@ import PartsListView from "../parts/PartsListView";
 
 const EXPLORER_STATE_KEY = 'achtung_inventory_explorer_state';
 
-export default function InventoryExplorerLayout() {
+export default function InventoryExplorerLayout({ onPartClick }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [expandedLocations, setExpandedLocations] = useState(new Set());
   const [viewMode, setViewMode] = useState('list');
@@ -218,7 +218,7 @@ export default function InventoryExplorerLayout() {
                   parts={filteredParts}
                   categories={categories}
                   selectedCategoryId={null}
-                  onPartClick={() => {}}
+                  onPartClick={onPartClick}
                   showGrouping={false}
                 />
               </div>
