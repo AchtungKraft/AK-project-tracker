@@ -118,7 +118,7 @@ export default function PartsGrid({
             return (
               <div
                 key={part.id}
-                onClick={() => onPartClick(part.id)}
+                onClick={() => onPartClick(part)}
                 className="bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
               >
                 {/* Image Section */}

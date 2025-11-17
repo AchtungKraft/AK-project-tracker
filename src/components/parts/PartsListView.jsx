@@ -178,7 +178,7 @@ export default function PartsListView({
 
     return (
       <div
-        onClick={() => onPartClick(part.id)}
+        onClick={() => onPartClick(part)}
         className="flex items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
       >
         {/* Thumbnail */}
