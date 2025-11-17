@@ -63,14 +63,14 @@ export default function PriorityTaskList({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Group By Selector */}
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-gray-400">Group tasks by:</label>
+        <CardContent className="p-2">
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-gray-400">Group by:</label>
             <Select value={groupBy} onValueChange={onGroupByChange}>
-              <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
+              <SelectTrigger className="w-40 h-8 text-xs bg-gray-900/50 border-gray-700 text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -89,20 +89,20 @@ export default function PriorityTaskList({
 
         return (
           <Card key={projectId} className="bg-black/40 backdrop-blur-xl border-2 border-red-600/50 shadow-lg shadow-red-600/10">
-            <CardHeader className="border-b border-red-900/30 p-4">
-              <div className="flex items-center gap-3">
-                <FolderKanban className="w-5 h-5 text-red-400" />
+            <CardHeader className="border-b border-red-900/30 p-2 px-3">
+              <div className="flex items-center gap-2">
+                <FolderKanban className="w-4 h-4 text-red-400" />
                 <div>
                   <Link 
                     to={createPageUrl("ProjectDetail") + `?id=${project.id}`}
                     className="hover:text-red-400 transition-colors"
                   >
-                    <CardTitle className="text-white text-lg hover:text-red-400 transition-colors">
+                    <CardTitle className="text-white text-base hover:text-red-400 transition-colors">
                       {project.name}
                     </CardTitle>
                   </Link>
                   {project.client_name && (
-                    <p className="text-sm text-gray-400">{project.client_name}</p>
+                    <p className="text-xs text-gray-400">{project.client_name}</p>
                   )}
                 </div>
               </div>
@@ -119,14 +119,14 @@ export default function PriorityTaskList({
                 return (
                   <div key={subGroupName}>
                     <div 
-                      className="px-4 py-2 bg-gray-900/50 border-l-4 border-b"
+                      className="px-3 py-1 bg-gray-900/50 border-l-4 border-b"
                       style={{ 
                         borderLeftColor: subGroupColor,
                         borderBottomColor: `${subGroupColor}40`
                       }}
                     >
                       <span 
-                        className="text-sm font-medium"
+                        className="text-xs font-medium"
                         style={{ color: subGroupColor }}
                       >
                         {subGroupName} ({subGroupTasks.length})
@@ -135,15 +135,15 @@ export default function PriorityTaskList({
                     <Table>
                       <TableHeader>
                         <TableRow className="border-b border-red-900/20 hover:bg-transparent">
-                          <TableHead className="text-gray-400 text-xs py-2">Task</TableHead>
-                          <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Status</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-1 h-8">Task</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-1 h-8 hidden lg:table-cell">Status</TableHead>
                           {groupBy === 'category' && (
-                            <TableHead className="text-gray-400 text-xs py-2 hidden xl:table-cell">Assigned</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-1 h-8 hidden xl:table-cell">Assigned</TableHead>
                           )}
                           {groupBy === 'assigned' && (
-                            <TableHead className="text-gray-400 text-xs py-2 hidden lg:table-cell">Category</TableHead>
+                            <TableHead className="text-gray-400 text-xs py-1 h-8 hidden lg:table-cell">Category</TableHead>
                           )}
-                          <TableHead className="text-gray-400 text-xs py-2">Due Date</TableHead>
+                          <TableHead className="text-gray-400 text-xs py-1 h-8">Due</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -157,39 +157,39 @@ export default function PriorityTaskList({
                               onClick={() => onTaskClick(task)}
                               className="border-b border-red-900/10 hover:bg-red-950/20 transition-colors cursor-pointer"
                             >
-                              <TableCell className="font-medium text-white text-sm py-2">
+                              <TableCell className="font-medium text-white text-xs py-1.5">
                                 {task.name}
                               </TableCell>
-                              <TableCell className="hidden lg:table-cell py-2">
+                              <TableCell className="hidden lg:table-cell py-1.5">
                                 {taskStatus && (
                                   <Badge 
                                     style={{ backgroundColor: taskStatus.color }}
-                                    className="text-white text-xs"
+                                    className="text-white text-xs px-1.5 py-0"
                                   >
                                     {taskStatus.label}
                                   </Badge>
                                 )}
                               </TableCell>
                               {groupBy === 'category' && (
-                                <TableCell className="text-gray-300 text-sm hidden xl:table-cell py-2">
+                                <TableCell className="text-gray-300 text-xs hidden xl:table-cell py-1.5">
                                   {teamMembers.find(m => m.id === task.assigned_team_member_id)?.full_name || 'Unassigned'}
                                 </TableCell>
                               )}
                               {groupBy === 'assigned' && (
-                                <TableCell className="text-sm hidden lg:table-cell py-2">
+                                <TableCell className="text-xs hidden lg:table-cell py-1.5">
                                   <span style={{ color: categories.find(c => c.id === task.category_id)?.color || '#D1D5DB' }}>
                                     {getCategoryPath(task.category_id, categories) || '-'}
                                   </span>
                                 </TableCell>
                               )}
-                              <TableCell className="py-2">
+                              <TableCell className="py-1.5">
                                 {task.due_date ? (
-                                  <span className={cn("text-sm", isOverdue ? 'text-red-400 font-medium' : 'text-gray-400')}>
-                                    <Calendar className="w-3 h-3 inline mr-1" />
+                                  <span className={cn("text-xs whitespace-nowrap", isOverdue ? 'text-red-400 font-medium' : 'text-gray-400')}>
+                                    <Calendar className="w-3 h-3 inline mr-0.5" />
                                     {format(new Date(task.due_date), 'MMM d')}
                                   </span>
                                 ) : (
-                                  <span className="text-gray-600 text-sm">-</span>
+                                  <span className="text-gray-600 text-xs">-</span>
                                 )}
                               </TableCell>
                             </TableRow>
