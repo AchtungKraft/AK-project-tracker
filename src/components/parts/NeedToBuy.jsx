@@ -241,7 +241,7 @@ export default function NeedToBuy({ onPartClick }) {
                 <Card 
                   key={part.id}
                   className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-900/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedPart(part)}
+                  onClick={() => onPartClick(part)}
                 >
                   <CardHeader className="border-b border-red-900/30 p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -404,13 +404,6 @@ export default function NeedToBuy({ onPartClick }) {
           </Card>
         )}
       </div>
-
-      {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
-          onClose={() => setSelectedPart(null)}
-        />
-      )}
     </>
   );
 }
