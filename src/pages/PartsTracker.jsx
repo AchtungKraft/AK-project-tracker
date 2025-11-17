@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree } from "lucide-react";
+import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse } from "lucide-react";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import NeedToBuy from "../components/parts/NeedToBuy";
 import OnOrder from "../components/parts/OnOrder";
 import InventoryLocations from "../components/parts/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
+import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
 
 export default function PartsTracker() {
   return (
@@ -44,6 +45,11 @@ export default function PartsTracker() {
                 <FolderTree className="w-4 h-4" />
                 <span>BUILDS</span>
               </TabsTrigger>
+              <TabsTrigger value="inventory-explorer" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                <Warehouse className="w-4 h-4" />
+                <span className="hidden sm:inline">INVENTORY EXPLORER</span>
+                <span className="sm:hidden">EXPLORER</span>
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -65,6 +71,10 @@ export default function PartsTracker() {
 
           <TabsContent value="builds" className="mt-4">
             <BuildsDashboard />
+          </TabsContent>
+
+          <TabsContent value="inventory-explorer" className="mt-4">
+            <InventoryExplorerLayout />
           </TabsContent>
         </Tabs>
       </div>
