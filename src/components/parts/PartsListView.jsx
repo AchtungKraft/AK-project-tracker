@@ -178,8 +178,8 @@ export default function PartsListView({
 
     return (
       <div
-        onClick={() => onPartClick(part)}
-        className="flex items-center gap-2 md:gap-3 p-2 md:p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
+        onClick={() => onPartClick(part.id)}
+        className="flex items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
       >
         {/* Thumbnail */}
         <div 
@@ -223,42 +223,42 @@ export default function PartsListView({
             </Badge>
           </div>
           
-          <div className="flex flex-col md:flex-row md:flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-400">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
             {part.vendor_part_number && (
-              <span className="font-mono truncate">{part.vendor_part_number}</span>
+              <span className="font-mono">{part.vendor_part_number}</span>
             )}
             {(make || model || year) && (
-              <span className="text-blue-400 truncate">
+              <span className="text-blue-400">
                 {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
               </span>
             )}
             {location && (
-              <span className="flex items-center gap-1 truncate">
-                <MapPin className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{location.bin_description || location.location_area}</span>
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {location.bin_description || location.location_area}
               </span>
             )}
             {vendor && (
-              <span className="flex items-center gap-1 truncate">
-                <Box className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{vendor.vendor_name}</span>
+              <span className="flex items-center gap-1">
+                <Box className="w-3 h-3" />
+                {vendor.vendor_name}
               </span>
             )}
           </div>
         </div>
 
         {/* Inventory Stats */}
-        <div className="flex gap-2 md:gap-4 text-xs shrink-0">
+        <div className="flex gap-4 text-xs shrink-0">
           <div className="text-center">
-            <div className="text-gray-500 text-[10px] md:text-xs">Stock</div>
+            <div className="text-gray-500">Stock</div>
             <div className="text-white font-semibold">{part.quantity_on_hand || 0}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500 text-[10px] md:text-xs">Res.</div>
+            <div className="text-gray-500">Reserved</div>
             <div className="text-yellow-400 font-semibold">{reserved}</div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500 text-[10px] md:text-xs">Avail.</div>
+            <div className="text-gray-500">Available</div>
             <div className={cn(
               "font-semibold",
               available > 0 ? "text-green-400" : "text-red-400"

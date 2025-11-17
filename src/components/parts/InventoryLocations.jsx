@@ -9,7 +9,6 @@ import LocationTree from "../inventory/LocationTree";
 import InventoryBreadcrumb from "../inventory/InventoryBreadcrumb";
 import PartsListView from "./PartsListView";
 import ImageGallery from "./ImageGallery";
-import PartDetailModal from "./PartDetailModal";
 
 const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
@@ -22,7 +21,6 @@ export default function InventoryLocations() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [selectedPart, setSelectedPart] = useState(null);
 
   // Load state from localStorage
   useEffect(() => {
@@ -267,7 +265,7 @@ export default function InventoryLocations() {
                     parts={filteredParts}
                     categories={categories}
                     selectedCategoryId={null}
-                    onPartClick={(part) => setSelectedPart(part)}
+                    onPartClick={() => {}}
                     showGrouping={false}
                   />
                 </div>
@@ -284,13 +282,6 @@ export default function InventoryLocations() {
         onClose={() => setGalleryOpen(false)}
         onNavigate={handleNavigateGallery}
       />
-
-      {selectedPart && (
-        <PartDetailModal
-          part={selectedPart}
-          onClose={() => setSelectedPart(null)}
-        />
-      )}
     </>
   );
 }
