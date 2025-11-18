@@ -37,28 +37,37 @@ export default function MyProjects() {
         const teamMembers = await base44.entities.TeamMember.list();
         const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
         
+        console.log('🔍 Current User:', user.email);
+        console.log('👤 User Team Member:', userTeamMember);
+        
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
+        console.log('🏢 View As Company:', viewAsCompany);
+        
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
           // Create a virtual team member with the selected company
-          setCurrentTeamMember({
+          const virtualMember = {
             ...userTeamMember,
             company: viewAsCompany,
             is_achtung_kraft_member: false // Temporarily disable full access
-          });
+          };
+          console.log('✨ Virtual Team Member Created:', virtualMember);
+          setCurrentTeamMember(virtualMember);
         } else {
           setCurrentTeamMember(userTeamMember);
         }
       } catch (error) {
-        console.error('Error fetching user:', error);
+        console.error('❌ Error fetching user:', error);
       }
     };
     fetchUser();
   }, []);
 
+  // Wait for currentTeamMember before loading projects
   const { data: allProjects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
+    enabled: !!currentTeamMember, // Only load when we have team member data
   });
 
   const { data: statuses = [] } = useQuery({
@@ -83,29 +92,59 @@ export default function MyProjects() {
       const list = await base44.entities.TeamMember.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    enabled: !!currentTeamMember, // Only load when we have team member data
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   // Filter projects based on user's company and team assignments
-  const projects = allProjects.filter(project => {
-    if (!currentTeamMember) return false;
-
-    // If user is Achtung Kraft member, show all projects
-    if (currentTeamMember.is_achtung_kraft_member) {
-      return true;
+  const projects = React.useMemo(() => {
+    if (!currentTeamMember || teamMembersLoading) {
+      console.log('⏳ Waiting for team member data...');
+      return [];
     }
 
-    // Otherwise, show only projects where ANY assigned team member has the same company OR client matches
-    const projectTeamMembers = (project.assigned_team || [])
-      .map(tmId => teamMembers.find(tm => tm.id === tmId))
-      .filter(Boolean);
+    console.log('🔄 Filtering projects...');
+    console.log('📊 Total projects:', allProjects.length);
+    console.log('👥 Total team members:', teamMembers.length);
 
-    const hasCompanyTeamMember = projectTeamMembers.some(tm => tm.company === currentTeamMember.company);
-    const isClientCompany = currentTeamMember.company && (project.client_name === currentTeamMember.company);
+    const filtered = allProjects.filter(project => {
+      // If user is Achtung Kraft member (not viewing as company), show all projects
+      if (currentTeamMember.is_achtung_kraft_member) {
+        console.log(`✅ Project "${project.name}" - AK member sees all`);
+        return true;
+      }
 
-    return hasCompanyTeamMember || isClientCompany;
-  });
+      // Get team members assigned to this project
+      const assignedTeam = Array.isArray(project.assigned_team) ? project.assigned_team : [];
+      console.log(`🔍 Project "${project.name}" - Assigned team IDs:`, assignedTeam);
+      
+      const projectTeamMembers = assignedTeam
+        .map(tmId => teamMembers.find(tm => tm.id === tmId))
+        .filter(Boolean);
+      
+      console.log(`👥 Project "${project.name}" - Team members:`, projectTeamMembers.map(tm => `${tm.full_name} (${tm.company})`));
+
+      // Check if any assigned team member has the same company
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => 
+        tm.company && currentTeamMember.company && tm.company === currentTeamMember.company
+      );
+      
+      // Check if client name matches company
+      const isClientCompany = currentTeamMember.company && 
+                             project.client_name && 
+                             project.client_name === currentTeamMember.company;
+
+      const shouldShow = hasCompanyTeamMember || isClientCompany;
+      
+      console.log(`${shouldShow ? '✅' : '❌'} Project "${project.name}" - Company match: ${hasCompanyTeamMember}, Client match: ${isClientCompany}`);
+      
+      return shouldShow;
+    });
+
+    console.log('📋 Filtered projects count:', filtered.length);
+    return filtered;
+  }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,12 +177,20 @@ export default function MyProjects() {
     groupedProjects[groupKey].projects.push(project);
   });
 
-  if (!currentTeamMember || teamMembersLoading) {
+  // Show loading state while data is being fetched
+  const isLoading = !currentTeamMember || teamMembersLoading || projectsLoading;
+  
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
             <p className="text-gray-500 text-lg">Loading your projects...</p>
+            <p className="text-gray-600 text-sm mt-2">
+              {!currentTeamMember && 'Loading user data...'}
+              {currentTeamMember && teamMembersLoading && 'Loading team members...'}
+              {currentTeamMember && !teamMembersLoading && projectsLoading && 'Loading projects...'}
+            </p>
           </div>
         </div>
       </div>
