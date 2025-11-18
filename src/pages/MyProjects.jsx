@@ -77,7 +77,7 @@ export default function MyProjects() {
     },
   });
 
-  const { data: teamMembers = [] } = useQuery({
+  const { data: teamMembers = [], isLoading: teamMembersLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
       const list = await base44.entities.TeamMember.list();
@@ -139,7 +139,7 @@ export default function MyProjects() {
     groupedProjects[groupKey].projects.push(project);
   });
 
-  if (!currentTeamMember) {
+  if (!currentTeamMember || teamMembersLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">

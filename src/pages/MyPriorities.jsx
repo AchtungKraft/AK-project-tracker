@@ -68,7 +68,7 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.TaskCategory.list(),
   });
 
-  const { data: teamMembers = [] } = useQuery({
+  const { data: teamMembers = [], isLoading: teamMembersLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
   });
@@ -171,24 +171,12 @@ export default function MyPriorities() {
     }
   };
 
-  if (!currentTeamMember) {
+  if (!currentTeamMember || teamMembersLoading || tasksLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
-            <p className="text-gray-500 text-lg">Loading your priorities...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (tasksLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
-          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
-            <p className="text-gray-500 text-lg">Loading priority tasks...</p>
+            <p className="text-gray-500 text-lg">Loading priorities...</p>
           </div>
         </div>
       </div>
