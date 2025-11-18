@@ -27,9 +27,6 @@ export default function MyPriorities() {
         
         const teamMembers = await base44.entities.TeamMember.list();
         const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
-
-        console.log('👤 [MyPriorities] Current User:', user);
-        console.log('👥 [MyPriorities] User Team Member:', userTeamMember);
         
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
