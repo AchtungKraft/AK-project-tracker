@@ -96,16 +96,15 @@ export default function MyProjects() {
       return true;
     }
 
-    // Otherwise, show only projects where ANY assigned team member has the same company
-    if (!project.assigned_team || project.assigned_team.length === 0) {
-      return false;
-    }
-
-    const projectTeamMembers = project.assigned_team
+    // Otherwise, show only projects where ANY assigned team member has the same company OR client matches
+    const projectTeamMembers = (project.assigned_team || [])
       .map(tmId => teamMembers.find(tm => tm.id === tmId))
       .filter(Boolean);
 
-    return projectTeamMembers.some(tm => tm.company === currentTeamMember.company);
+    const hasCompanyTeamMember = projectTeamMembers.some(tm => tm.company === currentTeamMember.company);
+    const isClientCompany = currentTeamMember.company && (project.client_name === currentTeamMember.company);
+
+    return hasCompanyTeamMember || isClientCompany;
   });
 
   const filteredProjects = projects.filter(p => {
