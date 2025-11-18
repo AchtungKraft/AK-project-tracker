@@ -179,86 +179,96 @@ export default function PartsListView({
     return (
       <div
         onClick={() => onPartClick(part)}
-        className="flex items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
+        className="flex flex-col md:flex-row md:items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group min-h-[88px]"
       >
-        {/* Thumbnail */}
-        <div 
-          className="relative w-12 h-12 flex-shrink-0 bg-gray-800 rounded overflow-hidden cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (images.length > 0) openGallery(images, 0);
-          }}
-        >
-          {featuredPhoto ? (
-            <>
-              <img
-                src={featuredPhoto}
-                alt={part.part_name}
-                className="w-full h-full object-cover"
-              />
-              {hasMultipleImages && (
-                <div className="absolute bottom-0 right-0 bg-black/80 text-white text-xs px-1 rounded-tl">
-                  {images.length}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Package className="w-6 h-6 text-gray-600" />
+        {/* Mobile: Top row with thumbnail and title */}
+        <div className="flex items-start gap-3 w-full md:w-auto md:flex-1">
+          {/* Thumbnail */}
+          <div 
+            className="relative w-16 h-16 md:w-12 md:h-12 flex-shrink-0 bg-gray-800 rounded overflow-hidden cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (images.length > 0) openGallery(images, 0);
+            }}
+          >
+            {featuredPhoto ? (
+              <>
+                <img
+                  src={featuredPhoto}
+                  alt={part.part_name}
+                  className="w-full h-full object-cover"
+                />
+                {hasMultipleImages && (
+                  <div className="absolute bottom-0 right-0 bg-black/80 text-white text-xs px-1 rounded-tl">
+                    {images.length}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Package className="w-6 h-6 text-gray-600" />
+              </div>
+            )}
+          </div>
+
+          {/* Part Info */}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-start gap-2">
+              <h4 className="text-white text-sm font-medium line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
+                {part.part_name}
+              </h4>
+              <Badge 
+                style={{ backgroundColor: statusColors[part.status] }}
+                className="text-white text-xs shrink-0"
+              >
+                {part.status}
+              </Badge>
             </div>
-          )}
-        </div>
-
-        {/* Part Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2 mb-1">
-            <h4 className="text-white text-sm font-medium truncate flex-1 group-hover:text-red-400 transition-colors">
-              {part.part_name}
-            </h4>
-            <Badge 
-              style={{ backgroundColor: statusColors[part.status] }}
-              className="text-white text-xs shrink-0"
-            >
-              {part.status}
-            </Badge>
-          </div>
-          
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
+            
+            {/* Part Number */}
             {part.vendor_part_number && (
-              <span className="font-mono">{part.vendor_part_number}</span>
+              <div className="text-xs text-gray-400 font-mono truncate">
+                {part.vendor_part_number}
+              </div>
             )}
+
+            {/* Vehicle Info */}
             {(make || model || year) && (
-              <span className="text-blue-400">
+              <div className="text-xs text-blue-400 truncate">
                 {[make?.name, model?.name, year?.year].filter(Boolean).join(' ')}
-              </span>
+              </div>
             )}
-            {location && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                {location.bin_description || location.location_area}
-              </span>
-            )}
-            {vendor && (
-              <span className="flex items-center gap-1">
-                <Box className="w-3 h-3" />
-                {vendor.vendor_name}
-              </span>
-            )}
+
+            {/* Location and Vendor - Mobile stacked */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1 sm:gap-x-3 text-xs text-gray-400">
+              {location && (
+                <span className="flex items-center gap-1 truncate">
+                  <MapPin className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{location.bin_description || location.location_area}</span>
+                </span>
+              )}
+              {vendor && (
+                <span className="flex items-center gap-1 truncate">
+                  <Box className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{vendor.vendor_name}</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Inventory Stats */}
-        <div className="flex gap-4 text-xs shrink-0">
-          <div className="text-center">
-            <div className="text-gray-500">Stock</div>
+        {/* Inventory Stats - Mobile full width, desktop auto */}
+        <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
+          <div className="text-center min-w-[60px]">
+            <div className="text-gray-500 mb-0.5">Stock</div>
             <div className="text-white font-semibold">{part.quantity_on_hand || 0}</div>
           </div>
-          <div className="text-center">
-            <div className="text-gray-500">Reserved</div>
+          <div className="text-center min-w-[60px]">
+            <div className="text-gray-500 mb-0.5">Reserved</div>
             <div className="text-yellow-400 font-semibold">{reserved}</div>
           </div>
-          <div className="text-center">
-            <div className="text-gray-500">Available</div>
+          <div className="text-center min-w-[60px]">
+            <div className="text-gray-500 mb-0.5">Available</div>
             <div className={cn(
               "font-semibold",
               available > 0 ? "text-green-400" : "text-red-400"
