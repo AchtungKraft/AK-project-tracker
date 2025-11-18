@@ -97,36 +97,49 @@ export default function MyPriorities() {
   // Filter projects based on user's company and team assignments
   const projects = React.useMemo(() => {
     if (!currentTeamMember || teamMembersLoading) {
-      console.log('⏳ [Priorities] Waiting for team member data...');
       return [];
     }
 
-    console.log('🔄 [Priorities] Filtering projects...');
-    console.log('📊 [Priorities] Total projects:', allProjects.length);
+    // If user is Achtung Kraft member (not viewing as company), show all projects
+    if (currentTeamMember.is_achtung_kraft_member) {
+      return allProjects;
+    }
+
+    // If user has no company assigned, show all projects
+    if (!currentTeamMember.company) {
+      return allProjects;
+    }
 
     const filtered = allProjects.filter(project => {
-      // If user is Achtung Kraft member (not viewing as company), show all projects
-      if (currentTeamMember.is_achtung_kraft_member) {
+      let assignedTeam = project.assigned_team;
+      if (typeof assignedTeam === 'string') {
+        try {
+          assignedTeam = JSON.parse(assignedTeam);
+        } catch (e) {
+          assignedTeam = [];
+        }
+      }
+      
+      assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
+      
+      // If project has no team assigned, show it (fallback)
+      if (assignedTeam.length === 0) {
         return true;
       }
-
-      const assignedTeam = Array.isArray(project.assigned_team) ? project.assigned_team : [];
+      
       const projectTeamMembers = assignedTeam
         .map(tmId => teamMembers.find(tm => tm.id === tmId))
         .filter(Boolean);
 
       const hasCompanyTeamMember = projectTeamMembers.some(tm => 
-        tm.company && currentTeamMember.company && tm.company === currentTeamMember.company
+        tm.company && tm.company === currentTeamMember.company
       );
       
-      const isClientCompany = currentTeamMember.company && 
-                             project.client_name && 
-                             project.client_name === currentTeamMember.company;
+      const isClientCompany = project.client_name === currentTeamMember.company;
 
       return hasCompanyTeamMember || isClientCompany;
     });
 
-    console.log('📋 [Priorities] Filtered projects count:', filtered.length);
     return filtered;
   }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
 
