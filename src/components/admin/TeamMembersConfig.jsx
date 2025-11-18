@@ -18,6 +18,7 @@ export default function TeamMembersConfig() {
     email: "",
     phone: "",
     company: "",
+    user_id: "",
     is_achtung_kraft_member: false,
     sort_order: 0,
   });
@@ -36,7 +37,7 @@ export default function TeamMembersConfig() {
     mutationFn: (data) => base44.entities.TeamMember.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
-      setNewMember({ full_name: "", team_role: "", email: "", phone: "", company: "", is_achtung_kraft_member: false, sort_order: 0 });
+      setNewMember({ full_name: "", team_role: "", email: "", phone: "", company: "", user_id: "", is_achtung_kraft_member: false, sort_order: 0 });
       toast.success('Team member added');
     },
   });
@@ -180,6 +181,15 @@ export default function TeamMembersConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+            <div>
+              <Label className="text-gray-400">User ID (Link to User)</Label>
+              <Input
+                value={newMember.user_id || ""}
+                onChange={(e) => setNewMember({ ...newMember, user_id: e.target.value })}
+                placeholder="User ID from Users table"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
             <div className="flex items-center space-x-2 pt-6">
               <Checkbox
                 id="new-achtung-kraft"
@@ -244,7 +254,7 @@ export default function TeamMembersConfig() {
                           
                           {editing === member.id ? (
                             <>
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-2 flex-1">
+                              <div className="grid grid-cols-1 md:grid-cols-6 gap-2 flex-1">
                                 <Input
                                   value={editData.full_name}
                                   onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
@@ -273,6 +283,12 @@ export default function TeamMembersConfig() {
                                   onChange={(e) => setEditData({ ...editData, company: e.target.value })}
                                   className="bg-gray-800 border-gray-700 text-white"
                                   placeholder="Company"
+                                />
+                                <Input
+                                  value={editData.user_id || ""}
+                                  onChange={(e) => setEditData({ ...editData, user_id: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                  placeholder="User ID"
                                 />
                               </div>
                               <div className="flex items-center space-x-2">
@@ -324,6 +340,11 @@ export default function TeamMembersConfig() {
                                   {member.email && <span>{member.email}</span>}
                                   {member.phone && <span>{member.phone}</span>}
                                   {member.company && <span>🏢 {member.company}</span>}
+                                </div>
+                                <div className="flex gap-3 text-xs text-gray-600 mt-1">
+                                  <span>TM ID: {member.id}</span>
+                                  {member.user_id && <span>User ID: {member.user_id}</span>}
+                                  {!member.user_id && <span className="text-yellow-500">⚠️ No User ID linked</span>}
                                 </div>
                               </div>
                               <Button
