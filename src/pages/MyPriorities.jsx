@@ -26,20 +26,27 @@ export default function MyPriorities() {
         const teamMembers = await base44.entities.TeamMember.list();
         const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
         
+        console.log('🔍 [Priorities] Current User:', user.email);
+        console.log('👤 [Priorities] User Team Member:', userTeamMember);
+        
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
+        console.log('🏢 [Priorities] View As Company:', viewAsCompany);
+        
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
           // Create a virtual team member with the selected company
-          setCurrentTeamMember({
+          const virtualMember = {
             ...userTeamMember,
             company: viewAsCompany,
             is_achtung_kraft_member: false // Temporarily disable full access
-          });
+          };
+          console.log('✨ [Priorities] Virtual Team Member Created:', virtualMember);
+          setCurrentTeamMember(virtualMember);
         } else {
           setCurrentTeamMember(userTeamMember);
         }
       } catch (error) {
-        console.error('Error fetching user:', error);
+        console.error('❌ [Priorities] Error fetching user:', error);
       }
     };
     fetchUser();
@@ -48,6 +55,7 @@ export default function MyPriorities() {
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
     queryFn: () => base44.entities.Task.filter({ is_priority: true }, '-created_date'),
+    enabled: !!currentTeamMember,
   });
 
   const updateTaskMutation = useMutation({
@@ -61,6 +69,7 @@ export default function MyPriorities() {
   const { data: allProjects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+    enabled: !!currentTeamMember,
   });
 
   const { data: categories = [] } = useQuery({
@@ -71,6 +80,7 @@ export default function MyPriorities() {
   const { data: teamMembers = [], isLoading: teamMembersLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    enabled: !!currentTeamMember,
   });
 
   const { data: statuses = [] } = useQuery({
@@ -85,24 +95,40 @@ export default function MyPriorities() {
   const completedStatusIds = completedStatuses.map(s => s.id);
 
   // Filter projects based on user's company and team assignments
-  const projects = allProjects.filter(project => {
-    if (!currentTeamMember) return false;
-
-    // If user is Achtung Kraft member, show all projects
-    if (currentTeamMember.is_achtung_kraft_member) {
-      return true;
+  const projects = React.useMemo(() => {
+    if (!currentTeamMember || teamMembersLoading) {
+      console.log('⏳ [Priorities] Waiting for team member data...');
+      return [];
     }
 
-    // Otherwise, show only projects where ANY assigned team member has the same company OR client matches
-    const projectTeamMembers = (project.assigned_team || [])
-      .map(tmId => teamMembers.find(tm => tm.id === tmId))
-      .filter(Boolean);
+    console.log('🔄 [Priorities] Filtering projects...');
+    console.log('📊 [Priorities] Total projects:', allProjects.length);
 
-    const hasCompanyTeamMember = projectTeamMembers.some(tm => tm.company === currentTeamMember.company);
-    const isClientCompany = currentTeamMember.company && (project.client_name === currentTeamMember.company);
+    const filtered = allProjects.filter(project => {
+      // If user is Achtung Kraft member (not viewing as company), show all projects
+      if (currentTeamMember.is_achtung_kraft_member) {
+        return true;
+      }
 
-    return hasCompanyTeamMember || isClientCompany;
-  });
+      const assignedTeam = Array.isArray(project.assigned_team) ? project.assigned_team : [];
+      const projectTeamMembers = assignedTeam
+        .map(tmId => teamMembers.find(tm => tm.id === tmId))
+        .filter(Boolean);
+
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => 
+        tm.company && currentTeamMember.company && tm.company === currentTeamMember.company
+      );
+      
+      const isClientCompany = currentTeamMember.company && 
+                             project.client_name && 
+                             project.client_name === currentTeamMember.company;
+
+      return hasCompanyTeamMember || isClientCompany;
+    });
+
+    console.log('📋 [Priorities] Filtered projects count:', filtered.length);
+    return filtered;
+  }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
 
   const projectIds = new Set(projects.map(p => p.id));
 
@@ -170,12 +196,19 @@ export default function MyPriorities() {
     }
   };
 
-  if (!currentTeamMember || teamMembersLoading || tasksLoading) {
+  const isLoading = !currentTeamMember || teamMembersLoading || tasksLoading;
+  
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
             <p className="text-gray-500 text-lg">Loading priorities...</p>
+            <p className="text-gray-600 text-sm mt-2">
+              {!currentTeamMember && 'Loading user data...'}
+              {currentTeamMember && teamMembersLoading && 'Loading team members...'}
+              {currentTeamMember && !teamMembersLoading && tasksLoading && 'Loading tasks...'}
+            </p>
           </div>
         </div>
       </div>
