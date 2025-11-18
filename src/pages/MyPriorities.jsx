@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Flame, CheckCircle2, Circle, User, Tag } from "lucide-react";
+import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function MyPriorities() {
@@ -21,34 +22,26 @@ export default function MyPriorities() {
       try {
         const user = await base44.auth.me();
         setCurrentUser(user);
-        console.log('🔍 [Priorities] Current User:', user);
         
-        // Find team member associated with this user
         const teamMembers = await base44.entities.TeamMember.list();
-        console.log('👥 [Priorities] All Team Members:', teamMembers);
-        
         const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
-        console.log('👤 [Priorities] User Team Member:', userTeamMember);
         
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
-        console.log('🏢 [Priorities] View As Company:', viewAsCompany);
         
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
           // Create a virtual team member with the selected company
           const virtualMember = {
             ...userTeamMember,
             company: viewAsCompany,
-            is_achtung_kraft_member: false // Temporarily disable full access
+            is_achtung_kraft_member: false
           };
-          console.log('✨ [Priorities] Virtual Team Member Created:', virtualMember);
           setCurrentTeamMember(virtualMember);
         } else {
-          console.log('✅ [Priorities] Setting Team Member:', userTeamMember);
           setCurrentTeamMember(userTeamMember);
         }
       } catch (error) {
-        console.error('❌ [Priorities] Error fetching user:', error);
+        console.error('Error fetching user:', error);
       }
     };
     fetchUser();
@@ -96,39 +89,13 @@ export default function MyPriorities() {
   );
   const completedStatusIds = completedStatuses.map(s => s.id);
 
-  // Filter projects based on user's company and team assignments
+  // Filter projects to only those where currentTeamMember is assigned
   const projects = React.useMemo(() => {
-    console.log('🔄 [Priorities] useMemo triggered');
-    console.log('  currentTeamMember:', currentTeamMember);
-    console.log('  teamMembersLoading:', teamMembersLoading);
-    console.log('  allProjects.length:', allProjects.length);
-    console.log('  teamMembers.length:', teamMembers.length);
-
     if (!currentTeamMember) {
-      console.log('⏳ [Priorities] No currentTeamMember - returning empty');
       return [];
     }
 
-    if (teamMembersLoading) {
-      console.log('⏳ [Priorities] teamMembersLoading - returning empty');
-      return [];
-    }
-
-    // If user is Achtung Kraft member (not viewing as company), show all projects
-    if (currentTeamMember.is_achtung_kraft_member) {
-      console.log('✅ [Priorities] AK member - returning all', allProjects.length, 'projects');
-      return allProjects;
-    }
-
-    // If user has no company assigned, show all projects
-    if (!currentTeamMember.company) {
-      console.log('⚠️ [Priorities] User has no company - showing all projects');
-      return allProjects;
-    }
-
-    console.log('🔍 [Priorities] Filtering for company:', currentTeamMember.company);
-
-    const filtered = allProjects.filter(project => {
+    const filteredProjects = allProjects.filter(project => {
       let assignedTeam = project.assigned_team;
       if (typeof assignedTeam === 'string') {
         try {
@@ -137,53 +104,19 @@ export default function MyPriorities() {
           assignedTeam = [];
         }
       }
-      
       assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
-      
-      console.log(`  📦 [Priorities] Project "${project.name}"`);
-      console.log(`    assigned_team:`, assignedTeam);
-      console.log(`    client_name: "${project.client_name}"`);
-      
-      // If project has no team assigned, show it (fallback)
-      if (assignedTeam.length === 0) {
-        console.log(`    ✅ No team assigned - SHOW by default`);
-        return true;
-      }
-      
-      const projectTeamMembers = assignedTeam
-        .map(tmId => {
-          const found = teamMembers.find(tm => tm.id === tmId);
-          if (!found) console.log(`    ⚠️ Team member ID ${tmId} not found in list`);
-          return found;
-        })
-        .filter(Boolean);
 
-      console.log(`    Team members found:`, projectTeamMembers.map(tm => `${tm.full_name} (company: ${tm.company})`));
-
-      const hasCompanyTeamMember = projectTeamMembers.some(tm => {
-        const match = tm.company && tm.company === currentTeamMember.company;
-        console.log(`      ${tm.full_name}: company "${tm.company}" === "${currentTeamMember.company}"? ${match}`);
-        return match;
-      });
-      
-      const isClientCompany = project.client_name === currentTeamMember.company;
-      console.log(`    Client match: "${project.client_name}" === "${currentTeamMember.company}"? ${isClientCompany}`);
-
-      const result = hasCompanyTeamMember || isClientCompany;
-      console.log(`    ${result ? '✅ SHOW' : '❌ HIDE'}`);
-
-      return result;
+      // Filter projects where the currentTeamMember's ID is in assigned_team
+      return assignedTeam.includes(currentTeamMember.id);
     });
 
-    console.log('📋 [Priorities] Filtered results:', filtered.length, 'of', allProjects.length);
-    filtered.forEach(p => console.log(`  ✅ ${p.name}`));
-    return filtered;
-  }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
+    return filteredProjects;
+  }, [allProjects, currentTeamMember]);
 
   const projectIds = new Set(projects.map(p => p.id));
 
-  // Filter tasks to only those in allowed projects and not completed
-  const tasks = allTasks.filter(task => {
+  // Filter tasks to only those in user's projects and not completed
+  const activePriorityTasks = allTasks.filter(task => {
     if (!projectIds.has(task.project_id)) return false;
     if (completedStatusIds.includes(task.status_id)) return false;
     return true;
@@ -191,7 +124,7 @@ export default function MyPriorities() {
 
   // Group tasks by project and then by selected criteria
   const groupedByProject = {};
-  tasks.forEach(task => {
+  activePriorityTasks.forEach(task => {
     const project = projects.find(p => p.id === task.project_id);
     if (!project) return;
 
@@ -247,18 +180,13 @@ export default function MyPriorities() {
   };
 
   const isLoading = !currentTeamMember || teamMembersLoading || tasksLoading;
-  
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
             <p className="text-gray-500 text-lg">Loading priorities...</p>
-            <p className="text-gray-600 text-sm mt-2">
-              {!currentTeamMember && 'Loading user data...'}
-              {currentTeamMember && teamMembersLoading && 'Loading team members...'}
-              {currentTeamMember && !teamMembersLoading && tasksLoading && 'Loading tasks...'}
-            </p>
           </div>
         </div>
       </div>
@@ -279,15 +207,13 @@ export default function MyPriorities() {
                 </h1>
               </div>
               <p className="text-sm text-gray-400 mt-1">
-                {currentTeamMember.is_achtung_kraft_member 
-                  ? 'High-priority tasks across all projects' 
-                  : `Priority tasks for ${currentTeamMember.company || 'your company'}`}
+                High-priority tasks from your assigned projects
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <Badge variant="outline" className="border-orange-500 text-orange-400 text-base px-3 py-1">
-                {tasks.length} Priority Task{tasks.length !== 1 ? 's' : ''}
+                {activePriorityTasks.length} Priority Task{activePriorityTasks.length !== 1 ? 's' : ''}
               </Badge>
             </div>
           </div>
@@ -333,9 +259,7 @@ export default function MyPriorities() {
                 <Flame className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg">No priority tasks found</p>
                 <p className="text-gray-600 mt-2">
-                  {currentTeamMember.is_achtung_kraft_member 
-                    ? 'Mark tasks as priority to see them here'
-                    : 'No priority tasks have been assigned to your company projects'}
+                  No priority tasks in your assigned projects
                 </p>
               </CardContent>
             </Card>
@@ -359,83 +283,18 @@ export default function MyPriorities() {
                           <h3 className="text-sm font-semibold text-gray-400 mb-2 uppercase tracking-wide">
                             {subGroupKey} ({groupTasks.length})
                           </h3>
-                          <div className="space-y-2">
-                            {groupTasks.map(task => {
-                              const status = statuses.find(s => s.id === task.status_id);
-                              const category = categories.find(c => c.id === task.category_id);
-                              const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
-                              const isCompleted = completedStatusIds.includes(task.status_id);
-
-                              return (
-                                <div
-                                  key={task.id}
-                                  className="bg-gray-900/50 rounded-lg p-3 hover:bg-gray-900/70 transition-colors cursor-pointer border border-gray-800"
-                                  onClick={() => setSelectedTaskId(task.id)}
-                                >
-                                  <div className="flex items-start gap-3">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToggleComplete(task);
-                                      }}
-                                      className="mt-1 text-gray-400 hover:text-green-400 transition-colors"
-                                    >
-                                      {isCompleted ? (
-                                        <CheckCircle2 className="w-5 h-5 text-green-400" />
-                                      ) : (
-                                        <Circle className="w-5 h-5" />
-                                      )}
-                                    </button>
-                                    <div className="flex-1 min-w-0">
-                                      <h4 className={`font-medium ${isCompleted ? 'line-through text-gray-500' : 'text-white'}`}>
-                                        {task.name}
-                                      </h4>
-                                      {task.description && (
-                                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                                          {task.description}
-                                        </p>
-                                      )}
-                                      <div className="flex flex-wrap gap-2 mt-2">
-                                        {status && (
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs"
-                                            style={{
-                                              borderColor: status.color,
-                                              color: status.color
-                                            }}
-                                          >
-                                            {status.label}
-                                          </Badge>
-                                        )}
-                                        {category && (
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs"
-                                            style={{
-                                              borderColor: category.color,
-                                              color: category.color
-                                            }}
-                                          >
-                                            {category.name}
-                                          </Badge>
-                                        )}
-                                        {assignedMember && (
-                                          <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
-                                            {assignedMember.full_name}
-                                          </Badge>
-                                        )}
-                                        {task.due_date && (
-                                          <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
-                                            Due: {new Date(task.due_date).toLocaleDateString()}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            {groupTasks.map(task => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                statuses={statuses}
+                                categories={categories}
+                                teamMembers={teamMembers}
+                                onToggleComplete={handleToggleComplete}
+                                onClick={() => setSelectedTaskId(task.id)}
+                              />
+                            ))}
                           </div>
                         </div>
                       ))}
