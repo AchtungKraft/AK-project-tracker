@@ -32,17 +32,18 @@ export default function MyProjects() {
       try {
         const user = await base44.auth.me();
         setCurrentUser(user);
+        console.log('🔍 [MyProjects] Current User:', user);
         
         // Find team member associated with this user
         const teamMembers = await base44.entities.TeamMember.list();
-        const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
+        console.log('👥 [MyProjects] All Team Members:', teamMembers);
         
-        console.log('🔍 Current User:', user.email);
-        console.log('👤 User Team Member:', userTeamMember);
+        const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
+        console.log('👤 [MyProjects] User Team Member:', userTeamMember);
         
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
-        console.log('🏢 View As Company:', viewAsCompany);
+        console.log('🏢 [MyProjects] View As Company:', viewAsCompany);
         
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
           // Create a virtual team member with the selected company
@@ -51,13 +52,14 @@ export default function MyProjects() {
             company: viewAsCompany,
             is_achtung_kraft_member: false // Temporarily disable full access
           };
-          console.log('✨ Virtual Team Member Created:', virtualMember);
+          console.log('✨ [MyProjects] Virtual Team Member Created:', virtualMember);
           setCurrentTeamMember(virtualMember);
         } else {
+          console.log('✅ [MyProjects] Setting Team Member:', userTeamMember);
           setCurrentTeamMember(userTeamMember);
         }
       } catch (error) {
-        console.error('❌ Error fetching user:', error);
+        console.error('❌ [MyProjects] Error fetching user:', error);
       }
     };
     fetchUser();
@@ -104,23 +106,36 @@ export default function MyProjects() {
 
   // Filter projects based on user's company and team assignments
   const projects = React.useMemo(() => {
+    console.log('🔄 [MyProjects] useMemo triggered');
+    console.log('  currentTeamMember:', currentTeamMember);
+    console.log('  teamMembersLoading:', teamMembersLoading);
+    console.log('  allProjects.length:', allProjects.length);
+    console.log('  teamMembers.length:', teamMembers.length);
+
     // If no current team member yet, wait
-    if (!currentTeamMember || teamMembersLoading) {
+    if (!currentTeamMember) {
+      console.log('⏳ [MyProjects] No currentTeamMember - returning empty');
+      return [];
+    }
+
+    if (teamMembersLoading) {
+      console.log('⏳ [MyProjects] teamMembersLoading - returning empty');
       return [];
     }
 
     // If user is Achtung Kraft member (not viewing as company), show all projects
     if (currentTeamMember.is_achtung_kraft_member) {
+      console.log('✅ [MyProjects] AK member - returning all', allProjects.length, 'projects');
       return allProjects;
     }
 
     // If user has no company assigned, show all projects
     if (!currentTeamMember.company) {
-      console.log('⚠️ User has no company - showing all projects');
+      console.log('⚠️ [MyProjects] User has no company - showing all projects');
       return allProjects;
     }
 
-    console.log('🔍 Filtering for company:', currentTeamMember.company);
+    console.log('🔍 [MyProjects] Filtering for company:', currentTeamMember.company);
 
     const filtered = allProjects.filter(project => {
       // Parse assigned_team if it's a string
@@ -135,29 +150,46 @@ export default function MyProjects() {
       
       assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
       
+      console.log(`  📦 [MyProjects] Project "${project.name}"`);
+      console.log(`    assigned_team:`, assignedTeam);
+      console.log(`    client_name: "${project.client_name}"`);
+      
       // If project has no team assigned, show it (fallback for unassigned projects)
       if (assignedTeam.length === 0) {
-        console.log(`⚠️ Project "${project.name}" - No team assigned, showing by default`);
+        console.log(`    ✅ No team assigned - SHOW by default`);
         return true;
       }
       
       // Find team members
       const projectTeamMembers = assignedTeam
-        .map(tmId => teamMembers.find(tm => tm.id === tmId))
+        .map(tmId => {
+          const found = teamMembers.find(tm => tm.id === tmId);
+          if (!found) console.log(`    ⚠️ Team member ID ${tmId} not found in list`);
+          return found;
+        })
         .filter(Boolean);
 
+      console.log(`    Team members found:`, projectTeamMembers.map(tm => `${tm.full_name} (company: ${tm.company})`));
+
       // Check company match
-      const hasCompanyTeamMember = projectTeamMembers.some(tm => 
-        tm.company && tm.company === currentTeamMember.company
-      );
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => {
+        const match = tm.company && tm.company === currentTeamMember.company;
+        console.log(`      ${tm.full_name}: company "${tm.company}" === "${currentTeamMember.company}"? ${match}`);
+        return match;
+      });
       
       // Check client match
       const isClientCompany = project.client_name === currentTeamMember.company;
+      console.log(`    Client match: "${project.client_name}" === "${currentTeamMember.company}"? ${isClientCompany}`);
       
-      return hasCompanyTeamMember || isClientCompany;
+      const result = hasCompanyTeamMember || isClientCompany;
+      console.log(`    ${result ? '✅ SHOW' : '❌ HIDE'}`);
+      
+      return result;
     });
 
-    console.log('📋 Filtered projects:', filtered.length, 'of', allProjects.length);
+    console.log('📋 [MyProjects] Filtered results:', filtered.length, 'of', allProjects.length);
+    filtered.forEach(p => console.log(`  ✅ ${p.name}`));
     return filtered;
   }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
 
