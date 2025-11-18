@@ -26,7 +26,7 @@ export default function MyPriorities() {
         setCurrentUser(user);
         
         const teamMembers = await base44.entities.TeamMember.list();
-        const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
+        const userTeamMember = teamMembers.find(tm => tm.email?.toLowerCase() === user.email?.toLowerCase());
         
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
