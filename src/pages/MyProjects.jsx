@@ -63,11 +63,16 @@ export default function MyProjects() {
     fetchUser();
   }, []);
 
-  // Wait for currentTeamMember before loading projects
   const { data: allProjects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
-    enabled: !!currentTeamMember, // Only load when we have team member data
+    queryFn: async () => {
+      const list = await base44.entities.Project.list('-created_date');
+      console.log('📦 All projects loaded:', list.length);
+      list.forEach(p => {
+        console.log(`  Project: "${p.name}", assigned_team:`, p.assigned_team, 'type:', typeof p.assigned_team);
+      });
+      return list;
+    },
   });
 
   const { data: statuses = [] } = useQuery({
@@ -90,59 +95,92 @@ export default function MyProjects() {
     queryKey: ['teamMembers'],
     queryFn: async () => {
       const list = await base44.entities.TeamMember.list();
+      console.log('👥 All team members loaded:', list.length);
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    enabled: !!currentTeamMember, // Only load when we have team member data
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   // Filter projects based on user's company and team assignments
   const projects = React.useMemo(() => {
-    if (!currentTeamMember || teamMembersLoading) {
-      console.log('⏳ Waiting for team member data...');
+    console.log('🔄 Starting project filtering...');
+    console.log('  Current team member:', currentTeamMember);
+    console.log('  Team members loading:', teamMembersLoading);
+    console.log('  All projects:', allProjects.length);
+    console.log('  Team members:', teamMembers.length);
+
+    // If no current team member yet, wait
+    if (!currentTeamMember) {
+      console.log('⏳ No current team member yet');
       return [];
     }
 
-    console.log('🔄 Filtering projects...');
-    console.log('📊 Total projects:', allProjects.length);
-    console.log('👥 Total team members:', teamMembers.length);
+    // If still loading team members, wait
+    if (teamMembersLoading) {
+      console.log('⏳ Team members still loading');
+      return [];
+    }
+
+    // If user is Achtung Kraft member (not viewing as company), show all projects
+    if (currentTeamMember.is_achtung_kraft_member) {
+      console.log('✅ AK member - showing all', allProjects.length, 'projects');
+      return allProjects;
+    }
+
+    console.log('🔍 Filtering for company:', currentTeamMember.company);
 
     const filtered = allProjects.filter(project => {
-      // If user is Achtung Kraft member (not viewing as company), show all projects
-      if (currentTeamMember.is_achtung_kraft_member) {
-        console.log(`✅ Project "${project.name}" - AK member sees all`);
-        return true;
+      // Parse assigned_team if it's a string
+      let assignedTeam = project.assigned_team;
+      if (typeof assignedTeam === 'string') {
+        try {
+          assignedTeam = JSON.parse(assignedTeam);
+        } catch (e) {
+          console.log(`⚠️ Project "${project.name}" - Could not parse assigned_team`);
+          assignedTeam = [];
+        }
       }
-
-      // Get team members assigned to this project
-      const assignedTeam = Array.isArray(project.assigned_team) ? project.assigned_team : [];
-      console.log(`🔍 Project "${project.name}" - Assigned team IDs:`, assignedTeam);
       
+      // Ensure it's an array
+      assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
+      
+      console.log(`🔍 Project "${project.name}"`);
+      console.log(`  assigned_team:`, assignedTeam);
+      console.log(`  client_name:`, project.client_name);
+      
+      // Find team members
       const projectTeamMembers = assignedTeam
-        .map(tmId => teamMembers.find(tm => tm.id === tmId))
+        .map(tmId => {
+          const found = teamMembers.find(tm => tm.id === tmId);
+          if (!found) console.log(`  ⚠️ Team member ID ${tmId} not found`);
+          return found;
+        })
         .filter(Boolean);
       
-      console.log(`👥 Project "${project.name}" - Team members:`, projectTeamMembers.map(tm => `${tm.full_name} (${tm.company})`));
+      console.log(`  Team members:`, projectTeamMembers.map(tm => `${tm.full_name} (${tm.company || 'no company'})`));
 
-      // Check if any assigned team member has the same company
-      const hasCompanyTeamMember = projectTeamMembers.some(tm => 
-        tm.company && currentTeamMember.company && tm.company === currentTeamMember.company
-      );
+      // Check company match
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => {
+        const match = tm.company && currentTeamMember.company && tm.company === currentTeamMember.company;
+        console.log(`    ${tm.full_name}: ${tm.company} === ${currentTeamMember.company}? ${match}`);
+        return match;
+      });
       
-      // Check if client name matches company
+      // Check client match
       const isClientCompany = currentTeamMember.company && 
                              project.client_name && 
                              project.client_name === currentTeamMember.company;
-
-      const shouldShow = hasCompanyTeamMember || isClientCompany;
       
-      console.log(`${shouldShow ? '✅' : '❌'} Project "${project.name}" - Company match: ${hasCompanyTeamMember}, Client match: ${isClientCompany}`);
+      console.log(`  Company match: ${hasCompanyTeamMember}, Client match: ${isClientCompany}`);
+      
+      const shouldShow = hasCompanyTeamMember || isClientCompany;
+      console.log(`  ${shouldShow ? '✅ SHOW' : '❌ HIDE'}`);
       
       return shouldShow;
     });
 
-    console.log('📋 Filtered projects count:', filtered.length);
+    console.log('📋 Final filtered count:', filtered.length);
     return filtered;
   }, [allProjects, currentTeamMember, teamMembers, teamMembersLoading]);
 
@@ -178,7 +216,7 @@ export default function MyProjects() {
   });
 
   // Show loading state while data is being fetched
-  const isLoading = !currentTeamMember || teamMembersLoading || projectsLoading;
+  const isLoading = teamMembersLoading || projectsLoading || !currentTeamMember;
   
   if (isLoading) {
     return (
@@ -188,8 +226,24 @@ export default function MyProjects() {
             <p className="text-gray-500 text-lg">Loading your projects...</p>
             <p className="text-gray-600 text-sm mt-2">
               {!currentTeamMember && 'Loading user data...'}
-              {currentTeamMember && teamMembersLoading && 'Loading team members...'}
-              {currentTeamMember && !teamMembersLoading && projectsLoading && 'Loading projects...'}
+              {teamMembersLoading && 'Loading team members...'}
+              {projectsLoading && 'Loading projects...'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show message if user has no associated team member
+  if (!currentTeamMember) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
+            <p className="text-gray-500 text-lg">No Team Member Profile Found</p>
+            <p className="text-gray-600 mt-2">
+              Your user account is not associated with a team member. Please contact an administrator.
             </p>
           </div>
         </div>
