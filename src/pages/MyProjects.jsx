@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, RefreshCw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,6 +25,8 @@ export default function MyProjects() {
   const [groupBy, setGroupBy] = useState('projectType');
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
   // Get current user and team member
   useEffect(() => {
@@ -275,15 +277,30 @@ export default function MyProjects() {
                 : `Projects for ${currentTeamMember.company || 'your company'}`}
             </p>
           </div>
-          {currentTeamMember.is_achtung_kraft_member && (
+          <div className="flex gap-2">
             <Button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-red-600 hover:bg-red-700 gap-2"
+              onClick={async () => {
+                setIsRefreshing(true);
+                await queryClient.invalidateQueries();
+                setIsRefreshing(false);
+              }}
+              variant="outline"
+              className="border-gray-700 text-white gap-2"
+              disabled={isRefreshing}
             >
-              <Plus className="w-5 h-5" />
-              New Project
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
-          )}
+            {currentTeamMember.is_achtung_kraft_member && (
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-red-600 hover:bg-red-700 gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                New Project
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}

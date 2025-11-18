@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Flame, Loader2, FolderKanban } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
@@ -16,6 +16,7 @@ export default function MyPriorities() {
   const [groupBy, setGroupBy] = useState('category');
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
   // Get current user and team member
@@ -249,16 +250,32 @@ export default function MyPriorities() {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
-              <Flame className="w-6 h-6 text-red-500" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-12 h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
+                <Flame className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITIES</h1>
+                <p className="text-sm text-gray-400">
+                  {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITIES</h1>
-              <p className="text-sm text-gray-400">
-                {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
-              </p>
-            </div>
+            <Button
+              onClick={async () => {
+                setIsRefreshing(true);
+                await queryClient.invalidateQueries();
+                setIsRefreshing(false);
+              }}
+              variant="outline"
+              size="sm"
+              className="border-gray-700 text-white gap-2"
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
           </div>
 
           {/* Group By Filter */}
