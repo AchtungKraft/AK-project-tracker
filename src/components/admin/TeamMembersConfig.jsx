@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -16,6 +17,8 @@ export default function TeamMembersConfig() {
     team_role: "",
     email: "",
     phone: "",
+    company: "",
+    is_achtung_kraft_member: false,
     sort_order: 0,
   });
   const [editing, setEditing] = useState(null);
@@ -33,7 +36,7 @@ export default function TeamMembersConfig() {
     mutationFn: (data) => base44.entities.TeamMember.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
-      setNewMember({ full_name: "", team_role: "", email: "", phone: "", sort_order: 0 });
+      setNewMember({ full_name: "", team_role: "", email: "", phone: "", company: "", is_achtung_kraft_member: false, sort_order: 0 });
       toast.success('Team member added');
     },
   });
@@ -168,6 +171,27 @@ export default function TeamMembersConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+            <div>
+              <Label className="text-gray-400">Company</Label>
+              <Input
+                value={newMember.company}
+                onChange={(e) => setNewMember({ ...newMember, company: e.target.value })}
+                placeholder="Company name"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div className="flex items-center space-x-2 pt-6">
+              <Checkbox
+                id="new-achtung-kraft"
+                checked={newMember.is_achtung_kraft_member}
+                onCheckedChange={(checked) => 
+                  setNewMember({ ...newMember, is_achtung_kraft_member: checked })
+                }
+              />
+              <Label htmlFor="new-achtung-kraft" className="text-gray-400 cursor-pointer">
+                Achtung Kraft Member (Full Access)
+              </Label>
+            </div>
           </div>
           <Button 
             type="submit" 
@@ -220,7 +244,7 @@ export default function TeamMembersConfig() {
                           
                           {editing === member.id ? (
                             <>
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-2 flex-1">
                                 <Input
                                   value={editData.full_name}
                                   onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
@@ -244,6 +268,24 @@ export default function TeamMembersConfig() {
                                   className="bg-gray-800 border-gray-700 text-white"
                                   placeholder="Phone"
                                 />
+                                <Input
+                                  value={editData.company || ""}
+                                  onChange={(e) => setEditData({ ...editData, company: e.target.value })}
+                                  className="bg-gray-800 border-gray-700 text-white"
+                                  placeholder="Company"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`edit-ak-${member.id}`}
+                                  checked={editData.is_achtung_kraft_member || false}
+                                  onCheckedChange={(checked) => 
+                                    setEditData({ ...editData, is_achtung_kraft_member: checked })
+                                  }
+                                />
+                                <Label htmlFor={`edit-ak-${member.id}`} className="text-gray-400 text-xs cursor-pointer">
+                                  AK
+                                </Label>
                               </div>
                               <Button
                                 size="icon"
@@ -272,10 +314,16 @@ export default function TeamMembersConfig() {
                                   {member.team_role && (
                                     <span className="text-sm text-gray-400">({member.team_role})</span>
                                   )}
+                                  {member.is_achtung_kraft_member && (
+                                    <span className="text-xs px-2 py-0.5 bg-red-900/30 text-red-400 border border-red-500 rounded">
+                                      AK Full Access
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex gap-3 text-sm text-gray-500 mt-1">
                                   {member.email && <span>{member.email}</span>}
                                   {member.phone && <span>{member.phone}</span>}
+                                  {member.company && <span>🏢 {member.company}</span>}
                                 </div>
                               </div>
                               <Button
