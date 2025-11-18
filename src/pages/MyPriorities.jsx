@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Flame, CheckCircle2, Circle, User, Tag } from "lucide-react";
+import { Flame, Loader2, FolderKanban } from "lucide-react";
+import { createPageUrl } from "@/utils";
+import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function MyPriorities() {
-  const queryClient = useQueryClient();
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [groupBy, setGroupBy] = useState('status');
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [groupBy, setGroupBy] = useState('category');
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
+  const queryClient = useQueryClient();
 
   // Get current user and team member
   useEffect(() => {
@@ -30,7 +32,6 @@ export default function MyPriorities() {
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
         
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
-          // Create a virtual team member with the selected company
           const virtualMember = {
             ...userTeamMember,
             company: viewAsCompany,
@@ -49,7 +50,7 @@ export default function MyPriorities() {
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
-    queryFn: () => base44.entities.Task.filter({ is_priority: true }, '-created_date'),
+    queryFn: () => base44.entities.Task.filter({ is_priority: true }),
     enabled: !!currentTeamMember,
   });
 
@@ -72,10 +73,9 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.TaskCategory.list(),
   });
 
-  const { data: teamMembers = [], isLoading: teamMembersLoading } = useQuery({
+  const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
-    enabled: !!currentTeamMember,
   });
 
   const { data: statuses = [] } = useQuery({
@@ -83,14 +83,8 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  const taskStatuses = statuses.filter(s => s.scope === 'Task');
-  const completedStatuses = taskStatuses.filter(s => 
-    s.label.toLowerCase().includes('complete') || s.label.toLowerCase().includes('done')
-  );
-  const completedStatusIds = completedStatuses.map(s => s.id);
-
   // Filter projects to only those where currentTeamMember is assigned
-  const projects = React.useMemo(() => {
+  const projects = useMemo(() => {
     if (!currentTeamMember) {
       return [];
     }
@@ -106,88 +100,118 @@ export default function MyPriorities() {
       }
       assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
 
-      // Filter projects where the currentTeamMember's ID is in assigned_team
       return assignedTeam.includes(currentTeamMember.id);
     });
 
     return filteredProjects;
   }, [allProjects, currentTeamMember]);
 
+  // Filter out completed tasks and only include tasks from user's projects
+  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+  const completedStatus = taskStatuses.find(s => {
+    const label = s.label.toLowerCase();
+    return label.includes('complete') || label.includes('done');
+  });
+  
   const projectIds = new Set(projects.map(p => p.id));
-
-  // Filter tasks to only those in user's projects and not completed
-  const activePriorityTasks = allTasks.filter(task => {
-    if (!projectIds.has(task.project_id)) return false;
-    if (completedStatusIds.includes(task.status_id)) return false;
-    return true;
+  const activePriorityTasks = allTasks.filter(t => {
+    return projectIds.has(t.project_id) && t.status_id !== completedStatus?.id;
   });
 
-  // Group tasks by project and then by selected criteria
-  const groupedByProject = {};
-  activePriorityTasks.forEach(task => {
-    const project = projects.find(p => p.id === task.project_id);
-    if (!project) return;
-
-    if (!groupedByProject[project.id]) {
-      groupedByProject[project.id] = {
-        project,
-        subGroups: {}
-      };
-    }
-
-    let subGroupKey = 'Ungrouped';
-    if (groupBy === 'status') {
-      const status = statuses.find(s => s.id === task.status_id);
-      subGroupKey = status?.label || 'No Status';
-    } else if (groupBy === 'assigned') {
-      const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
-      subGroupKey = member?.full_name || 'Unassigned';
-    } else if (groupBy === 'category') {
-      const category = categories.find(c => c.id === task.category_id);
-      subGroupKey = category?.name || 'No Category';
-    }
-
-    if (!groupedByProject[project.id].subGroups[subGroupKey]) {
-      groupedByProject[project.id].subGroups[subGroupKey] = [];
-    }
-    groupedByProject[project.id].subGroups[subGroupKey].push(task);
-  });
-
-  const handleToggleComplete = (task) => {
-    const isCompleted = completedStatusIds.includes(task.status_id);
+  // Group tasks by project, then sub-group by selected filter
+  const tasksByProject = useMemo(() => {
+    const grouped = {};
     
-    if (isCompleted) {
-      const firstNonCompletedStatus = taskStatuses.find(s => !completedStatusIds.includes(s.id));
-      updateTaskMutation.mutate({
-        id: task.id,
-        data: {
-          ...task,
-          status_id: firstNonCompletedStatus?.id || task.status_id,
-          completed_date: null
+    activePriorityTasks.forEach(task => {
+      const projectId = task.project_id;
+      if (!grouped[projectId]) {
+        grouped[projectId] = { tasks: [], groups: {} };
+      }
+      grouped[projectId].tasks.push(task);
+    });
+    
+    // Sub-group tasks within each project
+    Object.keys(grouped).forEach(projectId => {
+      const projectTasks = grouped[projectId].tasks;
+      const groups = {};
+      
+      projectTasks.forEach(task => {
+        let groupKey, groupLabel, groupColor;
+        
+        if (groupBy === 'status') {
+          const status = statuses.find(s => s.id === task.status_id);
+          groupKey = task.status_id || 'no-status';
+          groupLabel = status?.label || 'No Status';
+          groupColor = status?.color || '#6B7280';
+        } else if (groupBy === 'assigned') {
+          const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+          groupKey = task.assigned_team_member_id || 'unassigned';
+          groupLabel = member?.full_name || 'Unassigned';
+          groupColor = '#6B7280';
+        } else if (groupBy === 'category') {
+          const category = categories.find(c => c.id === task.category_id);
+          groupKey = task.category_id || 'no-category';
+          groupLabel = category?.name || 'No Category';
+          groupColor = category?.color || '#6B7280';
         }
+        
+        if (!groups[groupKey]) {
+          groups[groupKey] = {
+            label: groupLabel,
+            color: groupColor,
+            tasks: []
+          };
+        }
+        
+        groups[groupKey].tasks.push(task);
       });
+      
+      grouped[projectId].groups = groups;
+    });
+    
+    return grouped;
+  }, [activePriorityTasks, groupBy, statuses, teamMembers, categories]);
+
+  const handleToggleComplete = async (task) => {
+    const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
+    const completedStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes('complete') || label.includes('done');
+    });
+
+    const isCurrentlyComplete = task.status_id === completedStatus?.id;
+    
+    if (isCurrentlyComplete) {
+      const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
+      if (firstStatus) {
+        await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: {
+            status_id: firstStatus.id,
+            completed_date: null,
+          }
+        });
+        toast.success('Task reopened');
+      }
     } else {
-      const firstCompletedStatus = completedStatuses[0];
-      updateTaskMutation.mutate({
-        id: task.id,
-        data: {
-          ...task,
-          status_id: firstCompletedStatus?.id || task.status_id,
-          completed_date: new Date().toISOString()
-        }
-      });
+      if (completedStatus) {
+        await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: {
+            status_id: completedStatus.id,
+            completed_date: new Date().toISOString(),
+          }
+        });
+        toast.success('Task completed');
+      }
     }
   };
 
-  const isLoading = !currentTeamMember || teamMembersLoading || tasksLoading;
-
-  if (isLoading) {
+  if (!currentTeamMember || tasksLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
-          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
-            <p className="text-gray-500 text-lg">Loading priorities...</p>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-red-600" />
         </div>
       </div>
     );
@@ -196,121 +220,139 @@ export default function MyPriorities() {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
+        <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Flame className="w-8 h-8 text-orange-500" />
-                <h1 className="text-2xl md:text-3xl font-bold text-white">
-                  MY PRIORITIES
-                </h1>
-              </div>
-              <p className="text-sm text-gray-400 mt-1">
-                High-priority tasks from your assigned projects
-              </p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
+              <Flame className="w-6 h-6 text-red-500" />
             </div>
-
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className="border-orange-500 text-orange-400 text-base px-3 py-1">
-                {activePriorityTasks.length} Priority Task{activePriorityTasks.length !== 1 ? 's' : ''}
-              </Badge>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITIES</h1>
+              <p className="text-sm text-gray-400">
+                {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
+              </p>
             </div>
           </div>
 
-          {/* Group By Control */}
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">Group by:</span>
-                <Select value={groupBy} onValueChange={setGroupBy}>
-                  <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="status">
-                      <div className="flex items-center gap-2">
-                        <Circle className="w-4 h-4" />
-                        Status
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="assigned">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Assigned To
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="category">
-                      <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4" />
-                        Category
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Group By Filter */}
+          {activePriorityTasks.length > 0 && (
+            <div className="flex justify-end">
+              <Select value={groupBy} onValueChange={setGroupBy}>
+                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">Group by Status</SelectItem>
+                  <SelectItem value="assigned">Group by Assigned</SelectItem>
+                  <SelectItem value="category">Group by Category</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
-          {/* Tasks by Project */}
-          {Object.keys(groupedByProject).length === 0 ? (
+          {/* Priority Tasks by Project */}
+          {activePriorityTasks.length === 0 ? (
             <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-              <CardContent className="p-8 text-center">
-                <Flame className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">No priority tasks found</p>
-                <p className="text-gray-600 mt-2">
-                  No priority tasks in your assigned projects
+              <CardContent className="p-8 md:p-12 text-center">
+                <div className="flex items-center justify-center w-16 h-16 bg-red-600/10 rounded-full border-2 border-red-600/30 mx-auto mb-4">
+                  <Flame className="w-8 h-8 text-red-500/50" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">No Priority Tasks</h3>
+                <p className="text-gray-400 max-w-md mx-auto">
+                  No priority tasks found in your assigned projects. Drag tasks into the PRIORITY bucket on project boards to focus on what matters most.
                 </p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-6">
-              {Object.entries(groupedByProject).map(([projectId, { project, subGroups }]) => (
-                <Card key={projectId} className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-                  <CardHeader className="border-b border-red-900/30">
-                    <CardTitle className="text-white flex items-center gap-2">
-                      <div className="w-2 h-2 bg-red-500 rounded-full" />
-                      {project.name}
-                      <Badge variant="outline" className="ml-2 border-gray-600 text-gray-400">
-                        {Object.values(subGroups).flat().length} task{Object.values(subGroups).flat().length !== 1 ? 's' : ''}
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="space-y-4">
-                      {Object.entries(subGroups).map(([subGroupKey, groupTasks]) => (
-                        <div key={subGroupKey}>
-                          <h3 className="text-sm font-semibold text-gray-400 mb-2 uppercase tracking-wide">
-                            {subGroupKey} ({groupTasks.length})
-                          </h3>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            {groupTasks.map(task => (
-                              <TaskCard
-                                key={task.id}
-                                task={task}
-                                statuses={statuses}
-                                categories={categories}
-                                teamMembers={teamMembers}
-                                onToggleComplete={handleToggleComplete}
-                                onClick={() => setSelectedTaskId(task.id)}
-                              />
-                            ))}
+              {Object.entries(tasksByProject).map(([projectId, projectData]) => {
+                const project = projects.find(p => p.id === projectId);
+                if (!project) return null;
+                
+                const { tasks, groups } = projectData;
+
+                return (
+                  <Card key={projectId} className="bg-black/40 backdrop-blur-xl border-2 border-red-600/50 shadow-lg shadow-red-600/10">
+                    <CardHeader className="border-b border-red-900/30 p-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <FolderKanban className="w-5 h-5 text-red-400" />
+                          <div>
+                            <Link 
+                              to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                              className="hover:text-red-400 transition-colors"
+                            >
+                              <CardTitle className="text-white text-lg hover:underline">{project.name}</CardTitle>
+                            </Link>
+                            {project.client_name && (
+                              <p className="text-sm text-gray-400">{project.client_name}</p>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        <Badge 
+                          variant="outline" 
+                          className="border-red-600 text-red-400 bg-red-600/10"
+                        >
+                          {tasks.length} priority {tasks.length === 1 ? 'task' : 'tasks'}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(groups).map(([groupKey, groupData]) => (
+                          <div key={groupKey} className="col-span-1">
+                            <div 
+                              className="bg-black/40 rounded-lg border-2 overflow-hidden"
+                              style={{ borderColor: groupData.color }}
+                            >
+                              <div 
+                                className="p-3 border-b-2"
+                                style={{ 
+                                  borderBottomColor: groupData.color,
+                                  backgroundColor: `${groupData.color}15`
+                                }}
+                              >
+                                <h3 
+                                  className="font-semibold text-sm"
+                                  style={{ color: groupData.color }}
+                                >
+                                  {groupData.label}
+                                </h3>
+                                <span className="text-xs text-gray-400">
+                                  {groupData.tasks.length} {groupData.tasks.length === 1 ? 'task' : 'tasks'}
+                                </span>
+                              </div>
+                              <div className="p-3 space-y-2">
+                                {groupData.tasks.map(task => (
+                                  <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    categories={categories}
+                                    teamMembers={teamMembers}
+                                    statuses={statuses}
+                                    onToggleComplete={handleToggleComplete}
+                                    onClick={() => setSelectedTask(task)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {selectedTaskId && (
+      {selectedTask && (
         <TaskDetailDrawer
-          taskId={selectedTaskId}
-          onClose={() => setSelectedTaskId(null)}
+          task={selectedTask}
+          projectId={selectedTask.project_id}
+          onClose={() => setSelectedTask(null)}
         />
       )}
     </>
