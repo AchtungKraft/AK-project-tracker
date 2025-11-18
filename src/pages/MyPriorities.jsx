@@ -67,19 +67,7 @@ export default function MyPriorities() {
 
   const { data: allProjects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: async () => {
-      const list = await base44.entities.Project.list();
-      console.log('📦 [MyPriorities] All Projects:', list.length);
-      if (list.length > 0) {
-        console.log('📊 [MyPriorities] Sample assigned_team:', list.slice(0, 3).map(p => ({
-          name: p.name,
-          assigned_team: p.assigned_team,
-          type: typeof p.assigned_team
-        })));
-      }
-      return list;
-    },
-    enabled: !!currentTeamMember,
+    queryFn: () => base44.entities.Project.list(),
   });
 
   const { data: categories = [] } = useQuery({
@@ -100,11 +88,18 @@ export default function MyPriorities() {
   // Filter projects to only those where currentTeamMember is assigned
   const projects = useMemo(() => {
     if (!currentTeamMember) {
-      console.log('⏳ [MyPriorities] No currentTeamMember yet');
       return [];
     }
 
-    console.log('🔍 [MyPriorities] Filtering projects for Team Member ID:', currentTeamMember.id);
+    // If user is Achtung Kraft member (not viewing as company), show all projects
+    if (currentTeamMember.is_achtung_kraft_member) {
+      return allProjects;
+    }
+
+    // If user has no company assigned, show all projects
+    if (!currentTeamMember.company) {
+      return allProjects;
+    }
 
     const filteredProjects = allProjects.filter(project => {
       let assignedTeam = project.assigned_team;
@@ -116,16 +111,30 @@ export default function MyPriorities() {
         }
       }
       assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
+      
+      // If project has no team assigned, show it (fallback for unassigned projects)
+      if (assignedTeam.length === 0) {
+        return true;
+      }
+      
+      // Find team members
+      const projectTeamMembers = assignedTeam
+        .map(tmId => teamMembers.find(tm => tm.id === tmId))
+        .filter(Boolean);
 
-      const isAssigned = assignedTeam.includes(currentTeamMember.id);
-      console.log(`  Project "${project.name}": assigned_team=${JSON.stringify(assignedTeam)}, includes ${currentTeamMember.id}? ${isAssigned}`);
-
-      return isAssigned;
+      // Check company match
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => {
+        return tm.company && tm.company === currentTeamMember.company;
+      });
+      
+      // Check client match
+      const isClientCompany = project.client_name === currentTeamMember.company;
+      
+      return hasCompanyTeamMember || isClientCompany;
     });
 
-    console.log('✅ [MyPriorities] Filtered Projects:', filteredProjects.length);
     return filteredProjects;
-  }, [allProjects, currentTeamMember]);
+  }, [allProjects, currentTeamMember, teamMembers]);
 
   // Filter out completed tasks and only include tasks from user's projects
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
