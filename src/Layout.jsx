@@ -27,8 +27,16 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Building2 } from "lucide-react";
 
 const getNavigationItems = (isAchtungKraft) => {
   if (isAchtungKraft) {
