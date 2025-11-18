@@ -7,6 +7,8 @@ import AdminConfig from './pages/AdminConfig';
 import PartsTracker from './pages/PartsTracker';
 import PriorityDashboard from './pages/PriorityDashboard';
 import TasksExplorer from './pages/TasksExplorer';
+import MyProjects from './pages/MyProjects';
+import MyPriorities from './pages/MyPriorities';
 import __Layout from './Layout.jsx';
 
 
@@ -20,6 +22,8 @@ export const PAGES = {
     "PartsTracker": PartsTracker,
     "PriorityDashboard": PriorityDashboard,
     "TasksExplorer": TasksExplorer,
+    "MyProjects": MyProjects,
+    "MyPriorities": MyPriorities,
 }
 
 export const pagesConfig = {

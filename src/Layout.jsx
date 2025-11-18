@@ -30,52 +30,72 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const navigationItems = [
-  {
-    title: "Dashboard",
-    url: createPageUrl("Dashboard"),
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Priority",
-    url: createPageUrl("PriorityDashboard"),
-    icon: Flame,
-  },
-  {
-    title: "Projects",
-    url: createPageUrl("Projects"),
-    icon: FolderKanban,
-  },
-  {
-    title: "Tasks",
-    url: createPageUrl("TasksExplorer"),
-    icon: ListChecks,
-  },
-  {
-    title: "Parts Tracker",
-    url: createPageUrl("PartsTracker"),
-    icon: Package,
-  },
-  {
-    title: "Reports",
-    url: createPageUrl("Reports"),
-    icon: BarChart3,
-  },
-  {
-    title: "Admin Config",
-    url: createPageUrl("AdminConfig"),
-    icon: Settings,
-  },
-];
+const getNavigationItems = (isAchtungKraft) => {
+  if (isAchtungKraft) {
+    return [
+      {
+        title: "Dashboard",
+        url: createPageUrl("Dashboard"),
+        icon: LayoutDashboard,
+      },
+      {
+        title: "Priority",
+        url: createPageUrl("PriorityDashboard"),
+        icon: Flame,
+      },
+      {
+        title: "Projects",
+        url: createPageUrl("Projects"),
+        icon: FolderKanban,
+      },
+      {
+        title: "Tasks",
+        url: createPageUrl("TasksExplorer"),
+        icon: ListChecks,
+      },
+      {
+        title: "Parts Tracker",
+        url: createPageUrl("PartsTracker"),
+        icon: Package,
+      },
+      {
+        title: "Reports",
+        url: createPageUrl("Reports"),
+        icon: BarChart3,
+      },
+      {
+        title: "Admin Config",
+        url: createPageUrl("AdminConfig"),
+        icon: Settings,
+      },
+    ];
+  } else {
+    return [
+      {
+        title: "My Projects",
+        url: createPageUrl("MyProjects"),
+        icon: FolderKanban,
+      },
+      {
+        title: "My Priorities",
+        url: createPageUrl("MyPriorities"),
+        icon: Flame,
+      },
+    ];
+  }
+};
 
 // Mobile bottom nav
-const MobileBottomNav = ({ currentPath }) => {
-  const mobileItems = [
+const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
+  const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priority", url: createPageUrl("PriorityDashboard"), icon: Flame },
     { title: "Tasks", url: createPageUrl("TasksExplorer"), icon: ListChecks },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
     { title: "Admin", url: createPageUrl("AdminConfig"), icon: Settings },
+  ] : [
+    { title: "Projects", url: createPageUrl("MyProjects"), icon: FolderKanban },
+    { title: "Priorities", url: createPageUrl("MyPriorities"), icon: Flame },
   ];
 
   return (
@@ -106,6 +126,7 @@ const MobileBottomNav = ({ currentPath }) => {
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const [user, setUser] = useState(null);
+  const [teamMember, setTeamMember] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -116,8 +137,38 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
+    const fetchUserAndTeamMember = async () => {
+      try {
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+        
+        const teamMembers = await base44.entities.TeamMember.list();
+        const userTeamMember = teamMembers.find(tm => tm.user_id === currentUser.id);
+        setTeamMember(userTeamMember);
+        
+        // Redirect company users to My Projects if they try to access unauthorized pages
+        if (userTeamMember && !userTeamMember.is_achtung_kraft_member) {
+          const allowedPaths = [
+            createPageUrl("MyProjects"),
+            createPageUrl("MyPriorities"),
+            createPageUrl("ProjectDetail")
+          ];
+          const currentPath = location.pathname;
+          const isAllowed = allowedPaths.some(path => currentPath.startsWith(path));
+          
+          if (!isAllowed) {
+            window.location.href = createPageUrl("MyProjects");
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
+    };
+    fetchUserAndTeamMember();
+  }, [location.pathname]);
+
+  const isAchtungKraft = teamMember?.is_achtung_kraft_member ?? true;
+  const navigationItems = getNavigationItems(isAchtungKraft);
 
   if (isMobile) {
     return (
@@ -154,7 +205,7 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </main>
 
-        <MobileBottomNav currentPath={location.pathname} />
+        <MobileBottomNav currentPath={location.pathname} isAchtungKraft={isAchtungKraft} />
       </div>
     );
   }
