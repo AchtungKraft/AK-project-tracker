@@ -127,6 +127,10 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [teamMember, setTeamMember] = useState(null);
+  const [allTeamMembers, setAllTeamMembers] = useState([]);
+  const [viewAsCompany, setViewAsCompany] = useState(() => {
+    return localStorage.getItem('achtung_view_as_company') || null;
+  });
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -143,11 +147,14 @@ export default function Layout({ children, currentPageName }) {
         setUser(currentUser);
         
         const teamMembers = await base44.entities.TeamMember.list();
+        setAllTeamMembers(teamMembers);
         const userTeamMember = teamMembers.find(tm => tm.user_id === currentUser.id);
         setTeamMember(userTeamMember);
         
         // Redirect company users to My Projects if they try to access unauthorized pages
-        if (userTeamMember && !userTeamMember.is_achtung_kraft_member) {
+        // If Achtung Kraft member is viewing as a company, also apply restrictions
+        const isViewingAsCompany = userTeamMember?.is_achtung_kraft_member && viewAsCompany;
+        if ((userTeamMember && !userTeamMember.is_achtung_kraft_member) || isViewingAsCompany) {
           const allowedPaths = [
             createPageUrl("MyProjects"),
             createPageUrl("MyPriorities"),
@@ -165,10 +172,27 @@ export default function Layout({ children, currentPageName }) {
       }
     };
     fetchUserAndTeamMember();
-  }, [location.pathname]);
+  }, [location.pathname, viewAsCompany]);
 
-  const isAchtungKraft = teamMember?.is_achtung_kraft_member ?? true;
+  const handleViewAsChange = (company) => {
+    if (company === 'achtung_kraft') {
+      setViewAsCompany(null);
+      localStorage.removeItem('achtung_view_as_company');
+      window.location.href = createPageUrl("Dashboard");
+    } else {
+      setViewAsCompany(company);
+      localStorage.setItem('achtung_view_as_company', company);
+      window.location.href = createPageUrl("MyProjects");
+    }
+  };
+
+  // Determine effective access level
+  const isAchtungKraftMember = teamMember?.is_achtung_kraft_member ?? true;
+  const isAchtungKraft = isAchtungKraftMember && !viewAsCompany;
   const navigationItems = getNavigationItems(isAchtungKraft);
+
+  // Get unique company names for the dropdown
+  const companies = [...new Set(allTeamMembers.filter(tm => tm.company).map(tm => tm.company))].sort();
 
   if (isMobile) {
     return (
@@ -270,7 +294,36 @@ export default function Layout({ children, currentPageName }) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-red-900/30 p-3">
+          <SidebarFooter className="border-t border-red-900/30 p-3 space-y-3">
+            {/* View As Selector for Achtung Kraft Members */}
+            {isAchtungKraftMember && companies.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400 uppercase tracking-wide">View As</label>
+                <Select 
+                  value={viewAsCompany || 'achtung_kraft'} 
+                  onValueChange={handleViewAsChange}
+                >
+                  <SelectTrigger className="w-full bg-gray-900/50 border-gray-700 text-white h-9">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4" />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="achtung_kraft">
+                      <span className="font-semibold text-red-400">⚡ Achtung Kraft (Full Access)</span>
+                    </SelectItem>
+                    {companies.map(company => (
+                      <SelectItem key={company} value={company}>
+                        🏢 {company}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* User Info */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-xs">
@@ -282,7 +335,7 @@ export default function Layout({ children, currentPageName }) {
                   {user?.full_name || 'User'}
                 </p>
                 <p className="text-xs text-gray-400 truncate">
-                  {user?.team_role || user?.role || 'Team Member'}
+                  {viewAsCompany ? `Viewing as: ${viewAsCompany}` : (user?.team_role || user?.role || 'Team Member')}
                 </p>
               </div>
             </div>

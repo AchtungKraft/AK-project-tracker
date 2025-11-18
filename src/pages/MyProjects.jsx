@@ -36,7 +36,19 @@ export default function MyProjects() {
         // Find team member associated with this user
         const teamMembers = await base44.entities.TeamMember.list();
         const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
-        setCurrentTeamMember(userTeamMember);
+        
+        // Check if Achtung Kraft member is viewing as a company
+        const viewAsCompany = localStorage.getItem('achtung_view_as_company');
+        if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
+          // Create a virtual team member with the selected company
+          setCurrentTeamMember({
+            ...userTeamMember,
+            company: viewAsCompany,
+            is_achtung_kraft_member: false // Temporarily disable full access
+          });
+        } else {
+          setCurrentTeamMember(userTeamMember);
+        }
       } catch (error) {
         console.error('Error fetching user:', error);
       }
