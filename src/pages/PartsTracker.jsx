@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse } from "lucide-react";
+import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import NeedToBuy from "../components/parts/NeedToBuy";
 import OnOrder from "../components/parts/OnOrder";
@@ -11,6 +13,8 @@ import EditPartDrawer from "../components/parts/EditPartDrawer";
 
 export default function PartsTracker() {
   const [selectedPartId, setSelectedPartId] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
   const handlePartClick = (part) => {
     setSelectedPartId(part.id);
@@ -20,11 +24,27 @@ export default function PartsTracker() {
     <>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
-              PARTS TRACKER
-            </h1>
-            <p className="text-sm text-gray-400">Manage parts inventory, orders, and build assignments</p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                PARTS TRACKER
+              </h1>
+              <p className="text-sm text-gray-400">Manage parts inventory, orders, and build assignments</p>
+            </div>
+            <Button
+              onClick={async () => {
+                setIsRefreshing(true);
+                await queryClient.invalidateQueries();
+                setIsRefreshing(false);
+              }}
+              variant="outline"
+              size="sm"
+              className="border-gray-700 text-white gap-2"
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
           </div>
 
           <Tabs defaultValue="parts-master" className="w-full">

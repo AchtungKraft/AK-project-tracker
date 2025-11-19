@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, RefreshCw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -23,6 +23,8 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [groupBy, setGroupBy] = useState('projectType');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
@@ -97,13 +99,28 @@ export default function Dashboard() {
             </h1>
             <p className="text-sm text-gray-400">Ächtung Kraft Project Tracking Platform</p>
           </div>
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-red-600 hover:bg-red-700 gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New Project
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={async () => {
+                setIsRefreshing(true);
+                await queryClient.invalidateQueries();
+                setIsRefreshing(false);
+              }}
+              variant="outline"
+              className="border-gray-700 text-white gap-2"
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-red-600 hover:bg-red-700 gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              New Project
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
