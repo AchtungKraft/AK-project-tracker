@@ -12,9 +12,9 @@ import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLa
 import EditPartDrawer from "../components/parts/EditPartDrawer";
 
 export default function PartsTracker() {
+  const queryClient = useQueryClient();
   const [selectedPartId, setSelectedPartId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const queryClient = useQueryClient();
 
   const handlePartClick = (part) => {
     setSelectedPartId(part.id);

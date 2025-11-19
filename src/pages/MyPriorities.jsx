@@ -13,12 +13,12 @@ import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function MyPriorities() {
+  const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('category');
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const queryClient = useQueryClient();
 
   // Get current user and team member
   useEffect(() => {
