@@ -17,6 +17,7 @@ import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,7 +25,6 @@ export default function Dashboard() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [groupBy, setGroupBy] = useState('projectType');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const queryClient = useQueryClient();
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
