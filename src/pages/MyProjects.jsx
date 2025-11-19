@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, RefreshCw } from "lucide-react";
@@ -17,6 +17,7 @@ import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function MyProjects() {
+  const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,7 +27,6 @@ export default function MyProjects() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const queryClient = useQueryClient();
 
   // Get current user and team member
   useEffect(() => {
