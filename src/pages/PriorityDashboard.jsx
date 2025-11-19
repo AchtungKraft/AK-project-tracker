@@ -13,10 +13,10 @@ import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 
 export default function PriorityDashboard() {
+  const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('category');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const queryClient = useQueryClient();
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
