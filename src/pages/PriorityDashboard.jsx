@@ -16,6 +16,7 @@ export default function PriorityDashboard() {
   const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('category');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
@@ -57,7 +58,11 @@ export default function PriorityDashboard() {
     const label = s.label.toLowerCase();
     return label.includes('complete') || label.includes('done');
   });
-  const activePriorityTasks = allTasks.filter(t => t.status_id !== completedStatus?.id);
+  const activePriorityTasks = allTasks.filter(t => {
+    if (t.status_id === completedStatus?.id) return false;
+    if (assignedToFilter !== 'all' && t.assigned_team_member_id !== assignedToFilter) return false;
+    return true;
+  });
 
   // Group tasks by project, then sub-group by selected filter
   const tasksByProject = useMemo(() => {
@@ -193,9 +198,22 @@ export default function PriorityDashboard() {
             </Button>
           </div>
 
-          {/* Group By Filter */}
-          {activePriorityTasks.length > 0 && (
-            <div className="flex justify-end">
+          {/* Filters */}
+          {allTasks.length > 0 && (
+            <div className="flex justify-end gap-3 flex-wrap">
+              <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="Filter by Assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Team Members</SelectItem>
+                  {teamMembers.filter(tm => tm.active).map(member => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={groupBy} onValueChange={setGroupBy}>
                 <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue />
