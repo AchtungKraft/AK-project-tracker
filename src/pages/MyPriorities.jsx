@@ -16,7 +16,6 @@ export default function MyPriorities() {
   const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('category');
-  const [currentUser, setCurrentUser] = useState(null);
   const [currentTeamMember, setCurrentTeamMember] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -25,21 +24,18 @@ export default function MyPriorities() {
     const fetchUser = async () => {
       try {
         const user = await base44.auth.me();
-        setCurrentUser(user);
-        
-        const teamMembers = await base44.entities.TeamMember.list();
-        const userTeamMember = teamMembers.find(tm => tm.user_id === user.id);
+        const teamMembersList = await base44.entities.TeamMember.list();
+        const userTeamMember = teamMembersList.find(tm => tm.user_id === user.id);
         
         // Check if Achtung Kraft member is viewing as a company
         const viewAsCompany = localStorage.getItem('achtung_view_as_company');
         
         if (userTeamMember?.is_achtung_kraft_member && viewAsCompany) {
-          const virtualMember = {
+          setCurrentTeamMember({
             ...userTeamMember,
             company: viewAsCompany,
             is_achtung_kraft_member: false
-          };
-          setCurrentTeamMember(virtualMember);
+          });
         } else {
           setCurrentTeamMember(userTeamMember);
         }
@@ -53,7 +49,6 @@ export default function MyPriorities() {
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
     queryFn: () => base44.entities.Task.filter({ is_priority: true }),
-    enabled: !!currentTeamMember,
   });
 
   const updateTaskMutation = useMutation({
@@ -84,55 +79,32 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  // Filter projects to only those where currentTeamMember is assigned
+  // Filter projects to only those where currentTeamMember's company is assigned
   const projects = useMemo(() => {
-    if (!currentTeamMember) {
-      return [];
-    }
+    if (!currentTeamMember) return [];
+    if (currentTeamMember.is_achtung_kraft_member) return allProjects;
+    if (!currentTeamMember.company) return allProjects;
 
-    // If user is Achtung Kraft member (not viewing as company), show all projects
-    if (currentTeamMember.is_achtung_kraft_member) {
-      return allProjects;
-    }
-
-    // If user has no company assigned, show all projects
-    if (!currentTeamMember.company) {
-      return allProjects;
-    }
-
-    const filteredProjects = allProjects.filter(project => {
+    return allProjects.filter(project => {
       let assignedTeam = project.assigned_team;
       if (typeof assignedTeam === 'string') {
-        try {
-          assignedTeam = JSON.parse(assignedTeam);
-        } catch (e) {
-          assignedTeam = [];
-        }
+        try { assignedTeam = JSON.parse(assignedTeam); } catch { assignedTeam = []; }
       }
       assignedTeam = Array.isArray(assignedTeam) ? assignedTeam : [];
       
-      // If project has no team assigned, show it (fallback for unassigned projects)
-      if (assignedTeam.length === 0) {
-        return true;
-      }
+      if (assignedTeam.length === 0) return true;
       
-      // Find team members
       const projectTeamMembers = assignedTeam
         .map(tmId => teamMembers.find(tm => tm.id === tmId))
         .filter(Boolean);
 
-      // Check company match
-      const hasCompanyTeamMember = projectTeamMembers.some(tm => {
-        return tm.company && tm.company === currentTeamMember.company;
-      });
-      
-      // Check client match
+      const hasCompanyTeamMember = projectTeamMembers.some(tm => 
+        tm.company && tm.company === currentTeamMember.company
+      );
       const isClientCompany = project.client_name === currentTeamMember.company;
       
       return hasCompanyTeamMember || isClientCompany;
     });
-
-    return filteredProjects;
   }, [allProjects, currentTeamMember, teamMembers]);
 
   // Filter out completed tasks and only include tasks from user's projects
@@ -143,9 +115,9 @@ export default function MyPriorities() {
   });
   
   const projectIds = new Set(projects.map(p => p.id));
-  const activePriorityTasks = allTasks.filter(t => {
-    return projectIds.has(t.project_id) && t.status_id !== completedStatus?.id;
-  });
+  const activePriorityTasks = allTasks.filter(t => 
+    projectIds.has(t.project_id) && t.status_id !== completedStatus?.id
+  );
 
   // Group tasks by project, then sub-group by selected filter
   const tasksByProject = useMemo(() => {
@@ -159,7 +131,6 @@ export default function MyPriorities() {
       grouped[projectId].tasks.push(task);
     });
     
-    // Sub-group tasks within each project
     Object.keys(grouped).forEach(projectId => {
       const projectTasks = grouped[projectId].tasks;
       const groups = {};
@@ -185,13 +156,8 @@ export default function MyPriorities() {
         }
         
         if (!groups[groupKey]) {
-          groups[groupKey] = {
-            label: groupLabel,
-            color: groupColor,
-            tasks: []
-          };
+          groups[groupKey] = { label: groupLabel, color: groupColor, tasks: [] };
         }
-        
         groups[groupKey].tasks.push(task);
       });
       
@@ -202,37 +168,28 @@ export default function MyPriorities() {
   }, [activePriorityTasks, groupBy, statuses, teamMembers, categories]);
 
   const handleToggleComplete = async (task) => {
-    const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-    const completedStatus = taskStatuses.find(s => {
+    const completedStat = taskStatuses.find(s => {
       const label = s.label.toLowerCase();
       return label.includes('complete') || label.includes('done');
     });
 
-    const isCurrentlyComplete = task.status_id === completedStatus?.id;
+    const isCurrentlyComplete = task.status_id === completedStat?.id;
     
     if (isCurrentlyComplete) {
-      const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
+      const firstStatus = taskStatuses.find(s => s.id !== completedStat?.id);
       if (firstStatus) {
         await updateTaskMutation.mutateAsync({
           id: task.id,
-          data: {
-            status_id: firstStatus.id,
-            completed_date: null,
-          }
+          data: { status_id: firstStatus.id, completed_date: null }
         });
         toast.success('Task reopened');
       }
-    } else {
-      if (completedStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: {
-            status_id: completedStatus.id,
-            completed_date: new Date().toISOString(),
-          }
-        });
-        toast.success('Task completed');
-      }
+    } else if (completedStat) {
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: { status_id: completedStat.id, completed_date: new Date().toISOString() }
+      });
+      toast.success('Task completed');
     }
   };
 
@@ -257,7 +214,7 @@ export default function MyPriorities() {
                 <Flame className="w-6 h-6 text-red-500" />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITIES</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITY TASKS</h1>
                 <p className="text-sm text-gray-400">
                   {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
                 </p>
@@ -304,7 +261,7 @@ export default function MyPriorities() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-2">No Priority Tasks</h3>
                 <p className="text-gray-400 max-w-md mx-auto">
-                  No priority tasks found in your assigned projects. Drag tasks into the PRIORITY bucket on project boards to focus on what matters most.
+                  Drag tasks into the PRIORITY bucket on project boards to focus on what matters most.
                 </p>
               </CardContent>
             </Card>
