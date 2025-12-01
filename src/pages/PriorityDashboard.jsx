@@ -15,7 +15,8 @@ import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
-  const [groupBy, setGroupBy] = useState('category');
+  const [primaryGroupBy, setPrimaryGroupBy] = useState('project');
+  const [secondaryGroupBy, setSecondaryGroupBy] = useState('status');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -64,59 +65,77 @@ export default function PriorityDashboard() {
     return true;
   });
 
-  // Group tasks by project, then sub-group by selected filter
-  const tasksByProject = useMemo(() => {
-    const grouped = {};
-    
+  // Group tasks by primary grouping, then sub-group by secondary grouping
+  const groupedTasks = useMemo(() => {
+    const primaryGroups = {};
+
     activePriorityTasks.forEach(task => {
-      const projectId = task.project_id;
-      if (!grouped[projectId]) {
-        grouped[projectId] = { tasks: [], groups: {} };
+      let primaryKey, primaryLabel, primaryColor;
+
+      if (primaryGroupBy === 'project') {
+        const project = projects.find(p => p.id === task.project_id);
+        primaryKey = task.project_id;
+        primaryLabel = project?.name || 'No Project';
+        primaryColor = '#EF4444';
+      } else if (primaryGroupBy === 'category') {
+        const category = categories.find(c => c.id === task.category_id);
+        primaryKey = task.category_id || 'no-category';
+        primaryLabel = category?.name || 'No Category';
+        primaryColor = category?.color || '#6B7280';
       }
-      grouped[projectId].tasks.push(task);
+
+      if (!primaryGroups[primaryKey]) {
+        primaryGroups[primaryKey] = {
+          id: primaryKey,
+          label: primaryLabel,
+          color: primaryColor,
+          tasks: [],
+          secondaryGroups: {},
+        };
+      }
+      primaryGroups[primaryKey].tasks.push(task);
     });
-    
-    // Sub-group tasks within each project
-    Object.keys(grouped).forEach(projectId => {
-      const projectTasks = grouped[projectId].tasks;
-      const groups = {};
-      
-      projectTasks.forEach(task => {
-        let groupKey, groupLabel, groupColor;
-        
-        if (groupBy === 'status') {
+
+    // Sub-group tasks within each primary group
+    Object.values(primaryGroups).forEach(primaryGroup => {
+      const secondaryGroups = {};
+
+      primaryGroup.tasks.forEach(task => {
+        let secondaryKey, secondaryLabel, secondaryColor;
+
+        if (secondaryGroupBy === 'status') {
           const status = statuses.find(s => s.id === task.status_id);
-          groupKey = task.status_id || 'no-status';
-          groupLabel = status?.label || 'No Status';
-          groupColor = status?.color || '#6B7280';
-        } else if (groupBy === 'assigned') {
+          secondaryKey = task.status_id || 'no-status';
+          secondaryLabel = status?.label || 'No Status';
+          secondaryColor = status?.color || '#6B7280';
+        } else if (secondaryGroupBy === 'assigned') {
           const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
-          groupKey = task.assigned_team_member_id || 'unassigned';
-          groupLabel = member?.full_name || 'Unassigned';
-          groupColor = '#6B7280';
-        } else if (groupBy === 'category') {
+          secondaryKey = task.assigned_team_member_id || 'unassigned';
+          secondaryLabel = member?.full_name || 'Unassigned';
+          secondaryColor = '#6B7280';
+        } else if (secondaryGroupBy === 'category') {
           const category = categories.find(c => c.id === task.category_id);
-          groupKey = task.category_id || 'no-category';
-          groupLabel = category?.name || 'No Category';
-          groupColor = category?.color || '#6B7280';
+          secondaryKey = task.category_id || 'no-category';
+          secondaryLabel = category?.name || 'No Category';
+          secondaryColor = category?.color || '#6B7280';
+        } else if (secondaryGroupBy === 'project') {
+          const project = projects.find(p => p.id === task.project_id);
+          secondaryKey = task.project_id;
+          secondaryLabel = project?.name || 'No Project';
+          secondaryColor = '#6B7280';
         }
-        
-        if (!groups[groupKey]) {
-          groups[groupKey] = {
-            label: groupLabel,
-            color: groupColor,
-            tasks: []
-          };
+
+        if (!secondaryGroups[secondaryKey]) {
+          secondaryGroups[secondaryKey] = { label: secondaryLabel, color: secondaryColor, tasks: [] };
         }
-        
-        groups[groupKey].tasks.push(task);
+        secondaryGroups[secondaryKey].tasks.push(task);
       });
-      
-      grouped[projectId].groups = groups;
+
+      primaryGroup.secondaryGroups = secondaryGroups;
     });
-    
-    return grouped;
-  }, [activePriorityTasks, groupBy, statuses, teamMembers, categories]);
+
+    return primaryGroups;
+  }, [activePriorityTasks, primaryGroupBy, secondaryGroupBy, projects, categories, statuses, teamMembers]);
 
   const handleToggleComplete = async (task) => {
     const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -178,7 +197,7 @@ export default function PriorityDashboard() {
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white">PRIORITY DASHBOARD</h1>
                 <p className="text-sm text-gray-400">
-                  {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
+                  {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(groupedTasks).length} {primaryGroupBy === 'project' ? (Object.keys(groupedTasks).length === 1 ? 'project' : 'projects') : (Object.keys(groupedTasks).length === 1 ? 'category' : 'categories')}
                 </p>
               </div>
             </div>
@@ -214,20 +233,30 @@ export default function PriorityDashboard() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={groupBy} onValueChange={setGroupBy}>
+              <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
                 <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue />
+                  <SelectValue placeholder="Primary Group" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="status">Group by Status</SelectItem>
-                  <SelectItem value="assigned">Group by Assigned</SelectItem>
+                  <SelectItem value="project">Group by Project</SelectItem>
                   <SelectItem value="category">Group by Category</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={secondaryGroupBy} onValueChange={setSecondaryGroupBy}>
+                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="Secondary Group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">Then by Status</SelectItem>
+                  <SelectItem value="assigned">Then by Assigned</SelectItem>
+                  {primaryGroupBy !== 'category' && <SelectItem value="category">Then by Category</SelectItem>}
+                  {primaryGroupBy !== 'project' && <SelectItem value="project">Then by Project</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          {/* Priority Tasks by Project */}
+          {/* Priority Tasks Grouped */}
           {activePriorityTasks.length === 0 ? (
             <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
               <CardContent className="p-8 md:p-12 text-center">
@@ -242,33 +271,45 @@ export default function PriorityDashboard() {
             </Card>
           ) : (
             <div className="space-y-6">
-              {Object.entries(tasksByProject).map(([projectId, projectData]) => {
-                const project = projects.find(p => p.id === projectId);
-                if (!project) return null;
-                
-                const { tasks, groups } = projectData;
+              {Object.entries(groupedTasks).map(([primaryKey, primaryGroup]) => {
+                const { tasks, secondaryGroups } = primaryGroup;
+                const project = primaryGroupBy === 'project' ? projects.find(p => p.id === primaryKey) : null;
 
                 return (
-                  <Card key={projectId} className="bg-black/40 backdrop-blur-xl border-2 border-red-600/50 shadow-lg shadow-red-600/10">
-                    <CardHeader className="border-b border-red-900/30 p-4">
+                  <Card 
+                    key={primaryKey} 
+                    className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+                    style={{ 
+                      borderColor: `${primaryGroup.color}80`,
+                      boxShadow: `0 10px 15px -3px ${primaryGroup.color}20`
+                    }}
+                  >
+                    <CardHeader 
+                      className="border-b p-4"
+                      style={{ borderBottomColor: `${primaryGroup.color}50` }}
+                    >
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-3">
-                          <FolderKanban className="w-5 h-5 text-red-400" />
+                          {primaryGroupBy === 'project' && <FolderKanban className="w-5 h-5" style={{ color: primaryGroup.color }} />}
                           <div>
-                            <Link 
-                              to={createPageUrl("ProjectDetail") + "?id=" + project.id}
-                              className="hover:text-red-400 transition-colors"
-                            >
-                              <CardTitle className="text-white text-lg hover:underline">{project.name}</CardTitle>
-                            </Link>
-                            {project.client_name && (
+                            {primaryGroupBy === 'project' && project ? (
+                              <Link 
+                                to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                                className="hover:opacity-80 transition-opacity"
+                              >
+                                <CardTitle className="text-lg hover:underline" style={{ color: primaryGroup.color }}>{primaryGroup.label}</CardTitle>
+                              </Link>
+                            ) : (
+                              <CardTitle className="text-lg" style={{ color: primaryGroup.color }}>{primaryGroup.label}</CardTitle>
+                            )}
+                            {primaryGroupBy === 'project' && project?.client_name && (
                               <p className="text-sm text-gray-400">{project.client_name}</p>
                             )}
                           </div>
                         </div>
                         <Badge 
                           variant="outline" 
-                          className="border-red-600 text-red-400 bg-red-600/10"
+                          style={{ borderColor: primaryGroup.color, color: primaryGroup.color, backgroundColor: `${primaryGroup.color}15` }}
                         >
                           {tasks.length} priority {tasks.length === 1 ? 'task' : 'tasks'}
                         </Badge>
@@ -276,31 +317,31 @@ export default function PriorityDashboard() {
                     </CardHeader>
                     <CardContent className="p-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {Object.entries(groups).map(([groupKey, groupData]) => (
-                          <div key={groupKey} className="col-span-1">
+                        {Object.entries(secondaryGroups).map(([secondaryKey, secondaryGroup]) => (
+                          <div key={secondaryKey} className="col-span-1">
                             <div 
                               className="bg-black/40 rounded-lg border-2 overflow-hidden"
-                              style={{ borderColor: groupData.color }}
+                              style={{ borderColor: secondaryGroup.color }}
                             >
                               <div 
                                 className="p-3 border-b-2"
                                 style={{ 
-                                  borderBottomColor: groupData.color,
-                                  backgroundColor: `${groupData.color}15`
+                                  borderBottomColor: secondaryGroup.color,
+                                  backgroundColor: `${secondaryGroup.color}15`
                                 }}
                               >
                                 <h3 
                                   className="font-semibold text-sm"
-                                  style={{ color: groupData.color }}
+                                  style={{ color: secondaryGroup.color }}
                                 >
-                                  {groupData.label}
+                                  {secondaryGroup.label}
                                 </h3>
                                 <span className="text-xs text-gray-400">
-                                  {groupData.tasks.length} {groupData.tasks.length === 1 ? 'task' : 'tasks'}
+                                  {secondaryGroup.tasks.length} {secondaryGroup.tasks.length === 1 ? 'task' : 'tasks'}
                                 </span>
                               </div>
                               <div className="p-3 space-y-2">
-                                {groupData.tasks.map(task => (
+                                {secondaryGroup.tasks.map(task => (
                                   <TaskCard
                                     key={task.id}
                                     task={task}
