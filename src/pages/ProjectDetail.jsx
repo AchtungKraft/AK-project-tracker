@@ -11,6 +11,7 @@ import ProjectOverview from "../components/project/ProjectOverview";
 import ProjectTasks from "../components/project/ProjectTasks";
 import ProjectParts from "../components/project/ProjectParts";
 import ProjectJournal from "../components/project/ProjectJournal";
+import ProjectClientPortal from "../components/project/ProjectClientPortal";
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
@@ -79,6 +80,7 @@ export default function ProjectDetail() {
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="parts">Parts</TabsTrigger>
             <TabsTrigger value="journal">Journal</TabsTrigger>
+            <TabsTrigger value="clientportal">Client Portal</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
@@ -95,6 +97,10 @@ export default function ProjectDetail() {
 
           <TabsContent value="journal" className="mt-6">
             <ProjectJournal projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="clientportal" className="mt-6">
+            <ProjectClientPortal projectId={projectId} />
           </TabsContent>
         </Tabs>
       </div>

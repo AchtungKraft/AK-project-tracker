@@ -11,10 +11,61 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CalendarIcon, Loader2, Trash2, UserPlus, Save } from "lucide-react";
+import { CalendarIcon, Loader2, Trash2, UserPlus, Save, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
+
+function ClientFeedbackLinks({ taskId }) {
+  const navigate = useNavigate();
+  
+  const { data: feedbackLinks = [] } = useQuery({
+    queryKey: ['taskFeedbackLinks', taskId],
+    queryFn: () => base44.entities.ClientFeedbackTaskLink.filter({ task_id: taskId }),
+    enabled: !!taskId,
+  });
+
+  const { data: requests = [] } = useQuery({
+    queryKey: ['clientFeedbackRequests'],
+    queryFn: () => base44.entities.ClientFeedbackRequest.list(),
+    enabled: feedbackLinks.length > 0,
+  });
+
+  if (feedbackLinks.length === 0) return null;
+
+  const linkedRequests = feedbackLinks.map(link => {
+    const request = requests.find(r => r.id === link.feedback_request_id);
+    return request ? { ...link, request } : null;
+  }).filter(Boolean);
+
+  if (linkedRequests.length === 0) return null;
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold text-white mb-3">Client Feedback</h3>
+      <div className="space-y-2">
+        {linkedRequests.map(({ request, project_id }) => (
+          <div key={request.id} className="bg-gray-800/50 rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <p className="text-white text-sm font-medium">{request.title}</p>
+              <p className="text-xs text-gray-400">Created from client approval</p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => navigate(createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${project_id}`)}
+              className="text-blue-400 hover:text-blue-300"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -430,6 +481,9 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           </div>
 
           <Separator className="bg-gray-700" />
+
+          {/* Client Feedback Links */}
+          <ClientFeedbackLinks taskId={task?.id} />
 
           {/* Comments Section */}
           <TaskCommentsSection taskId={task?.id} />
