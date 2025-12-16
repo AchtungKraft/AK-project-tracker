@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink } from "lucide-react";
+import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -27,10 +27,16 @@ export default function ClientFeedbackDetail() {
   const [user, setUser] = useState(null);
   const [newComment, setNewComment] = useState('');
   const [visibility, setVisibility] = useState('client_visible');
+  const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [newLinks, setNewLinks] = useState(['']);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState(null);
+  const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
+  const [requestDecisionType, setRequestDecisionType] = useState('');
+  const [requestDecisionNote, setRequestDecisionNote] = useState('');
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -75,6 +81,8 @@ export default function ClientFeedbackDetail() {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
       setNewComment('');
       setNewLinks(['']);
+      setUploadedPhotos([]);
+      setUploadedFiles([]);
     }
   });
 
@@ -83,6 +91,18 @@ export default function ClientFeedbackDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
     }
+  });
+
+  const createRequestDecisionMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      setRequestDecisionNote('');
+      setShowRequestDecisionForm(false);
+      toast.success('Decision recorded');
+    },
   });
 
   const handlePostToClient = () => {
@@ -111,27 +131,94 @@ export default function ClientFeedbackDetail() {
 
     setUploadingImages(true);
     try {
-      for (const file of files) {
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          attachment_type: 'image',
-          file_url,
-          created_by_type: 'internal_user',
-          created_by_id: user.id
-        });
-      }
+      const uploadPromises = files.map(file =>
+        base44.integrations.Core.UploadFile({ file })
+      );
+      const results = await Promise.all(uploadPromises);
+      const photoUrls = results.map(r => r.file_url);
+      
+      setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
       toast.success('Images uploaded');
+      e.target.value = '';
     } catch (error) {
+      console.error('Upload error:', error);
       toast.error('Failed to upload images');
     } finally {
       setUploadingImages(false);
     }
   };
 
+  const handleRemovePhoto = (urlToRemove) => {
+    setUploadedPhotos(uploadedPhotos.filter(url => url !== urlToRemove));
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFile(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setUploadedFiles([...uploadedFiles, { name: file.name, url: file_url }]);
+      toast.success('File uploaded');
+      e.target.value = '';
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleRemoveFile = (urlToRemove) => {
+    setUploadedFiles(uploadedFiles.filter(f => f.url !== urlToRemove));
+  };
+
+  const handleApproveRequest = () => {
+    setRequestDecisionType('approved');
+    setShowRequestDecisionForm(true);
+  };
+
+  const handleRequestChangesRequest = () => {
+    setRequestDecisionType('changes_requested');
+    setShowRequestDecisionForm(true);
+  };
+
+  const handleSubmitRequestDecision = async () => {
+    if (requestDecisionType === 'changes_requested' && !requestDecisionNote.trim()) {
+      toast.error('Please provide a note explaining the requested changes');
+      return;
+    }
+
+    if (!user) {
+      toast.error('User not authenticated.');
+      return;
+    }
+
+    try {
+      await createRequestDecisionMutation.mutateAsync({
+        request_id: requestId,
+        decided_by_type: 'internal_user',
+        decided_by_id: user.id,
+        decision: requestDecisionType,
+        note: requestDecisionNote,
+        target_type: 'request',
+        decided_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Decision error:', error);
+      toast.error('Failed to record decision');
+    }
+  };
+
   const handleAddComment = async () => {
-    if (!newComment.trim() && newLinks.every((l) => !l.trim())) {
-      toast.error('Please enter a comment or add a link');
+    if (!newComment.trim() && newLinks.every((l) => !l.trim()) && uploadedPhotos.length === 0 && uploadedFiles.length === 0) {
+      toast.error('Please enter a comment, add a link, or attach a file');
+      return;
+    }
+
+    if (!user) {
+      toast.error('User not authenticated.');
       return;
     }
 
@@ -145,6 +232,29 @@ export default function ClientFeedbackDetail() {
         target_type: 'request'
       });
 
+      for (const photoUrl of uploadedPhotos) {
+        await createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'image',
+          file_url: photoUrl,
+          created_by_type: 'internal_user',
+          created_by_id: user.id,
+        });
+      }
+
+      for (const file of uploadedFiles) {
+        await createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'file',
+          file_url: file.url,
+          label: file.name,
+          created_by_type: 'internal_user',
+          created_by_id: user.id,
+        });
+      }
+
       for (const link of newLinks) {
         if (link.trim()) {
           await createAttachmentMutation.mutateAsync({
@@ -153,7 +263,7 @@ export default function ClientFeedbackDetail() {
             attachment_type: 'link',
             link_url: link.trim(),
             created_by_type: 'internal_user',
-            created_by_id: user.id
+            created_by_id: user.id,
           });
         }
       }
@@ -194,6 +304,29 @@ export default function ClientFeedbackDetail() {
               <h1 className="text-2xl font-bold text-white">{request.title}</h1>
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
+
+            {request.status === 'posted' && request.request_type !== 'image_review' && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleApproveRequest}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleRequestChangesRequest}
+                  variant="outline"
+                  className="border-orange-500 text-orange-400"
+                >
+                  <AlertCircle className="w-4 h-4 mr-1" />
+                  Request Changes
+                </Button>
+              </div>
+            )}
+
           </div>
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -266,7 +399,19 @@ export default function ClientFeedbackDetail() {
             onCreateTask={(approval) => {
               setSelectedApproval(approval);
               setShowCreateTaskModal(true);
-            }} />
+            }}
+            isClientView={false}
+            accessRole={user?.role}
+          />
+
+          {request.request_type === 'image_review' && (
+            <ClientImageReviewGallery
+              requestId={requestId}
+              userId={user.id}
+              requestType={request.request_type}
+              accessRole={user?.role}
+            />
+          )}
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -288,8 +433,54 @@ export default function ClientFeedbackDetail() {
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
-                className="bg-gray-800 border-gray-700 text-white min-h-[100px]" />
+                className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+              />
 
+              {uploadedPhotos.length > 0 && (
+                <div>
+                  <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                    {uploadedPhotos.map((url, idx) => (
+                      <div key={idx} className="relative group">
+                        <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={url}
+                            alt={`Upload ${idx + 1}`}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(url)}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {uploadedFiles.length > 0 && (
+                <div>
+                  <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
+                  <div className="space-y-2">
+                    {uploadedFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                        <span className="text-white text-sm truncate">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFile(file.url)}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label className="text-xs text-gray-400">Add Links (optional)</Label>
@@ -320,23 +511,66 @@ export default function ClientFeedbackDetail() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => document.getElementById('image-upload').click()}
-                  disabled={uploadingImages} className="bg-red-600 text-slate-50 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700">
-
-
-                  {uploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-                  Upload Images
-                </Button>
                 <input
-                  id="image-upload"
+                  id="internal-image-upload"
                   type="file"
                   accept="image/*"
                   multiple
                   onChange={handleImageUpload}
-                  className="hidden" />
+                  className="hidden"
+                />
+                <label htmlFor="internal-image-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingImages}
+                    className="border-gray-700 cursor-pointer"
+                    onClick={() => document.getElementById('internal-image-upload').click()}
+                  >
+                    {uploadingImages ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-1" />
+                        Add Images
+                      </>
+                    )}
+                  </Button>
+                </label>
+
+                <input
+                  id="internal-file-upload"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <label htmlFor="internal-file-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingFile}
+                    className="border-gray-700 cursor-pointer"
+                    onClick={() => document.getElementById('internal-file-upload').click()}
+                  >
+                    {uploadingFile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Paperclip className="w-4 h-4 mr-1" />
+                        Attach File
+                      </>
+                    )}
+                  </Button>
+                </label>
 
 
                 <Button
@@ -350,7 +584,53 @@ export default function ClientFeedbackDetail() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        {showRequestDecisionForm && (
+          <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
+            <DialogContent className="bg-gray-900 text-white">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">
+                  {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  Making a decision for: "{request.title}"
+                </p>
+
+                <div>
+                  <label className="text-sm text-gray-400 mb-2 block">
+                    {requestDecisionType === 'changes_requested' ? 'Explain what changes are needed *' : 'Add a note (optional)'}
+                  </label>
+                  <Textarea
+                    value={requestDecisionNote}
+                    onChange={(e) => setRequestDecisionNote(e.target.value)}
+                    placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
+                    className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRequestDecisionForm(false)}
+                    className="border-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmitRequestDecision}
+                    disabled={createRequestDecisionMutation.isPending}
+                    className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
+                  >
+                    {createRequestDecisionMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {showCreateTaskModal &&

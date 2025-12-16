@@ -319,6 +319,15 @@ export default function ClientFeedbackRequestDetail() {
           />
         )}
 
+        {request.request_type === 'image_review' && (
+          <ClientImageReviewGallery
+            requestId={requestId}
+            clientContactId={clientAccess.client_contact_id}
+            requestType={request.request_type}
+            accessRole={clientAccess.access_role}
+          />
+        )}
+
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
           <CardContent className="p-4 space-y-3">
             <h3 className="font-semibold text-white">Add Comment</h3>
