@@ -384,7 +384,7 @@ export default function ClientFeedbackDetail() {
                 </div>
                 <div className="flex gap-2">
                   {request.status === 'draft' && (
-                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                    <Button size="sm" onClick={handlePostToClient} className="bg-red-600 hover:bg-red-700 text-white">
                       Post to Client
                     </Button>
                   )}
@@ -624,7 +624,7 @@ export default function ClientFeedbackDetail() {
                 <Button
                   onClick={handleAddComment}
                   disabled={createCommentMutation.isPending}
-                  className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
+                  className="bg-red-600 hover:bg-red-700 text-white ml-auto">
 
                   {createCommentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
                   Send
