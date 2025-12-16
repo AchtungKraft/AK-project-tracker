@@ -28,7 +28,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
       toast.success('Feedback request created');
       onClose();
-      setFormData({ title: '', body: '', request_type: 'approval', due_date: '' });
+      setFormData({ title: '', body: '', request_type: 'question', due_date: '' });
     },
     onError: () => {
       toast.error('Failed to create feedback request');
