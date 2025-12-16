@@ -134,7 +134,7 @@ export default function FeedbackRequestThread({ requestId, clientContactId, isCl
                       </div>
                     </div>
                     {event.comment.visibility === 'internal_only' && (
-                      <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">
+                      <Badge className="text-xs bg-orange-600 text-white">
                         Internal Only
                       </Badge>
                     )}

@@ -273,7 +273,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                     </Button>
                   </div>
                   <div className="absolute top-2 right-2">
-                    <Badge className={cn("text-xs shadow-lg", state.color)}>
+                    <Badge className={cn("text-xs text-white shadow-lg", state.color)}>
                       <StateIcon className="w-3 h-3 mr-1" />
                       {state.label}
                     </Badge>

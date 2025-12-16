@@ -261,11 +261,11 @@ export default function ClientFeedbackRequestDetail() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-white">{request.title}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs border-gray-600 text-gray-200">
                 {request.request_type.replace('_', ' ')}
               </Badge>
               {request.due_date && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs border-gray-600 text-gray-200">
                   Due: {format(new Date(request.due_date), 'MMM d, yyyy')}
                 </Badge>
               )}
