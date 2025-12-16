@@ -9,6 +9,7 @@ import PriorityDashboard from './pages/PriorityDashboard';
 import TasksExplorer from './pages/TasksExplorer';
 import MyProjects from './pages/MyProjects';
 import MyPriorities from './pages/MyPriorities';
+import ClientFeedbackDetail from './pages/ClientFeedbackDetail';
 import __Layout from './Layout.jsx';
 
 
@@ -24,6 +25,7 @@ export const PAGES = {
     "TasksExplorer": TasksExplorer,
     "MyProjects": MyProjects,
     "MyPriorities": MyPriorities,
+    "ClientFeedbackDetail": ClientFeedbackDetail,
 }
 
 export const pagesConfig = {
