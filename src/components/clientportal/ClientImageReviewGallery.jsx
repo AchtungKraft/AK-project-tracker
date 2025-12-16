@@ -133,11 +133,23 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     }
 
     try {
-      // First, upload any new images as attachments
+      // Create a comment summarizing this decision and attach any newly uploaded images
+      const totalCount = selectedImages.length + uploadedDecisionImages.length;
+      const commentBody = `${decisionType === 'approved' ? 'Approved' : 'Requested changes'} for ${totalCount} image${totalCount === 1 ? '' : 's'}.${decisionNote ? '\n\n' + decisionNote : ''}`;
+      const comment = await base44.entities.ClientFeedbackComment.create({
+        request_id: requestId,
+        author_type: isClientView ? 'client_contact' : 'internal_user',
+        author_id: isClientView ? clientContactId : userId,
+        body: commentBody,
+        visibility: 'client_visible',
+        target_type: 'request',
+      });
+
       const newAttachmentIds = [];
       for (const imageUrl of uploadedDecisionImages) {
-        const attachment = await createAttachmentMutation.mutateAsync({
+        const attachment = await base44.entities.ClientFeedbackAttachment.create({
           request_id: requestId,
+          comment_id: comment.id,
           attachment_type: 'image',
           file_url: imageUrl,
           created_by_type: isClientView ? 'client_contact' : 'internal_user',
@@ -146,9 +158,6 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
         newAttachmentIds.push(attachment.id);
       }
 
-      // Wait for query invalidation before proceeding
-      await queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-      
       // Create decisions for selected existing images
       const allDecisions = [];
       for (const imageId of selectedImages) {

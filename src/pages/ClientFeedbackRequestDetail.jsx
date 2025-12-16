@@ -171,6 +171,16 @@ export default function ClientFeedbackRequestDetail() {
         target_type: 'request',
         decided_at: new Date().toISOString(),
       });
+
+      // Also add a comment to the thread reflecting this decision
+      await createCommentMutation.mutateAsync({
+        request_id: requestId,
+        author_type: 'client_contact',
+        author_id: clientAccess.client_contact_id,
+        body: `${requestDecisionType === 'approved' ? 'Approved' : 'Requested changes'}${requestDecisionNote ? ': ' + requestDecisionNote : ''}`,
+        visibility: 'client_visible',
+        target_type: 'request',
+      });
     } catch (error) {
       console.error('Decision error:', error);
       toast.error('Failed to record decision');
