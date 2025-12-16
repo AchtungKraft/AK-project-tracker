@@ -207,14 +207,21 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     <>
       <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
         <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-white">Images for Review</h3>
+          <div className="flex flex-col gap-3 mb-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white">Images for Review</h3>
+              {canMakeDecision && (
+                <p className="text-xs text-gray-400">
+                  {selectedImages.length > 0 ? `${selectedImages.length} selected` : 'Tap images to select'}
+                </p>
+              )}
+            </div>
             {canMakeDecision && selectedImages.length > 0 && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
                   onClick={handleApproveImages}
-                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600 flex-1 sm:flex-none"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Approve ({selectedImages.length})
@@ -222,7 +229,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   size="sm"
                   onClick={handleRequestChanges}
-                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
+                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600 flex-1 sm:flex-none"
                 >
                   <XCircle className="w-4 h-4 mr-1" />
                   Request Changes
@@ -231,7 +238,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {images.map(image => {
               const state = getImageState(image.id, decisions);
               const StateIcon = state.icon;
@@ -242,7 +249,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                   key={image.id}
                   className={cn(
                     "relative group rounded-lg overflow-hidden border-2 transition-all",
-                    canMakeDecision && "cursor-pointer",
+                    canMakeDecision && "cursor-pointer hover:border-red-400",
                     isSelected ? "border-red-500 ring-2 ring-red-500" : "border-gray-700"
                   )}
                   onClick={() => canMakeDecision && toggleImageSelection(image.id)}
@@ -250,7 +257,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                   <img
                     src={image.file_url}
                     alt=""
-                    className="w-full h-40 object-cover"
+                    className="w-full h-48 object-cover"
                   />
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Button
@@ -260,21 +267,28 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                         e.stopPropagation();
                         setViewingImage(image);
                       }}
-                      className="text-white"
+                      className="text-white bg-gray-800/80 hover:bg-gray-700/80"
                     >
-                      View
+                      View Full Size
                     </Button>
                   </div>
                   <div className="absolute top-2 right-2">
-                    <Badge className={cn("text-xs", state.color)}>
+                    <Badge className={cn("text-xs shadow-lg", state.color)}>
                       <StateIcon className="w-3 h-3 mr-1" />
                       {state.label}
                     </Badge>
                   </div>
                   {isSelected && (
                     <div className="absolute top-2 left-2">
-                      <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center">
-                        <CheckCircle2 className="w-4 h-4 text-white" />
+                      <div className="w-7 h-7 rounded-full bg-red-600 flex items-center justify-center shadow-lg border-2 border-white">
+                        <CheckCircle2 className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  )}
+                  {canMakeDecision && !isSelected && (
+                    <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-7 h-7 rounded-full bg-gray-700/80 flex items-center justify-center shadow-lg border-2 border-gray-500">
+                        <div className="w-4 h-4 rounded-full border-2 border-white" />
                       </div>
                     </div>
                   )}
@@ -382,7 +396,10 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   onClick={handleSubmitDecision}
                   disabled={createDecisionMutation.isPending}
-                  className={decisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
+                  className={cn(
+                    "text-white",
+                    decisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'
+                  )}
                 >
                   {createDecisionMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
