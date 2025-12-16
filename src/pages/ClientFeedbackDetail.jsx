@@ -104,24 +104,24 @@ export default function ClientFeedbackDetail() {
       setRequestDecisionNote('');
       setShowRequestDecisionForm(false);
       toast.success('Decision recorded');
-    },
+    }
   });
 
   const deleteRequestMutation = useMutation({
     mutationFn: async () => {
       const [attachments, comments, decisions, links] = await Promise.all([
-        base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-        base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-        base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-        base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
-      ]);
+      base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+      base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
+      base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+      base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })]
+      );
 
       await Promise.all([
-        ...attachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)),
-        ...comments.map(c => base44.entities.ClientFeedbackComment.delete(c.id)),
-        ...decisions.map(d => base44.entities.ClientFeedbackDecision.delete(d.id)),
-        ...links.map(l => base44.entities.ClientFeedbackTaskLink.delete(l.id)),
-      ]);
+      ...attachments.map((a) => base44.entities.ClientFeedbackAttachment.delete(a.id)),
+      ...comments.map((c) => base44.entities.ClientFeedbackComment.delete(c.id)),
+      ...decisions.map((d) => base44.entities.ClientFeedbackDecision.delete(d.id)),
+      ...links.map((l) => base44.entities.ClientFeedbackTaskLink.delete(l.id))]
+      );
 
       await base44.entities.ClientFeedbackRequest.delete(requestId);
     },
@@ -167,12 +167,12 @@ export default function ClientFeedbackDetail() {
 
     setUploadingImages(true);
     try {
-      const uploadPromises = files.map(file =>
-        base44.integrations.Core.UploadFile({ file })
+      const uploadPromises = files.map((file) =>
+      base44.integrations.Core.UploadFile({ file })
       );
       const results = await Promise.all(uploadPromises);
-      const photoUrls = results.map(r => r.file_url);
-      
+      const photoUrls = results.map((r) => r.file_url);
+
       setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
       toast.success('Images uploaded');
       e.target.value = '';
@@ -185,7 +185,7 @@ export default function ClientFeedbackDetail() {
   };
 
   const handleRemovePhoto = (urlToRemove) => {
-    setUploadedPhotos(uploadedPhotos.filter(url => url !== urlToRemove));
+    setUploadedPhotos(uploadedPhotos.filter((url) => url !== urlToRemove));
   };
 
   const handleFileUpload = async (e) => {
@@ -207,7 +207,7 @@ export default function ClientFeedbackDetail() {
   };
 
   const handleRemoveFile = (urlToRemove) => {
-    setUploadedFiles(uploadedFiles.filter(f => f.url !== urlToRemove));
+    setUploadedFiles(uploadedFiles.filter((f) => f.url !== urlToRemove));
   };
 
   const handleApproveRequest = () => {
@@ -239,7 +239,7 @@ export default function ClientFeedbackDetail() {
         decision: requestDecisionType,
         note: requestDecisionNote,
         target_type: 'request',
-        decided_at: new Date().toISOString(),
+        decided_at: new Date().toISOString()
       });
     } catch (error) {
       console.error('Decision error:', error);
@@ -275,7 +275,7 @@ export default function ClientFeedbackDetail() {
           attachment_type: 'image',
           file_url: photoUrl,
           created_by_type: 'internal_user',
-          created_by_id: user.id,
+          created_by_id: user.id
         });
       }
 
@@ -287,7 +287,7 @@ export default function ClientFeedbackDetail() {
           file_url: file.url,
           label: file.name,
           created_by_type: 'internal_user',
-          created_by_id: user.id,
+          created_by_id: user.id
         });
       }
 
@@ -299,7 +299,7 @@ export default function ClientFeedbackDetail() {
             attachment_type: 'link',
             link_url: link.trim(),
             created_by_type: 'internal_user',
-            created_by_id: user.id,
+            created_by_id: user.id
           });
         }
       }
@@ -341,26 +341,26 @@ export default function ClientFeedbackDetail() {
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
 
-            {request.status === 'posted' && request.request_type !== 'image_review' && (
-              <div className="flex gap-2">
+            {request.status === 'posted' && request.request_type !== 'image_review' &&
+            <div className="flex gap-2">
                 <Button
-                  size="sm"
-                  onClick={handleApproveRequest}
-                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
-                >
+                size="sm"
+                onClick={handleApproveRequest}
+                className="bg-green-600 hover:bg-green-700 text-white border-green-600">
+
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Approve
                 </Button>
                 <Button
-                  size="sm"
-                  onClick={handleRequestChangesRequest}
-                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
-                >
+                size="sm"
+                onClick={handleRequestChangesRequest}
+                className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600">
+
                   <AlertCircle className="w-4 h-4 mr-1" />
                   Request Changes
                 </Button>
               </div>
-            )}
+            }
 
           </div>
 
@@ -383,28 +383,28 @@ export default function ClientFeedbackDetail() {
                   }
                 </div>
                 <div className="flex gap-2">
-                  {request.status === 'draft' && (
-                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                  {request.status === 'draft' &&
+                  <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
-                  )}
-                  {request.status === 'posted' && (
-                    <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
+                  }
+                  {request.status === 'posted' &&
+                  <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
                       <Archive className="w-4 h-4 mr-1" />
                       Archive
                     </Button>
-                  )}
+                  }
                   <Button
                     size="sm"
                     onClick={handleDeleteRequest}
                     disabled={deleteRequestMutation.isPending}
-                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
-                  >
-                    {deleteRequestMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-1" />
-                    )}
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-600">
+
+                    {deleteRequestMutation.isPending ?
+                    <Loader2 className="w-4 h-4 animate-spin" /> :
+
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    }
                     Delete
                   </Button>
                 </div>
@@ -449,17 +449,17 @@ export default function ClientFeedbackDetail() {
               setShowCreateTaskModal(true);
             }}
             isClientView={false}
-            accessRole={user?.role}
-          />
+            accessRole={user?.role} />
 
-          {request.request_type === 'image_review' && (
-            <ClientImageReviewGallery
-              requestId={requestId}
-              userId={user.id}
-              requestType={request.request_type}
-              accessRole={user?.role}
-            />
-          )}
+
+          {request.request_type === 'image_review' &&
+          <ClientImageReviewGallery
+            requestId={requestId}
+            userId={user.id}
+            requestType={request.request_type}
+            accessRole={user?.role} />
+
+          }
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -481,54 +481,54 @@ export default function ClientFeedbackDetail() {
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
-                className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-              />
+                className="bg-gray-800 border-gray-700 text-white min-h-[100px]" />
 
-              {uploadedPhotos.length > 0 && (
-                <div>
+
+              {uploadedPhotos.length > 0 &&
+              <div>
                   <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
                   <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                    {uploadedPhotos.map((url, idx) => (
-                      <div key={idx} className="relative group">
+                    {uploadedPhotos.map((url, idx) =>
+                  <div key={idx} className="relative group">
                         <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
                           <img
-                            src={url}
-                            alt={`Upload ${idx + 1}`}
-                            className="max-w-full max-h-full object-contain"
-                          />
+                        src={url}
+                        alt={`Upload ${idx + 1}`}
+                        className="max-w-full max-h-full object-contain" />
+
                         </div>
                         <button
-                          type="button"
-                          onClick={() => handleRemovePhoto(url)}
-                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
+                      type="button"
+                      onClick={() => handleRemovePhoto(url)}
+                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
                           <X className="w-3 h-3" />
                         </button>
                       </div>
-                    ))}
+                  )}
                   </div>
                 </div>
-              )}
+              }
 
-              {uploadedFiles.length > 0 && (
-                <div>
+              {uploadedFiles.length > 0 &&
+              <div>
                   <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
                   <div className="space-y-2">
-                    {uploadedFiles.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                    {uploadedFiles.map((file, idx) =>
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
                         <span className="text-white text-sm truncate">{file.name}</span>
                         <button
-                          type="button"
-                          onClick={() => handleRemoveFile(file.url)}
-                          className="text-red-400 hover:text-red-300 p-1"
-                        >
+                      type="button"
+                      onClick={() => handleRemoveFile(file.url)}
+                      className="text-red-400 hover:text-red-300 p-1">
+
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
+                  )}
                   </div>
                 </div>
-              )}
+              }
 
               <div className="space-y-2">
                 <Label className="text-xs text-gray-400">Add Links (optional)</Label>
@@ -565,28 +565,28 @@ export default function ClientFeedbackDetail() {
                   accept="image/*"
                   multiple
                   onChange={handleImageUpload}
-                  className="hidden"
-                />
+                  className="hidden" />
+
                 <label htmlFor="internal-image-upload">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={uploadingImages}
-                    className="border-gray-700 cursor-pointer"
-                    onClick={() => document.getElementById('internal-image-upload').click()}
-                  >
-                    {uploadingImages ? (
-                      <>
+                    disabled={uploadingImages} className="bg-red-700 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700 cursor-pointer"
+
+                    onClick={() => document.getElementById('internal-image-upload').click()}>
+
+                    {uploadingImages ?
+                    <>
                         <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                         Uploading...
-                      </>
-                    ) : (
-                      <>
+                      </> :
+
+                    <>
                         <Upload className="w-4 h-4 mr-1" />
                         Add Images
                       </>
-                    )}
+                    }
                   </Button>
                 </label>
 
@@ -595,8 +595,8 @@ export default function ClientFeedbackDetail() {
                   type="file"
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
                   onChange={handleFileUpload}
-                  className="hidden"
-                />
+                  className="hidden" />
+
                 <label htmlFor="internal-file-upload">
                   <Button
                     type="button"
@@ -604,19 +604,19 @@ export default function ClientFeedbackDetail() {
                     size="sm"
                     disabled={uploadingFile}
                     className="border-gray-700 cursor-pointer"
-                    onClick={() => document.getElementById('internal-file-upload').click()}
-                  >
-                    {uploadingFile ? (
-                      <>
+                    onClick={() => document.getElementById('internal-file-upload').click()}>
+
+                    {uploadingFile ?
+                    <>
                         <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                         Uploading...
-                      </>
-                    ) : (
-                      <>
+                      </> :
+
+                    <>
                         <Paperclip className="w-4 h-4 mr-1" />
                         Attach File
                       </>
-                    )}
+                    }
                   </Button>
                 </label>
 
@@ -635,8 +635,8 @@ export default function ClientFeedbackDetail() {
         </div>
       </div>
 
-      {showRequestDecisionForm && (
-        <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
+      {showRequestDecisionForm &&
+      <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
           <DialogContent className="bg-gray-900 text-white">
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
@@ -651,37 +651,37 @@ export default function ClientFeedbackDetail() {
                   {requestDecisionType === 'changes_requested' ? 'Explain what changes are needed *' : 'Add a note (optional)'}
                 </label>
                 <Textarea
-                  value={requestDecisionNote}
-                  onChange={(e) => setRequestDecisionNote(e.target.value)}
-                  placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
-                  className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-                />
+                value={requestDecisionNote}
+                onChange={(e) => setRequestDecisionNote(e.target.value)}
+                placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
+                className="bg-gray-800 border-gray-700 text-white min-h-[100px]" />
+
               </div>
 
               <div className="flex justify-end gap-2">
                 <Button
-                  variant="outline"
-                  onClick={() => setShowRequestDecisionForm(false)}
-                  className="border-gray-600 text-gray-200 hover:bg-gray-800"
-                >
+                variant="outline"
+                onClick={() => setShowRequestDecisionForm(false)}
+                className="border-gray-600 text-gray-200 hover:bg-gray-800">
+
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleSubmitRequestDecision}
-                  disabled={createRequestDecisionMutation.isPending}
-                  className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
-                >
-                  {createRequestDecisionMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
-                  )}
+                onClick={handleSubmitRequestDecision}
+                disabled={createRequestDecisionMutation.isPending}
+                className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}>
+
+                  {createRequestDecisionMutation.isPending ?
+                <Loader2 className="w-4 h-4 animate-spin" /> :
+
+                `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
+                }
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
-      )}
+      }
 
       {showCreateTaskModal &&
       <CreateTaskFromApprovalModal
