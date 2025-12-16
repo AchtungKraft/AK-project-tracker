@@ -15,16 +15,16 @@ const getImageState = (imageId, decisions) => {
   const imageDecisions = decisions.filter(
     d => d.target_type === 'attachment_image' && d.target_attachment_id === imageId
   );
-  if (imageDecisions.length === 0) return { label: 'Pending', color: 'bg-gray-500', icon: Clock };
+  if (imageDecisions.length === 0) return { label: 'Pending', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border', icon: Clock };
 
   const latest = imageDecisions.sort((a, b) =>
     new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date)
   )[0];
 
   if (latest.decision === 'approved') {
-    return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle2 };
+    return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
   }
-  return { label: 'Changes Requested', color: 'bg-orange-500', icon: XCircle };
+  return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: XCircle };
 };
 
 export default function ClientImageReviewGallery({ requestId, userId, clientContactId, requestType, accessRole }) {

@@ -20,24 +20,24 @@ const getRequestState = (request, allDecisions, allAttachments) => {
     const imageDecisions = decisions.filter(d => d.target_type === 'attachment_image');
 
     if (imageDecisions.some(d => d.decision === 'changes_requested')) {
-      return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
+      return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
     }
 
     if (images.length > 0 && images.every(img =>
       imageDecisions.some(d => d.target_attachment_id === img.id && d.decision === 'approved')
     )) {
-      return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle2 };
+      return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
     }
 
     if (request.status === 'posted' && images.some(img =>
       !imageDecisions.some(d => d.target_attachment_id === img.id)
     )) {
       if (request.due_date && new Date(request.due_date) < new Date()) {
-        return { label: 'Overdue', color: 'bg-red-500', icon: Clock };
+        return { label: 'Overdue', color: 'bg-red-500/20 text-red-400 border-red-500/50 border', icon: Clock };
       }
-      return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+      return { label: 'Needs Your Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
     }
-    return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+    return { label: 'Needs Your Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
   }
 
   // For non-image_review requests
@@ -46,21 +46,21 @@ const getRequestState = (request, allDecisions, allAttachments) => {
     .sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date))[0];
 
   if (latestDecision?.decision === 'approved') {
-    return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle2 };
+    return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
   }
 
   if (latestDecision?.decision === 'changes_requested') {
-    return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
+    return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
   }
 
   if (request.status === 'posted' && !latestDecision) {
     if (request.due_date && new Date(request.due_date) < new Date()) {
-      return { label: 'Overdue', color: 'bg-red-500', icon: Clock };
+      return { label: 'Overdue', color: 'bg-red-500/20 text-red-400 border-red-500/50 border', icon: Clock };
     }
-    return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+    return { label: 'Needs Your Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
   }
 
-  return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+  return { label: 'Needs Your Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
 };
 
 export default function ClientProjectPortal() {
