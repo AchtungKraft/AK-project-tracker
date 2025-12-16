@@ -110,18 +110,21 @@ export default function ClientProjectPortal() {
       status: 'posted',
     }),
     enabled: !!clientAccess?.project_id,
+    refetchOnMount: 'always',
   });
 
   const { data: decisions = [] } = useQuery({
     queryKey: ['clientFeedbackDecisions', clientAccess?.project_id],
     queryFn: () => base44.entities.ClientFeedbackDecision.filter({ project_id: clientAccess.project_id }),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
+    refetchOnMount: 'always',
   });
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments', clientAccess?.project_id],
     queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ project_id: clientAccess.project_id }),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
+    refetchOnMount: 'always',
   });
 
   const requestsWithState = useMemo(() => {
@@ -139,7 +142,21 @@ export default function ClientProjectPortal() {
     } else if (filter !== 'all') {
       filtered = filtered.filter(req => req.state.label.toLowerCase().replace(' ', '_') === filter);
     }
-    return filtered.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date));
+    return filtered.sort((a, b) => {
+      const typePriority = {
+        approval: 1,
+        image_review: 2,
+        question: 3,
+        update: 4
+      };
+      
+      const pA = typePriority[a.request_type] || 99;
+      const pB = typePriority[b.request_type] || 99;
+      
+      if (pA !== pB) return pA - pB;
+      
+      return new Date(b.updated_date) - new Date(a.updated_date);
+    });
   }, [requestsWithState, filter]);
 
   if (!token || !clientAccess || !project) {
