@@ -10,36 +10,56 @@ import { Loader2, ArrowLeft, CheckCircle2, AlertCircle, Clock } from "lucide-rea
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const getRequestState = (request, decisions, attachments) => {
+const getRequestState = (request, allDecisions, allAttachments) => {
+  const decisions = allDecisions.filter(d => d.request_id === request.id);
+  const attachments = allAttachments.filter(a => a.request_id === request.id);
+
+  // For image_review requests
   if (request.request_type === 'image_review') {
-    const images = attachments.filter(a => a.request_id === request.id && a.attachment_type === 'image');
-    const imageDecisions = decisions.filter(d => d.request_id === request.id && d.target_type === 'attachment_image');
-    
+    const images = attachments.filter(a => a.attachment_type === 'image');
+    const imageDecisions = decisions.filter(d => d.target_type === 'attachment_image');
+
     if (imageDecisions.some(d => d.decision === 'changes_requested')) {
       return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
     }
-    
-    if (images.length > 0 && images.every(img => 
+
+    if (images.length > 0 && images.every(img =>
       imageDecisions.some(d => d.target_attachment_id === img.id && d.decision === 'approved')
     )) {
       return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle2 };
     }
-    
+
+    if (request.status === 'posted' && images.some(img =>
+      !imageDecisions.some(d => d.target_attachment_id === img.id)
+    )) {
+      if (request.due_date && new Date(request.due_date) < new Date()) {
+        return { label: 'Overdue', color: 'bg-red-500', icon: Clock };
+      }
+      return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+    }
     return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
   }
-  
+
+  // For non-image_review requests
   const latestDecision = decisions
-    .filter(d => d.request_id === request.id && d.target_type === 'request')
+    .filter(d => d.target_type === 'request')
     .sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date))[0];
-  
+
   if (latestDecision?.decision === 'approved') {
     return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle2 };
   }
-  
+
   if (latestDecision?.decision === 'changes_requested') {
     return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
   }
-  
+
+  if (request.status === 'posted' && !latestDecision) {
+    if (request.due_date && new Date(request.due_date) < new Date()) {
+      return { label: 'Overdue', color: 'bg-red-500', icon: Clock };
+    }
+    return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
+  }
+
   return { label: 'Needs Your Review', color: 'bg-blue-500', icon: Clock };
 };
 
@@ -83,15 +103,15 @@ export default function ClientProjectPortal() {
   });
 
   const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions'],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list(),
-    enabled: requests.length > 0,
+    queryKey: ['clientFeedbackDecisions', clientAccess?.project_id],
+    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ project_id: clientAccess.project_id }),
+    enabled: requests.length > 0 && !!clientAccess?.project_id,
   });
 
   const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments'],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
-    enabled: requests.length > 0,
+    queryKey: ['clientFeedbackAttachments', clientAccess?.project_id],
+    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ project_id: clientAccess.project_id }),
+    enabled: requests.length > 0 && !!clientAccess?.project_id,
   });
 
   const requestsWithState = useMemo(() => {
@@ -102,14 +122,14 @@ export default function ClientProjectPortal() {
   }, [requests, decisions, attachments]);
 
   const filteredRequests = useMemo(() => {
-    if (filter === 'all') return requestsWithState;
-    
-    return requestsWithState.filter(req => {
-      if (filter === 'needs_review') return req.state.label === 'Needs Your Review';
-      if (filter === 'approved') return req.state.label === 'Approved';
-      if (filter === 'changes_requested') return req.state.label === 'Changes Requested';
-      return true;
-    });
+    let filtered = requestsWithState;
+
+    if (filter === 'needs_review') {
+      filtered = filtered.filter(req => req.state.label === 'Needs Your Review' || req.state.label === 'Overdue');
+    } else if (filter !== 'all') {
+      filtered = filtered.filter(req => req.state.label.toLowerCase().replace(' ', '_') === filter);
+    }
+    return filtered.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date));
   }, [requestsWithState, filter]);
 
   if (!token || !clientAccess || !project) {
@@ -141,18 +161,23 @@ export default function ClientProjectPortal() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2">
-          {['needs_review', 'approved', 'changes_requested', 'all'].map(f => (
+          {[
+            { key: 'needs_review', label: 'Needs Review' },
+            { key: 'approved', label: 'Approved' },
+            { key: 'changes_requested', label: 'Changes Requested' },
+            { key: 'all', label: 'All' }
+          ].map(f => (
             <Button
-              key={f}
+              key={f.key}
               size="sm"
-              variant={filter === f ? 'default' : 'outline'}
-              onClick={() => setFilter(f)}
+              variant={filter === f.key ? 'default' : 'outline'}
+              onClick={() => setFilter(f.key)}
               className={cn(
-                filter === f ? 'bg-red-600 hover:bg-red-700' : 'border-gray-700 text-white',
+                filter === f.key ? 'bg-red-600 hover:bg-red-700' : 'border-gray-700 text-white',
                 'whitespace-nowrap'
               )}
             >
-              {f.replace('_', ' ')}
+              {f.label}
             </Button>
           ))}
         </div>

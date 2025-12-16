@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, Upload, Plus, Loader2 } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
@@ -25,7 +26,11 @@ export default function ClientFeedbackRequestDetail() {
   const [clientAccess, setClientAccess] = useState(null);
   const [newComment, setNewComment] = useState('');
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [newLinks, setNewLinks] = useState(['']);
+  const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
+  const [requestDecisionType, setRequestDecisionType] = useState('');
+  const [requestDecisionNote, setRequestDecisionNote] = useState('');
 
   useEffect(() => {
     if (!token) return;
@@ -63,6 +68,17 @@ export default function ClientFeedbackRequestDetail() {
     },
   });
 
+  const createRequestDecisionMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      setRequestDecisionNote('');
+      setShowRequestDecisionForm(false);
+      toast.success('Decision recorded');
+    },
+  });
+
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -90,6 +106,72 @@ export default function ClientFeedbackRequestDetail() {
       toast.error('Failed to upload images');
     } finally {
       setUploadingImages(false);
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!clientAccess) {
+      toast.error('Unable to upload: access not verified');
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await createAttachmentMutation.mutateAsync({
+        request_id: requestId,
+        attachment_type: 'file',
+        file_url,
+        label: file.name,
+        created_by_type: 'client_contact',
+        created_by_id: clientAccess.client_contact_id,
+      });
+      toast.success('File uploaded');
+      e.target.value = '';
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleApproveRequest = () => {
+    setRequestDecisionType('approved');
+    setShowRequestDecisionForm(true);
+  };
+
+  const handleRequestChangesRequest = () => {
+    setRequestDecisionType('changes_requested');
+    setShowRequestDecisionForm(true);
+  };
+
+  const handleSubmitRequestDecision = async () => {
+    if (requestDecisionType === 'changes_requested' && !requestDecisionNote.trim()) {
+      toast.error('Please provide a note explaining the requested changes');
+      return;
+    }
+
+    if (!clientAccess) {
+      toast.error('Access not verified. Please refresh.');
+      return;
+    }
+
+    try {
+      await createRequestDecisionMutation.mutateAsync({
+        request_id: requestId,
+        decided_by_type: 'client_contact',
+        decided_by_id: clientAccess.client_contact_id,
+        decision: requestDecisionType,
+        note: requestDecisionNote,
+        target_type: 'request',
+        decided_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Decision error:', error);
+      toast.error('Failed to record decision');
     }
   };
 
@@ -160,6 +242,28 @@ export default function ClientFeedbackRequestDetail() {
                 </Badge>
               )}
             </div>
+
+            {request.request_type !== 'image_review' && clientAccess?.access_role === 'approver' && (
+              <div className="flex gap-2 mt-4">
+                <Button
+                  size="sm"
+                  onClick={handleApproveRequest}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Approve Request
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleRequestChangesRequest}
+                  variant="outline"
+                  className="border-orange-500 text-orange-400"
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  Request Changes
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -175,13 +279,17 @@ export default function ClientFeedbackRequestDetail() {
           requestId={requestId}
           clientContactId={clientAccess.client_contact_id}
           isClientView={true}
+          accessRole={clientAccess.access_role}
         />
 
-        <ClientImageReviewGallery
-          requestId={requestId}
-          clientContactId={clientAccess.client_contact_id}
-          requestType={request.request_type}
-        />
+        {request.request_type === 'image_review' && (
+          <ClientImageReviewGallery
+            requestId={requestId}
+            clientContactId={clientAccess.client_contact_id}
+            requestType={request.request_type}
+            accessRole={clientAccess.access_role}
+          />
+        )}
 
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
           <CardContent className="p-4 space-y-3">
@@ -226,7 +334,7 @@ export default function ClientFeedbackRequestDetail() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => document.getElementById('client-image-upload').click()}
+                onClick={(e) => { e.stopPropagation(); document.getElementById('client-image-upload').click(); }}
                 disabled={uploadingImages}
                 className="border-gray-700"
               >
@@ -243,6 +351,24 @@ export default function ClientFeedbackRequestDetail() {
               />
 
               <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); document.getElementById('client-file-upload').click(); }}
+                disabled={uploadingFile}
+                className="border-gray-700"
+              >
+                {uploadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+                Attach File
+              </Button>
+              <input
+                id="client-file-upload"
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
+              <Button
                 onClick={handleAddComment}
                 disabled={createCommentMutation.isPending}
                 className="bg-red-600 hover:bg-red-700 ml-auto"
@@ -254,6 +380,54 @@ export default function ClientFeedbackRequestDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {showRequestDecisionForm && (
+        <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
+          <DialogContent className="bg-gray-900 text-white">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">
+                {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
+              </h3>
+              <p className="text-sm text-gray-400">
+                Making a decision for: "{request.title}"
+              </p>
+
+              <div>
+                <label className="text-sm text-gray-400 mb-2 block">
+                  {requestDecisionType === 'changes_requested' ? 'Explain what changes are needed *' : 'Add a note (optional)'}
+                </label>
+                <Textarea
+                  value={requestDecisionNote}
+                  onChange={(e) => setRequestDecisionNote(e.target.value)}
+                  placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
+                  className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRequestDecisionForm(false)}
+                  className="border-gray-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitRequestDecision}
+                  disabled={createRequestDecisionMutation.isPending}
+                  className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
+                >
+                  {createRequestDecisionMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

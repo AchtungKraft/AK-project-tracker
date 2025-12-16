@@ -4,12 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertCircle, MessageSquare, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
+import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-import ImageReviewGallery from "./ImageReviewGallery.jsx";
 
-export default function FeedbackRequestThread({ requestId, userId, onCreateTask }) {
+export default function FeedbackRequestThread({ requestId, clientContactId, isClientView, accessRole, userId, onCreateTask }) {
   const { data: request } = useQuery({
     queryKey: ['clientFeedbackRequest', requestId],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
@@ -41,6 +39,13 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
     queryFn: () => base44.entities.ClientContact.list(),
   });
 
+  const { data: currentClientContact } = useQuery({
+    queryKey: ['currentClientContact', clientContactId],
+    queryFn: () => base44.entities.ClientContact.filter({id: clientContactId}),
+    select: (data) => data[0],
+    enabled: !!clientContactId && isClientView
+  });
+
   const timeline = useMemo(() => {
     const events = [];
 
@@ -49,12 +54,17 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
       events.push({
         type: 'system',
         timestamp: new Date(request.posted_at),
-        message: 'Request posted to client',
+        message: 'Request posted',
       });
     }
 
+    // Filter out internal_only comments if it's the client view
+    const filteredComments = isClientView
+      ? comments.filter(comment => comment.visibility === 'client_visible')
+      : comments;
+
     // Comments
-    comments.forEach(comment => {
+    filteredComments.forEach(comment => {
       const author = comment.author_type === 'internal_user'
         ? users.find(u => u.id === comment.author_id)
         : clientContacts.find(c => c.id === comment.author_id);
@@ -76,31 +86,23 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
         ? users.find(u => u.id === decision.decided_by_id)
         : clientContacts.find(c => c.id === decision.decided_by_id);
 
-      events.push({
-        type: 'decision',
-        timestamp: new Date(decision.decided_at || decision.created_date),
-        decision,
-        decider,
-      });
+      // For image review requests, only show request-level decisions here.
+      // Image-specific decisions are displayed within ClientImageReviewGallery.
+      if (request.request_type !== 'image_review' || decision.target_type === 'request') {
+        events.push({
+          type: 'decision',
+          timestamp: new Date(decision.decided_at || decision.created_date),
+          decision,
+          decider,
+        });
+      }
     });
 
     return events.sort((a, b) => a.timestamp - b.timestamp);
-  }, [request, comments, decisions, attachments, users, clientContacts]);
-
-  const requestImages = attachments.filter(a => a.attachment_type === 'image' && !a.comment_id);
+  }, [request, comments, decisions, attachments, users, clientContacts, isClientView]);
 
   return (
     <div className="space-y-4">
-      {request?.request_type === 'image_review' && requestImages.length > 0 && (
-        <ImageReviewGallery
-          images={requestImages}
-          decisions={decisions}
-          requestId={requestId}
-          userId={userId}
-          onCreateTask={onCreateTask}
-        />
-      )}
-
       <div className="space-y-3">
         {timeline.map((event, idx) => (
           <Card key={idx} className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -119,12 +121,12 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
                         <span className="text-white font-bold text-xs">
-                          {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                          {event.author?.name?.[0] || event.author?.full_name?.[0] || (isClientView ? currentClientContact?.name?.[0] : 'U') }
                         </span>
                       </div>
                       <div>
                         <p className="font-medium text-white text-sm">
-                          {event.author?.name || event.author?.full_name || 'Unknown'}
+                          {event.author?.name || event.author?.full_name || (isClientView ? currentClientContact?.name : 'Unknown') }
                         </p>
                         <p className="text-xs text-gray-400">
                           {format(event.timestamp, 'MMM d, h:mm a')}
@@ -169,6 +171,19 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
                           {att.label || att.link_url}
                         </a>
                       ))}
+                      
+                      {event.attachments.filter(a => a.attachment_type === 'file').map(att => (
+                        <a
+                          key={att.id}
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          <FileText className="w-4 h-4" />
+                          {att.label || att.file_url}
+                        </a>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -194,7 +209,7 @@ export default function FeedbackRequestThread({ requestId, userId, onCreateTask 
                     <p className="text-gray-300 text-sm ml-7">{event.decision.note}</p>
                   )}
 
-                  {event.decision.decision === 'approved' && (
+                  {!isClientView && event.decision.decision === 'approved' && event.decision.target_type === 'request' && onCreateTask && (
                     <Button
                       size="sm"
                       onClick={() => onCreateTask(event.decision)}

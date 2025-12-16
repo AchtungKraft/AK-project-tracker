@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +26,7 @@ const getImageState = (imageId, decisions) => {
   return { label: 'Changes Requested', color: 'bg-orange-500', icon: XCircle };
 };
 
-export default function ClientImageReviewGallery({ requestId, clientContactId, requestType }) {
+export default function ClientImageReviewGallery({ requestId, clientContactId, requestType, accessRole }) {
   const queryClient = useQueryClient();
   const [selectedImages, setSelectedImages] = useState([]);
   const [viewingImage, setViewingImage] = useState(null);
@@ -58,6 +58,8 @@ export default function ClientImageReviewGallery({ requestId, clientContactId, r
   const images = attachments.filter(a => a.attachment_type === 'image' && !a.comment_id);
 
   if (requestType !== 'image_review' || images.length === 0) return null;
+
+  const canMakeDecision = accessRole === 'approver';
 
   const handleApproveImages = () => {
     setDecisionType('approved');
@@ -110,7 +112,7 @@ export default function ClientImageReviewGallery({ requestId, clientContactId, r
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-white">Images for Review</h3>
-            {selectedImages.length > 0 && (
+            {canMakeDecision && selectedImages.length > 0 && (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -143,10 +145,11 @@ export default function ClientImageReviewGallery({ requestId, clientContactId, r
                 <div
                   key={image.id}
                   className={cn(
-                    "relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all",
+                    "relative group rounded-lg overflow-hidden border-2 transition-all",
+                    canMakeDecision && "cursor-pointer",
                     isSelected ? "border-red-500 ring-2 ring-red-500" : "border-gray-700"
                   )}
-                  onClick={() => toggleImageSelection(image.id)}
+                  onClick={() => canMakeDecision && toggleImageSelection(image.id)}
                 >
                   <img
                     src={image.file_url}
