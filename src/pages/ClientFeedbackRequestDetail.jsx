@@ -68,7 +68,16 @@ export default function ClientFeedbackRequestDetail() {
   const createCommentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
+      // Invalidate project-level queries to refresh the landing page
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', request.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', request.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', request.project_id] });
+      if (clientAccess?.project_id) {
+          queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', clientAccess.project_id] });
+          queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', clientAccess.project_id] });
+          queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', clientAccess.project_id] });
+      }
       setNewComment('');
       setNewLinks(['']);
       setUploadedPhotos([]);
@@ -86,8 +95,13 @@ export default function ClientFeedbackRequestDetail() {
   const createRequestDecisionMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', request.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', request.project_id] });
+       if (clientAccess?.project_id) {
+          queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', clientAccess.project_id] });
+          queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', clientAccess.project_id] });
+      }
       setRequestDecisionNote('');
       setShowRequestDecisionForm(false);
       toast.success('Decision recorded');

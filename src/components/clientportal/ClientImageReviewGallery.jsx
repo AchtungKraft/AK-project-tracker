@@ -50,8 +50,10 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
   const createDecisionMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+      // Invalidate project-level queries to refresh the landing page
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); 
       setDecisionNote('');
       setShowDecisionForm(false);
       setSelectedImages([]);
@@ -135,7 +137,21 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     try {
       // Create a comment summarizing this decision and attach any newly uploaded images
       const totalCount = selectedImages.length + uploadedDecisionImages.length;
-      const commentBody = `${decisionType === 'approved' ? 'Approved' : 'Requested changes'} for ${totalCount} image${totalCount === 1 ? '' : 's'}.${decisionNote ? '\n\n' + decisionNote : ''}`;
+      let commentBody = `${decisionType === 'approved' ? 'Approved' : 'Requested changes'} for ${totalCount} image${totalCount === 1 ? '' : 's'}.`;
+      // List selected existing images
+      if (selectedImages.length > 0) {
+        const selectedFiles = images.filter(img => selectedImages.includes(img.id));
+        const fileNames = selectedFiles.map(img => img.file_url.split('/').pop()).join(', ');
+        commentBody += `\nSelected images: ${fileNames}`;
+      }
+      // List newly uploaded images
+      if (uploadedDecisionImages.length > 0) {
+        const uploadedNames = uploadedDecisionImages.map(url => url.split('/').pop()).join(', ');
+        commentBody += `\nUploaded images: ${uploadedNames}`;
+      }
+      if (decisionNote) {
+        commentBody += `\n\n${decisionNote}`;
+      }
       const comment = await base44.entities.ClientFeedbackComment.create({
         request_id: requestId,
         author_type: isClientView ? 'client_contact' : 'internal_user',

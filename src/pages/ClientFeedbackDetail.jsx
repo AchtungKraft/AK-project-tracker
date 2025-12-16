@@ -100,9 +100,10 @@ export default function ClientFeedbackDetail() {
   const createRequestDecisionMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); // Refresh lists
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
       setRequestDecisionNote('');
       setShowRequestDecisionForm(false);
       toast.success('Decision recorded');
@@ -185,8 +186,23 @@ export default function ClientFeedbackDetail() {
       const results = await Promise.all(uploadPromises);
       const photoUrls = results.map((r) => r.file_url);
 
-      setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
-      toast.success('Images uploaded');
+      if (request.request_type === 'image_review') {
+        // Directly create attachments for image review requests
+        const attachmentPromises = photoUrls.map(url => 
+          createAttachmentMutation.mutateAsync({
+            request_id: requestId,
+            attachment_type: 'image',
+            file_url: url,
+            created_by_type: 'internal_user',
+            created_by_id: user.id
+          })
+        );
+        await Promise.all(attachmentPromises);
+        toast.success('Images added to review gallery');
+      } else {
+        setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
+        toast.success('Images uploaded');
+      }
       e.target.value = '';
     } catch (error) {
       console.error('Upload error:', error);
