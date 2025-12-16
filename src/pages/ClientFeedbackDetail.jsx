@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
+import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();
@@ -584,54 +586,56 @@ export default function ClientFeedbackDetail() {
               </div>
             </CardContent>
           </Card>
-        {showRequestDecisionForm && (
-          <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
-            <DialogContent className="bg-gray-900 text-white">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">
-                  {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
-                </h3>
-                <p className="text-sm text-gray-400">
-                  Making a decision for: "{request.title}"
-                </p>
-
-                <div>
-                  <label className="text-sm text-gray-400 mb-2 block">
-                    {requestDecisionType === 'changes_requested' ? 'Explain what changes are needed *' : 'Add a note (optional)'}
-                  </label>
-                  <Textarea
-                    value={requestDecisionNote}
-                    onChange={(e) => setRequestDecisionNote(e.target.value)}
-                    placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
-                    className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRequestDecisionForm(false)}
-                    className="border-gray-700"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSubmitRequestDecision}
-                    disabled={createRequestDecisionMutation.isPending}
-                    className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
-                  >
-                    {createRequestDecisionMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+        </div>
       </div>
+
+      {showRequestDecisionForm && (
+        <Dialog open={showRequestDecisionForm} onOpenChange={setShowRequestDecisionForm}>
+          <DialogContent className="bg-gray-900 text-white">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">
+                {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
+              </h3>
+              <p className="text-sm text-gray-400">
+                Making a decision for: "{request.title}"
+              </p>
+
+              <div>
+                <label className="text-sm text-gray-400 mb-2 block">
+                  {requestDecisionType === 'changes_requested' ? 'Explain what changes are needed *' : 'Add a note (optional)'}
+                </label>
+                <Textarea
+                  value={requestDecisionNote}
+                  onChange={(e) => setRequestDecisionNote(e.target.value)}
+                  placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
+                  className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRequestDecisionForm(false)}
+                  className="border-gray-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitRequestDecision}
+                  disabled={createRequestDecisionMutation.isPending}
+                  className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
+                >
+                  {createRequestDecisionMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {showCreateTaskModal &&
       <CreateTaskFromApprovalModal
