@@ -70,11 +70,10 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="approval">Approval</SelectItem>
                 <SelectItem value="question">Question</SelectItem>
-                <SelectItem value="review">Review</SelectItem>
                 <SelectItem value="update">Update</SelectItem>
-                <SelectItem value="image_review">Image Review</SelectItem>
+                <SelectItem value="image_review">Design Review</SelectItem>
+                <SelectItem value="approval">Need from Client</SelectItem>
               </SelectContent>
             </Select>
           </div>
