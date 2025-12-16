@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Mail, Loader2 } from "lucide-react";
+import { Plus, Trash2, Mail, Loader2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { createPageUrl } from "@/utils";
 
 export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const queryClient = useQueryClient();
@@ -74,11 +75,17 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
   };
 
   const handleAddAccess = (clientId) => {
+    // Generate unique share token
+    const shareToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
     addAccessMutation.mutate({
       project_id: projectId,
       client_contact_id: clientId,
       access_role: 'approver',
       access_status: 'active',
+      share_token: shareToken,
     });
   };
 
@@ -178,46 +185,74 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                 activeAccess.map(access => {
                   const client = getClientDetails(access.client_contact_id);
                   if (!client) return null;
+
+                  const shareUrl = access.share_token 
+                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`
+                    : null;
                   
                   return (
-                    <div key={access.id} className="bg-gray-800 p-3 rounded-lg flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-white">{client.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {access.access_role}
-                          </Badge>
+                    <div key={access.id} className="bg-gray-800 p-3 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-white">{client.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {access.access_role}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-400">{client.email}</p>
+                          {access.last_viewed_at && (
+                            <p className="text-xs text-gray-500">
+                              Last viewed: {format(new Date(access.last_viewed_at), 'MMM d, yyyy')}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-400">{client.email}</p>
-                        {access.last_viewed_at && (
-                          <p className="text-xs text-gray-500">
-                            Last viewed: {format(new Date(access.last_viewed_at), 'MMM d, yyyy')}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={access.access_role}
+                            onValueChange={(value) => updateAccessMutation.mutate({ id: access.id, data: { access_role: value } })}
+                          >
+                            <SelectTrigger className="w-32 bg-gray-900 border-gray-700 text-white h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="viewer">Viewer</SelectItem>
+                              <SelectItem value="commenter">Commenter</SelectItem>
+                              <SelectItem value="approver">Approver</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => revokeAccessMutation.mutate(access.id)}
+                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={access.access_role}
-                          onValueChange={(value) => updateAccessMutation.mutate({ id: access.id, data: { access_role: value } })}
-                        >
-                          <SelectTrigger className="w-32 bg-gray-900 border-gray-700 text-white h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="viewer">Viewer</SelectItem>
-                            <SelectItem value="commenter">Commenter</SelectItem>
-                            <SelectItem value="approver">Approver</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => revokeAccessMutation.mutate(access.id)}
-                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-950/30"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+
+                      {shareUrl && (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={shareUrl}
+                            readOnly
+                            className="bg-gray-900 border-gray-700 text-white text-xs h-8"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(shareUrl);
+                              toast.success('Link copied!');
+                            }}
+                            className="border-gray-700 whitespace-nowrap h-8 text-xs"
+                          >
+                            <Copy className="w-3 h-3 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -229,13 +264,10 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
             <div className="flex items-start gap-3">
               <Mail className="w-5 h-5 text-blue-400 mt-0.5" />
               <div>
-                <h4 className="font-semibold text-blue-300 mb-1">Client Portal Link</h4>
-                <p className="text-sm text-gray-300 mb-2">
-                  Clients will receive a magic link via email to access the portal. Share this URL:
+                <h4 className="font-semibold text-blue-300 mb-1">Share Client Portal</h4>
+                <p className="text-sm text-gray-300">
+                  Copy the unique link for each client above and send it to them via email or message. Each link is personalized and secure.
                 </p>
-                <code className="text-xs bg-gray-800 px-2 py-1 rounded text-blue-300">
-                  {window.location.origin}/client
-                </code>
               </div>
             </div>
           </div>

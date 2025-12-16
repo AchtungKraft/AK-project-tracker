@@ -158,8 +158,8 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
   const StatTile = ({ label, count, filterValue, icon: Icon }) => (
     <Card 
       className={cn(
-        "cursor-pointer hover:bg-gray-800/50 transition-colors",
-        stateFilter === filterValue && "ring-2 ring-red-500"
+        "cursor-pointer transition-colors",
+        stateFilter === filterValue ? "ring-2 ring-red-500 bg-gray-900/50" : "bg-gray-800/50 hover:bg-gray-700/50"
       )}
       onClick={() => setStateFilter(stateFilter === filterValue ? 'all' : filterValue)}
     >
