@@ -14,8 +14,8 @@ import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircl
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread";
-import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal";
+import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread.jsx";
+import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();

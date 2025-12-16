@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
-import ClientPortalDashboard from "../clientportal/ClientPortalDashboard";
-import CreateFeedbackRequestModal from "../clientportal/CreateFeedbackRequestModal";
-import ManageClientAccessModal from "../clientportal/ManageClientAccessModal";
+import ClientPortalDashboard from "../clientportal/ClientPortalDashboard.jsx";
+import CreateFeedbackRequestModal from "../clientportal/CreateFeedbackRequestModal.jsx";
+import ManageClientAccessModal from "../clientportal/ManageClientAccessModal.jsx";
 
 export default function ProjectClientPortal({ projectId }) {
   const navigate = useNavigate();

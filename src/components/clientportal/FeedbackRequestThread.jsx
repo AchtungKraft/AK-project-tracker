@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertCircle, MessageSquare, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import ImageReviewGallery from "./ImageReviewGallery";
+import ImageReviewGallery from "./ImageReviewGallery.jsx";
 
 export default function FeedbackRequestThread({ requestId, userId, onCreateTask }) {
   const { data: request } = useQuery({

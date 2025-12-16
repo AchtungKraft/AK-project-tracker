@@ -13,8 +13,8 @@ import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle } fro
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread";
-import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery";
+import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
+import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();
