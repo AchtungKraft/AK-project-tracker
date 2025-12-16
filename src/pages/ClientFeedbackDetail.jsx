@@ -370,9 +370,9 @@ export default function ClientFeedbackDetail() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="border-gray-600 text-gray-200">{request.request_type.replace('_', ' ')}</Badge>
                   <Badge className={cn(
-                    request.status === 'draft' ? 'bg-gray-500' :
-                    request.status === 'posted' ? 'bg-blue-500' :
-                    'bg-gray-400'
+                    request.status === 'draft' ? 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' :
+                    request.status === 'posted' ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' :
+                    'bg-gray-400/20 text-gray-400 border-gray-400/50 border'
                   )}>
                     {request.status}
                   </Badge>
