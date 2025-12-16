@@ -18,7 +18,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
   const [formData, setFormData] = useState({
     title: '',
     body: '',
-    request_type: 'approval',
+    request_type: 'question',
     due_date: '',
   });
 
