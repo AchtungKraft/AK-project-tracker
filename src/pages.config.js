@@ -10,6 +10,11 @@ import TasksExplorer from './pages/TasksExplorer';
 import MyProjects from './pages/MyProjects';
 import MyPriorities from './pages/MyPriorities';
 import ClientFeedbackDetail from './pages/ClientFeedbackDetail';
+import ClientLogin from './pages/ClientLogin';
+import ClientAuth from './pages/ClientAuth';
+import ClientProjects from './pages/ClientProjects';
+import ClientProjectPortal from './pages/ClientProjectPortal';
+import ClientFeedbackRequestDetail from './pages/ClientFeedbackRequestDetail';
 import __Layout from './Layout.jsx';
 
 
@@ -26,6 +31,11 @@ export const PAGES = {
     "MyProjects": MyProjects,
     "MyPriorities": MyPriorities,
     "ClientFeedbackDetail": ClientFeedbackDetail,
+    "ClientLogin": ClientLogin,
+    "ClientAuth": ClientAuth,
+    "ClientProjects": ClientProjects,
+    "ClientProjectPortal": ClientProjectPortal,
+    "ClientFeedbackRequestDetail": ClientFeedbackRequestDetail,
 }
 
 export const pagesConfig = {
