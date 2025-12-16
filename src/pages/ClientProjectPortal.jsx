@@ -46,65 +46,50 @@ const getRequestState = (request, decisions, attachments) => {
 export default function ClientProjectPortal() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
-  const projectId = urlParams.get('id');
-  const [clientContactId, setClientContactId] = useState(null);
+  const token = urlParams.get('token');
+  const [clientAccess, setClientAccess] = useState(null);
   const [filter, setFilter] = useState('needs_review');
 
   useEffect(() => {
-    const contactId = localStorage.getItem('client_contact_id');
-    const sessionToken = localStorage.getItem('client_portal_session');
+    if (!token) return;
 
-    if (!contactId || !sessionToken) {
-      navigate(createPageUrl("ClientLogin"));
-      return;
-    }
-
-    // Verify access to this project
     base44.entities.ProjectClientAccess.filter({
-      client_contact_id: contactId,
-      project_id: projectId,
+      share_token: token,
       access_status: 'active',
     }).then(access => {
-      if (access.length === 0) {
-        navigate(createPageUrl("ClientProjects"));
-        return;
+      if (access.length > 0) {
+        setClientAccess(access[0]);
+        base44.entities.ProjectClientAccess.update(access[0].id, {
+          last_viewed_at: new Date().toISOString(),
+        });
       }
-
-      // Update last viewed
-      base44.entities.ProjectClientAccess.update(access[0].id, {
-        last_viewed_at: new Date().toISOString(),
-      });
-
-      setClientContactId(contactId);
-    }).catch(() => {
-      navigate(createPageUrl("ClientLogin"));
     });
-  }, [navigate, projectId]);
+  }, [token]);
 
   const { data: project } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => base44.entities.Project.filter({ id: projectId }),
+    queryKey: ['project', clientAccess?.project_id],
+    queryFn: () => base44.entities.Project.filter({ id: clientAccess.project_id }),
     select: (data) => data[0],
-    enabled: !!projectId,
+    enabled: !!clientAccess?.project_id,
   });
 
   const { data: requests = [] } = useQuery({
-    queryKey: ['clientFeedbackRequests', projectId],
+    queryKey: ['clientFeedbackRequests', clientAccess?.project_id],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({
-      project_id: projectId,
+      project_id: clientAccess.project_id,
       status: 'posted',
     }),
-    enabled: !!clientContactId,
+    enabled: !!clientAccess?.project_id,
   });
 
   const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions', projectId],
+    queryKey: ['clientFeedbackDecisions'],
     queryFn: () => base44.entities.ClientFeedbackDecision.list(),
     enabled: requests.length > 0,
   });
 
   const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments', projectId],
+    queryKey: ['clientFeedbackAttachments'],
     queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
     enabled: requests.length > 0,
   });
@@ -127,7 +112,7 @@ export default function ClientProjectPortal() {
     });
   }, [requestsWithState, filter]);
 
-  if (!clientContactId || !project) {
+  if (!token || !clientAccess || !project) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -142,7 +127,7 @@ export default function ClientProjectPortal() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("ClientProjects"))}
+            onClick={() => navigate(createPageUrl("ClientProjects") + `?token=${token}`)}
             className="border-gray-700 text-white"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -186,7 +171,7 @@ export default function ClientProjectPortal() {
                 <Card
                   key={request.id}
                   className="bg-black/60 backdrop-blur-xl border border-gray-700 hover:bg-gray-800/50 cursor-pointer transition-colors"
-                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&projectId=${projectId}`)}
+                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&token=${token}`)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3 mb-2">

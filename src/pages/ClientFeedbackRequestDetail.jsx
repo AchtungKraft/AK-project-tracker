@@ -9,10 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Send, Upload, Plus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
 
@@ -21,21 +20,25 @@ export default function ClientFeedbackRequestDetail() {
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const requestId = urlParams.get('id');
-  const projectId = urlParams.get('projectId');
+  const token = urlParams.get('token');
 
-  const [clientContactId, setClientContactId] = useState(null);
+  const [clientAccess, setClientAccess] = useState(null);
   const [newComment, setNewComment] = useState('');
   const [uploadingImages, setUploadingImages] = useState(false);
   const [newLinks, setNewLinks] = useState(['']);
 
   useEffect(() => {
-    const contactId = localStorage.getItem('client_contact_id');
-    if (!contactId) {
-      navigate(createPageUrl("ClientLogin"));
-      return;
-    }
-    setClientContactId(contactId);
-  }, [navigate]);
+    if (!token) return;
+
+    base44.entities.ProjectClientAccess.filter({
+      share_token: token,
+      access_status: 'active',
+    }).then(access => {
+      if (access.length > 0) {
+        setClientAccess(access[0]);
+      }
+    });
+  }, [token]);
 
   const { data: request } = useQuery({
     queryKey: ['clientFeedbackRequest', requestId],
@@ -73,7 +76,7 @@ export default function ClientFeedbackRequestDetail() {
           attachment_type: 'image',
           file_url,
           created_by_type: 'client_contact',
-          created_by_id: clientContactId,
+          created_by_id: clientAccess.client_contact_id,
         });
       }
       toast.success('Images uploaded');
@@ -94,7 +97,7 @@ export default function ClientFeedbackRequestDetail() {
       const comment = await createCommentMutation.mutateAsync({
         request_id: requestId,
         author_type: 'client_contact',
-        author_id: clientContactId,
+        author_id: clientAccess.client_contact_id,
         body: newComment,
         visibility: 'client_visible',
         target_type: 'request',
@@ -108,7 +111,7 @@ export default function ClientFeedbackRequestDetail() {
             attachment_type: 'link',
             link_url: link.trim(),
             created_by_type: 'client_contact',
-            created_by_id: clientContactId,
+            created_by_id: clientAccess.client_contact_id,
           });
         }
       }
@@ -119,7 +122,7 @@ export default function ClientFeedbackRequestDetail() {
     }
   };
 
-  if (!clientContactId || !request) {
+  if (!token || !clientAccess || !request) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -134,7 +137,7 @@ export default function ClientFeedbackRequestDetail() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("ClientProjectPortal") + `?id=${projectId}`)}
+            onClick={() => navigate(createPageUrl("ClientProjectPortal") + `?token=${token}`)}
             className="border-gray-700 text-white"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -164,13 +167,13 @@ export default function ClientFeedbackRequestDetail() {
 
         <ClientFeedbackThread
           requestId={requestId}
-          clientContactId={clientContactId}
+          clientContactId={clientAccess.client_contact_id}
           isClientView={true}
         />
 
         <ClientImageReviewGallery
           requestId={requestId}
-          clientContactId={clientContactId}
+          clientContactId={clientAccess.client_contact_id}
           requestType={request.request_type}
         />
 
