@@ -26,7 +26,7 @@ const getImageState = (imageId, decisions) => {
   return { label: 'Changes Requested', color: 'bg-orange-500', icon: XCircle };
 };
 
-export default function ClientImageReviewGallery({ requestId, clientContactId, requestType, accessRole }) {
+export default function ClientImageReviewGallery({ requestId, userId, clientContactId, requestType, accessRole }) {
   const queryClient = useQueryClient();
   const [selectedImages, setSelectedImages] = useState([]);
   const [viewingImage, setViewingImage] = useState(null);
@@ -59,7 +59,8 @@ export default function ClientImageReviewGallery({ requestId, clientContactId, r
 
   if (requestType !== 'image_review' || images.length === 0) return null;
 
-  const canMakeDecision = accessRole === 'approver';
+  const isClientView = !!clientContactId;
+  const canMakeDecision = isClientView ? accessRole === 'approver' : !!userId;
 
   const handleApproveImages = () => {
     setDecisionType('approved');
@@ -86,8 +87,8 @@ export default function ClientImageReviewGallery({ requestId, clientContactId, r
       for (const imageId of selectedImages) {
         await createDecisionMutation.mutateAsync({
           request_id: requestId,
-          decided_by_type: 'client_contact',
-          decided_by_id: clientContactId,
+          decided_by_type: isClientView ? 'client_contact' : 'internal_user',
+          decided_by_id: isClientView ? clientContactId : userId,
           decision: decisionType,
           note: decisionNote,
           target_type: 'attachment_image',
