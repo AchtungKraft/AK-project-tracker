@@ -40,25 +40,25 @@ export default function ClientFeedbackDetail() {
     queryKey: ['clientFeedbackRequest', requestId],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
     select: (data) => data[0],
-    enabled: !!requestId,
+    enabled: !!requestId
   });
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => base44.entities.Project.filter({ id: projectId }),
     select: (data) => data[0],
-    enabled: !!projectId,
+    enabled: !!projectId
   });
 
   const { data: linkedTasks = [] } = useQuery({
     queryKey: ['feedbackTaskLinks', requestId],
     queryFn: () => base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
-    enabled: !!requestId,
+    enabled: !!requestId
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list(),
+    queryFn: () => base44.entities.Task.list()
   });
 
   const updateRequestMutation = useMutation({
@@ -66,7 +66,7 @@ export default function ClientFeedbackDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
-    },
+    }
   });
 
   const createCommentMutation = useMutation({
@@ -75,21 +75,21 @@ export default function ClientFeedbackDetail() {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
       setNewComment('');
       setNewLinks(['']);
-    },
+    }
   });
 
   const createAttachmentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
-    },
+    }
   });
 
   const handlePostToClient = () => {
     if (confirm('Post this request to the client? They will be notified.')) {
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: 'posted', posted_at: new Date().toISOString() },
+        data: { status: 'posted', posted_at: new Date().toISOString() }
       });
       toast.success('Request posted to client');
     }
@@ -99,7 +99,7 @@ export default function ClientFeedbackDetail() {
     if (confirm('Archive this request?')) {
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: 'archived' },
+        data: { status: 'archived' }
       });
       toast.success('Request archived');
     }
@@ -118,7 +118,7 @@ export default function ClientFeedbackDetail() {
           attachment_type: 'image',
           file_url,
           created_by_type: 'internal_user',
-          created_by_id: user.id,
+          created_by_id: user.id
         });
       }
       toast.success('Images uploaded');
@@ -130,7 +130,7 @@ export default function ClientFeedbackDetail() {
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() && newLinks.every(l => !l.trim())) {
+    if (!newComment.trim() && newLinks.every((l) => !l.trim())) {
       toast.error('Please enter a comment or add a link');
       return;
     }
@@ -142,7 +142,7 @@ export default function ClientFeedbackDetail() {
         author_id: user.id,
         body: newComment,
         visibility,
-        target_type: 'request',
+        target_type: 'request'
       });
 
       for (const link of newLinks) {
@@ -153,7 +153,7 @@ export default function ClientFeedbackDetail() {
             attachment_type: 'link',
             link_url: link.trim(),
             created_by_type: 'internal_user',
-            created_by_id: user.id,
+            created_by_id: user.id
           });
         }
       }
@@ -164,8 +164,8 @@ export default function ClientFeedbackDetail() {
     }
   };
 
-  const linkedTaskDetails = linkedTasks.map(link => {
-    const task = tasks.find(t => t.id === link.task_id);
+  const linkedTaskDetails = linkedTasks.map((link) => {
+    const task = tasks.find((t) => t.id === link.task_id);
     return task ? { ...link, task } : null;
   }).filter(Boolean);
 
@@ -173,8 +173,8 @@ export default function ClientFeedbackDetail() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
-      </div>
-    );
+      </div>);
+
   }
 
   return (
@@ -186,8 +186,8 @@ export default function ClientFeedbackDetail() {
               variant="outline"
               size="icon"
               onClick={() => navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=clientportal")}
-              className="border-gray-700 text-white"
-            >
+              className="border-gray-700 text-white">
+
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex-1">
@@ -208,55 +208,55 @@ export default function ClientFeedbackDetail() {
                   )}>
                     {request.status}
                   </Badge>
-                  {request.due_date && (
-                    <Badge variant="outline">
+                  {request.due_date &&
+                  <Badge variant="outline">
                       Due: {format(new Date(request.due_date), 'MMM d, yyyy')}
                     </Badge>
-                  )}
+                  }
                 </div>
                 <div className="flex gap-2">
-                  {request.status === 'draft' && (
-                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                  {request.status === 'draft' &&
+                  <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
-                  )}
-                  {request.status === 'posted' && (
-                    <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
+                  }
+                  {request.status === 'posted' &&
+                  <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
                       <Archive className="w-4 h-4 mr-1" />
                       Archive
                     </Button>
-                  )}
+                  }
                 </div>
               </div>
 
-              {request.body && (
-                <div className="bg-gray-800/50 rounded-lg p-3">
+              {request.body &&
+              <div className="bg-gray-800/50 rounded-lg p-3">
                   <p className="text-gray-300 whitespace-pre-wrap">{request.body}</p>
                 </div>
-              )}
+              }
 
-              {linkedTaskDetails.length > 0 && (
-                <div>
+              {linkedTaskDetails.length > 0 &&
+              <div>
                   <h3 className="text-sm font-semibold text-gray-400 mb-2">Linked Tasks</h3>
                   <div className="space-y-2">
-                    {linkedTaskDetails.map(({ task }) => (
-                      <div key={task.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
+                    {linkedTaskDetails.map(({ task }) =>
+                  <div key={task.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
                         <span className="text-white text-sm">{task.name}</span>
                         <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks");
-                          }}
-                          className="text-blue-400 hover:text-blue-300"
-                        >
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks");
+                      }}
+                      className="text-blue-400 hover:text-blue-300">
+
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </div>
-                    ))}
+                  )}
                   </div>
                 </div>
-              )}
+              }
             </CardContent>
           </Card>
 
@@ -266,8 +266,8 @@ export default function ClientFeedbackDetail() {
             onCreateTask={(approval) => {
               setSelectedApproval(approval);
               setShowCreateTaskModal(true);
-            }}
-          />
+            }} />
+
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4 space-y-3">
@@ -288,35 +288,35 @@ export default function ClientFeedbackDetail() {
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Write a comment..."
-                className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-              />
+                className="bg-gray-800 border-gray-700 text-white min-h-[100px]" />
+
 
               <div className="space-y-2">
                 <Label className="text-xs text-gray-400">Add Links (optional)</Label>
-                {newLinks.map((link, idx) => (
-                  <div key={idx} className="flex gap-2">
+                {newLinks.map((link, idx) =>
+                <div key={idx} className="flex gap-2">
                     <Input
-                      value={link}
-                      onChange={(e) => {
-                        const updated = [...newLinks];
-                        updated[idx] = e.target.value;
-                        setNewLinks(updated);
-                      }}
-                      placeholder="https://..."
-                      className="bg-gray-800 border-gray-700 text-white"
-                    />
-                    {idx === newLinks.length - 1 && (
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setNewLinks([...newLinks, ''])}
-                        className="border-gray-700"
-                      >
+                    value={link}
+                    onChange={(e) => {
+                      const updated = [...newLinks];
+                      updated[idx] = e.target.value;
+                      setNewLinks(updated);
+                    }}
+                    placeholder="https://..."
+                    className="bg-gray-800 border-gray-700 text-white" />
+
+                    {idx === newLinks.length - 1 &&
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setNewLinks([...newLinks, ''])}
+                    className="border-gray-700">
+
                         <Plus className="w-4 h-4" />
                       </Button>
-                    )}
+                  }
                   </div>
-                ))}
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -324,9 +324,9 @@ export default function ClientFeedbackDetail() {
                   variant="outline"
                   size="sm"
                   onClick={() => document.getElementById('image-upload').click()}
-                  disabled={uploadingImages}
-                  className="border-gray-700"
-                >
+                  disabled={uploadingImages} className="bg-red-600 text-slate-50 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700">
+
+
                   {uploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
                   Upload Images
                 </Button>
@@ -336,14 +336,14 @@ export default function ClientFeedbackDetail() {
                   accept="image/*"
                   multiple
                   onChange={handleImageUpload}
-                  className="hidden"
-                />
+                  className="hidden" />
+
 
                 <Button
                   onClick={handleAddComment}
                   disabled={createCommentMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700 ml-auto"
-                >
+                  className="bg-red-600 hover:bg-red-700 ml-auto">
+
                   {createCommentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
                   Send
                 </Button>
@@ -353,19 +353,19 @@ export default function ClientFeedbackDetail() {
         </div>
       </div>
 
-      {showCreateTaskModal && (
-        <CreateTaskFromApprovalModal
-          open={showCreateTaskModal}
-          onClose={() => {
-            setShowCreateTaskModal(false);
-            setSelectedApproval(null);
-          }}
-          projectId={projectId}
-          requestId={requestId}
-          approval={selectedApproval}
-          userId={user.id}
-        />
-      )}
-    </>
-  );
+      {showCreateTaskModal &&
+      <CreateTaskFromApprovalModal
+        open={showCreateTaskModal}
+        onClose={() => {
+          setShowCreateTaskModal(false);
+          setSelectedApproval(null);
+        }}
+        projectId={projectId}
+        requestId={requestId}
+        approval={selectedApproval}
+        userId={user.id} />
+
+      }
+    </>);
+
 }
