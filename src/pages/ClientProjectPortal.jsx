@@ -208,7 +208,7 @@ export default function ClientProjectPortal() {
                     </div>
                     <div className="flex items-center gap-3 text-sm text-gray-400">
                       <Badge variant="outline" className="text-xs">
-                        {request.request_type.replace('_', ' ')}
+                        {({ question: 'Question', update: 'Update', image_review: 'Design Review', approval: 'Need from Client' }[request.request_type] || request.request_type.replace('_', ' '))}
                       </Badge>
                       {request.due_date && (
                         <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
