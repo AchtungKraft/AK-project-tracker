@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip } from "lucide-react";
+import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -106,6 +106,40 @@ export default function ClientFeedbackDetail() {
       toast.success('Decision recorded');
     },
   });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: async () => {
+      const [attachments, comments, decisions, links] = await Promise.all([
+        base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+        base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
+        base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+        base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
+      ]);
+
+      await Promise.all([
+        ...attachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)),
+        ...comments.map(c => base44.entities.ClientFeedbackComment.delete(c.id)),
+        ...decisions.map(d => base44.entities.ClientFeedbackDecision.delete(d.id)),
+        ...links.map(l => base44.entities.ClientFeedbackTaskLink.delete(l.id)),
+      ]);
+
+      await base44.entities.ClientFeedbackRequest.delete(requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+      toast.success('Feedback request deleted');
+      navigate(createPageUrl('ProjectDetail') + '?id=' + projectId + '&tab=clientportal');
+    }
+  });
+
+  const handleDeleteRequest = () => {
+    if (!confirm('Delete this feedback request? This will remove its comments, attachments, and decisions.')) return;
+    deleteRequestMutation.mutate();
+  };
 
   const handlePostToClient = () => {
     if (confirm('Post this request to the client? They will be notified.')) {
@@ -349,17 +383,30 @@ export default function ClientFeedbackDetail() {
                   }
                 </div>
                 <div className="flex gap-2">
-                  {request.status === 'draft' &&
-                  <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                  {request.status === 'draft' && (
+                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
-                  }
-                  {request.status === 'posted' &&
-                  <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
+                  )}
+                  {request.status === 'posted' && (
+                    <Button size="sm" onClick={handleArchive} variant="outline" className="border-gray-700">
                       <Archive className="w-4 h-4 mr-1" />
                       Archive
                     </Button>
-                  }
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={handleDeleteRequest}
+                    disabled={deleteRequestMutation.isPending}
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                  >
+                    {deleteRequestMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-1" />
+                    )}
+                    Delete
+                  </Button>
                 </div>
               </div>
 
