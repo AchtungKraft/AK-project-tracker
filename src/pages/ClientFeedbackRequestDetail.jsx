@@ -15,6 +15,17 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
+import { cn } from "@/lib/utils";
+
+const getRequestTypeInfo = (type) => {
+  const map = {
+    question: { label: 'Question', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' },
+    update: { label: 'Update', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
+    image_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
+    approval: { label: 'Need from Client', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
+  };
+  return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
+};
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();
@@ -271,8 +282,8 @@ export default function ClientFeedbackRequestDetail() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-white">{request.title}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className="text-xs border-gray-600 text-gray-200">
-                {({ question: 'Question', update: 'Update', image_review: 'Design Review', approval: 'Need from Client' }[request.request_type] || request.request_type.replace('_', ' '))}
+              <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
+                {getRequestTypeInfo(request.request_type).label}
               </Badge>
               {request.due_date && (
                 <Badge variant="outline" className="text-xs border-gray-600 text-gray-200">
