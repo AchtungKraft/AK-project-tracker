@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, Loader2, Upload, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -33,6 +34,8 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
   const [decisionNote, setDecisionNote] = useState('');
   const [showDecisionForm, setShowDecisionForm] = useState(false);
   const [decisionType, setDecisionType] = useState('approved');
+  const [uploadedDecisionImages, setUploadedDecisionImages] = useState([]);
+  const [uploadingDecisionImages, setUploadingDecisionImages] = useState(false);
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments', requestId],
@@ -48,10 +51,19 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
       setDecisionNote('');
       setShowDecisionForm(false);
       setSelectedImages([]);
+      setUploadedDecisionImages([]);
       toast.success('Decision recorded');
+    },
+  });
+
+  const createAttachmentMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
     },
   });
 
@@ -72,9 +84,36 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     setShowDecisionForm(true);
   };
 
+  const handleDecisionImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setUploadingDecisionImages(true);
+    try {
+      const uploadPromises = files.map(file =>
+        base44.integrations.Core.UploadFile({ file })
+      );
+      const results = await Promise.all(uploadPromises);
+      const photoUrls = results.map(r => r.file_url);
+      
+      setUploadedDecisionImages([...uploadedDecisionImages, ...photoUrls]);
+      toast.success('Images uploaded');
+      e.target.value = '';
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload images');
+    } finally {
+      setUploadingDecisionImages(false);
+    }
+  };
+
+  const handleRemoveDecisionImage = (urlToRemove) => {
+    setUploadedDecisionImages(uploadedDecisionImages.filter(url => url !== urlToRemove));
+  };
+
   const handleSubmitDecision = async () => {
-    if (selectedImages.length === 0) {
-      toast.error('Please select at least one image');
+    if (selectedImages.length === 0 && uploadedDecisionImages.length === 0) {
+      toast.error('Please select or upload at least one image');
       return;
     }
 
@@ -84,6 +123,20 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     }
 
     try {
+      // First, upload any new images as attachments
+      const newAttachmentIds = [];
+      for (const imageUrl of uploadedDecisionImages) {
+        const attachment = await createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          attachment_type: 'image',
+          file_url: imageUrl,
+          created_by_type: isClientView ? 'client_contact' : 'internal_user',
+          created_by_id: isClientView ? clientContactId : userId,
+        });
+        newAttachmentIds.push(attachment.id);
+      }
+
+      // Create decisions for selected existing images
       for (const imageId of selectedImages) {
         await createDecisionMutation.mutateAsync({
           request_id: requestId,
@@ -93,6 +146,20 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
           note: decisionNote,
           target_type: 'attachment_image',
           target_attachment_id: imageId,
+          decided_at: new Date().toISOString(),
+        });
+      }
+
+      // Create decisions for newly uploaded images
+      for (const attachmentId of newAttachmentIds) {
+        await createDecisionMutation.mutateAsync({
+          request_id: requestId,
+          decided_by_type: isClientView ? 'client_contact' : 'internal_user',
+          decided_by_id: isClientView ? clientContactId : userId,
+          decision: decisionType,
+          note: decisionNote,
+          target_type: 'attachment_image',
+          target_attachment_id: attachmentId,
           decided_at: new Date().toISOString(),
         });
       }
@@ -198,7 +265,8 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 {decisionType === 'approved' ? 'Approve Images' : 'Request Changes'}
               </h3>
               <p className="text-sm text-gray-400">
-                {selectedImages.length} image{selectedImages.length > 1 ? 's' : ''} selected
+                {selectedImages.length} existing image{selectedImages.length > 1 ? 's' : ''} selected
+                {uploadedDecisionImages.length > 0 && `, ${uploadedDecisionImages.length} new image${uploadedDecisionImages.length > 1 ? 's' : ''} uploaded`}
               </p>
 
               <div>
@@ -211,6 +279,68 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                   placeholder={decisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
                   className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
                 />
+              </div>
+
+              {uploadedDecisionImages.length > 0 && (
+                <div>
+                  <Label className="text-xs text-gray-400 mb-2 block">Uploaded Images ({uploadedDecisionImages.length})</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {uploadedDecisionImages.map((url, idx) => (
+                      <div key={idx} className="relative group">
+                        <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={url}
+                            alt={`Upload ${idx + 1}`}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDecisionImage(url)}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <input
+                  id="decision-image-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleDecisionImageUpload}
+                  className="hidden"
+                />
+                <label htmlFor="decision-image-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingDecisionImages}
+                    className="border-gray-700 cursor-pointer w-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.getElementById('decision-image-upload').click();
+                    }}
+                  >
+                    {uploadingDecisionImages ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Additional Images
+                      </>
+                    )}
+                  </Button>
+                </label>
               </div>
 
               <div className="flex justify-end gap-2">
