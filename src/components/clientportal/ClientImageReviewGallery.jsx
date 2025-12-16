@@ -122,6 +122,16 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
       return;
     }
 
+    if (!isClientView && !userId) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    if (isClientView && !clientContactId) {
+      toast.error('Client contact not verified');
+      return;
+    }
+
     try {
       // First, upload any new images as attachments
       const newAttachmentIds = [];
@@ -136,34 +146,53 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
         newAttachmentIds.push(attachment.id);
       }
 
+      // Wait for query invalidation before proceeding
+      await queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+      
       // Create decisions for selected existing images
+      const allDecisions = [];
       for (const imageId of selectedImages) {
-        await createDecisionMutation.mutateAsync({
-          request_id: requestId,
-          decided_by_type: isClientView ? 'client_contact' : 'internal_user',
-          decided_by_id: isClientView ? clientContactId : userId,
-          decision: decisionType,
-          note: decisionNote,
-          target_type: 'attachment_image',
-          target_attachment_id: imageId,
-          decided_at: new Date().toISOString(),
-        });
+        allDecisions.push(
+          base44.entities.ClientFeedbackDecision.create({
+            request_id: requestId,
+            decided_by_type: isClientView ? 'client_contact' : 'internal_user',
+            decided_by_id: isClientView ? clientContactId : userId,
+            decision: decisionType,
+            note: decisionNote,
+            target_type: 'attachment_image',
+            target_attachment_id: imageId,
+            decided_at: new Date().toISOString(),
+          })
+        );
       }
 
       // Create decisions for newly uploaded images
       for (const attachmentId of newAttachmentIds) {
-        await createDecisionMutation.mutateAsync({
-          request_id: requestId,
-          decided_by_type: isClientView ? 'client_contact' : 'internal_user',
-          decided_by_id: isClientView ? clientContactId : userId,
-          decision: decisionType,
-          note: decisionNote,
-          target_type: 'attachment_image',
-          target_attachment_id: attachmentId,
-          decided_at: new Date().toISOString(),
-        });
+        allDecisions.push(
+          base44.entities.ClientFeedbackDecision.create({
+            request_id: requestId,
+            decided_by_type: isClientView ? 'client_contact' : 'internal_user',
+            decided_by_id: isClientView ? clientContactId : userId,
+            decision: decisionType,
+            note: decisionNote,
+            target_type: 'attachment_image',
+            target_attachment_id: attachmentId,
+            decided_at: new Date().toISOString(),
+          })
+        );
       }
+
+      await Promise.all(allDecisions);
+      
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+      setDecisionNote('');
+      setShowDecisionForm(false);
+      setSelectedImages([]);
+      setUploadedDecisionImages([]);
+      toast.success(`${decisionType === 'approved' ? 'Approval' : 'Change request'} submitted for ${selectedImages.length + uploadedDecisionImages.length} image(s)`);
     } catch (error) {
+      console.error('Decision error:', error);
       toast.error('Failed to record decision');
     }
   };
@@ -185,7 +214,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   size="sm"
                   onClick={handleApproveImages}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Approve ({selectedImages.length})
@@ -193,8 +222,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   size="sm"
                   onClick={handleRequestChanges}
-                  variant="outline"
-                  className="border-orange-500 text-orange-400"
+                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
                 >
                   <XCircle className="w-4 h-4 mr-1" />
                   Request Changes

@@ -276,7 +276,7 @@ export default function ClientFeedbackRequestDetail() {
                 <Button
                   size="sm"
                   onClick={handleApproveRequest}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Approve Request
@@ -284,8 +284,7 @@ export default function ClientFeedbackRequestDetail() {
                 <Button
                   size="sm"
                   onClick={handleRequestChangesRequest}
-                  variant="outline"
-                  className="border-orange-500 text-orange-400"
+                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
                 >
                   <XCircle className="w-4 h-4 mr-1" />
                   Request Changes
@@ -469,7 +468,7 @@ export default function ClientFeedbackRequestDetail() {
               <Button
                 onClick={handleAddComment}
                 disabled={createCommentMutation.isPending}
-                className="bg-red-600 hover:bg-red-700 ml-auto"
+                className="bg-blue-600 hover:bg-blue-700 text-white ml-auto"
               >
                 {createCommentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
                 Send
