@@ -14,6 +14,17 @@ import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircl
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const getRequestTypeInfo = (type) => {
+  const map = {
+    question: { label: 'Question', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' },
+    update: { label: 'Update', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
+    image_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
+    approval: { label: 'Need from Client', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
+  };
+  return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
+};
+
 import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
@@ -368,7 +379,9 @@ export default function ClientFeedbackDetail() {
             <CardContent className="p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="border-gray-600 text-gray-200">{request.request_type.replace('_', ' ')}</Badge>
+                  <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
+                    {getRequestTypeInfo(request.request_type).label}
+                  </Badge>
                   <Badge className={cn(
                     request.status === 'draft' ? 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' :
                     request.status === 'posted' ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' :
