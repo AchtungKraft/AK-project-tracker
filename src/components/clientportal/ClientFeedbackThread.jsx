@@ -1,12 +1,15 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertCircle, Link as LinkIcon } from "lucide-react";
+import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
+import ImageModal from "../ui/ImageModal";
 
 export default function ClientFeedbackThread({ requestId, clientContactId, isClientView }) {
+  const [selectedImage, setSelectedImage] = useState(null);
+
   const { data: comments = [] } = useQuery({
     queryKey: ['clientFeedbackComments', requestId],
     queryFn: () => base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
@@ -73,94 +76,120 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   }, [comments, decisions, attachments, users, clientContacts, isClientView]);
 
   return (
-    <div className="space-y-3">
-      {timeline.map((event, idx) => (
-        <Card key={idx} className="bg-black/60 backdrop-blur-xl border border-gray-700">
-          <CardContent className="p-4">
-            {event.type === 'comment' && (
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
-                      <span className="text-white font-bold text-xs">
-                        {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-white text-sm">
-                        {event.author?.name || event.author?.full_name || 'Unknown'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {format(event.timestamp, 'MMM d, h:mm a')}
-                      </p>
-                    </div>
-                  </div>
-                  {!isClientView && event.comment.visibility === 'internal_only' && (
-                    <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">
-                      Internal Only
-                    </Badge>
-                  )}
-                </div>
-
-                {event.comment.body && (
-                  <p className="text-gray-300 whitespace-pre-wrap">{event.comment.body}</p>
-                )}
-
-                {event.attachments.length > 0 && (
-                  <div className="space-y-2">
-                    {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {event.attachments.filter(a => a.attachment_type === 'image').map(att => (
-                          <img
-                            key={att.id}
-                            src={att.file_url}
-                            alt=""
-                            className="w-full h-32 object-cover rounded-lg border border-gray-700"
-                          />
-                        ))}
+    <>
+      <div className="space-y-3">
+        {timeline.map((event, idx) => (
+          <Card key={idx} className="bg-black/60 backdrop-blur-xl border border-gray-700">
+            <CardContent className="p-4">
+              {event.type === 'comment' && (
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
+                        <span className="text-white font-bold text-xs">
+                          {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                        </span>
                       </div>
+                      <div>
+                        <p className="font-medium text-white text-sm">
+                          {event.author?.name || event.author?.full_name || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {format(event.timestamp, 'MMM d, h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                    {!isClientView && event.comment.visibility === 'internal_only' && (
+                      <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">
+                        Internal Only
+                      </Badge>
                     )}
-
-                    {event.attachments.filter(a => a.attachment_type === 'link').map(att => (
-                      <a
-                        key={att.id}
-                        href={att.link_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
-                      >
-                        <LinkIcon className="w-4 h-4" />
-                        {att.label || att.link_url}
-                      </a>
-                    ))}
                   </div>
-                )}
-              </div>
-            )}
 
-            {event.type === 'decision' && (
-              <div className="flex items-center gap-2">
-                {event.decision.decision === 'approved' ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-orange-500" />
-                )}
-                <div className="flex-1">
-                  <span className="font-medium text-white text-sm">
-                    {event.decider?.name || event.decider?.full_name || 'Someone'} {event.decision.decision === 'approved' ? 'approved' : 'requested changes'}
-                  </span>
-                  {event.decision.note && (
-                    <p className="text-gray-300 text-sm mt-1">{event.decision.note}</p>
+                  {event.comment.body && (
+                    <p className="text-gray-300 whitespace-pre-wrap">{event.comment.body}</p>
+                  )}
+
+                  {event.attachments.length > 0 && (
+                    <div className="space-y-2">
+                      {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {event.attachments.filter(a => a.attachment_type === 'image').map(att => (
+                            <div
+                              key={att.id}
+                              className="w-full h-32 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
+                              onClick={() => setSelectedImage(att.file_url)}
+                            >
+                              <img
+                                src={att.file_url}
+                                alt=""
+                                className="max-w-full max-h-full object-contain"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {event.attachments.filter(a => a.attachment_type === 'link').map(att => (
+                        <a
+                          key={att.id}
+                          href={att.link_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          <LinkIcon className="w-4 h-4" />
+                          {att.label || att.link_url}
+                        </a>
+                      ))}
+
+                      {event.attachments.filter(a => a.attachment_type === 'file').map(att => (
+                        <a
+                          key={att.id}
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          <FileText className="w-4 h-4" />
+                          {att.label || att.file_url}
+                        </a>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <span className="text-xs text-gray-400">
-                  {format(event.timestamp, 'MMM d, h:mm a')}
-                </span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+              )}
+
+              {event.type === 'decision' && (
+                <div className="flex items-center gap-2">
+                  {event.decision.decision === 'approved' ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-orange-500" />
+                  )}
+                  <div className="flex-1">
+                    <span className="font-medium text-white text-sm">
+                      {event.decider?.name || event.decider?.full_name || 'Someone'} {event.decision.decision === 'approved' ? 'approved' : 'requested changes'}
+                    </span>
+                    {event.decision.note && (
+                      <p className="text-gray-300 text-sm mt-1">{event.decision.note}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {format(event.timestamp, 'MMM d, h:mm a')}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <ImageModal
+        isOpen={!!selectedImage}
+        onClose={() => setSelectedImage(null)}
+        imageUrl={selectedImage}
+      />
+    </>
   );
 }
