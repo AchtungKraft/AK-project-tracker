@@ -263,26 +263,35 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                     canMakeDecision && "cursor-pointer hover:border-red-400",
                     isSelected ? "border-red-500 ring-2 ring-red-500" : "border-gray-700"
                   )}
-                  onClick={() => canMakeDecision && toggleImageSelection(image.id)}
+                  onClick={() => canMakeDecision ? toggleImageSelection(image.id) : setViewingImage(image)}
                 >
                   <img
                     src={image.file_url}
                     alt=""
                     className="w-full h-48 object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setViewingImage(image);
-                      }}
-                      className="text-white bg-gray-800/80 hover:bg-gray-700/80"
-                    >
-                      View Full Size
-                    </Button>
-                  </div>
+                  {canMakeDecision && (
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingImage(image);
+                        }}
+                        className="text-white bg-gray-800/80 hover:bg-gray-700/80"
+                      >
+                        View Full Size
+                      </Button>
+                    </div>
+                  )}
+                  {!canMakeDecision && (
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                      <div className="bg-black/50 text-white px-2 py-1 rounded text-xs">
+                        Click to enlarge
+                      </div>
+                    </div>
+                  )}
                   <div className="absolute top-2 right-2">
                     <Badge className={cn("text-xs text-white shadow-lg", state.color)}>
                       <StateIcon className="w-3 h-3 mr-1" />

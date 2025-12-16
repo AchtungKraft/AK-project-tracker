@@ -71,7 +71,7 @@ const getRequestState = (request, decisions, attachments) => {
 export default function ClientPortalDashboard({ projectId, onCreateRequest, onManageAccess, onSelectRequest }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [stateFilter, setStateFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('needs_review');
   const [sortBy, setSortBy] = useState('last_activity');
 
   const { data: requests = [] } = useQuery({

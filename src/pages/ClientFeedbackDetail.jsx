@@ -18,6 +18,7 @@ import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThr
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import ImageModal from "../components/ui/ImageModal";
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ export default function ClientFeedbackDetail() {
   const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
   const [requestDecisionType, setRequestDecisionType] = useState('');
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -696,6 +698,12 @@ export default function ClientFeedbackDetail() {
         userId={user.id} />
 
       }
+
+      <ImageModal
+        isOpen={!!selectedImage}
+        onClose={() => setSelectedImage(null)}
+        imageUrl={selectedImage}
+      />
     </>);
 
 }
