@@ -154,16 +154,7 @@ export default function ClientProjects() {
               </div>
             )}
 
-            {/* Progress */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-gray-500">Progress</span>
-                <span className="text-xs text-gray-400 font-medium">
-                  {project.progress_percent || 0}%
-                </span>
-              </div>
-              <Progress value={project.progress_percent || 0} className="h-1.5 bg-gray-800" />
-            </div>
+
 
             {/* Due Date */}
             <div className="flex items-center justify-between text-xs border-t border-gray-800 pt-2 mt-2">
@@ -183,7 +174,7 @@ export default function ClientProjects() {
                 className="bg-lime-600 text-white px-3 text-xs font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border shadow-sm hover:text-white h-8 border-lime-700 hover:bg-lime-700 gap-2"
               >
                 <Eye className="w-3 h-3" />
-                Open Portal
+                VIEW
               </Button>
             </div>
           </CardContent>

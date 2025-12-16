@@ -89,16 +89,7 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
             </div>
           }
 
-          {/* Progress */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-gray-500">Progress</span>
-              <span className="text-xs text-gray-400 font-medium">
-                {project.progress_percent || 0}%
-              </span>
-            </div>
-            <Progress value={project.progress_percent || 0} className="h-1.5 bg-gray-800" />
-          </div>
+
 
           {/* Due Date & Team */}
           <div className="flex items-center justify-between text-xs">
