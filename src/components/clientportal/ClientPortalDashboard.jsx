@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Share2, Search, AlertCircle, CheckCircle2, Clock, Archive, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { getRequestTypeInfo, getRequestState } from "@/utils/feedbackRequestUtils";
+import { getRequestTypeInfo, getRequestState } from "./utils";
 
 export default function ClientPortalDashboard({ projectId, onCreateRequest, onManageAccess, onSelectRequest }) {
   const [searchTerm, setSearchTerm] = useState('');
