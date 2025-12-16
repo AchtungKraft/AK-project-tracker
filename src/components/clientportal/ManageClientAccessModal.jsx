@@ -11,6 +11,7 @@ import { Plus, Trash2, Mail, Loader2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
+import { cn } from "@/lib/utils";
 
 export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const queryClient = useQueryClient();
@@ -196,7 +197,11 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium text-white">{client.name}</span>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge className={cn("text-xs capitalize", 
+                              access.access_role === 'approver' ? "bg-blue-500/20 text-blue-400 border-blue-500/50 border" :
+                              access.access_role === 'commenter' ? "bg-green-500/20 text-green-400 border-green-500/50 border" :
+                              "bg-gray-500/20 text-gray-400 border-gray-500/50 border"
+                            )}>
                               {access.access_role}
                             </Badge>
                           </div>
