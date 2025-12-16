@@ -67,7 +67,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
     },
   });
 
-  const images = attachments.filter(a => a.attachment_type === 'image' && !a.comment_id);
+  const images = attachments.filter(a => a.attachment_type === 'image');
 
   if (requestType !== 'image_review' || images.length === 0) return null;
 
@@ -216,12 +216,13 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 </p>
               )}
             </div>
-            {canMakeDecision && selectedImages.length > 0 && (
+            {canMakeDecision && (
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
                   onClick={handleApproveImages}
-                  className="bg-green-600 hover:bg-green-700 text-white border-green-600 flex-1 sm:flex-none"
+                  disabled={selectedImages.length === 0}
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Approve ({selectedImages.length})
@@ -229,7 +230,8 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   size="sm"
                   onClick={handleRequestChanges}
-                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600 flex-1 sm:flex-none"
+                  disabled={selectedImages.length === 0}
+                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none"
                 >
                   <XCircle className="w-4 h-4 mr-1" />
                   Request Changes
@@ -389,7 +391,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
                 <Button
                   variant="outline"
                   onClick={() => setShowDecisionForm(false)}
-                  className="border-gray-700"
+                  className="border-gray-600 text-gray-200 hover:bg-gray-800"
                 >
                   Cancel
                 </Button>

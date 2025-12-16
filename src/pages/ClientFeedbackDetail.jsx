@@ -615,7 +615,7 @@ export default function ClientFeedbackDetail() {
                 <Button
                   variant="outline"
                   onClick={() => setShowRequestDecisionForm(false)}
-                  className="border-gray-700"
+                  className="border-gray-600 text-gray-200 hover:bg-gray-800"
                 >
                   Cancel
                 </Button>
