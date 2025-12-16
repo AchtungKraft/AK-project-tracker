@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { getRequestTypeInfo, getRequestState } from "../components/clientportal/utils";
+import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/utils";
 
 export default function ClientProjectPortal() {
   const navigate = useNavigate();
