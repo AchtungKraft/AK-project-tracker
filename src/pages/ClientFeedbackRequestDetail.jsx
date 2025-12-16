@@ -66,6 +66,10 @@ export default function ClientFeedbackRequestDetail() {
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    if (!clientAccess) {
+      toast.error('Unable to upload: access not verified');
+      return;
+    }
 
     setUploadingImages(true);
     try {
@@ -80,7 +84,9 @@ export default function ClientFeedbackRequestDetail() {
         });
       }
       toast.success('Images uploaded');
+      e.target.value = '';
     } catch (error) {
+      console.error('Upload error:', error);
       toast.error('Failed to upload images');
     } finally {
       setUploadingImages(false);
