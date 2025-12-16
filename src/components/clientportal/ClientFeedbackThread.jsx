@@ -100,7 +100,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                       </div>
                     </div>
                     {!isClientView && event.comment.visibility === 'internal_only' && (
-                      <Badge className="text-xs bg-orange-600 text-white">
+                      <Badge className="text-xs bg-orange-500/20 text-orange-400 border-orange-500/50 border">
                         Internal Only
                       </Badge>
                     )}
