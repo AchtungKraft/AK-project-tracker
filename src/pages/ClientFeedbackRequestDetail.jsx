@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, XCircle, X, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
@@ -25,6 +25,8 @@ export default function ClientFeedbackRequestDetail() {
 
   const [clientAccess, setClientAccess] = useState(null);
   const [newComment, setNewComment] = useState('');
+  const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [newLinks, setNewLinks] = useState(['']);
@@ -58,6 +60,8 @@ export default function ClientFeedbackRequestDetail() {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
       setNewComment('');
       setNewLinks(['']);
+      setUploadedPhotos([]);
+      setUploadedFiles([]);
     },
   });
 
@@ -89,16 +93,13 @@ export default function ClientFeedbackRequestDetail() {
 
     setUploadingImages(true);
     try {
-      for (const file of files) {
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          attachment_type: 'image',
-          file_url,
-          created_by_type: 'client_contact',
-          created_by_id: clientAccess.client_contact_id,
-        });
-      }
+      const uploadPromises = files.map(file =>
+        base44.integrations.Core.UploadFile({ file })
+      );
+      const results = await Promise.all(uploadPromises);
+      const photoUrls = results.map(r => r.file_url);
+      
+      setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
       toast.success('Images uploaded');
       e.target.value = '';
     } catch (error) {
@@ -107,6 +108,10 @@ export default function ClientFeedbackRequestDetail() {
     } finally {
       setUploadingImages(false);
     }
+  };
+
+  const handleRemovePhoto = (urlToRemove) => {
+    setUploadedPhotos(uploadedPhotos.filter(url => url !== urlToRemove));
   };
 
   const handleFileUpload = async (e) => {
@@ -120,14 +125,7 @@ export default function ClientFeedbackRequestDetail() {
     setUploadingFile(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      await createAttachmentMutation.mutateAsync({
-        request_id: requestId,
-        attachment_type: 'file',
-        file_url,
-        label: file.name,
-        created_by_type: 'client_contact',
-        created_by_id: clientAccess.client_contact_id,
-      });
+      setUploadedFiles([...uploadedFiles, { name: file.name, url: file_url }]);
       toast.success('File uploaded');
       e.target.value = '';
     } catch (error) {
@@ -136,6 +134,10 @@ export default function ClientFeedbackRequestDetail() {
     } finally {
       setUploadingFile(false);
     }
+  };
+
+  const handleRemoveFile = (urlToRemove) => {
+    setUploadedFiles(uploadedFiles.filter(f => f.url !== urlToRemove));
   };
 
   const handleApproveRequest = () => {
@@ -176,8 +178,8 @@ export default function ClientFeedbackRequestDetail() {
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() && newLinks.every(l => !l.trim())) {
-      toast.error('Please enter a comment or add a link');
+    if (!newComment.trim() && newLinks.every(l => !l.trim()) && uploadedPhotos.length === 0 && uploadedFiles.length === 0) {
+      toast.error('Please enter a comment, add a link, or attach a file');
       return;
     }
 
@@ -191,6 +193,32 @@ export default function ClientFeedbackRequestDetail() {
         target_type: 'request',
       });
 
+      // Upload photos as attachments
+      for (const photoUrl of uploadedPhotos) {
+        await createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'image',
+          file_url: photoUrl,
+          created_by_type: 'client_contact',
+          created_by_id: clientAccess.client_contact_id,
+        });
+      }
+
+      // Upload files as attachments
+      for (const file of uploadedFiles) {
+        await createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'file',
+          file_url: file.url,
+          label: file.name,
+          created_by_type: 'client_contact',
+          created_by_id: clientAccess.client_contact_id,
+        });
+      }
+
+      // Upload links as attachments
       for (const link of newLinks) {
         if (link.trim()) {
           await createAttachmentMutation.mutateAsync({
@@ -302,6 +330,52 @@ export default function ClientFeedbackRequestDetail() {
               className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
             />
 
+            {uploadedPhotos.length > 0 && (
+              <div>
+                <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                  {uploadedPhotos.map((url, idx) => (
+                    <div key={idx} className="relative group">
+                      <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={url}
+                          alt={`Upload ${idx + 1}`}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(url)}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {uploadedFiles.length > 0 && (
+              <div>
+                <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
+                <div className="space-y-2">
+                  {uploadedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                      <span className="text-white text-sm truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFile(file.url)}
+                        className="text-red-400 hover:text-red-300 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className="text-xs text-gray-400">Add Links (optional)</Label>
               {newLinks.map((link, idx) => (
@@ -331,16 +405,6 @@ export default function ClientFeedbackRequestDetail() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); document.getElementById('client-image-upload').click(); }}
-                disabled={uploadingImages}
-                className="border-gray-700"
-              >
-                {uploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-                Upload Images
-              </Button>
               <input
                 id="client-image-upload"
                 type="file"
@@ -349,17 +413,29 @@ export default function ClientFeedbackRequestDetail() {
                 onChange={handleImageUpload}
                 className="hidden"
               />
+              <label htmlFor="client-image-upload">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingImages}
+                  className="border-gray-700 cursor-pointer"
+                  onClick={() => document.getElementById('client-image-upload').click()}
+                >
+                  {uploadingImages ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-1" />
+                      Add Images
+                    </>
+                  )}
+                </Button>
+              </label>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => { e.stopPropagation(); document.getElementById('client-file-upload').click(); }}
-                disabled={uploadingFile}
-                className="border-gray-700"
-              >
-                {uploadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-                Attach File
-              </Button>
               <input
                 id="client-file-upload"
                 type="file"
@@ -367,6 +443,28 @@ export default function ClientFeedbackRequestDetail() {
                 onChange={handleFileUpload}
                 className="hidden"
               />
+              <label htmlFor="client-file-upload">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingFile}
+                  className="border-gray-700 cursor-pointer"
+                  onClick={() => document.getElementById('client-file-upload').click()}
+                >
+                  {uploadingFile ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Paperclip className="w-4 h-4 mr-1" />
+                      Attach File
+                    </>
+                  )}
+                </Button>
+              </label>
 
               <Button
                 onClick={handleAddComment}
