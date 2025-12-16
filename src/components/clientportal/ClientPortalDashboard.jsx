@@ -9,64 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Share2, Search, AlertCircle, CheckCircle2, Clock, Archive, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-
-const getRequestTypeInfo = (type) => {
-  const map = {
-    question: { label: 'Question', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' },
-    update: { label: 'Update', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
-    image_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
-    approval: { label: 'Need from Client', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
-  };
-  return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
-};
-
-const getRequestState = (request, decisions, attachments) => {
-  if (request.status === 'draft') return { label: 'Draft', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border', icon: FileText };
-  if (request.status === 'archived') return { label: 'Archived', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20 border', icon: Archive };
-  
-  const requestDecisions = decisions.filter(d => d.request_id === request.id);
-  
-  if (request.request_type === 'image_review') {
-    const images = attachments.filter(a => a.request_id === request.id && a.attachment_type === 'image');
-    const imageDecisions = requestDecisions.filter(d => d.target_type === 'attachment_image');
-    
-    if (imageDecisions.some(d => d.decision === 'changes_requested')) {
-      return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
-    }
-    
-    if (images.length > 0 && images.every(img => 
-      imageDecisions.some(d => d.target_attachment_id === img.id && d.decision === 'approved')
-    )) {
-      return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
-    }
-    
-    if (request.due_date && new Date(request.due_date) < new Date() && images.some(img =>
-      !imageDecisions.some(d => d.target_attachment_id === img.id)
-    )) {
-      return { label: 'Overdue', color: 'bg-red-500/20 text-red-400 border-red-500/50 border', icon: Clock };
-    }
-    
-    return { label: 'Needs Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
-  }
-  
-  const latestDecision = requestDecisions
-    .filter(d => d.target_type === 'request')
-    .sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date))[0];
-  
-  if (latestDecision?.decision === 'approved') {
-    return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
-  }
-  
-  if (latestDecision?.decision === 'changes_requested') {
-    return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
-  }
-  
-  if (request.due_date && new Date(request.due_date) < new Date() && !latestDecision) {
-    return { label: 'Overdue', color: 'bg-red-500/20 text-red-400 border-red-500/50 border', icon: Clock };
-  }
-  
-  return { label: 'Needs Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
-};
+import { getRequestTypeInfo, getRequestState } from "@/utils/feedbackRequestUtils";
 
 export default function ClientPortalDashboard({ projectId, onCreateRequest, onManageAccess, onSelectRequest }) {
   const [searchTerm, setSearchTerm] = useState('');

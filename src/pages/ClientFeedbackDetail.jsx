@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -150,6 +150,16 @@ export default function ClientFeedbackDetail() {
         data: { status: 'posted', posted_at: new Date().toISOString() }
       });
       toast.success('Request posted to client');
+    }
+  };
+
+  const handleResendForApproval = () => {
+    if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
+      updateRequestMutation.mutate({
+        id: requestId,
+        data: { status: 'posted', posted_at: new Date().toISOString() }
+      });
+      toast.success('Request resent to client');
     }
   };
 
@@ -391,10 +401,16 @@ export default function ClientFeedbackDetail() {
                     </Button>
                   }
                   {request.status === 'posted' &&
-                  <Button size="sm" onClick={handleArchive} variant="outline" className="bg-sky-100 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700">
+                  <>
+                    <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 hover:text-purple-950 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm h-8">
+                      <RotateCw className="w-4 h-4 mr-1" />
+                      Resend
+                    </Button>
+                    <Button size="sm" onClick={handleArchive} variant="outline" className="bg-sky-100 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700">
                       <Archive className="w-4 h-4 mr-1" />
                       Archive
                     </Button>
+                  </>
                   }
                   <Button
                     size="sm"
