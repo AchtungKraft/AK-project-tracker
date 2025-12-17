@@ -490,6 +490,7 @@ export default function ClientFeedbackDetail() {
           <ClientImageReviewGallery
             requestId={requestId}
             userId={user.id}
+            projectId={projectId}
             requestType={request.request_type}
             accessRole={user?.role} />
 

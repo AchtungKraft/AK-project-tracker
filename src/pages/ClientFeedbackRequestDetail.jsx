@@ -347,6 +347,7 @@ export default function ClientFeedbackRequestDetail() {
         {request.request_type === 'image_review' && (
           <ClientImageReviewGallery
             requestId={requestId}
+            projectId={clientAccess.project_id}
             clientContactId={clientAccess.client_contact_id}
             requestType={request.request_type}
             accessRole={clientAccess.access_role}

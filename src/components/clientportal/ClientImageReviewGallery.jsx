@@ -27,7 +27,7 @@ const getImageState = (imageId, decisions) => {
   return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: XCircle };
 };
 
-export default function ClientImageReviewGallery({ requestId, userId, clientContactId, requestType, accessRole }) {
+export default function ClientImageReviewGallery({ requestId, userId, clientContactId, requestType, accessRole, projectId }) {
   const queryClient = useQueryClient();
   const [selectedImages, setSelectedImages] = useState([]);
   const [viewingImage, setViewingImage] = useState(null);
@@ -39,7 +39,7 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }, '-created_date'),
   });
 
   const { data: decisions = [] } = useQuery({
@@ -53,7 +53,13 @@ export default function ClientImageReviewGallery({ requestId, userId, clientCont
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
       // Invalidate project-level queries to refresh the landing page
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); 
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', projectId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', projectId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+      }
       setDecisionNote('');
       setShowDecisionForm(false);
       setSelectedImages([]);
