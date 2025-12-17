@@ -428,6 +428,20 @@ export default function ClientFeedbackDetail() {
                     </Button>
                   </>
                   }
+                  {request.status === 'archived' && (
+                    <Button size="sm" onClick={() => {
+                      if (confirm('Move this request back to draft?')) {
+                        updateRequestMutation.mutate({
+                          id: requestId,
+                          data: { status: 'draft' }
+                        });
+                        toast.success('Moved to Drafts');
+                      }
+                    }} variant="outline" className="bg-gray-100 text-gray-900 border-gray-200 hover:bg-gray-200 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors border h-8">
+                      <FileText className="w-4 h-4 mr-1" />
+                      Move to Draft
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={handleDeleteRequest}
