@@ -353,7 +353,7 @@ export default function ClientFeedbackDetail() {
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
 
-            {request.status === 'posted' && request.request_type !== 'image_review' &&
+            {request.status === 'posted' &&
             <div className="flex gap-2">
                 <Button
                 size="sm"
