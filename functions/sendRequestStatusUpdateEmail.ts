@@ -17,7 +17,6 @@ Deno.serve(async (req) => {
         }
 
         // Fetch Request details
-        // Using asServiceRole to ensure we can read the necessary data regardless of current user permissions context
         const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
         const request = requests[0];
 
@@ -25,7 +24,7 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Request not found' }, { status: 404 });
         }
 
-        // Fetch Project details to get client info
+        // Fetch Project details
         const projects = await base44.asServiceRole.entities.Project.filter({ id: request.project_id });
         const project = projects[0];
 
@@ -33,42 +32,65 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        const clientEmail = project.client_email;
-        const clientName = project.client_name || 'Client';
+        // Collect Recipient Emails
+        const recipients = new Set();
 
-        if (!clientEmail) {
-            console.log(`No client email found for project ${project.id}. Skipping email.`);
-            return Response.json({ message: 'No client email found' });
+        // 1. Client Email from Project (Legacy/Main)
+        if (project.client_email) {
+            recipients.add(project.client_email);
         }
 
+        // 2. Client Contacts with Access to Project
+        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
+            project_id: request.project_id,
+            access_status: 'active'
+        });
+        
+        const clientContactIds = accesses.map(a => a.client_contact_id);
+        if (clientContactIds.length > 0) {
+            // Fetch contacts manually as we don't have bulk fetch by ID list easily without loop or complex filter
+            // Assuming filter supports $in or similar or just loop
+            // Standard entity filter is often simple. Let's loop for safety or use filter if supported.
+            // Base44 filter: { id: { $in: [...] } } or just loop. The SDK instructions don't explicitly show $in support for 'filter'. 
+            // It says "Query filter (e.g. {"id": "123"}, {"status": "active"}, {"age": {"$gte": 18}})"
+            // So let's try Promise.all for parallel fetch which is fast enough for small numbers.
+            const contactPromises = clientContactIds.map(id => 
+                base44.asServiceRole.entities.ClientContact.filter({ id })
+            );
+            const contactResults = await Promise.all(contactPromises);
+            contactResults.flat().forEach(contact => {
+                if (contact && contact.email) recipients.add(contact.email);
+            });
+        }
+
+        // 3. Team Members Assigned to Project
+        if (project.assigned_team && Array.isArray(project.assigned_team) && project.assigned_team.length > 0) {
+             const teamPromises = project.assigned_team.map(id => 
+                base44.asServiceRole.entities.TeamMember.filter({ id })
+            );
+            const teamResults = await Promise.all(teamPromises);
+            teamResults.flat().forEach(member => {
+                if (member && member.email) recipients.add(member.email);
+            });
+        }
+
+        if (recipients.size === 0) {
+            console.log(`No recipients found for project ${project.id}. Skipping email.`);
+            return Response.json({ message: 'No recipients found' });
+        }
+
+        const toAddresses = Array.from(recipients);
+
         // Prepare email content
-        const appBaseUrl = Deno.env.get("APP_BASE_URL") || 'https://projects.achtungkraft.com'; // Fallback if secret not set yet
-        const requestUrl = `${appBaseUrl}/requests/${request.id}`; // Assuming this route exists or resolves correctly. 
-        // Note: The user provided URL structure is {{APP_BASE_URL}}/requests/{{request.id}}
-        // However, in the app routing (from context), the page is likely ClientFeedbackRequestDetail which takes ?id=...
-        // But I will stick to the user's requested format or adjust if I know the routing is different.
-        // Looking at file summaries: "pages/ClientFeedbackRequestDetail" uses ?id=...
-        // The user's template suggests /requests/:id. I should probably use the actual functional URL if I can, or stick to instructions.
-        // User instruction: "<a href="{{APP_BASE_URL}}/requests/{{request.id}}">"
-        // I will use exactly what user asked, but also maybe the functional one is better? 
-        // "Clicking the link opens the correct request" is acceptance criteria.
-        // The current app uses query params. `createPageUrl("ClientFeedbackRequestDetail") + "?id=" + request.id`
-        // I'll stick to the user's requested text format for now, but to ensure "Clicking the link opens the correct request", 
-        // I should probably use the actual working URL of the app.
-        // If I use /requests/123, it might 404 if not handled by router.
-        // I'll use the functional URL for safety, or maybe the user has a redirect setup?
-        // Let's assume the user knows what they are asking for with /requests/{{id}}, BUT "Clicking the link opens the correct request" is a requirement.
-        // I'll use the working URL format: `${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${clientAccess?.share_token}`?
-        // Wait, for the client to view it, they usually need a token or be logged in.
-        // The user instruction implies a simple link.
-        // I will follow the user's specific HTML Body template.
+        const appBaseUrl = Deno.env.get("APP_BASE_URL") || 'https://projects.achtungkraft.com'; 
         
         const subject = `Request update: ${request.title}`;
         
+        // Using a generic greeting since there are multiple recipients
         const htmlBody = `
-<p>Hi ${clientName},</p>
+<p>Hello,</p>
 
-<p>Your request <strong>${request.title}</strong> has been updated.</p>
+<p>The request <strong>${request.title}</strong> has been updated.</p>
 
 <p>
 Status changed from <strong>${oldStatus || 'unknown'}</strong>
@@ -88,7 +110,7 @@ View Request
 `;
 
         const textBody = `
-Your request "${request.title}" has been updated.
+The request "${request.title}" has been updated.
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 
@@ -111,7 +133,7 @@ ${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}
             },
             body: JSON.stringify({
                 from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
-                to: clientEmail,
+                to: toAddresses, 
                 subject: subject,
                 html: htmlBody,
                 text: textBody
@@ -126,8 +148,7 @@ ${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}
 
         const emailData = await emailResponse.json();
 
-        // Log the email (console log is captured in base44 logs)
-        console.log(`Email sent for Request ${requestId}: ${oldStatus} -> ${newStatus} to ${clientEmail}. ID: ${emailData.id}`);
+        console.log(`Email sent for Request ${requestId}: ${oldStatus} -> ${newStatus} to ${toAddresses.join(', ')}. ID: ${emailData.id}`);
 
         return Response.json({ success: true, emailId: emailData.id });
 
