@@ -14,7 +14,7 @@ import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, XCircle, X, Paper
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
-import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
+// import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { cn } from "@/lib/utils";
 
 const getRequestTypeInfo = (type) => {
@@ -341,18 +341,11 @@ export default function ClientFeedbackRequestDetail() {
           requestId={requestId}
           clientContactId={clientAccess.client_contact_id}
           isClientView={true}
+          requestType={request.request_type}
           accessRole={clientAccess.access_role}
         />
 
-        {request.request_type === 'image_review' && (
-          <ClientImageReviewGallery
-            requestId={requestId}
-            projectId={clientAccess.project_id}
-            clientContactId={clientAccess.client_contact_id}
-            requestType={request.request_type}
-            accessRole={clientAccess.access_role}
-          />
-        )}
+{/* ClientImageReviewGallery removed in favor of threaded design review */}
 
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
           <CardContent className="p-4 space-y-3">

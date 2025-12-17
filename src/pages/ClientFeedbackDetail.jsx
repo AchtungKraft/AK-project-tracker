@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
-import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx";
+// import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 
@@ -478,6 +478,7 @@ export default function ClientFeedbackDetail() {
           <FeedbackRequestThread
             requestId={requestId}
             userId={user.id}
+            requestType={request.request_type}
             onCreateTask={(approval) => {
               setSelectedApproval(approval);
               setShowCreateTaskModal(true);
@@ -486,15 +487,7 @@ export default function ClientFeedbackDetail() {
             accessRole={user?.role} />
 
 
-          {request.request_type === 'image_review' &&
-          <ClientImageReviewGallery
-            requestId={requestId}
-            userId={user.id}
-            projectId={projectId}
-            requestType={request.request_type}
-            accessRole={user?.role} />
-
-          }
+{/* ClientImageReviewGallery removed in favor of threaded design review */}
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
