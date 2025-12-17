@@ -16,18 +16,20 @@ export default function ClientProjects() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
+  const slug = urlParams.get('slug');
   const [clientAccess, setClientAccess] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
-    if (!token) {
+    if (!token && !slug) {
       return;
     }
 
-    base44.entities.ProjectClientAccess.filter({
-      share_token: token,
-      access_status: 'active',
-    }).then(access => {
+    const filter = { access_status: 'active' };
+    if (token) filter.share_token = token;
+    if (slug) filter.url_slug = slug;
+
+    base44.entities.ProjectClientAccess.filter(filter).then(access => {
       if (access.length > 0) {
         setClientAccess(access[0]);
         // Update last viewed
@@ -36,7 +38,7 @@ export default function ClientProjects() {
         });
       }
     });
-  }, [token]);
+  }, [token, slug]);
 
   const { data: project } = useQuery({
     queryKey: ['project', clientAccess?.project_id],
@@ -64,7 +66,7 @@ export default function ClientProjects() {
     enabled: !!project
   });
 
-  if (!token || !clientAccess || !project) {
+  if ((!token && !slug) || !clientAccess || !project) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -170,7 +172,7 @@ export default function ClientProjects() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate(createPageUrl("ClientProjectPortal") + `?token=${token}`)}
+                onClick={() => navigate(createPageUrl("ClientProjectPortal") + (slug ? `?slug=${slug}` : `?token=${token}`))}
                 className="bg-lime-600 text-white px-3 text-xs font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border shadow-sm hover:text-white h-8 border-lime-700 hover:bg-lime-700 gap-2"
               >
                 <Eye className="w-3 h-3" />
