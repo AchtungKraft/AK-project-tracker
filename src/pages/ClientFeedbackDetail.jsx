@@ -14,7 +14,7 @@ import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircl
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import FeedbackRequestThread from "../components/clientportal/FeedbackRequestThread.jsx";
+import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 // import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -461,7 +461,7 @@ export default function ClientFeedbackDetail() {
             </CardContent>
           </Card>
 
-          <FeedbackRequestThread
+          <ClientFeedbackThread
             requestId={requestId}
             userId={user.id}
             requestType={request.request_type}
