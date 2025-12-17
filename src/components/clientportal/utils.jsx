@@ -13,6 +13,11 @@ export const getRequestTypeInfo = (type) => {
 export const getRequestState = (request, allDecisions, allAttachments) => {
   if (request.status === 'draft') return { label: 'Draft', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border', icon: FileText };
   if (request.status === 'archived') return { label: 'Archived', color: 'bg-[oklch(74.6%_0.16_232.661)]/10 text-[oklch(74.6%_0.16_232.661)] border-[oklch(74.6%_0.16_232.661)]/20 border', icon: Archive };
+  
+  // Explicit status check for changes_requested to ensure it appears in bucket even if decisions are tricky
+  if (request.status === 'changes_requested') {
+    return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
+  }
 
   // Filter decisions that happened AFTER the last posted_at date
   const requestPostedAt = request.posted_at ? new Date(request.posted_at) : new Date(0);

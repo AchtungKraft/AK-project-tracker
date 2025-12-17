@@ -256,7 +256,7 @@ export default function ClientProjectPortal() {
                   isNeedsReview ? "bg-[oklch(39.6%_0.141_25.723)]" : "bg-black/40"
                 )}
                 style={{ 
-                  borderColor: isNeedsReview ? 'oklch(57.7% 0.245 27.325)' : `${group.color}80`,
+                  borderColor: isNeedsReview ? 'oklch(57.7% 0.245 27.325)' : group.color, // Use full opacity color for border
                   boxShadow: `0 10px 15px -3px ${group.color}20`
                 }}
               >

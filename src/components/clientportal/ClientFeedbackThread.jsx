@@ -200,9 +200,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       // 2a. Update Request Status if Changes Requested
       if (reviewAction === 'changes_requested') {
+         // Also update posted_at to bump it to top of lists if needed, but primary is status change
          await updateRequestMutation.mutateAsync({
             id: requestId,
-            data: { status: 'changes_requested' }
+            data: { 
+              status: 'changes_requested',
+              posted_at: new Date().toISOString() 
+            }
          });
       }
 
