@@ -14,6 +14,7 @@ import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircl
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getRequestState } from "@/components/clientportal/utils";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 // import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
@@ -69,6 +70,18 @@ export default function ClientFeedbackDetail() {
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list()
+  });
+
+  const { data: decisions = [] } = useQuery({
+    queryKey: ['clientFeedbackDecisions', requestId],
+    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+    enabled: !!requestId
+  });
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['clientFeedbackAttachments', requestId],
+    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+    enabled: !!requestId
   });
 
   const updateRequestMutation = useMutation({
@@ -327,6 +340,8 @@ export default function ClientFeedbackDetail() {
     return task ? { ...link, task } : null;
   }).filter(Boolean);
 
+  const requestState = request ? getRequestState(request, decisions, attachments) : null;
+
   if (!request || !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
@@ -383,13 +398,12 @@ export default function ClientFeedbackDetail() {
                   <Badge variant="outline" className="border-gray-600 text-gray-200">
                     {request.request_type === 'image_review' ? 'Design Review' : request.request_type.replace('_', ' ')}
                   </Badge>
-                  <Badge className={cn(
-                    request.status === 'draft' ? 'bg-gray-500' :
-                    request.status === 'posted' ? 'bg-blue-500' :
-                    'bg-gray-400'
-                  )}>
-                    {request.status}
-                  </Badge>
+                  {requestState && (
+                    <Badge className={cn("flex items-center gap-1", requestState.color)}>
+                      <requestState.icon className="w-3 h-3" />
+                      {requestState.label}
+                    </Badge>
+                  )}
                   {request.due_date &&
                   <Badge variant="outline" className="border-gray-600 text-gray-200">
                       Due: {format(new Date(request.due_date), 'MMM d, yyyy')}
