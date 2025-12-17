@@ -189,11 +189,9 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                   const client = getClientDetails(access.client_contact_id);
                   if (!client) return null;
 
-                  const shareUrl = access.url_slug
-                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?slug=${access.url_slug}`
-                    : access.share_token 
-                      ? `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`
-                      : null;
+                  const shareUrl = access.share_token 
+                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`
+                    : null;
                   
                   return (
                     <div key={access.id} className="bg-gray-800 p-3 rounded-lg space-y-2">
