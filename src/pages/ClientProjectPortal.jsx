@@ -50,7 +50,7 @@ export default function ClientProjectPortal() {
     enabled: !!clientAccess?.project_id,
   });
 
-  const { data: rawRequests = [] } = useQuery({
+  const { data: requests = [] } = useQuery({
     queryKey: ['clientFeedbackRequests', clientAccess?.project_id],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({
       project_id: clientAccess.project_id,
@@ -59,24 +59,22 @@ export default function ClientProjectPortal() {
     refetchOnMount: 'always',
   });
 
-  const requests = useMemo(() => rawRequests.filter(r => r.status !== 'draft'), [rawRequests]);
-
   const { data: comments = [] } = useQuery({
     queryKey: ['clientFeedbackComments', clientAccess?.project_id],
-    queryFn: () => base44.entities.ClientFeedbackComment.list(), // Simplified list since we can't filter by project_id easily on comments without complex joins, but we filter in memory
+    queryFn: () => base44.entities.ClientFeedbackComment.list(), 
     enabled: requests.length > 0 && !!clientAccess?.project_id,
   });
 
   const { data: decisions = [] } = useQuery({
     queryKey: ['clientFeedbackDecisions'],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list({ sort: { created_date: -1 }, limit: 1000 }),
+    queryFn: () => base44.entities.ClientFeedbackDecision.list('-created_date', 1000),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments'],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
+    queryFn: () => base44.entities.ClientFeedbackAttachment.list('-created_date', 1000),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
@@ -100,11 +98,13 @@ export default function ClientProjectPortal() {
       needsReview: 0,
       changesRequested: 0,
       approved: 0,
+      drafts: 0,
       archived: 0,
     };
 
     requestsWithState.forEach(req => {
-      if (req.state.label === 'Archived') counts.archived++;
+      if (req.state.label === 'Draft') counts.drafts++;
+      else if (req.state.label === 'Archived') counts.archived++;
       else if (req.state.label === 'Needs Your Review' || req.state.label === 'Needs Review') counts.needsReview++;
       else if (req.state.label === 'Changes Requested') counts.changesRequested++;
       else if (req.state.label === 'Approved') counts.approved++;
@@ -203,10 +203,11 @@ export default function ClientProjectPortal() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
           <StatTile label="Needs Review" count={stats.needsReview} filterValue="needs_review" icon={Clock} />
           <StatTile label="Changes Requested" count={stats.changesRequested} filterValue="changes_requested" icon={AlertCircle} />
           <StatTile label="Approved" count={stats.approved} filterValue="approved" icon={CheckCircle2} />
+          <StatTile label="Drafts" count={stats.drafts} filterValue="draft" icon={FileText} />
           <StatTile label="Archived" count={stats.archived} filterValue="archived" icon={Archive} />
         </div>
 
