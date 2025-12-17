@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 // import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { cn } from "@/lib/utils";
+import { getRequestState } from "@/components/clientportal/utils";
 
 const getRequestTypeInfo = (type) => {
   const map = {
@@ -63,6 +64,18 @@ export default function ClientFeedbackRequestDetail() {
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
     select: (data) => data[0],
     enabled: !!requestId,
+  });
+
+  const { data: decisions = [] } = useQuery({
+    queryKey: ['clientFeedbackDecisions', requestId],
+    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+    enabled: !!requestId
+  });
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['clientFeedbackAttachments', requestId],
+    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+    enabled: !!requestId
   });
 
   const createCommentMutation = useMutation({
@@ -273,6 +286,8 @@ export default function ClientFeedbackRequestDetail() {
     }
   };
 
+  const requestState = request ? getRequestState(request, decisions, attachments) : null;
+
   if (!token || !clientAccess || !request) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
@@ -299,6 +314,12 @@ export default function ClientFeedbackRequestDetail() {
               <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
                 {getRequestTypeInfo(request.request_type).label}
               </Badge>
+              {requestState && (
+                <Badge className={cn("flex items-center gap-1", requestState.color)}>
+                  <requestState.icon className="w-3 h-3" />
+                  {requestState.label}
+                </Badge>
+              )}
               {request.due_date && (
                 <Badge variant="outline" className="text-xs border-gray-600 text-gray-200">
                   Due: {format(new Date(request.due_date), 'MMM d, yyyy')}
