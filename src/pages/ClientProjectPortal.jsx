@@ -65,7 +65,7 @@ export default function ClientProjectPortal() {
 
   const { data: decisions = [] } = useQuery({
     queryKey: ['clientFeedbackDecisions'],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list(),
+    queryFn: () => base44.entities.ClientFeedbackDecision.list({ sort: { created_date: -1 }, limit: 1000 }),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
