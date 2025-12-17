@@ -197,11 +197,9 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                   const client = getClientDetails(access.client_contact_id);
                   if (!client) return null;
 
-                  const shareUrl = access.url_slug
-                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?slug=${access.url_slug}`
-                    : access.share_token 
-                      ? `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`
-                      : null;
+                  const shareUrl = client.url_slug
+                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?slug=${client.url_slug}`
+                    : `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`;
                   
                   return (
                     <div key={access.id} className="bg-gray-800 p-3 rounded-lg space-y-2">
@@ -249,8 +247,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                         </div>
                       </div>
 
-                      {shareUrl && (
-                        <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                           <Input
                             value={shareUrl}
@@ -272,7 +269,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          {editingSlugId === access.id ? (
+                          {editingSlugId === client.id ? (
                             <>
                               <div className="flex items-center bg-gray-900 rounded-md border border-gray-700 px-2 h-8 flex-1">
                                 <span className="text-gray-500 text-xs whitespace-nowrap mr-1">?slug=</span>
@@ -280,14 +277,14 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                                   type="text"
                                   value={slugValue}
                                   onChange={(e) => setSlugValue(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
-                                  placeholder="custom-name"
+                                  placeholder="client-name"
                                   className="bg-transparent border-none text-white text-xs w-full focus:outline-none"
                                 />
                               </div>
                               <Button
                                 size="sm"
                                 onClick={() => {
-                                  updateAccessMutation.mutate({ id: access.id, data: { url_slug: slugValue } });
+                                  updateClientMutation.mutate({ id: client.id, data: { url_slug: slugValue } });
                                   setEditingSlugId(null);
                                 }}
                                 className="h-8 bg-green-600 hover:bg-green-700"
@@ -306,14 +303,14 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                           ) : (
                             <div className="flex items-center gap-2 w-full">
                               <span className="text-xs text-gray-500">
-                                Slug: {access.url_slug || <span className="italic">none</span>}
+                                Client Slug: {client.url_slug || <span className="italic">none</span>}
                               </span>
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 onClick={() => {
-                                  setEditingSlugId(access.id);
-                                  setSlugValue(access.url_slug || '');
+                                  setEditingSlugId(client.id);
+                                  setSlugValue(client.url_slug || '');
                                 }}
                                 className="h-6 w-6 text-gray-400 hover:text-white"
                               >
@@ -323,7 +320,6 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                           )}
                         </div>
                       </div>
-                      )}
                     </div>
                   );
                 })
