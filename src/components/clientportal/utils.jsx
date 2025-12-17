@@ -12,7 +12,7 @@ export const getRequestTypeInfo = (type) => {
 
 export const getRequestState = (request, allDecisions, allAttachments) => {
   if (request.status === 'draft') return { label: 'Draft', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border', icon: FileText };
-  if (request.status === 'archived') return { label: 'Archived', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20 border', icon: Archive };
+  if (request.status === 'archived') return { label: 'Archived', color: 'bg-[oklch(74.6%_0.16_232.661)]/10 text-[oklch(74.6%_0.16_232.661)] border-[oklch(74.6%_0.16_232.661)]/20 border', icon: Archive };
 
   // Filter decisions that happened AFTER the last posted_at date
   const requestPostedAt = request.posted_at ? new Date(request.posted_at) : new Date(0);
@@ -28,10 +28,10 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
     .sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date))[0];
 
   if (latestGlobalDecision?.decision === 'changes_requested') {
-    return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
+    return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
   }
   if (latestGlobalDecision?.decision === 'approved') {
-    return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
+    return { label: 'Approved', color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
   }
 
   // 2. Check Image-level Decisions (if no global decision)
@@ -44,7 +44,7 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
     
     // If ANY image has changes requested -> Changes Requested
     if (imageDecisions.some(d => d.decision === 'changes_requested')) {
-      return { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50 border', icon: AlertCircle };
+      return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
     }
 
     // If ALL images are approved -> Approved
@@ -53,14 +53,14 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
     );
 
     if (allApproved) {
-      return { label: 'Approved', color: 'bg-green-500/20 text-green-400 border-green-500/50 border', icon: CheckCircle2 };
+      return { label: 'Approved', color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
     }
   }
 
   // 3. Default: Needs Review (includes Overdue)
   if (request.due_date && new Date(request.due_date) < new Date()) {
-    return { label: 'Needs Review', color: 'bg-red-500/20 text-red-400 border-red-500/50 border', icon: Clock };
+    return { label: 'Needs Review', color: 'bg-[oklch(57.7%_0.245_27.325)]/20 text-[oklch(57.7%_0.245_27.325)] border-[oklch(57.7%_0.245_27.325)]/50 border', icon: Clock };
   }
 
-  return { label: 'Needs Review', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border', icon: Clock };
+  return { label: 'Needs Review', color: 'bg-[oklch(57.7%_0.245_27.325)]/20 text-[oklch(57.7%_0.245_27.325)] border-[oklch(57.7%_0.245_27.325)]/50 border', icon: Clock };
 };

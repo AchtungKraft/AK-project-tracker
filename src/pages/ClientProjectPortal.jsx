@@ -13,14 +13,14 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/utils";
 
-// Helper for hex colors
+// Helper for hex/oklch colors
 const getStateColor = (label) => {
   const normalized = label.toLowerCase();
-  if (normalized.includes('approved')) return '#22c55e'; // green-500
-  if (normalized.includes('changes')) return '#f97316'; // orange-500
-  if (normalized.includes('draft')) return '#6b7280'; // gray-500
-  if (normalized.includes('archived')) return '#6b7280'; // gray-500
-  if (normalized.includes('needs')) return '#3b82f6'; // blue-500 (default for needs review)
+  if (normalized.includes('approved')) return 'oklch(64.8% 0.2 131.684)'; // Green
+  if (normalized.includes('changes')) return 'oklch(85.2% 0.199 91.936)'; // Yellow
+  if (normalized.includes('draft')) return '#6b7280';
+  if (normalized.includes('archived')) return 'oklch(74.6% 0.16 232.661)'; // Light Blue
+  if (normalized.includes('needs')) return 'oklch(57.7% 0.245 27.325)'; // Red Border
   return '#6b7280';
 };
 
@@ -246,12 +246,17 @@ export default function ClientProjectPortal() {
           </Card>
         ) : (
           <div className="space-y-6">
-            {groupedRequests.map(([groupKey, group]) => (
+            {groupedRequests.map(([groupKey, group]) => {
+              const isNeedsReview = group.label.toLowerCase().includes('needs');
+              return (
               <Card 
                 key={groupKey}
-                className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+                className={cn(
+                  "backdrop-blur-xl border-2 shadow-lg",
+                  isNeedsReview ? "bg-[oklch(39.6%_0.141_25.723)]" : "bg-black/40"
+                )}
                 style={{ 
-                  borderColor: `${group.color}80`,
+                  borderColor: isNeedsReview ? 'oklch(57.7% 0.245 27.325)' : `${group.color}80`,
                   boxShadow: `0 10px 15px -3px ${group.color}20`
                 }}
               >
@@ -332,7 +337,8 @@ export default function ClientProjectPortal() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

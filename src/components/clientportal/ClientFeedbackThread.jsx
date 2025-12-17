@@ -58,6 +58,10 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
   });
 
+  const updateRequestMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackRequest.update(data.id, data.data),
+  });
+
   const createCommentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
   });
@@ -193,6 +197,14 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         visibility: 'client_visible',
         target_type: 'request', // or could be 'attachment_image' but we have multiple.
       });
+
+      // 2a. Update Request Status if Changes Requested
+      if (reviewAction === 'changes_requested') {
+         await updateRequestMutation.mutateAsync({
+            id: requestId,
+            data: { status: 'changes_requested' }
+         });
+      }
 
       // 3. Attach new images to the comment
       const newImagePromises = reviewNewImages.map(url => 
