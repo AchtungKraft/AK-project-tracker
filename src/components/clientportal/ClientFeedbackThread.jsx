@@ -233,10 +233,11 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] }); // Invalidate all decisions to update dashboard
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); // Invalidate requests to update status
 
-    } catch (error) {
+      } catch (error) {
       console.error(error);
       toast.error('Failed to submit review');
     }
@@ -314,33 +315,36 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {event.attachments.filter(a => a.attachment_type === 'image').map(att => {
-                        const isSelected = selectedImageIds.includes(att.id);
-                        
-                        // Check if there are decisions on this image
-                        const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
-                        const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
-                        
-                        return (
-                          <div key={att.id} className="relative group">
-                            <div 
-                              className={`
-                                relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
-                                ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
-                              `}
-                              onClick={() => canReview ? handleImageSelect(att.id) : setSelectedImage(att.file_url)}
-                            >
-                              <img src={att.file_url} alt="" className="w-full h-full object-contain" />
-                              
-                              {/* Selection Overlay */}
-                              {canReview && (
-                                <div className="absolute top-2 right-2 z-10">
-                                  <Checkbox 
-                                    checked={isSelected}
-                                    onCheckedChange={() => handleImageSelect(att.id)}
-                                    className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
-                                  />
-                                </div>
-                              )}
+                            const isSelected = selectedImageIds.includes(att.id);
+
+                            // Check if there are decisions on this image
+                            const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                            const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+
+                            return (
+                              <div key={att.id} className="relative group">
+                                <div 
+                                  className={`
+                                    relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                                    ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
+                                  `}
+                                  onClick={() => setSelectedImage(att.file_url)}
+                                >
+                                  <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+
+                                  {/* Selection Overlay */}
+                                  {canReview && (
+                                    <div 
+                                      className="absolute top-2 right-2 z-10"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Checkbox 
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleImageSelect(att.id)}
+                                        className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
+                                      />
+                                    </div>
+                                  )}
 
                               {/* Decision Badge Overlay */}
                               {latestDecision && (
