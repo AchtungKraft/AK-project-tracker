@@ -159,9 +159,17 @@ export default function ClientFeedbackDetail() {
 
   const handlePostToClient = () => {
     if (confirm('Post this request to the client? They will be notified.')) {
+      const oldStatus = request.status;
+      const newStatus = 'posted';
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: 'posted', posted_at: new Date().toISOString() }
+        data: { status: newStatus, posted_at: new Date().toISOString() }
+      }, {
+        onSuccess: () => {
+          if (oldStatus !== newStatus) {
+            base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
+          }
+        }
       });
       toast.success('Request posted to client');
     }
@@ -169,9 +177,20 @@ export default function ClientFeedbackDetail() {
 
   const handleResendForApproval = () => {
     if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
+      const oldStatus = request.status;
+      const newStatus = 'posted';
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: 'posted', posted_at: new Date().toISOString() }
+        data: { status: newStatus, posted_at: new Date().toISOString() }
+      }, {
+        onSuccess: () => {
+           // Even if status doesn't change (posted -> posted), user might want notification for "bump"
+           // But requirements say: "Condition: status field value has changed"
+           // "Ignore non-status updates"
+           if (oldStatus !== newStatus) {
+              base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
+           }
+        }
       });
       toast.success('Request resent to client');
     }
@@ -179,9 +198,17 @@ export default function ClientFeedbackDetail() {
 
   const handleArchive = () => {
     if (confirm('Archive this request?')) {
+      const oldStatus = request.status;
+      const newStatus = 'archived';
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: 'archived' }
+        data: { status: newStatus }
+      }, {
+        onSuccess: () => {
+          if (oldStatus !== newStatus) {
+            base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
+          }
+        }
       });
       toast.success('Request archived');
     }
@@ -431,9 +458,17 @@ export default function ClientFeedbackDetail() {
                   {request.status === 'archived' && (
                     <Button size="sm" onClick={() => {
                       if (confirm('Move this request back to draft?')) {
+                        const oldStatus = request.status;
+                        const newStatus = 'draft';
                         updateRequestMutation.mutate({
                           id: requestId,
-                          data: { status: 'draft' }
+                          data: { status: newStatus }
+                        }, {
+                          onSuccess: () => {
+                            if (oldStatus !== newStatus) {
+                               base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
+                            }
+                          }
                         });
                         toast.success('Moved to Drafts');
                       }
