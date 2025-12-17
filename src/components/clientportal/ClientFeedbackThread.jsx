@@ -1,14 +1,32 @@
 import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole }) {
+  const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImageIds, setSelectedImageIds] = useState([]);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewAction, setReviewAction] = useState(null); // 'approved' | 'changes_requested'
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewNewImages, setReviewNewImages] = useState([]); // Array of uploaded file URLs
+  const [isUploading, setIsUploading] = useState(false);
+
+  const { data: request } = useQuery({
+    queryKey: ['clientFeedbackRequest', requestId],
+    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
+    select: (data) => data[0],
+  });
 
   const { data: comments = [] } = useQuery({
     queryKey: ['clientFeedbackComments', requestId],
@@ -35,10 +53,34 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     queryFn: () => base44.entities.ClientContact.list(),
   });
 
+  // Mutations
+  const createDecisionMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
+  });
+
+  const createCommentMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
+  });
+
+  const createAttachmentMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
+  });
+
   const timeline = useMemo(() => {
     const events = [];
 
-    // Filter comments based on visibility
+    // 1. Request-level attachments (Initial Post)
+    const requestAttachments = attachments.filter(a => !a.comment_id);
+    if (requestAttachments.length > 0 || request?.posted_at) {
+      events.push({
+        type: 'request_post',
+        timestamp: new Date(request?.posted_at || request?.created_date || new Date()),
+        message: 'Review Started',
+        attachments: requestAttachments,
+      });
+    }
+
+    // 2. Comments
     const visibleComments = isClientView
       ? comments.filter(c => c.visibility === 'client_visible')
       : comments;
@@ -59,131 +101,388 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
     });
 
+    // 3. Decisions (Request level ones mainly, image level ones are usually associated with a comment if we do it right, but we list them if standalone)
     decisions.forEach(decision => {
-      const decider = decision.decided_by_type === 'internal_user'
-        ? users.find(u => u.id === decision.decided_by_id)
-        : clientContacts.find(c => c.id === decision.decided_by_id);
+      // If decision is associated with a specific image, we might want to group it? 
+      // For now, list request-level decisions. Image-level decisions might be noisy if listed individually.
+      // But let's list them if they are 'request' target.
+      if (decision.target_type === 'request') {
+        const decider = decision.decided_by_type === 'internal_user'
+          ? users.find(u => u.id === decision.decided_by_id)
+          : clientContacts.find(c => c.id === decision.decided_by_id);
 
-      events.push({
-        type: 'decision',
-        timestamp: new Date(decision.decided_at || decision.created_date),
-        decision,
-        decider,
-      });
+        events.push({
+          type: 'decision',
+          timestamp: new Date(decision.decided_at || decision.created_date),
+          decision,
+          decider,
+        });
+      }
     });
 
     return events.sort((a, b) => a.timestamp - b.timestamp);
-  }, [comments, decisions, attachments, users, clientContacts, isClientView]);
+  }, [comments, decisions, attachments, users, clientContacts, isClientView, request]);
+
+  const handleImageSelect = (imageId) => {
+    setSelectedImageIds(prev => {
+      if (prev.includes(imageId)) {
+        return prev.filter(id => id !== imageId);
+      }
+      return [...prev, imageId];
+    });
+  };
+
+  const handleReviewAction = (action) => {
+    setReviewAction(action);
+    setIsReviewing(true);
+  };
+
+  const handleReviewImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    setIsUploading(true);
+    try {
+      const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+      const results = await Promise.all(uploadPromises);
+      const urls = results.map(r => r.file_url);
+      setReviewNewImages(prev => [...prev, ...urls]);
+      toast.success('Images uploaded');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to upload images');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (reviewAction === 'changes_requested' && !reviewNote.trim()) {
+      toast.error('Please provide a note for changes requested');
+      return;
+    }
+
+    const authorType = isClientView ? 'client_contact' : 'internal_user';
+    const authorId = isClientView ? clientContactId : userId;
+
+    try {
+      // 1. Create decisions for selected images
+      const decisionPromises = selectedImageIds.map(imgId => 
+        createDecisionMutation.mutateAsync({
+          request_id: requestId,
+          decided_by_type: authorType,
+          decided_by_id: authorId,
+          decision: reviewAction,
+          note: reviewNote, // Same note for all? Or just attached to comment? Let's attach to decision too for audit.
+          target_type: 'attachment_image',
+          target_attachment_id: imgId,
+          decided_at: new Date().toISOString(),
+        })
+      );
+      await Promise.all(decisionPromises);
+
+      // 2. Create Comment summarizing the action
+      const actionLabel = reviewAction === 'approved' ? 'Approved' : 'Requested changes on';
+      const commentBody = `${actionLabel} ${selectedImageIds.length} image(s)${reviewNote ? ': ' + reviewNote : '.'}`;
+      
+      const comment = await createCommentMutation.mutateAsync({
+        request_id: requestId,
+        author_type: authorType,
+        author_id: authorId,
+        body: commentBody,
+        visibility: 'client_visible',
+        target_type: 'request', // or could be 'attachment_image' but we have multiple.
+      });
+
+      // 3. Attach new images to the comment
+      if (reviewNewImages.length > 0) {
+        const attachmentPromises = reviewNewImages.map(url => 
+          createAttachmentMutation.mutateAsync({
+            request_id: requestId,
+            comment_id: comment.id,
+            attachment_type: 'image',
+            file_url: url,
+            created_by_type: authorType,
+            created_by_id: authorId,
+          })
+        );
+        await Promise.all(attachmentPromises);
+      }
+
+      toast.success('Review submitted');
+      
+      // Cleanup
+      setSelectedImageIds([]);
+      setReviewNewImages([]);
+      setReviewNote("");
+      setIsReviewing(false);
+      setReviewAction(null);
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to submit review');
+    }
+  };
+
+  // Only allow selection if we have an active role (approver for client, or any internal user)
+  // For simplicity, let's assume if you can view the page and have an ID, you can interact.
+  // But strictly, client needs 'approver' role to make decisions?
+  // User said "admin can see the Approve and request changes also".
+  const canReview = userId || (isClientView && clientContactId); 
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-6 pb-20">
         {timeline.map((event, idx) => (
           <Card key={idx} className="bg-black/60 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4">
-              {event.type === 'comment' && (
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">
-                          {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-white text-sm">
-                          {event.author?.name || event.author?.full_name || 'Unknown'}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {format(event.timestamp, 'MMM d, h:mm a')}
-                        </p>
-                      </div>
+              {/* Event Header */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                {event.type === 'request_post' && (
+                  <div className="flex items-center gap-2 text-blue-400">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/50">
+                      <ImageIcon className="w-4 h-4" />
                     </div>
-                    {!isClientView && event.comment.visibility === 'internal_only' && (
-                      <Badge className="text-xs bg-orange-500/20 text-orange-400 border-orange-500/50 border">
-                        Internal Only
-                      </Badge>
-                    )}
+                    <div>
+                      <p className="font-medium text-sm">Original Request</p>
+                      <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+                    </div>
                   </div>
+                )}
 
-                  {event.comment.body && (
-                    <p className="text-gray-300 whitespace-pre-wrap">{event.comment.body}</p>
-                  )}
-
-                  {event.attachments.length > 0 && (
-                    <div className="space-y-2">
-                      {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {event.attachments.filter(a => a.attachment_type === 'image').map(att => (
-                            <div
-                              key={att.id}
-                              className="w-full h-32 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
-                              onClick={() => setSelectedImage(att.file_url)}
-                            >
-                              <img
-                                src={att.file_url}
-                                alt=""
-                                className="max-w-full max-h-full object-contain"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {event.attachments.filter(a => a.attachment_type === 'link').map(att => (
-                        <a
-                          key={att.id}
-                          href={att.link_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
-                        >
-                          <LinkIcon className="w-4 h-4" />
-                          {att.label || att.link_url}
-                        </a>
-                      ))}
-
-                      {event.attachments.filter(a => a.attachment_type === 'file').map(att => (
-                        <a
-                          key={att.id}
-                          href={att.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
-                        >
-                          <FileText className="w-4 h-4" />
-                          {att.label || att.file_url}
-                        </a>
-                      ))}
+                {event.type === 'comment' && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">
+                        {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <p className="font-medium text-white text-sm">
+                        {event.author?.name || event.author?.full_name || 'Unknown'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {format(event.timestamp, 'MMM d, h:mm a')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {event.type === 'decision' && (
+                  <div className="flex items-center gap-2 text-white">
+                    {event.decision.decision === 'approved' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-orange-500" />}
+                    <div>
+                      <p className="font-medium text-sm">
+                        {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
+                      </p>
+                      <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Event Content */}
+              {event.comment?.body && (
+                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.comment.body}</p>
+              )}
+              {event.decision?.note && (
+                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.decision.note}</p>
               )}
 
-              {event.type === 'decision' && (
-                <div className="flex items-center gap-2">
-                  {event.decision.decision === 'approved' ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-orange-500" />
+              {/* Attachments Grid */}
+              {event.attachments?.length > 0 && (
+                <div className="pl-10 space-y-3">
+                  {/* Images */}
+                  {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {event.attachments.filter(a => a.attachment_type === 'image').map(att => {
+                        const isSelected = selectedImageIds.includes(att.id);
+                        
+                        // Check if there are decisions on this image
+                        const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                        const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+                        
+                        return (
+                          <div key={att.id} className="relative group">
+                            <div 
+                              className={`
+                                relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                                ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
+                              `}
+                              onClick={() => canReview ? handleImageSelect(att.id) : setSelectedImage(att.file_url)}
+                            >
+                              <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                              
+                              {/* Selection Overlay */}
+                              {canReview && (
+                                <div className="absolute top-2 right-2 z-10">
+                                  <Checkbox 
+                                    checked={isSelected}
+                                    onCheckedChange={() => handleImageSelect(att.id)}
+                                    className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Decision Badge Overlay */}
+                              {latestDecision && (
+                                <div className="absolute bottom-2 left-2 z-10">
+                                  {latestDecision.decision === 'approved' ? (
+                                    <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
+                                      <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
+                                      <AlertCircle className="w-3 h-3 mr-1" /> Changes
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Magnify Icon on hover if not selecting */}
+                              {!isSelected && (
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                                  {/* <ImageIcon className="w-8 h-8 text-white/80" /> */}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
-                  <div className="flex-1">
-                    <span className="font-medium text-white text-sm">
-                      {event.decider?.name || event.decider?.full_name || 'Someone'} {event.decision.decision === 'approved' ? 'approved' : 'requested changes'}
-                    </span>
-                    {event.decision.note && (
-                      <p className="text-gray-300 text-sm mt-1">{event.decision.note}</p>
-                    )}
+
+                  {/* Other Files */}
+                  <div className="flex flex-wrap gap-2">
+                    {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
+                      <a
+                        key={att.id}
+                        href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                      >
+                        {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                      </a>
+                    ))}
                   </div>
-                  <span className="text-xs text-gray-400">
-                    {format(event.timestamp, 'MMM d, h:mm a')}
-                  </span>
                 </div>
               )}
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Review Toolbar - Sticky Bottom */}
+      {selectedImageIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in">
+          <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
+            <CardContent className="p-3 flex items-center gap-4">
+              <span className="text-white font-medium pl-2">{selectedImageIds.length} selected</span>
+              
+              <div className="h-6 w-px bg-gray-700" />
+              
+              <div className="flex gap-2">
+                <Button 
+                  size="sm"
+                  onClick={() => handleReviewAction('approved')}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Approve Selected
+                </Button>
+                <Button 
+                  size="sm"
+                  onClick={() => handleReviewAction('changes_requested')}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Request Changes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedImageIds([])}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Review Dialog */}
+      <Dialog open={isReviewing} onOpenChange={setIsReviewing}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>
+              {reviewAction === 'approved' ? 'Approve Selected Images' : 'Request Changes'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">
+                {reviewAction === 'changes_requested' ? 'What changes are needed? *' : 'Add a note (optional)'}
+              </label>
+              <Textarea
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+                placeholder={reviewAction === 'changes_requested' ? 'Describe changes...' : 'Great work!'}
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">Upload Reference Images (Optional)</label>
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md transition-colors text-sm text-gray-300">
+                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Upload Images
+                  </div>
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={handleReviewImageUpload} disabled={isUploading} />
+                </label>
+                <span className="text-xs text-gray-500">{reviewNewImages.length} images added</span>
+              </div>
+              
+              {reviewNewImages.length > 0 && (
+                <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
+                  {reviewNewImages.map((url, idx) => (
+                    <div key={idx} className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden border border-gray-700">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button 
+                        onClick={() => setReviewNewImages(prev => prev.filter(u => u !== url))}
+                        className="absolute top-0 right-0 bg-red-600 text-white p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsReviewing(false)} className="text-gray-400">Cancel</Button>
+            <Button 
+              onClick={handleSubmitReview}
+              className={reviewAction === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ImageModal
         isOpen={!!selectedImage}
