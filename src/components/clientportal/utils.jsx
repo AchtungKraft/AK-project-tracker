@@ -28,8 +28,8 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
 
   // For image_review requests
   if (request.request_type === 'image_review') {
-    // Only count images uploaded by internal users (exclude client reference uploads)
-    const images = attachments.filter(a => a.attachment_type === 'image' && a.created_by_type !== 'client_contact');
+    // Only count images uploaded by internal users (exclude client reference uploads) and NOT attached to comments (only main request images)
+    const images = attachments.filter(a => a.attachment_type === 'image' && a.created_by_type !== 'client_contact' && !a.comment_id);
     const imageDecisions = relevantDecisions.filter(d => d.target_type === 'attachment_image');
 
     // If ANY image has changes requested, the whole request needs attention
