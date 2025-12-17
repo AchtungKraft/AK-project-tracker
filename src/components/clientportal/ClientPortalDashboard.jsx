@@ -14,7 +14,7 @@ import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/u
 // Helper for hex/oklch colors
 const getStateColor = (label) => {
   const normalized = label.toLowerCase();
-  if (normalized.includes('approved')) return 'oklch(64.8% 0.2 131.684)'; // Green
+  if (normalized.includes('approved') || normalized.includes('confirmed')) return 'oklch(64.8% 0.2 131.684)'; // Green
   if (normalized.includes('changes')) return 'oklch(85.2% 0.199 91.936)'; // Yellow
   if (normalized.includes('draft')) return '#6b7280';
   if (normalized.includes('archived')) return 'oklch(74.6% 0.16 232.661)'; // Light Blue
@@ -32,7 +32,7 @@ const getTypeColor = (type) => {
   }
 };
 
-const STATE_ORDER = ['Needs Review', 'Needs Your Review', 'Changes Requested', 'Approved', 'Draft', 'Archived'];
+const STATE_ORDER = ['Needs Review', 'Needs Your Review', 'Changes Requested', 'Approved/Confirmed', 'Draft', 'Archived'];
 
 export default function ClientPortalDashboard({ projectId, onCreateRequest, onManageAccess, onSelectRequest }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,7 +105,11 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
     const groups = {};
 
     filteredRequests.forEach(request => {
-      const stateLabel = request.state.label;
+      let stateLabel = request.state.label;
+      // Combine Approved and Confirmed into one bucket
+      if (stateLabel === 'Approved' || stateLabel === 'Confirmed') {
+        stateLabel = 'Approved/Confirmed';
+      }
       const stateColor = getStateColor(stateLabel);
 
       if (!groups[stateLabel]) {

@@ -36,7 +36,9 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
     return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
   }
   if (latestGlobalDecision?.decision === 'approved') {
-    return { label: 'Approved', color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
+    // Determine label based on request type
+    const label = request.request_type === 'image_review' ? 'Approved' : 'Confirmed';
+    return { label, color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
   }
 
   // 2. Check Image-level Decisions (if no global decision)
@@ -52,7 +54,7 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
       return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
     }
 
-    // If ALL images are approved -> Approved
+    // If ALL images are approved -> Approved (always "Approved" for image reviews)
     const allApproved = images.every(img => 
       imageDecisions.some(d => d.target_attachment_id === img.id && d.decision === 'approved')
     );

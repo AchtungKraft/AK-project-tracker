@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
@@ -349,17 +349,15 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                                   <img src={att.file_url} alt="" className="w-full h-full object-contain" />
 
                                   {/* Selection Overlay */}
-                                  {canReview && (
+                                  {canReview && requestType === 'image_review' && (
                                     <div 
                                       className="absolute top-2 right-2 z-10"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleImageSelect(att.id);
-                                      }}
                                     >
                                       <Checkbox 
                                         checked={isSelected}
+                                        onCheckedChange={() => handleImageSelect(att.id)}
                                         className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
+                                        onClick={(e) => e.stopPropagation()}
                                       />
                                     </div>
                                   )}
@@ -414,8 +412,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         ))}
       </div>
 
-      {/* Review Toolbar - Sticky Bottom */}
-      {selectedImageIds.length > 0 && (
+      {/* Review Toolbar - Sticky Bottom - Only for image_review type */}
+      {selectedImageIds.length > 0 && requestType === 'image_review' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in">
           <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
             <CardContent className="p-3 flex items-center gap-4">

@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { getRequestState } from "@/components/clientportal/utils";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
-// import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 
@@ -184,9 +183,6 @@ export default function ClientFeedbackDetail() {
         data: { status: newStatus, posted_at: new Date().toISOString() }
       }, {
         onSuccess: () => {
-           // Even if status doesn't change (posted -> posted), user might want notification for "bump"
-           // But requirements say: "Condition: status field value has changed"
-           // "Ignore non-status updates"
            if (oldStatus !== newStatus) {
               base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
            }
@@ -369,6 +365,10 @@ export default function ClientFeedbackDetail() {
 
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
 
+  // Determine button labels based on request type
+  const approveLabel = request?.request_type === 'image_review' ? 'Approve' : 'Confirm';
+  const requestChangesLabel = 'Request Changes';
+
   if (!request || !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
@@ -395,7 +395,7 @@ export default function ClientFeedbackDetail() {
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
 
-            {request.status === 'posted' &&
+            {request.status === 'posted' && request.request_type !== 'image_review' &&
             <div className="flex gap-2">
                 <Button
                 size="sm"
@@ -403,7 +403,7 @@ export default function ClientFeedbackDetail() {
                 className="bg-green-600 hover:bg-green-700 text-white border-green-600">
 
                   <CheckCircle2 className="w-4 h-4 mr-1" />
-                  Approve
+                  {approveLabel}
                 </Button>
                 <Button
                 size="sm"
@@ -411,7 +411,7 @@ export default function ClientFeedbackDetail() {
                 className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600">
 
                   <AlertCircle className="w-4 h-4 mr-1" />
-                  Request Changes
+                  {requestChangesLabel}
                 </Button>
               </div>
             }
@@ -534,9 +534,6 @@ export default function ClientFeedbackDetail() {
             }}
             isClientView={false}
             accessRole={user?.role} />
-
-
-{/* ClientImageReviewGallery removed in favor of threaded design review */}
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -717,7 +714,7 @@ export default function ClientFeedbackDetail() {
           <DialogContent className="bg-gray-900 text-white">
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
-                {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
+                {requestDecisionType === 'approved' ? `${approveLabel} Request` : 'Request Changes'}
               </h3>
               <p className="text-sm text-gray-400">
                 Making a decision for: "{request.title}"
@@ -751,7 +748,7 @@ export default function ClientFeedbackDetail() {
                   {createRequestDecisionMutation.isPending ?
                 <Loader2 className="w-4 h-4 animate-spin" /> :
 
-                `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
+                `Submit ${requestDecisionType === 'approved' ? approveLabel : 'Changes'}`
                 }
                 </Button>
               </div>
