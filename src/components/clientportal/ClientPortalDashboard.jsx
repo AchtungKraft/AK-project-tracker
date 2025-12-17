@@ -52,7 +52,6 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
   const stats = useMemo(() => {
     const counts = {
       needsReview: 0,
-      overdue: 0,
       changesRequested: 0,
       approved: 0,
       drafts: 0,
@@ -63,7 +62,6 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
       if (req.state.label === 'Draft') counts.drafts++;
       else if (req.state.label === 'Archived') counts.archived++;
       else if (req.state.label === 'Needs Review') counts.needsReview++;
-      else if (req.state.label === 'Overdue') counts.overdue++;
       else if (req.state.label === 'Changes Requested') counts.changesRequested++;
       else if (req.state.label === 'Approved') counts.approved++;
     });
@@ -144,9 +142,8 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatTile label="Needs Review" count={stats.needsReview} filterValue="needs_review" icon={Clock} />
-        <StatTile label="Overdue" count={stats.overdue} filterValue="overdue" icon={AlertCircle} />
         <StatTile label="Changes Requested" count={stats.changesRequested} filterValue="changes_requested" icon={AlertCircle} />
         <StatTile label="Approved" count={stats.approved} filterValue="approved" icon={CheckCircle2} />
         <StatTile label="Drafts" count={stats.drafts} filterValue="drafts" icon={FileText} />

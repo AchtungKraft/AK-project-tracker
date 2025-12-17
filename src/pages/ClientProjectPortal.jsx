@@ -47,15 +47,16 @@ export default function ClientProjectPortal() {
     enabled: !!clientAccess?.project_id,
   });
 
-  const { data: requests = [] } = useQuery({
+  const { data: rawRequests = [] } = useQuery({
     queryKey: ['clientFeedbackRequests', clientAccess?.project_id],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({
       project_id: clientAccess.project_id,
-      status: 'posted',
     }),
     enabled: !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
+
+  const requests = useMemo(() => rawRequests.filter(r => r.status !== 'draft'), [rawRequests]);
 
   const { data: comments = [] } = useQuery({
     queryKey: ['clientFeedbackComments', clientAccess?.project_id],
@@ -96,13 +97,11 @@ export default function ClientProjectPortal() {
       needsReview: 0,
       changesRequested: 0,
       approved: 0,
-      drafts: 0,
       archived: 0,
     };
 
     requestsWithState.forEach(req => {
-      if (req.state.label === 'Draft') counts.drafts++;
-      else if (req.state.label === 'Archived') counts.archived++;
+      if (req.state.label === 'Archived') counts.archived++;
       else if (req.state.label === 'Needs Your Review' || req.state.label === 'Needs Review') counts.needsReview++;
       else if (req.state.label === 'Changes Requested') counts.changesRequested++;
       else if (req.state.label === 'Approved') counts.approved++;
@@ -201,10 +200,11 @@ export default function ClientProjectPortal() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatTile label="Needs Review" count={stats.needsReview} filterValue="needs_review" icon={Clock} />
           <StatTile label="Changes Requested" count={stats.changesRequested} filterValue="changes_requested" icon={AlertCircle} />
           <StatTile label="Approved" count={stats.approved} filterValue="approved" icon={CheckCircle2} />
+          <StatTile label="Archived" count={stats.archived} filterValue="archived" icon={Archive} />
         </div>
 
         <div className="flex flex-wrap gap-3">
