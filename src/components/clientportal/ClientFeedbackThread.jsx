@@ -120,7 +120,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       }
     });
 
-    return events.sort((a, b) => a.timestamp - b.timestamp);
+    return events.sort((a, b) => b.timestamp - a.timestamp);
   }, [comments, decisions, attachments, users, clientContacts, isClientView, request]);
 
   const handleImageSelect = (imageId) => {
@@ -195,19 +195,32 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
 
       // 3. Attach new images to the comment
-      if (reviewNewImages.length > 0) {
-        const attachmentPromises = reviewNewImages.map(url => 
-          createAttachmentMutation.mutateAsync({
-            request_id: requestId,
-            comment_id: comment.id,
-            attachment_type: 'image',
-            file_url: url,
-            created_by_type: authorType,
-            created_by_id: authorId,
-          })
-        );
-        await Promise.all(attachmentPromises);
-      }
+      const newImagePromises = reviewNewImages.map(url => 
+        createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'image',
+          file_url: url,
+          created_by_type: authorType,
+          created_by_id: authorId,
+        })
+      );
+
+      // 4. Attach selected existing images to the comment (as references)
+      const selectedAttachments = attachments.filter(a => selectedImageIds.includes(a.id));
+      const existingImagePromises = selectedAttachments.map(att => 
+        createAttachmentMutation.mutateAsync({
+          request_id: requestId,
+          comment_id: comment.id,
+          attachment_type: 'image',
+          file_url: att.file_url, // Use the same URL
+          label: att.label || 'Reviewed Image',
+          created_by_type: authorType,
+          created_by_id: authorId,
+        })
+      );
+
+      await Promise.all([...newImagePromises, ...existingImagePromises]);
 
       toast.success('Review submitted');
       
