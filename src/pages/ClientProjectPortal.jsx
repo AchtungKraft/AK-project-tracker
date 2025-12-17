@@ -3,15 +3,38 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ArrowLeft, CheckCircle2, AlertCircle, Clock, Search, Archive, FileText } from "lucide-react";
+import { Loader2, ArrowLeft, Search, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/utils";
+
+// Helper for hex colors
+const getStateColor = (label) => {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('approved')) return '#22c55e'; // green-500
+  if (normalized.includes('changes')) return '#f97316'; // orange-500
+  if (normalized.includes('draft')) return '#6b7280'; // gray-500
+  if (normalized.includes('archived')) return '#6b7280'; // gray-500
+  if (normalized.includes('needs')) return '#3b82f6'; // blue-500 (default for needs review)
+  return '#6b7280';
+};
+
+const getTypeColor = (type) => {
+  switch (type) {
+    case 'question': return '#3b82f6'; // blue-500
+    case 'update': return '#6366f1'; // indigo-500
+    case 'image_review': return '#a855f7'; // purple-500
+    case 'approval': return '#f59e0b'; // amber-500
+    default: return '#6b7280';
+  }
+};
+
+const STATE_ORDER = ['Needs Review', 'Needs Your Review', 'Changes Requested', 'Approved', 'Draft', 'Archived'];
 
 export default function ClientProjectPortal() {
   const navigate = useNavigate();
@@ -21,8 +44,6 @@ export default function ClientProjectPortal() {
   const [clientAccess, setClientAccess] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [stateFilter, setStateFilter] = useState('needs_review');
   const [sortBy, setSortBy] = useState('last_activity');
 
   useEffect(() => {
@@ -93,26 +114,7 @@ export default function ClientProjectPortal() {
     });
   }, [requests, comments, decisions, attachments]);
 
-  const stats = useMemo(() => {
-    const counts = {
-      needsReview: 0,
-      changesRequested: 0,
-      approved: 0,
-      drafts: 0,
-      archived: 0,
-    };
-
-    requestsWithState.forEach(req => {
-      if (req.state.label === 'Draft') counts.drafts++;
-      else if (req.state.label === 'Archived') counts.archived++;
-      else if (req.state.label === 'Needs Your Review' || req.state.label === 'Needs Review') counts.needsReview++;
-      else if (req.state.label === 'Changes Requested') counts.changesRequested++;
-      else if (req.state.label === 'Approved') counts.approved++;
-    });
-
-    return counts;
-  }, [requestsWithState]);
-
+  // Filter and Sort Logic
   const filteredRequests = useMemo(() => {
     let filtered = requestsWithState;
 
@@ -122,19 +124,6 @@ export default function ClientProjectPortal() {
         r.title.toLowerCase().includes(term) || 
         (r.body && r.body.toLowerCase().includes(term))
       );
-    }
-
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(r => r.request_type === typeFilter);
-    }
-
-    if (stateFilter !== 'all') {
-      // Normalize state label for filtering
-      filtered = filtered.filter(r => {
-        const label = r.state.label.toLowerCase();
-        if (stateFilter === 'needs_review') return label === 'needs your review' || label === 'needs review';
-        return label.replace(/ /g, '_') === stateFilter;
-      });
     }
 
     filtered = [...filtered].sort((a, b) => {
@@ -153,27 +142,49 @@ export default function ClientProjectPortal() {
     });
 
     return filtered;
-  }, [requestsWithState, searchTerm, typeFilter, stateFilter, sortBy]);
+  }, [requestsWithState, searchTerm, sortBy]);
 
-  const StatTile = ({ label, count, filterValue, icon: Icon }) => (
-    <Card 
-      className={cn(
-        "cursor-pointer transition-colors border border-gray-700",
-        stateFilter === filterValue ? "ring-2 ring-red-500 bg-gray-900/80" : "bg-black/40 backdrop-blur-xl hover:bg-gray-800/50"
-      )}
-      onClick={() => setStateFilter(stateFilter === filterValue ? 'all' : filterValue)}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-400">{label}</p>
-            <p className="text-2xl font-bold text-white">{count}</p>
-          </div>
-          <Icon className="w-8 h-8 text-gray-500" />
-        </div>
-      </CardContent>
-    </Card>
-  );
+  // Grouping Logic
+  const groupedRequests = useMemo(() => {
+    const groups = {};
+
+    filteredRequests.forEach(request => {
+      const stateLabel = request.state.label;
+      const stateColor = getStateColor(stateLabel);
+
+      if (!groups[stateLabel]) {
+        groups[stateLabel] = {
+          label: stateLabel,
+          color: stateColor,
+          requests: [],
+          subGroups: {}
+        };
+      }
+      groups[stateLabel].requests.push(request);
+
+      // Sub-group by type
+      const typeKey = request.request_type;
+      const typeInfo = getRequestTypeInfo(typeKey);
+      
+      if (!groups[stateLabel].subGroups[typeKey]) {
+        groups[stateLabel].subGroups[typeKey] = {
+          label: typeInfo.label,
+          color: getTypeColor(typeKey),
+          requests: []
+        };
+      }
+      groups[stateLabel].subGroups[typeKey].requests.push(request);
+    });
+
+    // Sort primary groups
+    const sortedGroups = Object.entries(groups).sort((a, b) => {
+      const idxA = STATE_ORDER.indexOf(a[0]);
+      const idxB = STATE_ORDER.indexOf(b[0]);
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
+
+    return sortedGroups;
+  }, [filteredRequests]);
 
   if ((!token && !slug) || !clientAccess || !project) {
     return (
@@ -203,14 +214,6 @@ export default function ClientProjectPortal() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          <StatTile label="Needs Review" count={stats.needsReview} filterValue="needs_review" icon={Clock} />
-          <StatTile label="Changes Requested" count={stats.changesRequested} filterValue="changes_requested" icon={AlertCircle} />
-          <StatTile label="Approved" count={stats.approved} filterValue="approved" icon={CheckCircle2} />
-          <StatTile label="Drafts" count={stats.drafts} filterValue="draft" icon={FileText} />
-          <StatTile label="Archived" count={stats.archived} filterValue="archived" icon={Archive} />
-        </div>
-
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
@@ -223,18 +226,6 @@ export default function ClientProjectPortal() {
               />
             </div>
           </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-48 bg-black/40 backdrop-blur-xl border-gray-700 text-white">
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="question">Question</SelectItem>
-              <SelectItem value="update">Update</SelectItem>
-              <SelectItem value="image_review">Design Review</SelectItem>
-              <SelectItem value="approval">Need from Client</SelectItem>
-            </SelectContent>
-          </Select>
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-48 bg-black/40 backdrop-blur-xl border-gray-700 text-white">
               <SelectValue />
@@ -247,50 +238,101 @@ export default function ClientProjectPortal() {
           </Select>
         </div>
 
-        {filteredRequests.length === 0 ? (
+        {groupedRequests.length === 0 ? (
           <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-8 text-center">
               <p className="text-gray-400">No requests found</p>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {filteredRequests.map(request => {
-              const StateIcon = request.state.icon;
-              return (
-                <Card
-                  key={request.id}
-                  className="bg-black/60 backdrop-blur-xl border border-gray-700 hover:bg-gray-800/50 cursor-pointer transition-colors"
-                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
+          <div className="space-y-6">
+            {groupedRequests.map(([groupKey, group]) => (
+              <Card 
+                key={groupKey}
+                className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+                style={{ 
+                  borderColor: `${group.color}80`,
+                  boxShadow: `0 10px 15px -3px ${group.color}20`
+                }}
+              >
+                <CardHeader 
+                  className="border-b p-4"
+                  style={{ borderBottomColor: `${group.color}50` }}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <h3 className="font-semibold text-white">{request.title}</h3>
-                          <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
-                            {getRequestTypeInfo(request.request_type).label}
-                          </Badge>
-                          <Badge className={cn("text-xs", request.state.color)}>
-                            <StateIcon className="w-3 h-3 mr-1" />
-                            {request.state.label}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-400 flex-wrap">
-                          {request.due_date && (
-                            <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
-                          )}
-                          <span>Updated: {format(request.lastActivity, 'MMM d, h:mm a')}</span>
-                          {request.commentCount > 0 && (
-                            <span>{request.commentCount} {request.commentCount === 1 ? 'comment' : 'comments'}</span>
-                          )}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <FolderKanban className="w-5 h-5" style={{ color: group.color }} />
+                      <CardTitle className="text-lg" style={{ color: group.color }}>{group.label}</CardTitle>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      style={{ borderColor: group.color, color: group.color, backgroundColor: `${group.color}15` }}
+                    >
+                      {group.requests.length} {group.requests.length === 1 ? 'request' : 'requests'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(group.subGroups).map(([typeKey, subGroup]) => (
+                      <div key={typeKey} className="col-span-1">
+                        <div 
+                          className="bg-black/40 rounded-lg border-2 overflow-hidden"
+                          style={{ borderColor: subGroup.color }}
+                        >
+                          <div 
+                            className="p-3 border-b-2"
+                            style={{ 
+                              borderBottomColor: subGroup.color,
+                              backgroundColor: `${subGroup.color}15`
+                            }}
+                          >
+                            <h3 
+                              className="font-semibold text-sm"
+                              style={{ color: subGroup.color }}
+                            >
+                              {subGroup.label}
+                            </h3>
+                            <span className="text-xs text-gray-400">
+                              {subGroup.requests.length} {subGroup.requests.length === 1 ? 'request' : 'requests'}
+                            </span>
+                          </div>
+                          <div className="p-3 space-y-2">
+                            {subGroup.requests.map(request => {
+                              const StateIcon = request.state.icon;
+                              return (
+                                <div
+                                  key={request.id}
+                                  className="bg-gray-900/50 border border-gray-700 hover:bg-gray-800/80 cursor-pointer transition-all rounded-md p-3"
+                                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <h4 className="font-medium text-white text-sm line-clamp-2">{request.title}</h4>
+                                    {request.commentCount > 0 && (
+                                       <Badge variant="secondary" className="text-[10px] px-1 h-5 bg-gray-800 text-gray-300">
+                                         {request.commentCount}
+                                       </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                                     <span className={cn("flex items-center", request.state.color.split(' ')[1])}>
+                                       <StateIcon className="w-3 h-3 mr-1" />
+                                       {request.state.label}
+                                     </span>
+                                     <span>•</span>
+                                     <span>{format(request.lastActivity, 'MMM d')}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </div>
