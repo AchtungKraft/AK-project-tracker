@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Mail, Loader2, Copy } from "lucide-react";
+import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
@@ -17,6 +17,8 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [showAddClient, setShowAddClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', role_title: '' });
+  const [editingSlugId, setEditingSlugId] = useState(null);
+  const [slugValue, setSlugValue] = useState('');
 
   const { data: projectAccess = [] } = useQuery({
     queryKey: ['projectClientAccess', projectId],
@@ -238,6 +240,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                       </div>
 
                       {shareUrl && (
+                        <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                           <Input
                             value={shareUrl}
@@ -257,6 +260,59 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                             Copy
                           </Button>
                         </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {editingSlugId === access.id ? (
+                            <>
+                              <div className="flex items-center bg-gray-900 rounded-md border border-gray-700 px-2 h-8 flex-1">
+                                <span className="text-gray-500 text-xs whitespace-nowrap mr-1">?slug=</span>
+                                <input
+                                  type="text"
+                                  value={slugValue}
+                                  onChange={(e) => setSlugValue(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
+                                  placeholder="custom-name"
+                                  className="bg-transparent border-none text-white text-xs w-full focus:outline-none"
+                                />
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  updateAccessMutation.mutate({ id: access.id, data: { url_slug: slugValue } });
+                                  setEditingSlugId(null);
+                                }}
+                                className="h-8 bg-green-600 hover:bg-green-700"
+                              >
+                                <Check className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingSlugId(null)}
+                                className="h-8 text-gray-400"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 w-full">
+                              <span className="text-xs text-gray-500">
+                                Slug: {access.url_slug || <span className="italic">none</span>}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingSlugId(access.id);
+                                  setSlugValue(access.url_slug || '');
+                                }}
+                                className="h-6 w-6 text-gray-400 hover:text-white"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       )}
                     </div>
                   );

@@ -34,6 +34,7 @@ export default function ClientFeedbackRequestDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const requestId = urlParams.get('id');
   const token = urlParams.get('token');
+  const slug = urlParams.get('slug');
 
   const [clientAccess, setClientAccess] = useState(null);
   const [newComment, setNewComment] = useState('');
@@ -47,17 +48,19 @@ export default function ClientFeedbackRequestDetail() {
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
 
   useEffect(() => {
-    if (!token) return;
+    if (!token && !slug) return;
 
-    base44.entities.ProjectClientAccess.filter({
-      share_token: token,
-      access_status: 'active',
-    }).then(access => {
+    const filter = {};
+    if (token) filter.share_token = token;
+    if (slug) filter.url_slug = slug;
+    filter.access_status = 'active';
+
+    base44.entities.ProjectClientAccess.filter(filter).then(access => {
       if (access.length > 0) {
         setClientAccess(access[0]);
       }
     });
-  }, [token]);
+  }, [token, slug]);
 
   const { data: request } = useQuery({
     queryKey: ['clientFeedbackRequest', requestId],
@@ -288,7 +291,7 @@ export default function ClientFeedbackRequestDetail() {
 
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
 
-  if (!token || !clientAccess || !request) {
+  if ((!token && !slug) || !clientAccess || !request) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -303,7 +306,7 @@ export default function ClientFeedbackRequestDetail() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("ClientProjectPortal") + `?token=${token}`)}
+            onClick={() => navigate(createPageUrl("ClientProjectPortal") + (slug ? `?slug=${slug}` : `?token=${token}`))}
             className="border-gray-700 text-white"
           >
             <ArrowLeft className="w-4 h-4" />

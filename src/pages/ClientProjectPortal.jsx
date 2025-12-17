@@ -17,20 +17,23 @@ export default function ClientProjectPortal() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
+  const slug = urlParams.get('slug');
   const [clientAccess, setClientAccess] = useState(null);
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('needs_review');
   const [sortBy, setSortBy] = useState('last_activity');
 
   useEffect(() => {
-    if (!token) return;
+    if (!token && !slug) return;
 
-    base44.entities.ProjectClientAccess.filter({
-      share_token: token,
-      access_status: 'active',
-    }).then(access => {
+    const filter = {};
+    if (token) filter.share_token = token;
+    if (slug) filter.url_slug = slug;
+    filter.access_status = 'active';
+
+    base44.entities.ProjectClientAccess.filter(filter).then(access => {
       if (access.length > 0) {
         setClientAccess(access[0]);
         base44.entities.ProjectClientAccess.update(access[0].id, {
@@ -38,7 +41,7 @@ export default function ClientProjectPortal() {
         });
       }
     });
-  }, [token]);
+  }, [token, slug]);
 
   const { data: project } = useQuery({
     queryKey: ['project', clientAccess?.project_id],
@@ -172,7 +175,7 @@ export default function ClientProjectPortal() {
     </Card>
   );
 
-  if (!token || !clientAccess || !project) {
+  if ((!token && !slug) || !clientAccess || !project) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -187,7 +190,7 @@ export default function ClientProjectPortal() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("ClientProjects") + `?token=${token}`)}
+            onClick={() => navigate(createPageUrl("ClientProjects") + (slug ? `?slug=${slug}` : `?token=${token}`))}
             className="border-gray-700 text-white"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -257,7 +260,7 @@ export default function ClientProjectPortal() {
                 <Card
                   key={request.id}
                   className="bg-black/60 backdrop-blur-xl border border-gray-700 hover:bg-gray-800/50 cursor-pointer transition-colors"
-                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&token=${token}`)}
+                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3">
