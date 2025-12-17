@@ -42,6 +42,14 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     },
   });
 
+  const updateClientMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.ClientContact.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
+      toast.success('Client updated');
+    },
+  });
+
   const addAccessMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
     onSuccess: () => {
