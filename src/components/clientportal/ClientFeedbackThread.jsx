@@ -352,11 +352,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                                   {canReview && (
                                     <div 
                                       className="absolute top-2 right-2 z-10"
-                                      onClick={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleImageSelect(att.id);
+                                      }}
                                     >
                                       <Checkbox 
                                         checked={isSelected}
-                                        onCheckedChange={() => handleImageSelect(att.id)}
                                         className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
                                       />
                                     </div>

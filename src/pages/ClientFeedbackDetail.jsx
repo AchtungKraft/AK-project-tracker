@@ -443,7 +443,7 @@ export default function ClientFeedbackDetail() {
                       Post to Client
                     </Button>
                   }
-                  {request.status === 'posted' &&
+                  {['posted', 'changes_requested', 'approved'].includes(request.status) &&
                   <>
                     <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 hover:text-purple-950 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm h-8">
                       <RotateCw className="w-4 h-4 mr-1" />
