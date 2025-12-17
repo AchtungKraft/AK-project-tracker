@@ -64,15 +64,15 @@ export default function ClientProjectPortal() {
   });
 
   const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions', clientAccess?.project_id],
-    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ project_id: clientAccess.project_id }),
+    queryKey: ['clientFeedbackDecisions'],
+    queryFn: () => base44.entities.ClientFeedbackDecision.list(),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
 
   const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments', clientAccess?.project_id],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ project_id: clientAccess.project_id }),
+    queryKey: ['clientFeedbackAttachments'],
+    queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
     enabled: requests.length > 0 && !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
