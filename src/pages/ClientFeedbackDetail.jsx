@@ -396,7 +396,9 @@ export default function ClientFeedbackDetail() {
             <CardContent className="p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="border-gray-600 text-gray-200">{request.request_type.replace('_', ' ')}</Badge>
+                  <Badge variant="outline" className="border-gray-600 text-gray-200">
+                    {request.request_type === 'image_review' ? 'Design Review' : request.request_type.replace('_', ' ')}
+                  </Badge>
                   <Badge className={cn(
                     request.status === 'draft' ? 'bg-gray-500' :
                     request.status === 'posted' ? 'bg-blue-500' :
