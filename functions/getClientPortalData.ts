@@ -9,10 +9,21 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Missing required parameters' }, { status: 400 });
         }
 
+        let clientContactId;
+        
+        // If using slug, first find the client contact
+        if (slug) {
+            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+            if (contacts.length === 0) {
+                return Response.json({ error: 'Invalid access' }, { status: 403 });
+            }
+            clientContactId = contacts[0].id;
+        }
+
         // Verify client access
         const filter = { project_id: projectId, access_status: 'active' };
         if (token) filter.share_token = token;
-        if (slug) filter.url_slug = slug;
+        if (clientContactId) filter.client_contact_id = clientContactId;
 
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
         
