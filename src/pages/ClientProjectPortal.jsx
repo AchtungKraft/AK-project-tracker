@@ -41,6 +41,7 @@ export default function ClientProjectPortal() {
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
   const slug = urlParams.get('slug');
+  const projectId = urlParams.get('projectId');
   const [clientAccess, setClientAccess] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,57 +49,38 @@ export default function ClientProjectPortal() {
 
   useEffect(() => {
     if (!token && !slug) return;
+    if (!projectId) return;
 
-    const filter = {};
-    if (token) filter.share_token = token;
-    if (slug) filter.url_slug = slug;
-    filter.access_status = 'active';
+    base44.functions.invoke('getClientPortalData', { token, slug, projectId })
+      .then(response => {
+        if (response.data.success) {
+          setClientAccess(response.data.access);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load portal data:', error);
+      });
+  }, [token, slug, projectId]);
 
-    base44.entities.ProjectClientAccess.filter(filter).then(access => {
-      if (access.length > 0) {
-        setClientAccess(access[0]);
-        base44.entities.ProjectClientAccess.update(access[0].id, {
-          last_viewed_at: new Date().toISOString(),
-        });
-      }
-    });
-  }, [token, slug]);
-
-  const { data: project } = useQuery({
-    queryKey: ['project', clientAccess?.project_id],
-    queryFn: () => base44.entities.Project.filter({ id: clientAccess.project_id }),
-    select: (data) => data[0],
-    enabled: !!clientAccess?.project_id,
-  });
-
-  const { data: requests = [] } = useQuery({
-    queryKey: ['clientFeedbackRequests', clientAccess?.project_id],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({
-      project_id: clientAccess.project_id,
-    }),
+  const { data: portalData } = useQuery({
+    queryKey: ['clientPortalData', token, slug, clientAccess?.project_id],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('getClientPortalData', { 
+        token, 
+        slug, 
+        projectId: clientAccess.project_id 
+      });
+      return response.data;
+    },
     enabled: !!clientAccess?.project_id,
     refetchOnMount: 'always',
   });
 
-  const { data: comments = [] } = useQuery({
-    queryKey: ['clientFeedbackComments', clientAccess?.project_id],
-    queryFn: () => base44.entities.ClientFeedbackComment.list(), 
-    enabled: requests.length > 0 && !!clientAccess?.project_id,
-  });
-
-  const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions'],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list('-created_date', 1000),
-    enabled: requests.length > 0 && !!clientAccess?.project_id,
-    refetchOnMount: 'always',
-  });
-
-  const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments'],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.list('-created_date', 1000),
-    enabled: requests.length > 0 && !!clientAccess?.project_id,
-    refetchOnMount: 'always',
-  });
+  const project = portalData?.project;
+  const requests = portalData?.requests || [];
+  const comments = portalData?.comments || [];
+  const decisions = portalData?.decisions || [];
+  const attachments = portalData?.attachments || [];
 
   const requestsWithState = useMemo(() => {
     return requests.map(request => {

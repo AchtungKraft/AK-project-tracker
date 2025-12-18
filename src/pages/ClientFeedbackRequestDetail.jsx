@@ -48,38 +48,31 @@ export default function ClientFeedbackRequestDetail() {
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
 
   useEffect(() => {
-    if (!token && !slug) return;
+    if (!token && !slug || !requestId) return;
 
-    const filter = {};
-    if (token) filter.share_token = token;
-    if (slug) filter.url_slug = slug;
-    filter.access_status = 'active';
+    base44.functions.invoke('getClientRequestDetail', { token, slug, requestId })
+      .then(response => {
+        if (response.data.success) {
+          setClientAccess(response.data.access);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load request data:', error);
+      });
+  }, [token, slug, requestId]);
 
-    base44.entities.ProjectClientAccess.filter(filter).then(access => {
-      if (access.length > 0) {
-        setClientAccess(access[0]);
-      }
-    });
-  }, [token, slug]);
-
-  const { data: request } = useQuery({
-    queryKey: ['clientFeedbackRequest', requestId],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
-    select: (data) => data[0],
-    enabled: !!requestId,
+  const { data: requestData } = useQuery({
+    queryKey: ['clientRequestDetail', token, slug, requestId],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('getClientRequestDetail', { token, slug, requestId });
+      return response.data;
+    },
+    enabled: !!requestId && !!clientAccess,
   });
 
-  const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions', requestId],
-    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-    enabled: !!requestId
-  });
-
-  const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-    enabled: !!requestId
-  });
+  const request = requestData?.request;
+  const decisions = requestData?.decisions || [];
+  const attachments = requestData?.attachments || [];
 
   const createCommentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
