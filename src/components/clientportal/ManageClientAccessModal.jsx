@@ -37,8 +37,8 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     onSuccess: (newClient) => {
       queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
       toast.success('Client contact created');
-      // Automatically add them to the project
-      handleAddAccess(newClient.id);
+      // Automatically add them to the project with their slug
+      handleAddAccessWithClient(newClient);
       setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
       setShowAddClient(false);
     },
@@ -103,7 +103,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
       const existingClient = allClients.find(c => c.url_slug === newClient.url_slug && c.active);
       if (existingClient) {
         // Use existing client instead of creating new one
-        handleAddAccess(existingClient.id);
+        handleAddAccessWithClient(existingClient);
         setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
         setShowAddClient(false);
         toast.success('Added existing client with matching slug');
@@ -114,23 +114,28 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     createClientMutation.mutate(newClient);
   };
 
-  const handleAddAccess = (clientId) => {
+  const handleAddAccessWithClient = (client) => {
     // Generate unique share token
     const shareToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
-    // Get client details to copy url_slug
-    const client = allClients.find(c => c.id === clientId);
-
     addAccessMutation.mutate({
       project_id: projectId,
-      client_contact_id: clientId,
+      client_contact_id: client.id,
       access_role: 'approver',
       access_status: 'active',
       share_token: shareToken,
-      url_slug: client?.url_slug || null,
+      url_slug: client.url_slug || null,
     });
+  };
+
+  const handleAddAccess = (clientId) => {
+    // Get client details to copy url_slug
+    const client = allClients.find(c => c.id === clientId);
+    if (client) {
+      handleAddAccessWithClient(client);
+    }
   };
 
   return (
