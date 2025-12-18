@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,15 +12,16 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [reviewAction, setReviewAction] = useState(null); // 'approved' | 'changes_requested'
+  const [reviewAction, setReviewAction] = useState(null);
   const [reviewNote, setReviewNote] = useState("");
-  const [reviewNewImages, setReviewNewImages] = useState([]); // Array of uploaded file URLs
+  const [reviewNewImages, setReviewNewImages] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: request } = useQuery({
     queryKey: ['clientFeedbackRequest', requestId],
@@ -53,27 +54,9 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     queryFn: () => base44.entities.ClientContact.list(),
   });
 
-  // Mutations
-  const createDecisionMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
-  });
-
-  const updateRequestMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackRequest.update(data.id, data.data),
-  });
-
-  const createCommentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
-  });
-
-  const createAttachmentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
-  });
-
   const timeline = useMemo(() => {
     const events = [];
 
-    // 1. Request-level attachments (Initial Post)
     const requestAttachments = attachments.filter(a => !a.comment_id);
     if (requestAttachments.length > 0 || request?.posted_at) {
       events.push({
@@ -84,7 +67,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
     }
 
-    // 2. Comments
     const visibleComments = isClientView
       ? comments.filter(c => c.visibility === 'client_visible')
       : comments;
@@ -105,11 +87,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
     });
 
-    // 3. Decisions (Request level ones mainly, image level ones are usually associated with a comment if we do it right, but we list them if standalone)
     decisions.forEach(decision => {
-      // If decision is associated with a specific image, we might want to group it? 
-      // For now, list request-level decisions. Image-level decisions might be noisy if listed individually.
-      // But let's list them if they are 'request' target.
       if (decision.target_type === 'request') {
         const decider = decision.decided_by_type === 'internal_user'
           ? users.find(u => u.id === decision.decided_by_id)
@@ -166,104 +144,42 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       return;
     }
 
-    const authorType = isClientView ? 'client_contact' : 'internal_user';
-    const authorId = isClientView ? clientContactId : userId;
-
+    setIsSubmitting(true);
     try {
-      // 1. Create decisions for selected images
-      const decisionPromises = selectedImageIds.map(imgId => 
-        createDecisionMutation.mutateAsync({
-          request_id: requestId,
-          decided_by_type: authorType,
-          decided_by_id: authorId,
-          decision: reviewAction,
-          note: reviewNote, // Same note for all? Or just attached to comment? Let's attach to decision too for audit.
-          target_type: 'attachment_image',
-          target_attachment_id: imgId,
-          decided_at: new Date().toISOString(),
-        })
-      );
-      await Promise.all(decisionPromises);
-
-      // 2. Create Comment summarizing the action
-      const actionLabel = reviewAction === 'approved' ? 'Approved' : 'Requested changes on';
-      const commentBody = `${actionLabel} ${selectedImageIds.length} image(s)${reviewNote ? ': ' + reviewNote : '.'}`;
-      
-      const comment = await createCommentMutation.mutateAsync({
-        request_id: requestId,
-        author_type: authorType,
-        author_id: authorId,
-        body: commentBody,
-        visibility: 'client_visible',
-        target_type: 'request', // or could be 'attachment_image' but we have multiple.
+      await base44.functions.invoke('publicClientDecision', {
+        token: token || '',
+        slug: slug || '',
+        requestId: requestId,
+        decision: reviewAction,
+        note: reviewNote,
+        targetAttachmentIds: selectedImageIds,
+        newImages: reviewNewImages
       });
-
-      // 2a. Update Request Status if Changes Requested
-      if (reviewAction === 'changes_requested') {
-         // Also update posted_at to bump it to top of lists if needed, but primary is status change
-         await updateRequestMutation.mutateAsync({
-            id: requestId,
-            data: { 
-              status: 'changes_requested',
-              posted_at: new Date().toISOString() 
-            }
-         });
-      }
-
-      // 3. Attach new images to the comment
-      const newImagePromises = reviewNewImages.map(url => 
-        createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
-          attachment_type: 'image',
-          file_url: url,
-          created_by_type: authorType,
-          created_by_id: authorId,
-        })
-      );
-
-      // 4. Attach selected existing images to the comment (as references)
-      const selectedAttachments = attachments.filter(a => selectedImageIds.includes(a.id));
-      const existingImagePromises = selectedAttachments.map(att => 
-        createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
-          attachment_type: 'image',
-          file_url: att.file_url, // Use the same URL
-          label: att.label || 'Reviewed Image',
-          created_by_type: authorType,
-          created_by_id: authorId,
-        })
-      );
-
-      await Promise.all([...newImagePromises, ...existingImagePromises]);
 
       toast.success('Review submitted');
       
-      // Cleanup
       setSelectedImageIds([]);
       setReviewNewImages([]);
       setReviewNote("");
       setIsReviewing(false);
       setReviewAction(null);
 
-      // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] }); // Invalidate all decisions to update dashboard
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); // Invalidate requests to update status
-
-      } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+      if (token || slug) {
+        queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
+      }
+    } catch (error) {
       console.error(error);
       toast.error('Failed to submit review');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Only allow selection if we have an active role (approver for client, or any internal user)
-  // For simplicity, let's assume if you can view the page and have an ID, you can interact.
-  // But strictly, client needs 'approver' role to make decisions?
-  // User said "admin can see the Approve and request changes also".
-  const canReview = userId || (isClientView && clientContactId); 
+  const canReview = (accessRole === 'approver' && isClientView) || (!isClientView && userId);
 
   return (
     <>
@@ -271,7 +187,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         {timeline.map((event, idx) => (
           <Card key={idx} className="bg-black/60 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4">
-              {/* Event Header */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 {event.type === 'request_post' && (
                   <div className="flex items-center gap-2 text-blue-400">
@@ -316,7 +231,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 )}
               </div>
 
-              {/* Event Content */}
               {event.comment?.body && (
                 <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.comment.body}</p>
               )}
@@ -324,45 +238,37 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.decision.note}</p>
               )}
 
-              {/* Attachments Grid */}
               {event.attachments?.length > 0 && (
                 <div className="pl-10 space-y-3">
-                  {/* Images */}
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {event.attachments.filter(a => a.attachment_type === 'image').map(att => {
-                            const isSelected = selectedImageIds.includes(att.id);
+                        const isSelected = selectedImageIds.includes(att.id);
+                        const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                        const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
 
-                            // Check if there are decisions on this image
-                            const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
-                            const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+                        return (
+                          <div key={att.id} className="relative group">
+                            <div 
+                              className={`
+                                relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                                ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
+                              `}
+                              onClick={() => setSelectedImage(att.file_url)}
+                            >
+                              <img src={att.file_url} alt="" className="w-full h-full object-contain" />
 
-                            return (
-                              <div key={att.id} className="relative group">
-                                <div 
-                                  className={`
-                                    relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
-                                    ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
-                                  `}
-                                  onClick={() => setSelectedImage(att.file_url)}
-                                >
-                                  <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                              {canReview && requestType === 'image_review' && (
+                                <div className="absolute top-2 right-2 z-10">
+                                  <Checkbox 
+                                    checked={isSelected}
+                                    onCheckedChange={() => handleImageSelect(att.id)}
+                                    className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              )}
 
-                                  {/* Selection Overlay */}
-                                  {canReview && requestType === 'image_review' && (
-                                    <div 
-                                      className="absolute top-2 right-2 z-10"
-                                    >
-                                      <Checkbox 
-                                        checked={isSelected}
-                                        onCheckedChange={() => handleImageSelect(att.id)}
-                                        className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                    </div>
-                                  )}
-
-                              {/* Decision Badge Overlay */}
                               {latestDecision && (
                                 <div className="absolute bottom-2 left-2 z-10">
                                   {latestDecision.decision === 'approved' ? (
@@ -376,13 +282,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                                   )}
                                 </div>
                               )}
-                              
-                              {/* Magnify Icon on hover if not selecting */}
-                              {!isSelected && (
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
-                                  {/* <ImageIcon className="w-8 h-8 text-white/80" /> */}
-                                </div>
-                              )}
                             </div>
                           </div>
                         );
@@ -390,7 +289,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                     </div>
                   )}
 
-                  {/* Other Files */}
                   <div className="flex flex-wrap gap-2">
                     {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
                       <a
@@ -412,7 +310,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         ))}
       </div>
 
-      {/* Review Toolbar - Sticky Bottom - Only for image_review type */}
       {selectedImageIds.length > 0 && requestType === 'image_review' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in">
           <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
@@ -452,7 +349,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         </div>
       )}
 
-      {/* Review Dialog */}
       <Dialog open={isReviewing} onOpenChange={setIsReviewing}>
         <DialogContent className="bg-gray-900 border-gray-700 text-white">
           <DialogHeader>
@@ -506,12 +402,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsReviewing(false)} className="text-gray-400">Cancel</Button>
+            <Button variant="ghost" onClick={() => setIsReviewing(false)} className="text-gray-400" disabled={isSubmitting}>Cancel</Button>
             <Button 
               onClick={handleSubmitReview}
+              disabled={isSubmitting}
               className={reviewAction === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
             >
-              Confirm
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const { token, slug, requestId, decision, note, targetAttachmentIds } = await req.json();
+        const { token, slug, requestId, decision, note, targetAttachmentIds, newImages } = await req.json();
 
         if ((!token && !slug) || !requestId || !decision) {
             return Response.json({ error: 'Missing required parameters' }, { 
@@ -48,10 +48,11 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // Create decisions for each target attachment or request
+        // Create decisions and comments
         const decisions = [];
         
         if (targetAttachmentIds && targetAttachmentIds.length > 0) {
+            // Image-level decisions
             for (const attachmentId of targetAttachmentIds) {
                 const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                     request_id: requestId,
@@ -65,7 +66,35 @@ Deno.serve(async (req) => {
                 });
                 decisions.push(newDecision);
             }
+
+            // Create a single comment summarizing the image review
+            const actionLabel = decision === 'approved' ? 'Approved' : 'Requested changes on';
+            const commentBody = `${actionLabel} ${targetAttachmentIds.length} image(s)${note ? ': ' + note : ''}`;
+            
+            const comment = await base44.asServiceRole.entities.ClientFeedbackComment.create({
+                request_id: requestId,
+                author_type: 'client_contact',
+                author_id: access.client_contact_id,
+                body: commentBody,
+                visibility: 'client_visible',
+                target_type: 'request',
+            });
+
+            // Attach new images to the comment if provided
+            if (newImages && newImages.length > 0) {
+                for (const imageUrl of newImages) {
+                    await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                        request_id: requestId,
+                        comment_id: comment.id,
+                        attachment_type: 'image',
+                        file_url: imageUrl,
+                        created_by_type: 'client_contact',
+                        created_by_id: access.client_contact_id,
+                    });
+                }
+            }
         } else {
+            // Request-level decision
             const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                 request_id: requestId,
                 decided_by_type: 'client_contact',
@@ -76,6 +105,17 @@ Deno.serve(async (req) => {
                 decided_at: new Date().toISOString()
             });
             decisions.push(newDecision);
+
+            // Create comment for request decision
+            const commentBody = `${decision === 'approved' ? 'Approved' : 'Requested changes'}${note ? ': ' + note : ''}`;
+            await base44.asServiceRole.entities.ClientFeedbackComment.create({
+                request_id: requestId,
+                author_type: 'client_contact',
+                author_id: access.client_contact_id,
+                body: commentBody,
+                visibility: 'client_visible',
+                target_type: 'request',
+            });
         }
 
         // Update request status if changes requested

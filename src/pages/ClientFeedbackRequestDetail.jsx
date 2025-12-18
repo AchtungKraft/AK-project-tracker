@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, XCircle, X, Paperclip, FileText, Archive, RotateCw } from "lucide-react";
+import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
-// import ClientImageReviewGallery from "../components/clientportal/ClientImageReviewGallery.jsx"; // Removed
 import { cn } from "@/lib/utils";
 import { getRequestState } from "@/components/clientportal/utils";
 
@@ -50,7 +49,7 @@ export default function ClientFeedbackRequestDetail() {
   useEffect(() => {
     if (!token && !slug || !requestId) return;
 
-    base44.functions.invoke('getClientRequestDetail', { token, slug, requestId })
+    base44.functions.invoke('publicClientRequestDetail', { token, slug, requestId })
       .then(response => {
         if (response.data.success) {
           setClientAccess(response.data.access);
@@ -64,7 +63,7 @@ export default function ClientFeedbackRequestDetail() {
   const { data: requestData } = useQuery({
     queryKey: ['clientRequestDetail', token, slug, requestId],
     queryFn: async () => {
-      const response = await base44.functions.invoke('getClientRequestDetail', { token, slug, requestId });
+      const response = await base44.functions.invoke('publicClientRequestDetail', { token, slug, requestId });
       return response.data;
     },
     enabled: !!requestId && !!clientAccess,
@@ -75,45 +74,22 @@ export default function ClientFeedbackRequestDetail() {
   const attachments = requestData?.attachments || [];
 
   const createCommentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
+    mutationFn: async (data) => {
+      const response = await base44.functions.invoke('publicAddClientComment', {
+        token,
+        slug,
+        requestId,
+        comment: data.body,
+        attachments: data.attachments || []
+      });
+      return response.data;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-      // Invalidate project-level queries to refresh the landing page
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', request.project_id] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', request.project_id] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', request.project_id] });
-      if (clientAccess?.project_id) {
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', clientAccess.project_id] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', clientAccess.project_id] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', clientAccess.project_id] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
       setNewComment('');
       setNewLinks(['']);
       setUploadedPhotos([]);
       setUploadedFiles([]);
-    },
-  });
-
-  const createAttachmentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
-    },
-  });
-
-  const createRequestDecisionMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', request.project_id] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', request.project_id] });
-       if (clientAccess?.project_id) {
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests', clientAccess.project_id] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', clientAccess.project_id] });
-      }
-      setRequestDecisionNote('');
-      setShowRequestDecisionForm(false);
-      toast.success('Decision recorded');
     },
   });
 
@@ -196,25 +172,20 @@ export default function ClientFeedbackRequestDetail() {
     }
 
     try {
-      await createRequestDecisionMutation.mutateAsync({
-        request_id: requestId,
-        decided_by_type: 'client_contact',
-        decided_by_id: clientAccess.client_contact_id,
+      await base44.functions.invoke('publicClientDecision', {
+        token,
+        slug,
+        requestId,
         decision: requestDecisionType,
         note: requestDecisionNote,
-        target_type: 'request',
-        decided_at: new Date().toISOString(),
+        targetAttachmentIds: null,
+        newImages: []
       });
 
-      // Also add a comment to the thread reflecting this decision
-      await createCommentMutation.mutateAsync({
-        request_id: requestId,
-        author_type: 'client_contact',
-        author_id: clientAccess.client_contact_id,
-        body: `${requestDecisionType === 'approved' ? 'Approved' : 'Requested changes'}${requestDecisionNote ? ': ' + requestDecisionNote : ''}`,
-        visibility: 'client_visible',
-        target_type: 'request',
-      });
+      queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
+      setRequestDecisionNote('');
+      setShowRequestDecisionForm(false);
+      toast.success('Decision recorded');
     } catch (error) {
       console.error('Decision error:', error);
       toast.error('Failed to record decision');
@@ -228,53 +199,39 @@ export default function ClientFeedbackRequestDetail() {
     }
 
     try {
-      const comment = await createCommentMutation.mutateAsync({
-        request_id: requestId,
-        author_type: 'client_contact',
-        author_id: clientAccess.client_contact_id,
-        body: newComment,
-        visibility: 'client_visible',
-        target_type: 'request',
+      const attachments = [];
+
+      // Add photos
+      uploadedPhotos.forEach(url => {
+        attachments.push({
+          attachment_type: 'image',
+          file_url: url
+        });
       });
 
-      // Upload photos as attachments
-      for (const photoUrl of uploadedPhotos) {
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
-          attachment_type: 'image',
-          file_url: photoUrl,
-          created_by_type: 'client_contact',
-          created_by_id: clientAccess.client_contact_id,
-        });
-      }
-
-      // Upload files as attachments
-      for (const file of uploadedFiles) {
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
+      // Add files
+      uploadedFiles.forEach(file => {
+        attachments.push({
           attachment_type: 'file',
           file_url: file.url,
-          label: file.name,
-          created_by_type: 'client_contact',
-          created_by_id: clientAccess.client_contact_id,
+          label: file.name
         });
-      }
+      });
 
-      // Upload links as attachments
-      for (const link of newLinks) {
+      // Add links
+      newLinks.forEach(link => {
         if (link.trim()) {
-          await createAttachmentMutation.mutateAsync({
-            request_id: requestId,
-            comment_id: comment.id,
+          attachments.push({
             attachment_type: 'link',
-            link_url: link.trim(),
-            created_by_type: 'client_contact',
-            created_by_id: clientAccess.client_contact_id,
+            link_url: link.trim()
           });
         }
-      }
+      });
+
+      await createCommentMutation.mutateAsync({
+        body: newComment,
+        attachments
+      });
 
       toast.success('Comment added');
     } catch (error) {
@@ -283,6 +240,7 @@ export default function ClientFeedbackRequestDetail() {
   };
 
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
+  const approveLabel = request?.request_type === 'image_review' ? 'Approve' : 'Confirm';
 
   if ((!token && !slug) || !clientAccess || !request) {
     return (
@@ -299,7 +257,7 @@ export default function ClientFeedbackRequestDetail() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("ClientProjectPortal") + (slug ? `?slug=${slug}` : `?token=${token}`))}
+            onClick={() => navigate(createPageUrl("ClientProjectPortal") + `?projectId=${request.project_id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
             className="border-gray-700 text-white"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -323,7 +281,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && (
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type !== 'image_review' && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -331,14 +289,14 @@ export default function ClientFeedbackRequestDetail() {
                   className="bg-green-600 hover:bg-green-700 text-white border-green-600"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
-                  Approve Request
+                  {approveLabel}
                 </Button>
                 <Button
                   size="sm"
                   onClick={handleRequestChangesRequest}
                   className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
                 >
-                  <XCircle className="w-4 h-4 mr-1" />
+                  <AlertCircle className="w-4 h-4 mr-1" />
                   Request Changes
                 </Button>
               </div>
@@ -360,9 +318,9 @@ export default function ClientFeedbackRequestDetail() {
           isClientView={true}
           requestType={request.request_type}
           accessRole={clientAccess.access_role}
+          token={token}
+          slug={slug}
         />
-
-{/* ClientImageReviewGallery removed in favor of threaded design review */}
 
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
           <CardContent className="p-4 space-y-3">
@@ -529,7 +487,7 @@ export default function ClientFeedbackRequestDetail() {
           <DialogContent className="bg-gray-900 text-white">
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
-                {requestDecisionType === 'approved' ? 'Approve Request' : 'Request Changes'}
+                {requestDecisionType === 'approved' ? `${approveLabel} Request` : 'Request Changes'}
               </h3>
               <p className="text-sm text-gray-400">
                 Making a decision for: "{request.title}"
@@ -557,14 +515,9 @@ export default function ClientFeedbackRequestDetail() {
                 </Button>
                 <Button
                   onClick={handleSubmitRequestDecision}
-                  disabled={createRequestDecisionMutation.isPending}
                   className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}
                 >
-                  {createRequestDecisionMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    `Submit ${requestDecisionType === 'approved' ? 'Approval' : 'Changes'}`
-                  )}
+                  {`Submit ${requestDecisionType === 'approved' ? approveLabel : 'Changes'}`}
                 </Button>
               </div>
             </div>
