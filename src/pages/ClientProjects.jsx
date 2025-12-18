@@ -23,7 +23,7 @@ export default function ClientProjects() {
   useEffect(() => {
     if (!token && !slug) return;
 
-    base44.functions.invoke('getClientProjects', { token, slug })
+    base44.functions.invoke('publicClientProjects', { token, slug })
       .then(response => {
         if (response.data.success) {
           setClientContactId(response.data.contact.id);
@@ -38,7 +38,7 @@ export default function ClientProjects() {
   const { data: clientData, isLoading: loadingProjects } = useQuery({
     queryKey: ['clientProjects', token, slug],
     queryFn: async () => {
-      const response = await base44.functions.invoke('getClientProjects', { token, slug });
+      const response = await base44.functions.invoke('publicClientProjects', { token, slug });
       return response.data;
     },
     enabled: !!clientContactId,
