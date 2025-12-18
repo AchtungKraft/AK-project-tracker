@@ -81,33 +81,49 @@ Deno.serve(async (req) => {
                 ? `${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${access.url_slug}`
                 : `${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${access.share_token}`;
 
-            const subject = `Action Required: ${request.title}`;
+            // Fetch attachments for the request (most recent post)
+            const requestAttachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ 
+                request_id: request.id 
+            });
+            const images = requestAttachments.filter(a => a.attachment_type === 'image' && !a.comment_id).slice(0, 6);
+
+            const subject = `Achtung Kraft // REVIEW NEEDED ${request.title}`;
             
+            const imagesHtml = images.length > 0 ? `
+<div style="margin: 20px 0;">
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+        ${images.map(img => `
+            <div>
+                <img src="${img.file_url}" alt="" style="width: 100%; height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #ddd;" />
+            </div>
+        `).join('')}
+    </div>
+</div>
+` : '';
+
             const htmlBody = `
 <p>Hi ${contact.name},</p>
 
 <p>You have a new item that requires your review:</p>
 
-<div style="background-color: #fee; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
-    <h3 style="margin: 0 0 8px 0; color: #c00;">NEEDS REVIEW</h3>
-    <p style="margin: 0;"><strong>${request.title}</strong></p>
-    <p style="margin: 8px 0 0 0; color: #666;">${request.body || ''}</p>
+<p><strong>Project: ${project.name}</strong></p>
+
+<div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
+    <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
+    <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.body || ''}</p>
 </div>
 
-<p>
-<strong>Project:</strong> ${project.name}<br/>
-${request.due_date ? `<strong>Due Date:</strong> ${new Date(request.due_date).toLocaleDateString()}<br/>` : ''}
-</p>
+${imagesHtml}
 
-<p>
-<a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+<p style="margin: 30px 0;">
+<a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
 VIEW REQUEST
 </a>
 </p>
 
 <p style="color: #666; font-size: 14px;">
 Or access your full project portal here:<br/>
-<a href="${portalUrl}">${portalUrl}</a>
+<a href="${portalUrl}" style="color: #3b82f6;">${portalUrl}</a>
 </p>
 
 <p>
@@ -120,13 +136,10 @@ Hi ${contact.name},
 
 You have a new item that requires your review:
 
-** NEEDS REVIEW **
+Project: ${project.name}
 
 ${request.title}
 ${request.body || ''}
-
-Project: ${project.name}
-${request.due_date ? `Due Date: ${new Date(request.due_date).toLocaleDateString()}` : ''}
 
 View the request here:
 ${requestDetailUrl}
