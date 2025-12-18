@@ -34,9 +34,11 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
 
   const createClientMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientContact.create(data),
-    onSuccess: () => {
+    onSuccess: (newClient) => {
       queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
       toast.success('Client contact created');
+      // Automatically add them to the project
+      handleAddAccess(newClient.id);
       setNewClient({ name: '', email: '', phone: '', role_title: '' });
       setShowAddClient(false);
     },
@@ -52,9 +54,15 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
 
   const addAccessMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
-    onSuccess: () => {
+    onSuccess: (newAccess, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
       toast.success('Access granted');
+      // Send welcome email
+      base44.functions.invoke('sendWelcomeEmail', {
+        clientContactId: variables.client_contact_id,
+        projectId: variables.project_id,
+        accessId: newAccess.id
+      });
     },
   });
 
