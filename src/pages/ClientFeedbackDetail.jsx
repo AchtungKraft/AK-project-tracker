@@ -168,6 +168,8 @@ export default function ClientFeedbackDetail() {
           if (oldStatus !== newStatus) {
             base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
           }
+          // Send Needs Review email to active clients
+          base44.functions.invoke('sendNeedsReviewEmail', { requestId });
         }
       });
       toast.success('Request posted to client');
@@ -186,6 +188,8 @@ export default function ClientFeedbackDetail() {
            if (oldStatus !== newStatus) {
               base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
            }
+           // Send Needs Review email to active clients
+           base44.functions.invoke('sendNeedsReviewEmail', { requestId });
         }
       });
       toast.success('Request resent to client');
