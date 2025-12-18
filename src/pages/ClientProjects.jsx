@@ -19,90 +19,36 @@ export default function ClientProjects() {
   const [clientContactId, setClientContactId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // 1. Resolve Token/Slug to ClientContact
+  // 1. Resolve Token/Slug to ClientContact via backend
   useEffect(() => {
-    const resolveClient = async () => {
-      if (!token && !slug) return;
+    if (!token && !slug) return;
 
-      try {
-        let contactId = null;
-
-        if (slug) {
-          // Try to find ClientContact by slug
-          const clients = await base44.entities.ClientContact.filter({ url_slug: slug });
-          if (clients.length > 0) {
-            contactId = clients[0].id;
-          } else {
-            // Fallback: Try ProjectClientAccess by slug (legacy/project-specific)
-            const accesses = await base44.entities.ProjectClientAccess.filter({ url_slug: slug, access_status: 'active' });
-            if (accesses.length > 0) {
-              contactId = accesses[0].client_contact_id;
-            }
-          }
-        } else if (token) {
-          // Find by token
-          const accesses = await base44.entities.ProjectClientAccess.filter({ share_token: token, access_status: 'active' });
-          if (accesses.length > 0) {
-            contactId = accesses[0].client_contact_id;
-          }
+    base44.functions.invoke('getClientProjects', { token, slug })
+      .then(response => {
+        if (response.data.success) {
+          setClientContactId(response.data.contact.id);
         }
-
-        if (contactId) {
-          setClientContactId(contactId);
-        }
-      } catch (error) {
-        console.error("Error resolving access:", error);
-      }
-    };
-
-    resolveClient();
+      })
+      .catch(error => {
+        console.error('Failed to load client data:', error);
+      });
   }, [token, slug]);
 
-  // 2. Fetch Client Details
-  const { data: clientContact } = useQuery({
-    queryKey: ['clientContact', clientContactId],
-    queryFn: () => base44.entities.ClientContact.filter({ id: clientContactId }),
-    select: (data) => data[0],
-    enabled: !!clientContactId,
-  });
-
-  // 3. Fetch All Active Accesses for this Client
-  const { data: accesses = [] } = useQuery({
-    queryKey: ['clientAccesses', clientContactId],
+  // 2. Fetch all client data via backend
+  const { data: clientData, isLoading: loadingProjects } = useQuery({
+    queryKey: ['clientProjects', token, slug],
     queryFn: async () => {
-      const all = await base44.entities.ProjectClientAccess.filter({ 
-        client_contact_id: clientContactId, 
-        access_status: 'active' 
-      });
-      // Update last_viewed for all of them
-      // Promise.all(all.map(a => base44.entities.ProjectClientAccess.update(a.id, { last_viewed_at: new Date().toISOString() })));
-      return all;
+      const response = await base44.functions.invoke('getClientProjects', { token, slug });
+      return response.data;
     },
     enabled: !!clientContactId,
   });
 
-  // 4. Fetch Projects
-  const { data: projects = [], isLoading: loadingProjects } = useQuery({
-    queryKey: ['clientProjects', accesses.map(a => a.project_id).join(',')],
-    queryFn: async () => {
-      if (accesses.length === 0) return [];
-      // Fetch each project
-      const promises = accesses.map(a => base44.entities.Project.filter({ id: a.project_id }).then(res => res[0]));
-      const results = await Promise.all(promises);
-      return results.filter(Boolean); // Filter out any nulls
-    },
-    enabled: accesses.length > 0,
-  });
-
-  const { data: statusList = [] } = useQuery({
-    queryKey: ['statusList'],
-    queryFn: () => base44.entities.StatusList.list(),
-  });
-
-  const { data: projectTypes = [] } = useQuery({
-    queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list(),
-  });
+  const clientContact = clientData?.contact;
+  const accesses = clientData?.accesses || [];
+  const projects = clientData?.projects || [];
+  const statusList = clientData?.statuses || [];
+  const projectTypes = clientData?.projectTypes || [];
 
   if ((!token && !slug) || (!clientContactId && !loadingProjects) || loadingProjects) {
     return (
@@ -148,8 +94,7 @@ export default function ClientProjects() {
               // If we arrived via a User Slug, we might not have a project-specific token in the URL.
               // We need to pass the share_token from the ProjectClientAccess record to the portal.
               const access = accesses.find(a => a.project_id === project.id);
-              const portalLink = createPageUrl("ClientProjectPortal") + `?token=${access?.share_token}`;
-
+              const portalLink = createPageUrl("ClientProjectPortal") + `?projectId=${project.id}&` + (slug ? `slug=${slug}` : `token=${access?.share_token}`);
               return (
                 <Card key={project.id} className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-300 overflow-hidden group flex flex-col">
                   {/* Image Section */}
