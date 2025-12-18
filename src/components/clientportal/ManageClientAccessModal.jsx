@@ -46,9 +46,16 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
 
   const updateClientMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientContact.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updatedClient) => {
       queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
       toast.success('Client updated');
+      
+      // Update url_slug in all ProjectClientAccess records for this client
+      const clientAccesses = projectAccess.filter(a => a.client_contact_id === updatedClient.id);
+      clientAccesses.forEach(access => {
+        base44.entities.ProjectClientAccess.update(access.id, { url_slug: updatedClient.url_slug });
+      });
+      queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
     },
   });
 
@@ -113,12 +120,16 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
+    // Get client details to copy url_slug
+    const client = allClients.find(c => c.id === clientId);
+
     addAccessMutation.mutate({
       project_id: projectId,
       client_contact_id: clientId,
       access_role: 'approver',
       access_status: 'active',
       share_token: shareToken,
+      url_slug: client?.url_slug || null,
     });
   };
 
