@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [showAddClient, setShowAddClient] = useState(false);
-  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', role_title: '' });
+  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
   const [editingSlugId, setEditingSlugId] = useState(null);
   const [slugValue, setSlugValue] = useState('');
 
@@ -39,7 +39,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
       toast.success('Client contact created');
       // Automatically add them to the project
       handleAddAccess(newClient.id);
-      setNewClient({ name: '', email: '', phone: '', role_title: '' });
+      setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
       setShowAddClient(false);
     },
   });
@@ -88,8 +88,22 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
 
   const getClientDetails = (clientId) => allClients.find(c => c.id === clientId);
 
-  const handleCreateClient = (e) => {
+  const handleCreateClient = async (e) => {
     e.preventDefault();
+    
+    // Check if client with slug already exists
+    if (newClient.url_slug) {
+      const existingClient = allClients.find(c => c.url_slug === newClient.url_slug && c.active);
+      if (existingClient) {
+        // Use existing client instead of creating new one
+        handleAddAccess(existingClient.id);
+        setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
+        setShowAddClient(false);
+        toast.success('Added existing client with matching slug');
+        return;
+      }
+    }
+    
     createClientMutation.mutate(newClient);
   };
 
@@ -169,6 +183,15 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                       value={newClient.role_title}
                       onChange={(e) => setNewClient({ ...newClient, role_title: e.target.value })}
                       placeholder="Role (optional)"
+                      className="bg-gray-900 border-gray-700 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">URL Slug (optional)</Label>
+                    <Input
+                      value={newClient.url_slug}
+                      onChange={(e) => setNewClient({ ...newClient, url_slug: e.target.value.replace(/[^a-zA-Z0-9-_]/g, '') })}
+                      placeholder="client-name"
                       className="bg-gray-900 border-gray-700 text-white"
                     />
                   </div>
