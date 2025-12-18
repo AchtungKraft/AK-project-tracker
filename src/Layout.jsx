@@ -132,10 +132,13 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
 };
 
 export default function Layout({ children, currentPageName }) {
-  // Hide layout for client portal pages
-  if (currentPageName === 'ClientProjects' || currentPageName === 'ClientProjectPortal' || currentPageName === 'ClientFeedbackRequestDetail') {
+  // Hide layout for client portal pages (no auth required)
+  const isClientPortalPage = ['ClientProjects', 'ClientProjectPortal', 'ClientFeedbackRequestDetail'].includes(currentPageName);
+  
+  if (isClientPortalPage) {
     return <>{children}</>;
   }
+  
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [teamMember, setTeamMember] = useState(null);
