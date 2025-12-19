@@ -87,32 +87,49 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
     });
 
+    // Group decisions by timestamp and decider to handle batch reviews
+    const decisionGroups = {};
+
     decisions.forEach(decision => {
-      if (decision.target_type === 'request') {
-        const decider = decision.decided_by_type === 'internal_user'
-          ? users.find(u => u.id === decision.decided_by_id)
-          : clientContacts.find(c => c.id === decision.decided_by_id);
-
-        // Find associated comment created at roughly the same time by same person
-        const associatedComment = visibleComments.find(c => 
-          c.author_type === decision.decided_by_type &&
-          c.author_id === decision.decided_by_id &&
-          Math.abs(new Date(c.created_date) - new Date(decision.created_at || decision.created_date)) < 5000
-        );
-
-        // Get attachments from the associated comment
-        const decisionAttachments = associatedComment 
-          ? attachments.filter(a => a.comment_id === associatedComment.id)
-          : [];
-
-        events.push({
-          type: 'decision',
-          timestamp: new Date(decision.decided_at || decision.created_date),
-          decision,
-          decider,
-          attachments: decisionAttachments,
-        });
+      const key = `${decision.decided_by_type}_${decision.decided_by_id}_${decision.decided_at || decision.created_date}`;
+      if (!decisionGroups[key]) {
+        decisionGroups[key] = [];
       }
+      decisionGroups[key].push(decision);
+    });
+
+    Object.values(decisionGroups).forEach(group => {
+      const firstDecision = group[0];
+      const decider = firstDecision.decided_by_type === 'internal_user'
+        ? users.find(u => u.id === firstDecision.decided_by_id)
+        : clientContacts.find(c => c.id === firstDecision.decided_by_id);
+
+      // Find associated comment created at roughly the same time by same person
+      const associatedComment = visibleComments.find(c => 
+        c.author_type === firstDecision.decided_by_type &&
+        c.author_id === firstDecision.decided_by_id &&
+        Math.abs(new Date(c.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 5000
+      );
+
+      // Get reference images from the associated comment
+      const referenceAttachments = associatedComment 
+        ? attachments.filter(a => a.comment_id === associatedComment.id)
+        : [];
+
+      // Get the selected/reviewed images
+      const selectedImageIds = group
+        .filter(d => d.target_type === 'attachment_image' && d.target_attachment_id)
+        .map(d => d.target_attachment_id);
+      const selectedImages = attachments.filter(a => selectedImageIds.includes(a.id));
+
+      events.push({
+        type: 'decision',
+        timestamp: new Date(firstDecision.decided_at || firstDecision.created_date),
+        decision: firstDecision,
+        decider,
+        referenceAttachments,
+        selectedImages,
+      });
     });
 
     return events.sort((a, b) => b.timestamp - a.timestamp);
