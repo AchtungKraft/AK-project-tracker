@@ -74,32 +74,37 @@ Deno.serve(async (req) => {
         }
 
         let clientContactId;
+        let access = null;
 
-        if (slug) {
-            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
-            if (contacts.length === 0) {
-                return Response.json({ error: 'Invalid slug' }, { 
+        // If authenticated user (internal), skip access verification
+        if (!authenticatedUser) {
+            // Client portal access verification
+            if (slug) {
+                const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+                if (contacts.length === 0) {
+                    return Response.json({ error: 'Invalid slug' }, { 
+                        status: 403,
+                        headers: { 'Access-Control-Allow-Origin': '*' }
+                    });
+                }
+                clientContactId = contacts[0].id;
+            }
+
+            const filter = { project_id: request.project_id, access_status: 'active' };
+            if (token) filter.share_token = token;
+            if (clientContactId) filter.client_contact_id = clientContactId;
+
+            const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
+            
+            if (accesses.length === 0) {
+                return Response.json({ error: 'Invalid access' }, { 
                     status: 403,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
-            clientContactId = contacts[0].id;
+
+            access = accesses[0];
         }
-
-        const filter = { project_id: request.project_id, access_status: 'active' };
-        if (token) filter.share_token = token;
-        if (clientContactId) filter.client_contact_id = clientContactId;
-
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
-        
-        if (accesses.length === 0) {
-            return Response.json({ error: 'Invalid access' }, { 
-                status: 403,
-                headers: { 'Access-Control-Allow-Origin': '*' }
-            });
-        }
-
-        const access = accesses[0];
 
         // Create decisions and comments
         const decisions = [];
