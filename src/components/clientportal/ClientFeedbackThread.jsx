@@ -60,10 +60,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     });
 
     // Group decisions by timestamp and decider to handle batch reviews
+    // Use rounded timestamp (to nearest second) to group decisions made together
     const decisionGroups = {};
 
     decisions.forEach(decision => {
-      const key = `${decision.decided_by_type}_${decision.decided_by_id}_${decision.decided_at || decision.created_date}`;
+      const timestamp = new Date(decision.decided_at || decision.created_date);
+      const roundedTime = Math.floor(timestamp.getTime() / 1000); // Round to nearest second
+      const key = `${decision.decided_by_type}_${decision.decided_by_id}_${roundedTime}`;
       if (!decisionGroups[key]) {
         decisionGroups[key] = [];
       }
@@ -89,44 +92,30 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       // Get the selected/reviewed images
       const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image');
 
-      console.log('Processing decision group:', {
-        selectedImageDecisions,
-        decisionsWithUrls: selectedImageDecisions.filter(d => d.target_image_url),
-        decisionsWithIds: selectedImageDecisions.filter(d => d.target_attachment_id)
-      });
-
       // Create display objects - use stored URL if available, otherwise look up attachment
       const selectedImages = selectedImageDecisions.map(d => {
-        console.log('Processing decision:', d);
         if (d.target_image_url) {
           // New decisions with stored URL
-          const img = {
+          return {
             id: d.target_attachment_id || d.id,
             file_url: d.target_image_url,
             attachment_type: 'image',
             decision: d.decision
           };
-          console.log('Created image from URL:', img);
-          return img;
         } else if (d.target_attachment_id) {
           // Old decisions - look up attachment
           const attachment = attachments.find(a => a.id === d.target_attachment_id);
           if (attachment) {
-            const img = {
+            return {
               id: attachment.id,
               file_url: attachment.file_url,
               attachment_type: 'image',
               decision: d.decision
             };
-            console.log('Created image from attachment:', img);
-            return img;
           }
         }
-        console.log('Skipped decision:', d);
         return null;
       }).filter(Boolean);
-
-      console.log('Final selectedImages:', selectedImages);
 
       events.push({
         type: 'decision',
