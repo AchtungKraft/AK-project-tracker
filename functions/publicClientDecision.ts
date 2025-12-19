@@ -42,11 +42,24 @@ Deno.serve(async (req) => {
             newImages = imagesParam ? JSON.parse(imagesParam) : null;
         }
 
-        if ((!token && !slug) || !requestId || !decision) {
+        if (!requestId || !decision) {
             return Response.json({ error: 'Missing required parameters' }, { 
                 status: 400,
                 headers: { 'Access-Control-Allow-Origin': '*' }
             });
+        }
+
+        // Check if this is an authenticated internal user (no token/slug provided)
+        let authenticatedUser = null;
+        if (!token && !slug) {
+            try {
+                authenticatedUser = await base44.auth.me();
+            } catch (e) {
+                return Response.json({ error: 'Authentication required' }, { 
+                    status: 401,
+                    headers: { 'Access-Control-Allow-Origin': '*' }
+                });
+            }
         }
 
         // Verify access
