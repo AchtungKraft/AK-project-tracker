@@ -275,11 +275,52 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.decision.note}</p>
               )}
 
-              {event.type === 'decision' && event.attachments?.length > 0 && (
+              {event.type === 'decision' && event.selectedImages?.length > 0 && (
+                <div className="pl-10 space-y-3 mb-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {event.selectedImages.map(att => {
+                      const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                      const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+
+                      return (
+                        <div key={att.id} className="relative group">
+                          <div 
+                            className={`
+                              relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                              ${latestDecision?.decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
+                            `}
+                            onClick={() => setSelectedImage(att.file_url)}
+                          >
+                            <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+
+                            {latestDecision && (
+                              <div className="absolute bottom-2 left-2 z-10">
+                                {latestDecision.decision === 'approved' ? (
+                                  <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
+                                    <AlertCircle className="w-3 h-3 mr-1" /> Changes
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {event.type === 'decision' && event.referenceAttachments?.length > 0 && (
                 <div className="pl-10 space-y-3">
-                  {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reference Images</p>
+                  {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {event.attachments.filter(a => a.attachment_type === 'image').map(att => (
+                      {event.referenceAttachments.filter(a => a.attachment_type === 'image').map(att => (
                         <div key={att.id} className="relative group">
                           <div 
                             className="relative w-full h-40 bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
@@ -293,7 +334,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                   )}
 
                   <div className="flex flex-wrap gap-2">
-                    {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
+                    {event.referenceAttachments.filter(a => a.attachment_type !== 'image').map(att => (
                       <a
                         key={att.id}
                         href={att.attachment_type === 'link' ? att.link_url : att.file_url}
