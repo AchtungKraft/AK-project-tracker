@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
@@ -23,36 +23,12 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: request } = useQuery({
-    queryKey: ['clientFeedbackRequest', requestId],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
-    select: (data) => data[0],
-  });
 
-  const { data: comments = [] } = useQuery({
-    queryKey: ['clientFeedbackComments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-  });
 
-  const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-  });
-
-  const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions', requestId],
-    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-  });
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
-  });
-
-  const { data: clientContacts = [] } = useQuery({
-    queryKey: ['clientContacts'],
-    queryFn: () => base44.entities.ClientContact.list(),
-  });
+  // Get comments, decisions, and attachments from props (passed from parent)
+  const comments = request?.comments || [];
+  const decisions = request?.decisions || [];
+  const attachments = request?.attachments || [];
 
   const timeline = useMemo(() => {
     const events = [];
@@ -72,17 +48,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       : comments;
 
     visibleComments.forEach(comment => {
-      const author = comment.author_type === 'internal_user'
-        ? users.find(u => u.id === comment.author_id)
-        : clientContacts.find(c => c.id === comment.author_id);
-
       const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
 
       events.push({
         type: 'comment',
         timestamp: new Date(comment.created_date),
         comment,
-        author,
+        author: comment.author,
         attachments: commentAttachments,
       });
     });
@@ -100,9 +72,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
     Object.values(decisionGroups).forEach(group => {
       const firstDecision = group[0];
-      const decider = firstDecision.decided_by_type === 'internal_user'
-        ? users.find(u => u.id === firstDecision.decided_by_id)
-        : clientContacts.find(c => c.id === firstDecision.decided_by_id);
+      const decider = firstDecision.decider;
 
       // Find associated comment created at roughly the same time by same person
       const associatedComment = visibleComments.find(c => 
@@ -158,7 +128,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     });
 
     return events.sort((a, b) => b.timestamp - a.timestamp);
-  }, [comments, decisions, attachments, users, clientContacts, isClientView, request]);
+  }, [comments, decisions, attachments, isClientView, request]);
 
   const handleImageSelect = (imageId) => {
     setSelectedImageIds(prev => {

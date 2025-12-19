@@ -327,6 +327,7 @@ export default function ClientFeedbackRequestDetail() {
           accessRole={clientAccess.access_role}
           token={token}
           slug={slug}
+          request={requestData}
         />
 
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
