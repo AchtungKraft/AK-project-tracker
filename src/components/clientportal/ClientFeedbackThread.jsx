@@ -146,17 +146,18 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
     setIsSubmitting(true);
     try {
-      console.log('Submitting decision:', { token, slug, requestId, decision: reviewAction, note: reviewNote, targetAttachmentIds: selectedImageIds, newImages: reviewNewImages });
-      
-      const response = await base44.functions.invoke('publicClientDecision', {
-        token: token || '',
-        slug: slug || '',
+      const payload = {
         requestId: requestId,
         decision: reviewAction,
         note: reviewNote,
-        targetAttachmentIds: selectedImageIds,
+        targetAttachmentIds: selectedImageIds.length > 0 ? selectedImageIds : null,
         newImages: reviewNewImages
-      });
+      };
+      
+      if (token) payload.token = token;
+      if (slug) payload.slug = slug;
+      
+      const response = await base44.functions.invoke('publicClientDecision', payload);
 
       console.log('Decision response:', response);
 
