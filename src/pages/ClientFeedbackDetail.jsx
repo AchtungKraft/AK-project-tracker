@@ -338,52 +338,26 @@ export default function ClientFeedbackDetail() {
     }
 
     try {
-      const comment = await createCommentMutation.mutateAsync({
-        request_id: requestId,
-        author_type: 'internal_user',
-        author_id: user.id,
+      const response = await base44.functions.invoke('addInternalComment', {
+        requestId,
         body: newComment,
         visibility,
-        target_type: 'request'
+        photos: uploadedPhotos,
+        files: uploadedFiles,
+        links: newLinks
       });
 
-      for (const photoUrl of uploadedPhotos) {
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
-          attachment_type: 'image',
-          file_url: photoUrl,
-          created_by_type: 'internal_user',
-          created_by_id: user.id
-        });
+      if (response.data?.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+        setNewComment('');
+        setNewLinks(['']);
+        setUploadedPhotos([]);
+        setUploadedFiles([]);
+        toast.success('Comment added');
+      } else {
+        throw new Error(response.data?.error || 'Failed to add comment');
       }
-
-      for (const file of uploadedFiles) {
-        await createAttachmentMutation.mutateAsync({
-          request_id: requestId,
-          comment_id: comment.id,
-          attachment_type: 'file',
-          file_url: file.url,
-          label: file.name,
-          created_by_type: 'internal_user',
-          created_by_id: user.id
-        });
-      }
-
-      for (const link of newLinks) {
-        if (link.trim()) {
-          await createAttachmentMutation.mutateAsync({
-            request_id: requestId,
-            comment_id: comment.id,
-            attachment_type: 'link',
-            link_url: link.trim(),
-            created_by_type: 'internal_user',
-            created_by_id: user.id
-          });
-        }
-      }
-
-      toast.success('Comment added');
     } catch (error) {
       toast.error('Failed to add comment');
     }
