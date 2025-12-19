@@ -47,16 +47,35 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       ? comments.filter(c => c.visibility === 'client_visible')
       : comments;
 
-    visibleComments.forEach(comment => {
-      const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+    // Collect comment IDs that are associated with decisions (to avoid duplicates)
+    const commentIdsWithDecisions = new Set();
 
-      events.push({
-        type: 'comment',
-        timestamp: new Date(comment.created_date),
-        comment,
-        author: comment.author,
-        attachments: commentAttachments,
-      });
+    visibleComments.forEach(comment => {
+      // Check if this comment has associated decisions within 5 seconds
+      const hasAssociatedDecision = decisions.some(d => 
+        d.decided_by_type === comment.author_type &&
+        d.decided_by_id === comment.author_id &&
+        Math.abs(new Date(comment.created_date) - new Date(d.decided_at || d.created_date)) < 5000
+      );
+
+      if (hasAssociatedDecision) {
+        commentIdsWithDecisions.add(comment.id);
+      }
+    });
+
+    // Only add comments that are NOT part of a decision
+    visibleComments.forEach(comment => {
+      if (!commentIdsWithDecisions.has(comment.id)) {
+        const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+
+        events.push({
+          type: 'comment',
+          timestamp: new Date(comment.created_date),
+          comment,
+          author: comment.author,
+          attachments: commentAttachments,
+        });
+      }
     });
 
     // Group decisions by timestamp and decider to handle batch reviews
