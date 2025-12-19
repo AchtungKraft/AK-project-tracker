@@ -116,17 +116,35 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         ? attachments.filter(a => a.comment_id === associatedComment.id)
         : [];
 
-      // Get the selected/reviewed images - use stored URLs from decisions
-      const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image' && d.target_image_url);
+      // Get the selected/reviewed images
+      const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image');
       
-      // Create pseudo-attachment objects from decisions for display
-      const selectedImages = selectedImageDecisions.map(d => ({
-        id: d.target_attachment_id || d.id,
-        file_url: d.target_image_url,
-        attachment_type: 'image',
-        decision: d.decision,
-        fromDecision: true
-      }));
+      // Create display objects - use stored URL if available, otherwise look up attachment
+      const selectedImages = selectedImageDecisions.map(d => {
+        if (d.target_image_url) {
+          // New decisions with stored URL
+          return {
+            id: d.target_attachment_id || d.id,
+            file_url: d.target_image_url,
+            attachment_type: 'image',
+            decision: d.decision,
+            fromDecision: true
+          };
+        } else if (d.target_attachment_id) {
+          // Old decisions - look up attachment
+          const attachment = attachments.find(a => a.id === d.target_attachment_id);
+          if (attachment) {
+            return {
+              id: attachment.id,
+              file_url: attachment.file_url,
+              attachment_type: 'image',
+              decision: d.decision,
+              fromDecision: true
+            };
+          }
+        }
+        return null;
+      }).filter(Boolean);
 
       events.push({
         type: 'decision',
