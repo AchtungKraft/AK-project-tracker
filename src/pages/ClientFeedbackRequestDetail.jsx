@@ -285,7 +285,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type !== 'image_review' && (
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
