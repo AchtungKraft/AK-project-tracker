@@ -129,6 +129,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         decider,
         referenceAttachments,
         selectedImages,
+        groupedDecisions: group,
       });
     });
 
@@ -280,7 +281,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {event.selectedImages.map(att => {
-                      const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                      const imageDecisions = event.groupedDecisions.filter(d => d.target_attachment_id === att.id);
                       const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
 
                       return (
