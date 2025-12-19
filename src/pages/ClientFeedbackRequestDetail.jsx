@@ -79,7 +79,7 @@ export default function ClientFeedbackRequestDetail() {
         token,
         slug,
         requestId,
-        comment: data.body,
+        comment: { body: data.body },
         attachments: data.attachments || []
       });
       return response.data;
@@ -204,7 +204,7 @@ export default function ClientFeedbackRequestDetail() {
       // Add photos
       uploadedPhotos.forEach(url => {
         attachments.push({
-          attachment_type: 'image',
+          type: 'image',
           file_url: url
         });
       });
@@ -212,7 +212,7 @@ export default function ClientFeedbackRequestDetail() {
       // Add files
       uploadedFiles.forEach(file => {
         attachments.push({
-          attachment_type: 'file',
+          type: 'file',
           file_url: file.url,
           label: file.name
         });
@@ -222,14 +222,14 @@ export default function ClientFeedbackRequestDetail() {
       newLinks.forEach(link => {
         if (link.trim()) {
           attachments.push({
-            attachment_type: 'link',
+            type: 'link',
             link_url: link.trim()
           });
         }
       });
 
       await createCommentMutation.mutateAsync({
-        body: { body: newComment },
+        body: newComment,
         attachments
       });
 
