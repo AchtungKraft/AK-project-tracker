@@ -47,44 +47,25 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       ? comments.filter(c => c.visibility === 'client_visible')
       : comments;
 
-    // Collect comment IDs that are associated with decisions (to avoid duplicates)
-    const commentIdsWithDecisions = new Set();
-
+    // Add standalone comments (not associated with decisions)
     visibleComments.forEach(comment => {
-      // Check if this comment has associated decisions within 5 seconds
-      const hasAssociatedDecision = decisions.some(d => 
-        d.decided_by_type === comment.author_type &&
-        d.decided_by_id === comment.author_id &&
-        Math.abs(new Date(comment.created_date) - new Date(d.decided_at || d.created_date)) < 5000
-      );
+      const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
 
-      if (hasAssociatedDecision) {
-        commentIdsWithDecisions.add(comment.id);
-      }
-    });
-
-    // Only add comments that are NOT part of a decision
-    visibleComments.forEach(comment => {
-      if (!commentIdsWithDecisions.has(comment.id)) {
-        const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
-
-        events.push({
-          type: 'comment',
-          timestamp: new Date(comment.created_date),
-          comment,
-          author: comment.author,
-          attachments: commentAttachments,
-        });
-      }
+      events.push({
+        type: 'comment',
+        timestamp: new Date(comment.created_date),
+        comment,
+        author: comment.author,
+        attachments: commentAttachments,
+      });
     });
 
     // Group decisions by timestamp and decider to handle batch reviews
-    // Use rounded timestamp (to nearest second) to group decisions made together
     const decisionGroups = {};
 
     decisions.forEach(decision => {
       const timestamp = new Date(decision.decided_at || decision.created_date);
-      const roundedTime = Math.floor(timestamp.getTime() / 1000); // Round to nearest second
+      const roundedTime = Math.floor(timestamp.getTime() / 1000);
       const key = `${decision.decided_by_type}_${decision.decided_by_id}_${roundedTime}`;
       if (!decisionGroups[key]) {
         decisionGroups[key] = [];
@@ -96,25 +77,19 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const firstDecision = group[0];
       const decider = firstDecision.decider;
 
-      // Find associated comment created at roughly the same time by same person
-      const associatedComment = visibleComments.find(c => 
-        c.author_type === firstDecision.decided_by_type &&
-        c.author_id === firstDecision.decided_by_id &&
-        Math.abs(new Date(c.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 5000
+      // Get reference images created at the same time
+      const referenceAttachments = attachments.filter(a => 
+        !a.comment_id &&
+        a.created_by_type === firstDecision.decided_by_type &&
+        a.created_by_id === firstDecision.decided_by_id &&
+        Math.abs(new Date(a.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 2000
       );
-
-      // Get reference images from the associated comment
-      const referenceAttachments = associatedComment 
-        ? attachments.filter(a => a.comment_id === associatedComment.id)
-        : [];
 
       // Get the selected/reviewed images
       const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image');
 
-      // Create display objects - use stored URL if available, otherwise look up attachment
       const selectedImages = selectedImageDecisions.map(d => {
         if (d.target_image_url) {
-          // New decisions with stored URL
           return {
             id: d.target_attachment_id || d.id,
             file_url: d.target_image_url,
@@ -122,7 +97,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
             decision: d.decision
           };
         } else if (d.target_attachment_id) {
-          // Old decisions - look up attachment
           const attachment = attachments.find(a => a.id === d.target_attachment_id);
           if (attachment) {
             return {

@@ -106,8 +106,9 @@ Deno.serve(async (req) => {
             access = accesses[0];
         }
 
-        // Create decisions and comments
+        // Create decisions with a single timestamp for all records
         const decisions = [];
+        const currentTimestamp = new Date().toISOString();
         
         const decidedByType = authenticatedUser ? 'internal_user' : 'client_contact';
         const decidedById = authenticatedUser ? authenticatedUser.id : access.client_contact_id;
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
             // Fetch the attachments to get their URLs
             const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId });
             
-            // Image-level decisions
+            // Image-level decisions with note stored directly
             for (const attachmentId of targetAttachmentIds) {
                 const attachment = attachments.find(a => a.id === attachmentId);
                 const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
@@ -124,38 +125,26 @@ Deno.serve(async (req) => {
                     decided_by_type: decidedByType,
                     decided_by_id: decidedById,
                     decision,
-                    note,
+                    note: note || null,
                     target_type: 'attachment_image',
                     target_attachment_id: attachmentId,
                     target_image_url: attachment?.file_url || null,
-                    decided_at: new Date().toISOString()
+                    decided_at: currentTimestamp
                 });
                 decisions.push(newDecision);
             }
 
-            // Create a single comment summarizing the image review
-            const actionLabel = decision === 'approved' ? 'Approved' : 'Requested changes on';
-            const commentBody = `${actionLabel} ${targetAttachmentIds.length} image(s)${note ? ': ' + note : ''}`;
-            
-            const comment = await base44.asServiceRole.entities.ClientFeedbackComment.create({
-                request_id: requestId,
-                author_type: decidedByType,
-                author_id: decidedById,
-                body: commentBody,
-                visibility: 'client_visible',
-                target_type: 'request',
-            });
-
-            // Attach new images to the comment if provided
+            // Attach new reference images if provided
             if (newImages && newImages.length > 0) {
                 for (const imageUrl of newImages) {
                     await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                         request_id: requestId,
-                        comment_id: comment.id,
+                        comment_id: null,
                         attachment_type: 'image',
                         file_url: imageUrl,
                         created_by_type: decidedByType,
                         created_by_id: decidedById,
+                        created_date: currentTimestamp
                     });
                 }
             }
@@ -168,27 +157,16 @@ Deno.serve(async (req) => {
                 decision,
                 note,
                 target_type: 'request',
-                decided_at: new Date().toISOString()
+                decided_at: currentTimestamp
             });
             decisions.push(newDecision);
-
-            // Create comment for request decision
-            const commentBody = `${decision === 'approved' ? 'Approved' : 'Requested changes'}${note ? ': ' + note : ''}`;
-            await base44.asServiceRole.entities.ClientFeedbackComment.create({
-                request_id: requestId,
-                author_type: decidedByType,
-                author_id: decidedById,
-                body: commentBody,
-                visibility: 'client_visible',
-                target_type: 'request',
-            });
         }
 
         // Update request status if changes requested
         if (decision === 'changes_requested') {
             await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
                 status: 'changes_requested',
-                posted_at: new Date().toISOString()
+                posted_at: currentTimestamp
             });
         }
 
