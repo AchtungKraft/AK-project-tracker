@@ -13,7 +13,20 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const { token, slug, requestId } = await req.json();
+        let token, slug, requestId;
+        
+        // Handle both direct POST and SDK invoke
+        if (req.method === 'POST') {
+            const body = await req.json();
+            token = body.token;
+            slug = body.slug;
+            requestId = body.requestId;
+        } else {
+            const url = new URL(req.url);
+            token = url.searchParams.get('token');
+            slug = url.searchParams.get('slug');
+            requestId = url.searchParams.get('requestId');
+        }
 
         if ((!token && !slug) || !requestId) {
             return Response.json({ error: 'Missing required parameters' }, { 

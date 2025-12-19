@@ -13,7 +13,27 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const { token, slug, requestId, comment, attachments } = await req.json();
+        let token, slug, requestId, comment, attachments;
+        
+        // Handle both direct POST and SDK invoke
+        if (req.method === 'POST') {
+            const body = await req.json();
+            token = body.token;
+            slug = body.slug;
+            requestId = body.requestId;
+            comment = body.comment;
+            attachments = body.attachments;
+        } else {
+            const url = new URL(req.url);
+            token = url.searchParams.get('token');
+            slug = url.searchParams.get('slug');
+            requestId = url.searchParams.get('requestId');
+            // For complex objects via GET, they need to be JSON encoded
+            const commentParam = url.searchParams.get('comment');
+            const attachmentsParam = url.searchParams.get('attachments');
+            comment = commentParam ? JSON.parse(commentParam) : null;
+            attachments = attachmentsParam ? JSON.parse(attachmentsParam) : null;
+        }
 
         if ((!token && !slug) || !requestId) {
             return Response.json({ error: 'Missing required parameters' }, { 
