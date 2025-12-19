@@ -35,9 +35,10 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
     const requestAttachments = attachments.filter(a => !a.comment_id);
     if (requestAttachments.length > 0 || request?.posted_at) {
+      const timestamp = request?.posted_at || request?.created_date;
       events.push({
         type: 'request_post',
-        timestamp: new Date(request?.posted_at || request?.created_date || new Date()),
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
         message: 'Review Started',
         attachments: requestAttachments,
       });
@@ -53,7 +54,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       events.push({
         type: 'comment',
-        timestamp: new Date(comment.created_date),
+        timestamp: new Date(comment.created_date || comment.updated_date),
         comment,
         author: comment.author,
         attachments: commentAttachments,
@@ -64,7 +65,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     const decisionGroups = {};
 
     decisions.forEach(decision => {
-      const timestamp = new Date(decision.decided_at || decision.created_date);
+      const timestampStr = decision.decided_at || decision.created_date;
+      const timestamp = new Date(timestampStr);
       const roundedTime = Math.floor(timestamp.getTime() / 1000);
       const key = `${decision.decided_by_type}_${decision.decided_by_id}_${roundedTime}`;
       if (!decisionGroups[key]) {
@@ -110,9 +112,10 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         return null;
       }).filter(Boolean);
 
+      const timestampStr = firstDecision.decided_at || firstDecision.created_date;
       events.push({
         type: 'decision',
-        timestamp: new Date(firstDecision.decided_at || firstDecision.created_date),
+        timestamp: new Date(timestampStr),
         decision: firstDecision,
         decider,
         referenceAttachments,
@@ -121,7 +124,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       });
     });
 
-    return events.sort((a, b) => b.timestamp - a.timestamp);
+    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [comments, decisions, attachments, isClientView, request]);
 
   const handleImageSelect = (imageId) => {
