@@ -172,7 +172,7 @@ export default function ClientFeedbackRequestDetail() {
     }
 
     try {
-      await base44.functions.invoke('publicClientDecision', {
+      const response = await base44.functions.invoke('publicClientDecision', {
         token,
         slug,
         requestId,
@@ -182,13 +182,17 @@ export default function ClientFeedbackRequestDetail() {
         newImages: []
       });
 
-      queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
-      setRequestDecisionNote('');
-      setShowRequestDecisionForm(false);
-      toast.success('Decision recorded');
+      if (response.data?.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
+        setRequestDecisionNote('');
+        setShowRequestDecisionForm(false);
+        toast.success('Decision recorded');
+      } else {
+        throw new Error(response.data?.error || 'Failed to record decision');
+      }
     } catch (error) {
       console.error('Decision error:', error);
-      toast.error('Failed to record decision');
+      toast.error(error.message || 'Failed to record decision');
     }
   };
 
