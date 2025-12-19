@@ -113,8 +113,12 @@ Deno.serve(async (req) => {
         const decidedById = authenticatedUser ? authenticatedUser.id : access.client_contact_id;
         
         if (targetAttachmentIds && targetAttachmentIds.length > 0) {
+            // Fetch the attachments to get their URLs
+            const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId });
+            
             // Image-level decisions
             for (const attachmentId of targetAttachmentIds) {
+                const attachment = attachments.find(a => a.id === attachmentId);
                 const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                     request_id: requestId,
                     decided_by_type: decidedByType,
@@ -123,6 +127,7 @@ Deno.serve(async (req) => {
                     note,
                     target_type: 'attachment_image',
                     target_attachment_id: attachmentId,
+                    target_image_url: attachment?.file_url || null,
                     decided_at: new Date().toISOString()
                 });
                 decisions.push(newDecision);

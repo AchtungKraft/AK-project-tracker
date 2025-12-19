@@ -116,11 +116,17 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         ? attachments.filter(a => a.comment_id === associatedComment.id)
         : [];
 
-      // Get the selected/reviewed images
-      const selectedImageIds = group
-        .filter(d => d.target_type === 'attachment_image' && d.target_attachment_id)
-        .map(d => d.target_attachment_id);
-      const selectedImages = attachments.filter(a => selectedImageIds.includes(a.id));
+      // Get the selected/reviewed images - use stored URLs from decisions
+      const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image' && d.target_image_url);
+      
+      // Create pseudo-attachment objects from decisions for display
+      const selectedImages = selectedImageDecisions.map(d => ({
+        id: d.target_attachment_id || d.id,
+        file_url: d.target_image_url,
+        attachment_type: 'image',
+        decision: d.decision,
+        fromDecision: true
+      }));
 
       events.push({
         type: 'decision',
@@ -281,33 +287,30 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {event.selectedImages.map(att => {
-                      const imageDecisions = event.groupedDecisions.filter(d => d.target_attachment_id === att.id);
-                      const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+                      const decision = att.fromDecision ? att.decision : 'approved';
 
                       return (
                         <div key={att.id} className="relative group">
                           <div 
                             className={`
                               relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
-                              ${latestDecision?.decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
+                              ${decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
                             `}
                             onClick={() => setSelectedImage(att.file_url)}
                           >
                             <img src={att.file_url} alt="" className="w-full h-full object-contain" />
 
-                            {latestDecision && (
-                              <div className="absolute bottom-2 left-2 z-10">
-                                {latestDecision.decision === 'approved' ? (
-                                  <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
-                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
-                                    <AlertCircle className="w-3 h-3 mr-1" /> Changes
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
+                            <div className="absolute bottom-2 left-2 z-10">
+                              {decision === 'approved' ? (
+                                <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
+                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
+                                  <AlertCircle className="w-3 h-3 mr-1" /> Changes
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
