@@ -229,7 +229,7 @@ export default function ClientFeedbackRequestDetail() {
       });
 
       await createCommentMutation.mutateAsync({
-        body: newComment,
+        body: { body: newComment },
         attachments
       });
 
