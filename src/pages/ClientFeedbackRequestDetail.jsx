@@ -185,8 +185,6 @@ export default function ClientFeedbackRequestDetail() {
       
       const response = await base44.functions.invoke('publicClientDecision', payload);
 
-      console.log('Decision response:', response);
-
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
         setRequestDecisionNote('');
