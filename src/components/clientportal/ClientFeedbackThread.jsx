@@ -302,9 +302,11 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
               {event.type === 'decision' && event.selectedImages?.length > 0 && (
                 <div className="pl-10 space-y-3 mb-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
+                  {console.log('Rendering selectedImages section:', event.selectedImages)}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {event.selectedImages.map(att => {
+                      console.log('Mapping image att:', att);
                       const decision = att.fromDecision ? att.decision : 'approved';
 
                       return (
