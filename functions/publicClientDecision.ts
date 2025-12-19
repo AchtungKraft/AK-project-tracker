@@ -109,13 +109,16 @@ Deno.serve(async (req) => {
         // Create decisions and comments
         const decisions = [];
         
+        const decidedByType = authenticatedUser ? 'internal_user' : 'client_contact';
+        const decidedById = authenticatedUser ? authenticatedUser.id : access.client_contact_id;
+        
         if (targetAttachmentIds && targetAttachmentIds.length > 0) {
             // Image-level decisions
             for (const attachmentId of targetAttachmentIds) {
                 const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                     request_id: requestId,
-                    decided_by_type: 'client_contact',
-                    decided_by_id: access.client_contact_id,
+                    decided_by_type: decidedByType,
+                    decided_by_id: decidedById,
                     decision,
                     note,
                     target_type: 'attachment_image',
@@ -131,8 +134,8 @@ Deno.serve(async (req) => {
             
             const comment = await base44.asServiceRole.entities.ClientFeedbackComment.create({
                 request_id: requestId,
-                author_type: 'client_contact',
-                author_id: access.client_contact_id,
+                author_type: decidedByType,
+                author_id: decidedById,
                 body: commentBody,
                 visibility: 'client_visible',
                 target_type: 'request',
@@ -146,8 +149,8 @@ Deno.serve(async (req) => {
                         comment_id: comment.id,
                         attachment_type: 'image',
                         file_url: imageUrl,
-                        created_by_type: 'client_contact',
-                        created_by_id: access.client_contact_id,
+                        created_by_type: decidedByType,
+                        created_by_id: decidedById,
                     });
                 }
             }
@@ -155,8 +158,8 @@ Deno.serve(async (req) => {
             // Request-level decision
             const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                 request_id: requestId,
-                decided_by_type: 'client_contact',
-                decided_by_id: access.client_contact_id,
+                decided_by_type: decidedByType,
+                decided_by_id: decidedById,
                 decision,
                 note,
                 target_type: 'request',
@@ -168,8 +171,8 @@ Deno.serve(async (req) => {
             const commentBody = `${decision === 'approved' ? 'Approved' : 'Requested changes'}${note ? ': ' + note : ''}`;
             await base44.asServiceRole.entities.ClientFeedbackComment.create({
                 request_id: requestId,
-                author_type: 'client_contact',
-                author_id: access.client_contact_id,
+                author_type: decidedByType,
+                author_id: decidedById,
                 body: commentBody,
                 visibility: 'client_visible',
                 target_type: 'request',
