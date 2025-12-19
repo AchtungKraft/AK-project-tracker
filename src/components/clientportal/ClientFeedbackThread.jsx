@@ -146,7 +146,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
     setIsSubmitting(true);
     try {
-      await base44.functions.invoke('publicClientDecision', {
+      const response = await base44.functions.invoke('publicClientDecision', {
         token: token || '',
         slug: slug || '',
         requestId: requestId,
@@ -156,24 +156,28 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         newImages: reviewNewImages
       });
 
-      toast.success('Review submitted');
-      
-      setSelectedImageIds([]);
-      setReviewNewImages([]);
-      setReviewNote("");
-      setIsReviewing(false);
-      setReviewAction(null);
+      if (response.data?.success) {
+        toast.success('Review submitted');
+        
+        setSelectedImageIds([]);
+        setReviewNewImages([]);
+        setReviewNote("");
+        setIsReviewing(false);
+        setReviewAction(null);
 
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
-      if (token || slug) {
-        queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+        if (token || slug) {
+          queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
+        }
+      } else {
+        throw new Error(response.data?.error || 'Failed to submit review');
       }
     } catch (error) {
       console.error(error);
-      toast.error('Failed to submit review');
+      toast.error(error.message || 'Failed to submit review');
     } finally {
       setIsSubmitting(false);
     }
