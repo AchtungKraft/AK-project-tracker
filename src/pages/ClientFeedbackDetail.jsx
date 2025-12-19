@@ -53,6 +53,22 @@ export default function ClientFeedbackDetail() {
     enabled: !!requestId
   });
 
+  const { data: comments = [] } = useQuery({
+    queryKey: ['clientFeedbackComments', requestId],
+    queryFn: () => base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
+    enabled: !!requestId
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => base44.entities.User.list(),
+  });
+
+  const { data: clientContacts = [] } = useQuery({
+    queryKey: ['clientContacts'],
+    queryFn: () => base44.entities.ClientContact.list(),
+  });
+
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => base44.entities.Project.filter({ id: projectId }),
@@ -537,7 +553,23 @@ export default function ClientFeedbackDetail() {
               setShowCreateTaskModal(true);
             }}
             isClientView={false}
-            accessRole={user?.role} />
+            accessRole={user?.role}
+            request={{
+              ...request,
+              comments: comments.map(c => ({
+                ...c,
+                author: c.author_type === 'internal_user'
+                  ? users.find(u => u.id === c.author_id)
+                  : clientContacts.find(cc => cc.id === c.author_id)
+              })),
+              decisions: decisions.map(d => ({
+                ...d,
+                decider: d.decided_by_type === 'internal_user'
+                  ? users.find(u => u.id === d.decided_by_id)
+                  : clientContacts.find(cc => cc.id === d.decided_by_id)
+              })),
+              attachments
+            }} />
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
