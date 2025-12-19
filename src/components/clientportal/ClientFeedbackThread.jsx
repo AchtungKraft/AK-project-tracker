@@ -54,7 +54,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       events.push({
         type: 'comment',
-        timestamp: new Date(comment.created_date || comment.updated_date),
+        timestamp: new Date(comment.posted_at || comment.created_date),
         comment,
         author: comment.author,
         attachments: commentAttachments,
@@ -84,7 +84,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         !a.comment_id &&
         a.created_by_type === firstDecision.decided_by_type &&
         a.created_by_id === firstDecision.decided_by_id &&
-        Math.abs(new Date(a.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 2000
+        Math.abs(new Date(a.posted_at || a.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 2000
       );
 
       // Get the selected/reviewed images

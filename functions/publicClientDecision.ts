@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
                         file_url: imageUrl,
                         created_by_type: decidedByType,
                         created_by_id: decidedById,
-                        created_date: currentTimestamp
+                        posted_at: currentTimestamp
                     });
                 }
             }

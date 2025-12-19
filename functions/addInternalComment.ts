@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
             body: body || null,
             visibility: visibility || 'client_visible',
             target_type: 'request',
-            created_date: currentTimestamp
+            posted_at: currentTimestamp
         });
 
         // Create attachments with the same timestamp
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
                     file_url: photoUrl,
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
-                    created_date: currentTimestamp
+                    posted_at: currentTimestamp
                 });
                 attachments.push(attachment);
             }
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
                     label: file.name,
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
-                    created_date: currentTimestamp
+                    posted_at: currentTimestamp
                 });
                 attachments.push(attachment);
             }
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
                         link_url: link.trim(),
                         created_by_type: 'internal_user',
                         created_by_id: user.id,
-                        created_date: currentTimestamp
+                        posted_at: currentTimestamp
                     });
                     attachments.push(attachment);
                 }
