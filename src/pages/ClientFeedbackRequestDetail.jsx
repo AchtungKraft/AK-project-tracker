@@ -172,6 +172,8 @@ export default function ClientFeedbackRequestDetail() {
     }
 
     try {
+      console.log('Submitting decision:', { token, slug, requestId, decision: requestDecisionType, note: requestDecisionNote });
+      
       const response = await base44.functions.invoke('publicClientDecision', {
         token,
         slug,
@@ -181,6 +183,8 @@ export default function ClientFeedbackRequestDetail() {
         targetAttachmentIds: null,
         newImages: []
       });
+
+      console.log('Decision response:', response);
 
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
