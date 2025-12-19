@@ -258,7 +258,41 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.decision.note}</p>
               )}
 
-              {event.attachments?.length > 0 && (
+              {event.type === 'decision' && event.attachments?.length > 0 && (
+                <div className="pl-10 space-y-3">
+                  {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {event.attachments.filter(a => a.attachment_type === 'image').map(att => (
+                        <div key={att.id} className="relative group">
+                          <div 
+                            className="relative w-full h-40 bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
+                            onClick={() => setSelectedImage(att.file_url)}
+                          >
+                            <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
+                      <a
+                        key={att.id}
+                        href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                      >
+                        {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {event.type !== 'decision' && event.attachments?.length > 0 && (
                 <div className="pl-10 space-y-3">
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
