@@ -172,43 +172,45 @@ export default function ClientFeedbackDetail() {
     deleteRequestMutation.mutate();
   };
 
-  const handlePostToClient = () => {
+  const handlePostToClient = async () => {
     if (confirm('Post this request to the client? They will be notified.')) {
       const oldStatus = request.status;
       const newStatus = 'posted';
-      updateRequestMutation.mutate({
-        id: requestId,
-        data: { status: newStatus }
-      }, {
-        onSuccess: () => {
-          if (oldStatus !== newStatus) {
-            base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-          }
-          // Send Needs Review email to active clients
-          base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+      
+      try {
+        await base44.functions.invoke('updateRequestStatus', { requestId, status: newStatus });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+        
+        if (oldStatus !== newStatus) {
+          base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
         }
-      });
-      toast.success('Request posted to client');
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+        toast.success('Request posted to client');
+      } catch (error) {
+        toast.error('Failed to post request');
+      }
     }
   };
 
-  const handleResendForApproval = () => {
+  const handleResendForApproval = async () => {
     if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
       const oldStatus = request.status;
       const newStatus = 'posted';
-      updateRequestMutation.mutate({
-        id: requestId,
-        data: { status: newStatus }
-      }, {
-        onSuccess: () => {
-           if (oldStatus !== newStatus) {
-              base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-           }
-           // Send Needs Review email to active clients
-           base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+      
+      try {
+        await base44.functions.invoke('updateRequestStatus', { requestId, status: newStatus });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+        
+        if (oldStatus !== newStatus) {
+          base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
         }
-      });
-      toast.success('Request resent to client');
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+        toast.success('Request resent to client');
+      } catch (error) {
+        toast.error('Failed to resend request');
+      }
     }
   };
 
@@ -300,15 +302,24 @@ export default function ClientFeedbackDetail() {
     }
 
     try {
-      await createRequestDecisionMutation.mutateAsync({
-        request_id: requestId,
-        decided_by_type: 'internal_user',
-        decided_by_id: user.id,
+      const response = await base44.functions.invoke('publicClientDecision', {
+        requestId,
         decision: requestDecisionType,
         note: requestDecisionNote,
-        target_type: 'request',
-        decided_at: new Date().toISOString()
+        targetAttachmentIds: null,
+        newImages: []
       });
+
+      if (response.data?.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+        setRequestDecisionNote('');
+        setShowRequestDecisionForm(false);
+        toast.success('Decision recorded');
+      } else {
+        throw new Error(response.data?.error || 'Failed to record decision');
+      }
     } catch (error) {
       console.error('Decision error:', error);
       toast.error('Failed to record decision');
