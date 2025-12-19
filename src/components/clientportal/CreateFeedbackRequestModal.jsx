@@ -23,7 +23,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackRequest.create(data),
+    mutationFn: (data) => base44.functions.invoke('createFeedbackRequest', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
       toast.success('Feedback request created');
@@ -40,8 +40,6 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
     createMutation.mutate({
       ...formData,
       project_id: projectId,
-      created_by_user_id: userId,
-      status: 'draft',
     });
   };
 
