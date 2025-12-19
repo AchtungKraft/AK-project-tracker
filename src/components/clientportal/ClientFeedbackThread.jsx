@@ -93,11 +93,24 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
           ? users.find(u => u.id === decision.decided_by_id)
           : clientContacts.find(c => c.id === decision.decided_by_id);
 
+        // Find associated comment created at roughly the same time by same person
+        const associatedComment = visibleComments.find(c => 
+          c.author_type === decision.decided_by_type &&
+          c.author_id === decision.decided_by_id &&
+          Math.abs(new Date(c.created_date) - new Date(decision.created_at || decision.created_date)) < 5000
+        );
+
+        // Get attachments from the associated comment
+        const decisionAttachments = associatedComment 
+          ? attachments.filter(a => a.comment_id === associatedComment.id)
+          : [];
+
         events.push({
           type: 'decision',
           timestamp: new Date(decision.decided_at || decision.created_date),
           decision,
           decider,
+          attachments: decisionAttachments,
         });
       }
     });
