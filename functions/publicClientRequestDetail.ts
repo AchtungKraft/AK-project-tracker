@@ -71,15 +71,29 @@ Deno.serve(async (req) => {
         const users = await base44.asServiceRole.entities.User.list();
         const clientContacts = await base44.asServiceRole.entities.ClientContact.list();
 
+        // Enrich comments with author details
+        const enrichedComments = comments.map(comment => {
+            const author = comment.author_type === 'internal_user'
+                ? users.find(u => u.id === comment.author_id)
+                : clientContacts.find(c => c.id === comment.author_id);
+            return { ...comment, author };
+        });
+
+        // Enrich decisions with decider details
+        const enrichedDecisions = decisions.map(decision => {
+            const decider = decision.decided_by_type === 'internal_user'
+                ? users.find(u => u.id === decision.decided_by_id)
+                : clientContacts.find(c => c.id === decision.decided_by_id);
+            return { ...decision, decider };
+        });
+
         return Response.json({
             success: true,
             access,
             request,
-            comments,
-            decisions,
-            attachments,
-            users,
-            clientContacts
+            comments: enrichedComments,
+            decisions: enrichedDecisions,
+            attachments
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
