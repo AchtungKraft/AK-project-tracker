@@ -178,7 +178,7 @@ export default function ClientFeedbackDetail() {
       const newStatus = 'posted';
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: newStatus, posted_at: new Date().toISOString() }
+        data: { status: newStatus }
       }, {
         onSuccess: () => {
           if (oldStatus !== newStatus) {
@@ -198,7 +198,7 @@ export default function ClientFeedbackDetail() {
       const newStatus = 'posted';
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: newStatus, posted_at: new Date().toISOString() }
+        data: { status: newStatus }
       }, {
         onSuccess: () => {
            if (oldStatus !== newStatus) {
