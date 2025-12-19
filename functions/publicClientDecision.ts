@@ -165,8 +165,7 @@ Deno.serve(async (req) => {
         // Update request status if changes requested
         if (decision === 'changes_requested') {
             await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                status: 'changes_requested',
-                posted_at: currentTimestamp
+                status: 'changes_requested'
             });
         }
 
