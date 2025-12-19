@@ -119,10 +119,15 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       // Get the selected/reviewed images
       const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image');
       
+      console.log('Decision group:', group);
+      console.log('Selected image decisions:', selectedImageDecisions);
+      
       // Create display objects - use stored URL if available, otherwise look up attachment
       const selectedImages = selectedImageDecisions.map(d => {
+        console.log('Processing decision:', d);
         if (d.target_image_url) {
           // New decisions with stored URL
+          console.log('Using stored URL:', d.target_image_url);
           return {
             id: d.target_attachment_id || d.id,
             file_url: d.target_image_url,
@@ -133,6 +138,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         } else if (d.target_attachment_id) {
           // Old decisions - look up attachment
           const attachment = attachments.find(a => a.id === d.target_attachment_id);
+          console.log('Looking up attachment:', d.target_attachment_id, 'found:', attachment);
           if (attachment) {
             return {
               id: attachment.id,
@@ -145,6 +151,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         }
         return null;
       }).filter(Boolean);
+      
+      console.log('Final selectedImages:', selectedImages);
 
       events.push({
         type: 'decision',
