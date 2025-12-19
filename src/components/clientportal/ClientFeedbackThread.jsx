@@ -146,6 +146,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
     setIsSubmitting(true);
     try {
+      console.log('Submitting decision:', { token, slug, requestId, decision: reviewAction, note: reviewNote, targetAttachmentIds: selectedImageIds, newImages: reviewNewImages });
+      
       const response = await base44.functions.invoke('publicClientDecision', {
         token: token || '',
         slug: slug || '',
@@ -155,6 +157,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         targetAttachmentIds: selectedImageIds,
         newImages: reviewNewImages
       });
+
+      console.log('Decision response:', response);
 
       if (response.data?.success) {
         toast.success('Review submitted');
