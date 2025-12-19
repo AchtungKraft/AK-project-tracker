@@ -15,17 +15,21 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         let token, slug, requestId, decision, note, targetAttachmentIds, newImages;
         
-        // Handle both direct POST and SDK invoke
-        if (req.method === 'POST') {
-            const body = await req.json();
-            token = body.token;
-            slug = body.slug;
-            requestId = body.requestId;
-            decision = body.decision;
-            note = body.note;
-            targetAttachmentIds = body.targetAttachmentIds;
-            newImages = body.newImages;
-        } else {
+        // Safely parse request parameters
+        try {
+            const contentType = req.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const body = await req.json();
+                token = body.token;
+                slug = body.slug;
+                requestId = body.requestId;
+                decision = body.decision;
+                note = body.note;
+                targetAttachmentIds = body.targetAttachmentIds;
+                newImages = body.newImages;
+            }
+        } catch (e) {
+            // If JSON parsing fails, try URL parameters
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
