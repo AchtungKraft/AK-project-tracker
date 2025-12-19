@@ -157,12 +157,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       if (token) payload.token = token;
       if (slug) payload.slug = slug;
       
-      console.log('Submitting with payload:', payload);
-      console.log('Token:', token, 'Slug:', slug);
-      
       const response = await base44.functions.invoke('publicClientDecision', payload);
-      
-      console.log('Response:', response);
 
       console.log('Decision response:', response);
 
