@@ -172,17 +172,18 @@ export default function ClientFeedbackRequestDetail() {
     }
 
     try {
-      console.log('Submitting decision:', { token, slug, requestId, decision: requestDecisionType, note: requestDecisionNote });
-      
-      const response = await base44.functions.invoke('publicClientDecision', {
-        token,
-        slug,
+      const payload = {
         requestId,
         decision: requestDecisionType,
         note: requestDecisionNote,
         targetAttachmentIds: null,
         newImages: []
-      });
+      };
+      
+      if (token) payload.token = token;
+      if (slug) payload.slug = slug;
+      
+      const response = await base44.functions.invoke('publicClientDecision', payload);
 
       console.log('Decision response:', response);
 
