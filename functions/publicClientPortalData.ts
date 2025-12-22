@@ -44,8 +44,9 @@ Deno.serve(async (req) => {
         // If using slug, first find the client contact
         if (slug) {
             const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+            console.log('Contacts found:', contacts.length, contacts);
             if (contacts.length === 0) {
-                return Response.json({ error: 'Invalid access' }, { 
+                return Response.json({ error: 'ClientContact not found or inactive for slug: ' + slug }, { 
                     status: 403,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
@@ -58,10 +59,15 @@ Deno.serve(async (req) => {
         if (token) filter.share_token = token;
         if (clientContactId) filter.client_contact_id = clientContactId;
 
+        console.log('Looking for access with filter:', filter);
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
+        console.log('Accesses found:', accesses.length, accesses);
         
         if (accesses.length === 0) {
-            return Response.json({ error: 'Invalid access' }, { 
+            return Response.json({ 
+                error: 'No active ProjectClientAccess found',
+                debug: { projectId, clientContactId, token: token ? 'provided' : 'not provided' }
+            }, { 
                 status: 403,
                 headers: { 'Access-Control-Allow-Origin': '*' }
             });
