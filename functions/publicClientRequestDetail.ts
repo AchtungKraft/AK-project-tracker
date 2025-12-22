@@ -49,9 +49,22 @@ Deno.serve(async (req) => {
             });
         }
 
+        // If using slug, first find the client contact
+        let clientContactId;
+        if (slug) {
+            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+            if (contacts.length === 0) {
+                return Response.json({ error: 'Invalid slug' }, { 
+                    status: 403,
+                    headers: { 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+            clientContactId = contacts[0].id;
+        }
+
         const filter = { project_id: request.project_id, access_status: 'active' };
         if (token) filter.share_token = token;
-        if (slug) filter.url_slug = slug;
+        if (clientContactId) filter.client_contact_id = clientContactId;
 
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
         
