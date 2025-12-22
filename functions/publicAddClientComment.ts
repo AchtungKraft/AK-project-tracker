@@ -84,14 +84,19 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // Create comment
+        // Generate server-side timestamp
+        const currentTimestamp = new Date().toISOString();
+
+        // Create comment (handle both string and object format)
+        const commentBody = typeof comment === 'string' ? comment : comment.body;
         const newComment = await base44.asServiceRole.entities.ClientFeedbackComment.create({
             request_id: requestId,
             author_type: 'client_contact',
             author_id: access.client_contact_id,
-            body: comment.body,
+            body: commentBody,
             visibility: 'client_visible',
-            target_type: 'request'
+            target_type: 'request',
+            posted_at: currentTimestamp
         });
 
         // Create attachments
@@ -107,6 +112,7 @@ Deno.serve(async (req) => {
                     label: att.label,
                     created_by_type: 'client_contact',
                     created_by_id: access.client_contact_id,
+                    posted_at: currentTimestamp
                 })
             );
             createdAttachments.push(...await Promise.all(attachmentPromises));
