@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
                 base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: newComment.id,
-                    attachment_type: att.type,
+                    attachment_type: att.attachment_type,
                     file_url: att.file_url,
                     link_url: att.link_url,
                     label: att.label,
