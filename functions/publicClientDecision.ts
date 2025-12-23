@@ -135,21 +135,6 @@ Deno.serve(async (req) => {
                 });
                 decisions.push(newDecision);
             }
-
-            // Attach new reference images if provided
-            if (newImages && newImages.length > 0) {
-                for (const imageUrl of newImages) {
-                    await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
-                        request_id: requestId,
-                        comment_id: null,
-                        attachment_type: 'image',
-                        file_url: imageUrl,
-                        created_by_type: decidedByType,
-                        created_by_id: decidedById,
-                        posted_at: currentTimestamp
-                    });
-                }
-            }
         } else {
             // Request-level decision
             const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
@@ -162,6 +147,21 @@ Deno.serve(async (req) => {
                 decided_at: currentTimestamp
             });
             decisions.push(newDecision);
+        }
+
+        // Create reference images for ALL decision types (both image-level and request-level)
+        if (newImages && newImages.length > 0) {
+            for (const imageUrl of newImages) {
+                await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                    request_id: requestId,
+                    comment_id: null,
+                    attachment_type: 'image',
+                    file_url: imageUrl,
+                    created_by_type: decidedByType,
+                    created_by_id: decidedById,
+                    posted_at: currentTimestamp
+                });
+            }
         }
 
         // Update request status if changes requested
