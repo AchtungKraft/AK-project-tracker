@@ -46,12 +46,23 @@ Deno.serve(async (req) => {
             const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
             console.log('Contacts found:', contacts.length, contacts);
             if (contacts.length === 0) {
-                return Response.json({ error: 'ClientContact not found or inactive for slug: ' + slug }, { 
-                    status: 403,
+                return Response.json({ error: `Client contact not found for slug: "${slug}". Please verify the slug is correct and the contact is active.` }, { 
+                    status: 404,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
             clientContactId = contacts[0].id;
+        }
+
+        // Verify project exists before checking access
+        const projects = await base44.asServiceRole.entities.Project.filter({ id: projectId });
+        const project = projects[0];
+
+        if (!project) {
+            return Response.json({ error: `Project not found with id: "${projectId}". Please verify the project ID is correct.` }, { 
+                status: 404,
+                headers: { 'Access-Control-Allow-Origin': '*' }
+            });
         }
 
         // Build filter for ProjectClientAccess
@@ -62,11 +73,17 @@ Deno.serve(async (req) => {
         console.log('Looking for access with filter:', filter);
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
         console.log('Accesses found:', accesses.length, accesses);
-        
+
         if (accesses.length === 0) {
             return Response.json({ 
-                error: 'No active ProjectClientAccess found',
-                debug: { projectId, clientContactId, token: token ? 'provided' : 'not provided' }
+                error: `No active access found for this project. Client contact "${clientContactId || 'N/A'}" does not have active access to project "${projectId}". Please create a ProjectClientAccess record or verify access has not been revoked.`,
+                details: { 
+                    projectId, 
+                    projectName: project.name,
+                    clientContactId: clientContactId || null, 
+                    tokenProvided: !!token,
+                    suggestion: 'Create a ProjectClientAccess record with access_status="active" linking this client to this project.'
+                }
             }, { 
                 status: 403,
                 headers: { 'Access-Control-Allow-Origin': '*' }
@@ -74,16 +91,6 @@ Deno.serve(async (req) => {
         }
 
         const access = accesses[0];
-
-        const projects = await base44.asServiceRole.entities.Project.filter({ id: projectId });
-        const project = projects[0];
-
-        if (!project) {
-            return Response.json({ error: 'Project not found' }, { 
-                status: 404,
-                headers: { 'Access-Control-Allow-Origin': '*' }
-            });
-        }
 
         const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
         const visibleRequests = requests.filter(r => r.status !== 'draft');
