@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Code, Database, FileText, Users, Package, FolderKanban, CheckSquare, MessageSquare, Calendar } from "lucide-react";
+import { Code, Database, FileText, Users, Package, FolderKanban, CheckSquare, MessageSquare, Calendar, Map, FileCode, Shield, GitBranch, AlertTriangle } from "lucide-react";
 
 export default function TechSpecs() {
   return (
@@ -17,12 +17,16 @@ export default function TechSpecs() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="bg-gray-800 border border-gray-700">
+          <TabsList className="bg-gray-800 border border-gray-700 flex-wrap h-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="pages">Pages</TabsTrigger>
             <TabsTrigger value="entities">Entities</TabsTrigger>
             <TabsTrigger value="functions">Backend Functions</TabsTrigger>
             <TabsTrigger value="components">Components</TabsTrigger>
+            <TabsTrigger value="systemmap">System Map</TabsTrigger>
+            <TabsTrigger value="pagecontracts">Page Contracts</TabsTrigger>
+            <TabsTrigger value="rules">Rules Catalog</TabsTrigger>
+            <TabsTrigger value="changes">Change Management</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -571,6 +575,997 @@ export default function TechSpecs() {
                       <p className="text-xs text-gray-400">Reusable tree/hierarchy component</p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="systemmap" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Map className="w-5 h-5 text-red-500" />
+                  System Map
+                </CardTitle>
+                <p className="text-sm text-gray-400">Complete inventory of all modules, pages, components, and data structures</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-red-400">Development Rule</p>
+                    <p className="text-sm text-gray-300 mt-1">When new pages or components are created, this System Map MUST be updated with stable IDs following Module_Page_Function naming convention.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Modules</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-2">Core Modules</h4>
+                    <ul className="space-y-1 text-sm">
+                      <li>• <strong>Project Management</strong> - Projects, Tasks, Kanban boards</li>
+                      <li>• <strong>Parts Inventory</strong> - Parts tracking, locations, vendors</li>
+                      <li>• <strong>Client Portal</strong> - Feedback requests, approvals, comments</li>
+                      <li>• <strong>Team Management</strong> - Users, team members, access control</li>
+                      <li>• <strong>Configuration</strong> - Admin settings, types, categories, statuses</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Pages with Stable IDs</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">PM_DASH_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">Dashboard</h4>
+                      <p className="text-xs text-gray-400">Route: /Dashboard</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">PM_PRIO_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">PriorityDashboard</h4>
+                      <p className="text-xs text-gray-400">Route: /PriorityDashboard</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">PM_PROJ_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">Projects</h4>
+                      <p className="text-xs text-gray-400">Route: /Projects</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">PM_PROJD_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ProjectDetail</h4>
+                      <p className="text-xs text-gray-400">Route: /ProjectDetail?id=</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-blue-600 mb-2">PM_MYPR_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">MyProjects</h4>
+                      <p className="text-xs text-gray-400">Route: /MyProjects</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module (Company Users)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-blue-600 mb-2">PM_MYPRIOR_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">MyPriorities</h4>
+                      <p className="text-xs text-gray-400">Route: /MyPriorities</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Project Management Module (Company Users)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">TASK_EXP_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">TasksExplorer</h4>
+                      <p className="text-xs text-gray-400">Route: /TasksExplorer</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Task Management</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">PARTS_TRACK_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">PartsTracker</h4>
+                      <p className="text-xs text-gray-400">Route: /PartsTracker</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Parts Inventory Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-green-600 mb-2">CP_PROJ_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ClientProjects</h4>
+                      <p className="text-xs text-gray-400">Route: /ClientProjects?slug=</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Client Portal Module (Public)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-green-600 mb-2">CP_PORTAL_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ClientProjectPortal</h4>
+                      <p className="text-xs text-gray-400">Route: /ClientProjectPortal?slug=&projectId=</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Client Portal Module (Public)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-green-600 mb-2">CP_REQDET_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ClientFeedbackRequestDetail</h4>
+                      <p className="text-xs text-gray-400">Route: /ClientFeedbackRequestDetail?slug=&requestId=</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Client Portal Module (Public)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">CP_FEEDDET_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ClientFeedbackDetail</h4>
+                      <p className="text-xs text-gray-400">Route: /ClientFeedbackDetail?id=&projectId=</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Client Portal Module (Internal)</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">ADMIN_CONF_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">AdminConfig</h4>
+                      <p className="text-xs text-gray-400">Route: /AdminConfig</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Configuration Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">ADMIN_REP_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">Reports</h4>
+                      <p className="text-xs text-gray-400">Route: /Reports</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Reporting Module</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-red-600 mb-2">ADMIN_SPEC_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">TechSpecs</h4>
+                      <p className="text-xs text-gray-400">Route: /TechSpecs</p>
+                      <p className="text-xs text-gray-500 mt-1">Owner: Documentation Module</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Shared Components with IDs</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_THREAD_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ClientFeedbackThread</h4>
+                      <p className="text-xs text-gray-400">Threaded comments & decisions</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_KANBAN_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ProjectKanban</h4>
+                      <p className="text-xs text-gray-400">Drag-drop task board</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_TASKDET_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">TaskDetailDrawer</h4>
+                      <p className="text-xs text-gray-400">Task editing sidebar</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_IMGMOD_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ImageModal</h4>
+                      <p className="text-xs text-gray-400">Full-screen image viewer</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_HIER_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">HierarchicalList</h4>
+                      <p className="text-xs text-gray-400">Tree/hierarchy component</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_PROJCARD_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ProjectCard</h4>
+                      <p className="text-xs text-gray-400">Project display card</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_TASKCARD_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">TaskCard</h4>
+                      <p className="text-xs text-gray-400">Task display card</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_ACCESS_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ManageClientAccessModal</h4>
+                      <p className="text-xs text-gray-400">Client access management</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Data Entities Summary</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="font-semibold text-white">Core Entities (10)</h4>
+                      <p className="text-xs text-gray-400 mt-1">Project, Task, Part, PartBuildAssignment, JournalEntry, Comment, TaskComment, ProjectKanbanBucket, TeamMember, ActivityLog</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="font-semibold text-white">Client Portal Entities (7)</h4>
+                      <p className="text-xs text-gray-400 mt-1">ClientContact, ProjectClientAccess, ClientFeedbackRequest, ClientFeedbackComment, ClientFeedbackDecision, ClientFeedbackAttachment, ClientFeedbackTaskLink</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="font-semibold text-white">Configuration Entities (8)</h4>
+                      <p className="text-xs text-gray-400 mt-1">ProjectType, TaskCategory, StatusList, PartCategory, Vendor, Location, CarMake, CarModel, CarYear</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="font-semibold text-white">System Entities (2)</h4>
+                      <p className="text-xs text-gray-400 mt-1">User (built-in), Order</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Roles & Permission Levels</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-gradient-to-r from-red-900/30 to-transparent border-l-4 border-red-600 p-4 rounded">
+                      <h4 className="font-semibold text-white mb-2">Achtung Kraft Members</h4>
+                      <ul className="text-sm space-y-1 text-gray-300">
+                        <li>• Full access to all projects and tasks</li>
+                        <li>• Can create, edit, delete any record</li>
+                        <li>• Access to admin configuration</li>
+                        <li>• Can manage client access</li>
+                        <li>• Can view all reports and analytics</li>
+                        <li>• Can view as other companies (testing)</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-blue-900/30 to-transparent border-l-4 border-blue-600 p-4 rounded">
+                      <h4 className="font-semibold text-white mb-2">Company Users</h4>
+                      <ul className="text-sm space-y-1 text-gray-300">
+                        <li>• Access only to projects assigned to their company</li>
+                        <li>• Can view and update tasks assigned to them</li>
+                        <li>• Cannot access admin configuration</li>
+                        <li>• Cannot manage client access</li>
+                        <li>• Limited to MyProjects and MyPriorities pages</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-green-900/30 to-transparent border-l-4 border-green-600 p-4 rounded">
+                      <h4 className="font-semibold text-white mb-2">Client Contacts</h4>
+                      <ul className="text-sm space-y-1 text-gray-300">
+                        <li>• Access via slug-based public URLs (no login)</li>
+                        <li>• View feedback requests on assigned projects only</li>
+                        <li>• Can comment and add attachments</li>
+                        <li>• Can approve or request changes (if approver role)</li>
+                        <li>• Cannot see internal-only comments</li>
+                        <li>• No access to project management features</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pagecontracts" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-red-500" />
+                  Page Contracts
+                </CardTitle>
+                <p className="text-sm text-gray-400">Detailed contracts for each app page defining behavior, data, and constraints</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                <div className="bg-amber-900/20 border border-amber-800 rounded-lg p-4">
+                  <h3 className="font-semibold text-amber-400 mb-2">Page Contract Index</h3>
+                  <p className="text-sm text-gray-300">Click any page below to view its detailed contract:</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <a href="#contract-dashboard" className="bg-gray-800/50 hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700">
+                    <Badge className="bg-red-600 mb-2">PM_DASH_001</Badge>
+                    <h4 className="font-semibold text-white">Dashboard Contract</h4>
+                    <p className="text-xs text-gray-400 mt-1">Main project overview page</p>
+                  </a>
+
+                  <a href="#contract-priorities" className="bg-gray-800/50 hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700">
+                    <Badge className="bg-red-600 mb-2">PM_PRIO_001</Badge>
+                    <h4 className="font-semibold text-white">Priority Dashboard Contract</h4>
+                    <p className="text-xs text-gray-400 mt-1">High-priority tasks view</p>
+                  </a>
+
+                  <a href="#contract-clientportal" className="bg-gray-800/50 hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700">
+                    <Badge className="bg-green-600 mb-2">CP_PORTAL_001</Badge>
+                    <h4 className="font-semibold text-white">Client Portal Contract</h4>
+                    <p className="text-xs text-gray-400 mt-1">Public client feedback view</p>
+                  </a>
+
+                  <a href="#contract-template" className="bg-gray-800/50 hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700">
+                    <Badge className="bg-purple-600 mb-2">TEMPLATE</Badge>
+                    <h4 className="font-semibold text-white">Page Contract Template</h4>
+                    <p className="text-xs text-gray-400 mt-1">Use this template for new pages</p>
+                  </a>
+                </div>
+
+                <div id="contract-template" className="bg-gray-900/50 rounded-lg p-6 border-2 border-purple-700 space-y-4">
+                  <h3 className="text-xl font-semibold text-purple-400">Page Contract Template</h3>
+                  <p className="text-sm text-gray-400">Use this template when creating contracts for new pages</p>
+
+                  <div className="space-y-4 text-sm">
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Page Identification</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Page ID:</strong> [MODULE_PAGE_001]</li>
+                        <li>• <strong>Route:</strong> /PageName?params</li>
+                        <li>• <strong>Owner:</strong> [Module Name]</li>
+                        <li>• <strong>Last Updated:</strong> [Date]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Primary Goal</h4>
+                      <p className="text-gray-300">[One sentence describing what this page accomplishes for the user]</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">UI Regions + Component IDs</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Header:</strong> [COMP_XXX_001] - [Description]</li>
+                        <li>• <strong>Main Content:</strong> [COMP_YYY_001] - [Description]</li>
+                        <li>• <strong>Sidebar:</strong> [COMP_ZZZ_001] - [Description]</li>
+                        <li>• <strong>Footer/Actions:</strong> [COMP_AAA_001] - [Description]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Data Dependencies</h4>
+                      <ul className="space-y-2 text-gray-300">
+                        <li>
+                          <strong>Query 1:</strong> [Entity.list/filter]
+                          <ul className="ml-4 mt-1 text-xs text-gray-400">
+                            <li>- Filters: [field: value]</li>
+                            <li>- Sorting: [field, direction]</li>
+                            <li>- Pagination: [limit, offset]</li>
+                          </ul>
+                        </li>
+                        <li>
+                          <strong>Query 2:</strong> [Entity.list/filter]
+                          <ul className="ml-4 mt-1 text-xs text-gray-400">
+                            <li>- Filters: [field: value]</li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">States</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Loading:</strong> Show spinner, disable interactions</li>
+                        <li>• <strong>Empty:</strong> "No [items] found" message with create button</li>
+                        <li>• <strong>Error:</strong> Display error message, show retry button</li>
+                        <li>• <strong>Permission Denied:</strong> Redirect to [page] or show access message</li>
+                        <li>• <strong>Success:</strong> Display data in [layout]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Actions/Events</h4>
+                      <ul className="space-y-2 text-gray-300">
+                        <li>
+                          <strong>Action 1:</strong> [Button/Event Name]
+                          <ul className="ml-4 mt-1 text-xs text-gray-400">
+                            <li>- Triggers: [mutation/function]</li>
+                            <li>- Invalidates: [query keys]</li>
+                            <li>- Success: [toast/navigation]</li>
+                            <li>- Error: [error handling]</li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3 border-2 border-red-600">
+                      <h4 className="font-semibold text-red-400 mb-2">Guardrails (Must Not Change)</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• [Critical behavior that must remain unchanged]</li>
+                        <li>• [Data integrity rule]</li>
+                        <li>• [Access control requirement]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Mobile Layout Requirements</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• Responsive breakpoint: [768px / 1024px]</li>
+                        <li>• Mobile navigation: [bottom nav / sidebar]</li>
+                        <li>• Touch targets: minimum 44px</li>
+                        <li>• Simplified UI: [what changes on mobile]</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="contract-dashboard" className="bg-gray-900/50 rounded-lg p-6 border border-gray-700 space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <Badge className="bg-red-600 mb-2">PM_DASH_001</Badge>
+                      <h3 className="text-xl font-semibold text-white">Dashboard Page Contract</h3>
+                    </div>
+                    <Badge className="bg-green-600">Active</Badge>
+                  </div>
+
+                  <div className="space-y-4 text-sm">
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Page Identification</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Route:</strong> /Dashboard</li>
+                        <li>• <strong>Owner:</strong> Project Management Module</li>
+                        <li>• <strong>Access:</strong> Achtung Kraft Members only</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Primary Goal</h4>
+                      <p className="text-gray-300">Provide Achtung Kraft members with a comprehensive overview of all active projects with filtering, grouping, and quick access to project details.</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">UI Regions</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Header:</strong> Page title, refresh button, "New Project" button</li>
+                        <li>• <strong>Filters:</strong> Search bar, Group By selector, Status/Type filters</li>
+                        <li>• <strong>Main Content:</strong> COMP_PROJCARD_001 grid grouped by selected criteria</li>
+                        <li>• <strong>Modals:</strong> CreateProjectModal, EditProjectModal</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Data Dependencies</h4>
+                      <ul className="space-y-2 text-gray-300">
+                        <li><strong>Project.list():</strong> All projects, no filters, sorted by created_date descending</li>
+                        <li><strong>StatusList.filter({"{"}scope: 'Project'{"}"}):</strong> Available project statuses</li>
+                        <li><strong>ProjectType.list():</strong> Project type categories for filtering/grouping</li>
+                        <li><strong>TeamMember.list():</strong> For team assignments display</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3 border-2 border-red-600">
+                      <h4 className="font-semibold text-red-400 mb-2">Guardrails</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• MUST NOT allow company users to access this page (redirect to MyProjects)</li>
+                        <li>• MUST invalidate queries after project create/update</li>
+                        <li>• Project cards MUST show featured_image_url or default placeholder</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rules" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-red-500" />
+                  Rules Catalog
+                </CardTitle>
+                <p className="text-sm text-gray-400">Centralized repository of all business rules, state machines, and validation logic</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-red-400">Development Rule</p>
+                    <p className="text-sm text-gray-300 mt-1">Page logic MUST reference Rules Catalog entries rather than redefining rules ad-hoc. All new validation or state logic must be documented here first.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Status & State Machines</h3>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-3">Project Status State Machine</h4>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-400">Allowed transitions:</p>
+                      <div className="bg-gray-900 rounded p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-gray-600">New</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-yellow-600">On Hold</Badge>
+                          <span className="text-gray-500">|</span>
+                          <Badge className="bg-green-600">Completed</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-yellow-600">On Hold</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                          <span className="text-gray-500">|</span>
+                          <Badge className="bg-red-600">Cancelled</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-green-600">Completed</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-purple-600">Archived</Badge>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>STATE_PROJECT_001</code></p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-3">Task Status State Machine</h4>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-400">Allowed transitions:</p>
+                      <div className="bg-gray-900 rounded p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-gray-600">To Do</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-yellow-600">Blocked</Badge>
+                          <span className="text-gray-500">|</span>
+                          <Badge className="bg-green-600">Completed</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-yellow-600">Blocked</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">In Progress</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-green-600">Completed</Badge>
+                          <span className="text-gray-500">→</span>
+                          <span className="text-gray-400">(final state, set completed_date)</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>STATE_TASK_001</code></p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-3">Feedback Request Status State Machine</h4>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-400">Allowed transitions:</p>
+                      <div className="bg-gray-900 rounded p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-gray-600">Draft</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">Posted</Badge>
+                          <span className="text-gray-400 text-xs ml-2">(sets posted_at, sends email)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-600">Posted</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-orange-600">Changes Requested</Badge>
+                          <span className="text-gray-500">|</span>
+                          <Badge className="bg-purple-600">Archived</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-orange-600">Changes Requested</Badge>
+                          <span className="text-gray-500">→</span>
+                          <Badge className="bg-blue-600">Posted</Badge>
+                          <span className="text-gray-500">|</span>
+                          <Badge className="bg-purple-600">Archived</Badge>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>STATE_FEEDBACK_001</code></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Validation Rules</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Project Validation</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>name:</strong> Required, max 200 chars</li>
+                        <li>• <strong>vin:</strong> Optional, must be alphanumeric</li>
+                        <li>• <strong>assigned_team:</strong> Must be array of valid TeamMember IDs</li>
+                        <li>• <strong>progress_percent:</strong> 0-100, auto-calculated from tasks</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>VALID_PROJECT_001</code></p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Task Validation</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>name:</strong> Required, max 200 chars</li>
+                        <li>• <strong>project_id:</strong> Required, must reference existing Project</li>
+                        <li>• <strong>due_date:</strong> Cannot be in the past</li>
+                        <li>• <strong>dependencies:</strong> Cannot create circular dependencies</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>VALID_TASK_001</code></p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Client Contact Validation</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>email:</strong> Required, valid email format, unique</li>
+                        <li>• <strong>url_slug:</strong> Required, unique, lowercase, alphanumeric + hyphens</li>
+                        <li>• <strong>name:</strong> Required, max 100 chars</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>VALID_CLIENT_001</code></p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Part Validation</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>part_name:</strong> Required, max 200 chars</li>
+                        <li>• <strong>quantity_on_hand:</strong> Cannot be negative</li>
+                        <li>• <strong>cost, retail:</strong> Must be non-negative numbers</li>
+                        <li>• <strong>status:</strong> Must be "On-Hand", "Need to Buy", or "On-Order"</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>VALID_PART_001</code></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Permission Rules</h3>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-3">Role → Capabilities Matrix</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-900">
+                          <tr>
+                            <th className="p-2 text-left text-gray-400">Page/Feature</th>
+                            <th className="p-2 text-center text-red-400">Achtung Kraft</th>
+                            <th className="p-2 text-center text-blue-400">Company User</th>
+                            <th className="p-2 text-center text-green-400">Client Contact</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-gray-300">
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">Dashboard</td>
+                            <td className="p-2 text-center">✓ Full</td>
+                            <td className="p-2 text-center">✗ Redirect</td>
+                            <td className="p-2 text-center">✗ No Access</td>
+                          </tr>
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">MyProjects</td>
+                            <td className="p-2 text-center">✓ All Projects</td>
+                            <td className="p-2 text-center">✓ Company Only</td>
+                            <td className="p-2 text-center">✗ No Access</td>
+                          </tr>
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">AdminConfig</td>
+                            <td className="p-2 text-center">✓ Full</td>
+                            <td className="p-2 text-center">✗ Redirect</td>
+                            <td className="p-2 text-center">✗ No Access</td>
+                          </tr>
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">Client Portal (Public)</td>
+                            <td className="p-2 text-center">✓ Via URL</td>
+                            <td className="p-2 text-center">✓ Via URL</td>
+                            <td className="p-2 text-center">✓ Slug-based</td>
+                          </tr>
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">Create/Edit Projects</td>
+                            <td className="p-2 text-center">✓ All</td>
+                            <td className="p-2 text-center">✗ Read Only</td>
+                            <td className="p-2 text-center">✗ No Access</td>
+                          </tr>
+                          <tr className="border-t border-gray-700">
+                            <td className="p-2">Approve Feedback</td>
+                            <td className="p-2 text-center">✓ Always</td>
+                            <td className="p-2 text-center">✗ Never</td>
+                            <td className="p-2 text-center">✓ If Approver Role</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3">Rule ID: <code>PERM_ROLES_001</code></p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Notification Rules</h3>
+
+                  <div className="space-y-3">
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Client Feedback Posted</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>Trigger:</strong> Feedback request status changes from "draft" to "posted"</li>
+                        <li>• <strong>Recipient:</strong> All client contacts with access to the project</li>
+                        <li>• <strong>Function:</strong> sendNeedsReviewEmail</li>
+                        <li>• <strong>Content:</strong> Request title, type, due date, portal link</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>NOTIF_FEEDBACK_001</code></p>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Client Decision Made</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <strong>Trigger:</strong> Client submits approval or change request</li>
+                        <li>• <strong>Recipient:</strong> Internal team members assigned to project</li>
+                        <li>• <strong>Function:</strong> sendRequestStatusUpdateEmail</li>
+                        <li>• <strong>Content:</strong> Decision type, client name, request link</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 mt-2">Rule ID: <code>NOTIF_DECISION_001</code></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Naming Conventions</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Status Labels</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• Use Title Case (e.g., "In Progress", "On Hold")</li>
+                        <li>• Keep under 20 characters</li>
+                        <li>• Avoid abbreviations</li>
+                        <li>• Use action-oriented language</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Request Types</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <code>approval</code> - Needs client confirmation</li>
+                        <li>• <code>question</code> - Awaiting client answer</li>
+                        <li>• <code>review</code> - General review request</li>
+                        <li>• <code>update</code> - Informational update</li>
+                        <li>• <code>image_review</code> - Visual design review</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Decision Types</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• <code>approved</code> - Client accepts</li>
+                        <li>• <code>changes_requested</code> - Client wants changes</li>
+                        <li>• <code>rejected</code> - Client declines (rare)</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4">
+                      <h4 className="font-semibold text-white text-sm mb-2">Entity Field Names</h4>
+                      <ul className="text-xs text-gray-300 space-y-1">
+                        <li>• Use snake_case for all fields</li>
+                        <li>• Foreign keys end with _id</li>
+                        <li>• Boolean fields start with is_ or has_</li>
+                        <li>• Dates end with _date or _at</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="changes" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <GitBranch className="w-5 h-5 text-red-500" />
+                  Change Management
+                </CardTitle>
+                <p className="text-sm text-gray-400">Change request specifications and development workflow</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-blue-500 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-blue-400">Development Workflow Rule</p>
+                    <p className="text-sm text-gray-300 mt-1">Any requested change MUST reference Page IDs + Component IDs and include acceptance criteria and test steps before implementation.</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-900/50 rounded-lg p-6 border-2 border-purple-700 space-y-4">
+                  <h3 className="text-xl font-semibold text-purple-400">Change Request Spec Template</h3>
+                  <p className="text-sm text-gray-400">Use this template for all change requests</p>
+
+                  <div className="space-y-4 text-sm">
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Change Identification</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Change ID:</strong> CHG-[YYYY-MM-DD]-[XXX]</li>
+                        <li>• <strong>Date:</strong> [YYYY-MM-DD]</li>
+                        <li>• <strong>Requester:</strong> [Name/Role]</li>
+                        <li>• <strong>Priority:</strong> [Critical / High / Medium / Low]</li>
+                        <li>• <strong>Status:</strong> [Requested / Approved / In Progress / Completed / Rejected]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Affected Components</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>• <strong>Page ID(s):</strong> [PM_DASH_001, CP_PORTAL_001, etc.]</li>
+                        <li>• <strong>Component ID(s):</strong> [COMP_THREAD_001, etc.]</li>
+                        <li>• <strong>Backend Functions:</strong> [publicClientDecision, etc.]</li>
+                        <li>• <strong>Data Entities:</strong> [ClientFeedbackDecision, etc.]</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Behavior Description</h4>
+                      <div className="space-y-2 text-gray-300">
+                        <div>
+                          <strong>Current Behavior:</strong>
+                          <p className="ml-4 text-xs text-gray-400">[Describe exactly what happens now, step by step]</p>
+                        </div>
+                        <div>
+                          <strong>Desired Behavior:</strong>
+                          <p className="ml-4 text-xs text-gray-400">[Describe exactly what should happen, step by step]</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Acceptance Criteria Checklist</h4>
+                      <ul className="space-y-1 text-gray-300">
+                        <li>□ [Specific testable criterion 1]</li>
+                        <li>□ [Specific testable criterion 2]</li>
+                        <li>□ [Specific testable criterion 3]</li>
+                        <li>□ No regression in related features</li>
+                        <li>□ Works on mobile and desktop</li>
+                        <li>□ Handles error states gracefully</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Change Details</h4>
+                      <div className="space-y-2 text-gray-300">
+                        <div>
+                          <strong>UI Changes (Explicit List):</strong>
+                          <ul className="ml-4 text-xs text-gray-400 space-y-1 mt-1">
+                            <li>• [Specific UI element to add/modify/remove]</li>
+                            <li>• [Button text/color/position changes]</li>
+                            <li>• [New form fields or validation messages]</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <strong>Logic Changes (Explicit List):</strong>
+                          <ul className="ml-4 text-xs text-gray-400 space-y-1 mt-1">
+                            <li>• [Business logic modification]</li>
+                            <li>• [State management changes]</li>
+                            <li>• [API call modifications]</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <strong>Data Model Changes (Explicit List):</strong>
+                          <ul className="ml-4 text-xs text-gray-400 space-y-1 mt-1">
+                            <li>• [New entity fields]</li>
+                            <li>• [Modified entity relationships]</li>
+                            <li>• [Data migration required?]</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Edge Cases</h4>
+                      <ul className="space-y-1 text-gray-300 text-xs">
+                        <li>• What happens if [user action] occurs during [process]?</li>
+                        <li>• How to handle missing/invalid data?</li>
+                        <li>• What if user lacks permission?</li>
+                        <li>• Concurrent user scenarios?</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Test Plan Checklist</h4>
+                      <ul className="space-y-1 text-gray-300 text-xs">
+                        <li>□ Test as Achtung Kraft member</li>
+                        <li>□ Test as company user</li>
+                        <li>□ Test as client contact</li>
+                        <li>□ Test on mobile viewport</li>
+                        <li>□ Test with empty/missing data</li>
+                        <li>□ Test concurrent operations</li>
+                        <li>□ Verify query invalidation works</li>
+                        <li>□ Check console for errors</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h4 className="font-semibold text-white mb-2">Related Rules</h4>
+                      <p className="text-xs text-gray-400">Reference Rule IDs from Rules Catalog:</p>
+                      <ul className="space-y-1 text-gray-300 text-xs ml-4 mt-1">
+                        <li>• [STATE_XXX_001] - [Brief description]</li>
+                        <li>• [VALID_YYY_001] - [Brief description]</li>
+                        <li>• [PERM_ZZZ_001] - [Brief description]</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Change Log Index</h3>
+                  <p className="text-sm text-gray-400">Recent change requests:</p>
+
+                  <div className="space-y-3">
+                    <div className="bg-gray-800/50 rounded-lg p-4 border-l-4 border-green-600">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <Badge className="bg-green-600 mb-1">CHG-2025-12-23-001</Badge>
+                          <h4 className="font-semibold text-white text-sm">Fix: New images in change requests not displaying in timeline</h4>
+                        </div>
+                        <Badge className="bg-green-600">Completed</Badge>
+                      </div>
+                      <ul className="text-xs text-gray-400 space-y-1">
+                        <li>• <strong>Affected:</strong> COMP_THREAD_001, publicClientDecision function</li>
+                        <li>• <strong>Change:</strong> Updated attachment filtering logic to use 5s time window and match by creator</li>
+                        <li>• <strong>Date:</strong> 2025-12-23</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-4 border-l-4 border-blue-600">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <Badge className="bg-blue-600 mb-1">CHG-2025-12-23-002</Badge>
+                          <h4 className="font-semibold text-white text-sm">Feature: Add comprehensive documentation system</h4>
+                        </div>
+                        <Badge className="bg-blue-600">In Progress</Badge>
+                      </div>
+                      <ul className="text-xs text-gray-400 space-y-1">
+                        <li>• <strong>Affected:</strong> ADMIN_SPEC_001 (TechSpecs page)</li>
+                        <li>• <strong>Change:</strong> Add System Map, Page Contracts, Rules Catalog, Change Management tabs</li>
+                        <li>• <strong>Date:</strong> 2025-12-23</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-900/50 rounded-lg p-6 border border-gray-700">
+                  <h3 className="text-lg font-semibold text-white mb-3">Development Workflow</h3>
+                  <ol className="space-y-3 text-sm text-gray-300">
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">1.</span>
+                      <div>
+                        <strong>Create Change Request Spec</strong>
+                        <p className="text-xs text-gray-400 mt-1">Fill out template with all required fields, Page/Component IDs, acceptance criteria, and test plan</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">2.</span>
+                      <div>
+                        <strong>Review Rules Catalog</strong>
+                        <p className="text-xs text-gray-400 mt-1">Ensure change aligns with existing state machines, validation rules, and permissions</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">3.</span>
+                      <div>
+                        <strong>Check Page Contracts</strong>
+                        <p className="text-xs text-gray-400 mt-1">Review guardrails and data dependencies for affected pages</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">4.</span>
+                      <div>
+                        <strong>Implement Changes</strong>
+                        <p className="text-xs text-gray-400 mt-1">Make minimal, focused changes that match the spec exactly</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">5.</span>
+                      <div>
+                        <strong>Execute Test Plan</strong>
+                        <p className="text-xs text-gray-400 mt-1">Complete all checklist items from the change request spec</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-bold text-red-500">6.</span>
+                      <div>
+                        <strong>Update Documentation</strong>
+                        <p className="text-xs text-gray-400 mt-1">Update System Map if new pages/components added, update affected Page Contracts, add to Change Log</p>
+                      </div>
+                    </li>
+                  </ol>
                 </div>
               </CardContent>
             </Card>
