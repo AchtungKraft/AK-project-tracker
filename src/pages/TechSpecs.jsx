@@ -27,6 +27,8 @@ export default function TechSpecs() {
             <TabsTrigger value="pagecontracts">Page Contracts</TabsTrigger>
             <TabsTrigger value="rules">Rules Catalog</TabsTrigger>
             <TabsTrigger value="changes">Change Management</TabsTrigger>
+            <TabsTrigger value="clientportal">Client Portal Logic</TabsTrigger>
+            <TabsTrigger value="apisync">API Sync Guide</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -1566,6 +1568,826 @@ export default function TechSpecs() {
                       </div>
                     </li>
                   </ol>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="clientportal" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-red-500" />
+                  Client Portal Business Logic
+                </CardTitle>
+                <p className="text-sm text-gray-400">Comprehensive documentation of client feedback system behavior</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                
+                <div className="space-y-4">
+                  <h3 className="text-2xl font-semibold text-white border-b border-gray-700 pb-2">ClientFeedbackDetail Page Logic</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Badge className="bg-red-600">CP_FEEDDET_001</Badge>
+                      <Badge className="bg-purple-600">Internal Only</Badge>
+                    </div>
+                    <h4 className="font-semibold text-white text-lg">Overview</h4>
+                    <p className="text-sm">Internal authenticated page for managing client feedback requests. Allows team members to view, edit, post, archive requests and interact with client responses.</p>
+                  </div>
+
+                  <div className="bg-gray-900/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white text-lg">Data Flow & Dependencies</h4>
+                    
+                    <div className="space-y-3">
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Initial Data Load</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <code>ClientFeedbackRequest.filter({"{"} id: requestId {"}"})</code> - Main request data</li>
+                          <li>• <code>ClientFeedbackComment.filter({"{"} request_id: requestId {"}"})</code> - All comments (sorted by created_date desc)</li>
+                          <li>• <code>ClientFeedbackDecision.filter({"{"} request_id: requestId {"}"})</code> - All decisions</li>
+                          <li>• <code>ClientFeedbackAttachment.filter({"{"} request_id: requestId {"}"})</code> - All attachments</li>
+                          <li>• <code>User.list()</code> - For author enrichment</li>
+                          <li>• <code>ClientContact.list()</code> - For author enrichment</li>
+                          <li>• <code>Project.filter({"{"} id: request.project_id {"}"})</code> - Project context</li>
+                          <li>• <code>ClientFeedbackTaskLink.filter({"{"} request_id: requestId {"}"})</code> - Linked tasks</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Query Invalidation Strategy</h5>
+                        <p className="text-xs text-gray-400 mb-2">After mutations, invalidate:</p>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <code>['clientFeedbackRequest', requestId]</code></li>
+                          <li>• <code>['clientFeedbackComments', requestId]</code></li>
+                          <li>• <code>['clientFeedbackDecisions', requestId]</code></li>
+                          <li>• <code>['clientFeedbackAttachments', requestId]</code></li>
+                          <li>• <code>['clientFeedbackTaskLinks', requestId]</code></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-900/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white text-lg">State Management</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">UI States</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <code>selectedImage</code> - Currently viewing image (ImageModal)</li>
+                          <li>• <code>selectedImageIds</code> - Images selected for review</li>
+                          <li>• <code>showRequestDecisionForm</code> - Decision modal visibility</li>
+                          <li>• <code>requestDecisionType</code> - approved | changes_requested</li>
+                          <li>• <code>decisionUploadedImages</code> - New reference images</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Comment Form States</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <code>newComment</code> - Comment text</li>
+                          <li>• <code>uploadedPhotos</code> - Uploaded image URLs</li>
+                          <li>• <code>uploadedFiles</code> - Uploaded file objects</li>
+                          <li>• <code>newLinks</code> - Array of link strings</li>
+                          <li>• <code>uploadingImages</code> - Upload in progress</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-900/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white text-lg">Business Logic Rules</h4>
+                    
+                    <div className="space-y-3">
+                      <div className="bg-gray-800/50 rounded p-3 border-l-4 border-blue-600">
+                        <h5 className="font-semibold text-blue-400 text-sm mb-2">Request Status Transitions</h5>
+                        <ul className="text-xs space-y-2 text-gray-300">
+                          <li>
+                            <strong>Draft → Posted:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Sets <code>posted_at</code> to current timestamp</li>
+                              <li>- Triggers <code>sendNeedsReviewEmail</code> function</li>
+                              <li>- Email sent to all clients with access to project</li>
+                              <li>- Request becomes visible in client portal</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>Posted → Archived:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Request hidden from active client portal view</li>
+                              <li>- No email notification</li>
+                              <li>- Still accessible via direct link</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>Auto: Changes Requested:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Set automatically when client submits changes_requested decision</li>
+                              <li>- Handled by <code>publicClientDecision</code> function</li>
+                            </ul>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3 border-l-4 border-green-600">
+                        <h5 className="font-semibold text-green-400 text-sm mb-2">Comment Visibility Logic</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>client_visible:</strong> Shows in both internal and client portal views</li>
+                          <li>• <strong>internal_only:</strong> Shows only in internal view (this page)</li>
+                          <li>• Default is <code>client_visible</code></li>
+                          <li>• Internal users can toggle visibility when adding comments</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3 border-l-4 border-purple-600">
+                        <h5 className="font-semibold text-purple-400 text-sm mb-2">Attachment Handling</h5>
+                        <ul className="text-xs space-y-2 text-gray-300">
+                          <li>
+                            <strong>Image Attachments:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Uploaded via <code>Core.UploadFile</code> integration</li>
+                              <li>- Stored with <code>attachment_type: 'image'</code></li>
+                              <li>- Can be attached to request or comment</li>
+                              <li>- Can be targeted for individual decisions</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>File Attachments:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Supports PDF, DOC, DOCX, XLS, XLSX, ZIP</li>
+                              <li>- Stored with <code>attachment_type: 'file'</code></li>
+                              <li>- <code>label</code> field stores filename</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>Link Attachments:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- External URLs stored in <code>link_url</code></li>
+                              <li>- <code>attachment_type: 'link'</code></li>
+                              <li>- Opens in new tab</li>
+                            </ul>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3 border-l-4 border-orange-600">
+                        <h5 className="font-semibold text-orange-400 text-sm mb-2">Decision Recording</h5>
+                        <ul className="text-xs space-y-2 text-gray-300">
+                          <li>
+                            <strong>Request-Level Decisions:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Applied to entire request</li>
+                              <li>- <code>target_type: 'request'</code></li>
+                              <li>- Can include note and reference images</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>Image-Level Decisions:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Applied to specific images</li>
+                              <li>- <code>target_type: 'attachment_image'</code></li>
+                              <li>- Stores <code>target_attachment_id</code> and <code>target_image_url</code></li>
+                              <li>- Multiple images can be decided in one action</li>
+                            </ul>
+                          </li>
+                          <li>
+                            <strong>Reference Images:</strong>
+                            <ul className="ml-4 mt-1 space-y-1 text-gray-400">
+                              <li>- Images uploaded alongside decision</li>
+                              <li>- Created as attachments with matching <code>posted_at</code></li>
+                              <li>- Not linked to comment_id</li>
+                              <li>- Matched by creator + timestamp (5 second window)</li>
+                            </ul>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-900/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white text-lg">Timeline/Thread Logic</h4>
+                    
+                    <div className="bg-gray-800/50 rounded p-3">
+                      <h5 className="font-semibold text-white text-sm mb-2">COMP_THREAD_001 Behavior</h5>
+                      <p className="text-xs text-gray-400 mb-3">The ClientFeedbackThread component builds a chronological timeline:</p>
+                      
+                      <div className="space-y-3">
+                        <div className="bg-gray-900 rounded p-3">
+                          <h6 className="font-semibold text-white text-xs mb-2">1. Initial Post</h6>
+                          <ul className="text-xs space-y-1 text-gray-300">
+                            <li>• Shows request creator, title, body, posted_at</li>
+                            <li>• Includes attachments created BEFORE earliest decision</li>
+                            <li>• Filter: <code>attachmentTime {'<'} earliestDecisionTime</code></li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-gray-900 rounded p-3">
+                          <h6 className="font-semibold text-white text-xs mb-2">2. Comments</h6>
+                          <ul className="text-xs space-y-1 text-gray-300">
+                            <li>• Shows author, body, timestamp</li>
+                            <li>• Includes attachments where <code>comment_id</code> matches</li>
+                            <li>• Filters out comments that match decision (same author + timestamp ± 2s)</li>
+                            <li>• Prevents duplicate posts when comment+decision happen together</li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-gray-900 rounded p-3">
+                          <h6 className="font-semibold text-white text-xs mb-2">3. Decision Posts</h6>
+                          <ul className="text-xs space-y-1 text-gray-300">
+                            <li>• Groups decisions by decider + timestamp (1 second window)</li>
+                            <li>• Shows decision type (approved/changes_requested)</li>
+                            <li>• Displays note if provided</li>
+                            <li>• Shows "Reviewed Images" section for image-level decisions</li>
+                            <li>• Shows "Reference Images" section for uploaded images</li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-gray-900 rounded p-3">
+                          <h6 className="font-semibold text-white text-xs mb-2">Reference Image Matching Algorithm</h6>
+                          <p className="text-xs text-gray-400 mb-2">Attachments shown as "Reference Images" if:</p>
+                          <ul className="text-xs space-y-1 text-gray-300">
+                            <li>• <code>!a.comment_id</code> - Not linked to comment</li>
+                            <li>• <code>a.created_by_type === decision.decided_by_type</code></li>
+                            <li>• <code>a.created_by_id === decision.decided_by_id</code></li>
+                            <li>• <code>Math.abs(attachmentTime - decisionTime) {'<'} 5000</code> - Within 5 seconds</li>
+                            <li>• <code>attachmentTime {'>='} earliestDecisionTime</code> - Created after first decision</li>
+                          </ul>
+                        </div>
+
+                        <div className="bg-gray-900 rounded p-3">
+                          <h6 className="font-semibold text-white text-xs mb-2">Sorting</h6>
+                          <ul className="text-xs space-y-1 text-gray-300">
+                            <li>• All timeline events sorted by timestamp DESC</li>
+                            <li>• Most recent at top</li>
+                            <li>• Initial post always last (oldest)</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-900/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white text-lg">Action Buttons & Permissions</h4>
+                    
+                    <div className="space-y-3">
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Post to Client</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility:</strong> Only when status = 'draft'</li>
+                          <li>• <strong>Action:</strong> Updates status to 'posted', sets posted_at</li>
+                          <li>• <strong>Backend:</strong> <code>updateRequestStatus</code> function</li>
+                          <li>• <strong>Side Effect:</strong> Triggers <code>sendNeedsReviewEmail</code></li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Archive Request</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility:</strong> Any status</li>
+                          <li>• <strong>Action:</strong> Updates status to 'archived'</li>
+                          <li>• <strong>Result:</strong> Hidden from active client portal view</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Delete Request</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility:</strong> Any status</li>
+                          <li>• <strong>Confirmation:</strong> Required</li>
+                          <li>• <strong>Action:</strong> Hard delete of request record</li>
+                          <li>• <strong>Side Effect:</strong> Cascading delete of comments, decisions, attachments</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Create Task from Approval</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility:</strong> When any approved decision exists</li>
+                          <li>• <strong>Modal:</strong> CreateTaskFromApprovalModal</li>
+                          <li>• <strong>Pre-fills:</strong> Task name from request title, description from decision note</li>
+                          <li>• <strong>Creates:</strong> Task + ClientFeedbackTaskLink</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Add Comment (Internal)</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility Toggle:</strong> client_visible | internal_only</li>
+                          <li>• <strong>Attachments:</strong> Supports images, files, links</li>
+                          <li>• <strong>Backend:</strong> <code>addInternalComment</code> function</li>
+                          <li>• <strong>Auth:</strong> Uses authenticated user from base44.auth.me()</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Image Review (Internal)</h5>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <strong>Visibility:</strong> Only for image_review request type</li>
+                          <li>• <strong>Selection:</strong> Checkboxes on images</li>
+                          <li>• <strong>Actions:</strong> Approve Selected | Request Changes</li>
+                          <li>• <strong>Backend:</strong> <code>publicClientDecision</code> (internal mode)</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+                    <h4 className="font-semibold text-red-400 mb-3">Critical Guardrails</h4>
+                    <ul className="text-sm space-y-2 text-gray-300">
+                      <li>• <strong>MUST NOT:</strong> Allow status change from 'posted' back to 'draft'</li>
+                      <li>• <strong>MUST NOT:</strong> Delete request without confirmation dialog</li>
+                      <li>• <strong>MUST NOT:</strong> Show internal_only comments in client portal</li>
+                      <li>• <strong>MUST:</strong> Invalidate all query keys after mutations</li>
+                      <li>• <strong>MUST:</strong> Set server-side timestamps (posted_at, decided_at) not client-side</li>
+                      <li>• <strong>MUST:</strong> Enrich all comments/decisions with author/decider objects before display</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="apisync" className="space-y-4">
+            <Card className="bg-black/60 backdrop-blur-xl border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Code className="w-5 h-5 text-red-500" />
+                  External Client Portal API Sync Guide
+                </CardTitle>
+                <p className="text-sm text-gray-400">Synchronization guide for external Base44 client portal projects</p>
+              </CardHeader>
+              <CardContent className="text-gray-300 space-y-6">
+                
+                <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-400 mb-2">Overview</h3>
+                  <p className="text-sm text-gray-300">This guide ensures that external client portal projects consuming this app's APIs remain synchronized with data structures, business logic, and UI patterns.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Backend API Functions Reference</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">1. publicClientProjects</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/publicClientProjects</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here"  // or use "token" instead
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "contact": { id, name, email, url_slug, ... },
+  "accesses": [{ project_id, client_contact_id, access_role, ... }],
+  "projects": [{ id, name, client_name, featured_image_url, ... }],
+  "statuses": [{ label, color, ... }],
+  "projectTypes": [{ name, color, ... }]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Lists all projects accessible to the client
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">2. publicClientPortalData</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/publicClientPortalData</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here",
+  "projectId": "project-id-here"
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "access": { project_id, access_role, ... },
+  "project": { id, name, ... },
+  "requests": [{ id, title, request_type, status, due_date, ... }],
+  "comments": [{ id, body, author_type, author_id, visibility, ... }],
+  "decisions": [{ id, decision, note, target_type, ... }],
+  "attachments": [{ id, attachment_type, file_url, link_url, ... }]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Fetches all feedback data for one project
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">3. publicClientRequestDetail</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/publicClientRequestDetail</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here"
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "access": { access_role, client_contact_id, ... },
+  "request": { 
+    id, title, body, request_type, status, due_date,
+    creator: { full_name, email, ... }
+  },
+  "comments": [{ 
+    id, body, posted_at,
+    author: { name, email, ... }
+  }],
+  "decisions": [{
+    id, decision, note, target_type, decided_at,
+    decider: { name, email, ... }
+  }],
+  "attachments": [{
+    id, attachment_type, file_url, link_url, posted_at,
+    creator: { name, email, ... }
+  }]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Fetches detailed request with enriched author/decider data
+                      </div>
+                      <div className="text-yellow-400">
+                        <strong>⚠️ Important:</strong> All comments, decisions, and attachments include enriched user/contact objects
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">4. publicAddClientComment</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/publicAddClientComment</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "comment": { "body": "Comment text here" },
+  "attachments": [
+    { "type": "image", "file_url": "https://..." },
+    { "type": "link", "link_url": "https://..." },
+    { "type": "file", "file_url": "https://...", "label": "filename.pdf" }
+  ]
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "comment": { id, body, posted_at, ... },
+  "attachments": [{ id, attachment_type, file_url, ... }]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Allows clients to add comments with attachments
+                      </div>
+                      <div className="text-yellow-400">
+                        <strong>⚠️ Important:</strong> Server sets <code>posted_at</code> timestamp automatically
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">5. publicClientDecision</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/publicClientDecision</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input (Request-Level Decision):</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "decision": "approved" | "changes_requested",
+  "note": "Optional note text",
+  "targetAttachmentIds": null,
+  "newImages": ["https://ref-image-1.jpg", "https://ref-image-2.jpg"]
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input (Image-Level Decision):</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "decision": "approved" | "changes_requested",
+  "note": "Required for changes_requested",
+  "targetAttachmentIds": ["att-id-1", "att-id-2"],
+  "newImages": ["https://ref-image.jpg"]
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "decisions": [{ id, decision, note, target_type, ... }]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Records client approval or change request decisions
+                      </div>
+                      <div className="space-y-1 text-yellow-400">
+                        <div><strong>⚠️ Critical:</strong> Reference images in <code>newImages</code> are created as attachments</div>
+                        <div><strong>⚠️ Critical:</strong> Server sets <code>decided_at</code> and <code>posted_at</code> timestamps</div>
+                        <div><strong>⚠️ Critical:</strong> All decisions in batch get same timestamp</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Data Structure Synchronization</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4">
+                    <h4 className="font-semibold text-white mb-3">Entity Field Mappings</h4>
+                    
+                    <div className="space-y-3 text-xs">
+                      <div className="bg-gray-900 rounded p-3">
+                        <h5 className="font-semibold text-green-400 mb-2">ClientFeedbackRequest</h5>
+                        <pre className="text-gray-300 overflow-x-auto">{`{
+  id: string,
+  project_id: string,
+  title: string,
+  body: string,
+  request_type: "approval" | "question" | "review" | "update" | "image_review",
+  status: "draft" | "posted" | "archived",
+  due_date: string (date),
+  posted_at: string (datetime),
+  created_by_user_id: string,
+  created_date: string (datetime),
+  updated_date: string (datetime)
+}`}</pre>
+                      </div>
+
+                      <div className="bg-gray-900 rounded p-3">
+                        <h5 className="font-semibold text-green-400 mb-2">ClientFeedbackComment</h5>
+                        <pre className="text-gray-300 overflow-x-auto">{`{
+  id: string,
+  request_id: string,
+  author_type: "client_contact" | "internal_user",
+  author_id: string,
+  body: string,
+  visibility: "client_visible" | "internal_only",
+  target_type: "request" | "attachment_image",
+  target_attachment_id: string | null,
+  posted_at: string (datetime),
+  created_date: string (datetime)
+}`}</pre>
+                      </div>
+
+                      <div className="bg-gray-900 rounded p-3">
+                        <h5 className="font-semibold text-green-400 mb-2">ClientFeedbackDecision</h5>
+                        <pre className="text-gray-300 overflow-x-auto">{`{
+  id: string,
+  request_id: string,
+  decided_by_type: "client_contact" | "internal_user",
+  decided_by_id: string,
+  decision: "approved" | "changes_requested" | "rejected",
+  note: string | null,
+  target_type: "request" | "attachment_image",
+  target_attachment_id: string | null,
+  target_image_url: string | null,
+  decided_at: string (datetime),
+  created_date: string (datetime)
+}`}</pre>
+                      </div>
+
+                      <div className="bg-gray-900 rounded p-3">
+                        <h5 className="font-semibold text-green-400 mb-2">ClientFeedbackAttachment</h5>
+                        <pre className="text-gray-300 overflow-x-auto">{`{
+  id: string,
+  request_id: string,
+  comment_id: string | null,
+  attachment_type: "image" | "link" | "file",
+  file_url: string | null,
+  link_url: string | null,
+  label: string | null,
+  created_by_type: "client_contact" | "internal_user",
+  created_by_id: string,
+  posted_at: string (datetime),
+  created_date: string (datetime)
+}`}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">UI Pattern Synchronization</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-3">
+                    <h4 className="font-semibold text-white">Timeline Display Logic</h4>
+                    <p className="text-xs text-gray-400">External portal MUST replicate this logic:</p>
+                    
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <h5 className="font-semibold text-white mb-2">Step 1: Calculate Earliest Decision Time</h5>
+                      <pre className="text-gray-300 overflow-x-auto">{`const earliestDecisionTime = decisions.length > 0
+  ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
+  : Infinity;`}</pre>
+                    </div>
+
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <h5 className="font-semibold text-white mb-2">Step 2: Separate Initial vs Reference Attachments</h5>
+                      <pre className="text-gray-300 overflow-x-auto">{`// Initial request attachments (before any decisions)
+const requestAttachments = attachments.filter(a => {
+  if (a.comment_id) return false;
+  const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+  return attachmentTime < earliestDecisionTime;
+});`}</pre>
+                    </div>
+
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <h5 className="font-semibold text-white mb-2">Step 3: Group Decisions by Decider + Time</h5>
+                      <pre className="text-gray-300 overflow-x-auto">{`const decisionGroups = {};
+decisions.forEach(decision => {
+  const timestamp = new Date(decision.decided_at || decision.created_date);
+  const roundedTime = Math.floor(timestamp.getTime() / 1000);
+  const key = \`\${decision.decided_by_type}_\${decision.decided_by_id}_\${roundedTime}\`;
+  if (!decisionGroups[key]) decisionGroups[key] = [];
+  decisionGroups[key].push(decision);
+});`}</pre>
+                    </div>
+
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <h5 className="font-semibold text-white mb-2">Step 4: Match Reference Attachments</h5>
+                      <pre className="text-gray-300 overflow-x-auto">{`const referenceAttachments = attachments.filter(a => {
+  if (a.comment_id) return false;
+  const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+  const decisionTime = new Date(decision.decided_at || decision.created_date).getTime();
+  return (
+    a.created_by_type === decision.decided_by_type &&
+    a.created_by_id === decision.decided_by_id &&
+    Math.abs(attachmentTime - decisionTime) < 5000 &&
+    attachmentTime >= earliestDecisionTime
+  );
+});`}</pre>
+                    </div>
+
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <h5 className="font-semibold text-white mb-2">Step 5: Filter Duplicate Comment/Decision Posts</h5>
+                      <pre className="text-gray-300 overflow-x-auto">{`const hasMatchingDecision = decisions.some(decision => {
+  const decisionTime = new Date(decision.decided_at || decision.created_date).getTime();
+  const commentTime = new Date(comment.posted_at || comment.created_date).getTime();
+  return decision.decided_by_id === comment.author_id &&
+         decision.decided_by_type === comment.author_type &&
+         Math.abs(decisionTime - commentTime) < 2000;
+});
+// Only show comment if !hasMatchingDecision`}</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white border-b border-gray-700 pb-2">Request State Calculation</h3>
+                  
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-3">
+                    <p className="text-xs text-gray-400">External portal should use this logic to determine request state badges:</p>
+                    
+                    <div className="bg-gray-900 rounded p-3 text-xs">
+                      <pre className="text-gray-300 overflow-x-auto">{`function getRequestState(request, decisions, attachments) {
+  const now = new Date();
+  const dueDate = request.due_date ? new Date(request.due_date) : null;
+  const isOverdue = dueDate && dueDate < now;
+
+  // Check for global (request-level) decisions
+  const globalDecisions = decisions.filter(d => d.target_type === 'request');
+  const latestGlobalApproval = globalDecisions
+    .filter(d => d.decision === 'approved')
+    .sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at))[0];
+  const latestGlobalChanges = globalDecisions
+    .filter(d => d.decision === 'changes_requested')
+    .sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at))[0];
+
+  if (latestGlobalApproval) {
+    const approvalTime = new Date(latestGlobalApproval.decided_at);
+    const hasNewerChanges = latestGlobalChanges && 
+      new Date(latestGlobalChanges.decided_at) > approvalTime;
+    
+    if (!hasNewerChanges) {
+      return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle };
+    }
+  }
+
+  if (latestGlobalChanges) {
+    return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
+  }
+
+  // Check image-level decisions
+  const imageDecisions = decisions.filter(d => d.target_type === 'attachment_image');
+  const requestImages = attachments.filter(a => 
+    a.attachment_type === 'image' && !a.comment_id
+  );
+
+  if (requestImages.length > 0 && imageDecisions.length > 0) {
+    const allApproved = requestImages.every(img => {
+      const imgDecisions = imageDecisions
+        .filter(d => d.target_attachment_id === img.id)
+        .sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at));
+      return imgDecisions.length > 0 && imgDecisions[0].decision === 'approved';
+    });
+
+    if (allApproved) {
+      return { label: 'Approved', color: 'bg-green-500', icon: CheckCircle };
+    }
+
+    const anyChanges = imageDecisions.some(d => d.decision === 'changes_requested');
+    if (anyChanges) {
+      return { label: 'Changes Requested', color: 'bg-orange-500', icon: AlertCircle };
+    }
+  }
+
+  // Default: Needs Review
+  if (isOverdue) {
+    return { label: 'Overdue', color: 'bg-red-500', icon: AlertTriangle };
+  }
+
+  return { label: 'Needs Review', color: 'bg-blue-500', icon: MessageSquare };
+}`}</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-purple-900/20 border-2 border-purple-700 rounded-lg p-4 space-y-3">
+                  <h3 className="text-xl font-semibold text-purple-400">Synchronization Prompt Template</h3>
+                  <p className="text-sm text-gray-300">Use this prompt when updating the external client portal:</p>
+                  
+                  <div className="bg-gray-900 rounded p-4 text-xs">
+                    <pre className="text-gray-300 whitespace-pre-wrap">{`EXTERNAL CLIENT PORTAL SYNC REQUIREMENTS
+
+Context: This is an external Base44 project that consumes APIs from the main project management system.
+
+API Endpoints (Use these exact endpoints):
+• POST /api/functions/publicClientProjects - Get all accessible projects
+• POST /api/functions/publicClientPortalData - Get project feedback overview
+• POST /api/functions/publicClientRequestDetail - Get detailed request with enriched data
+• POST /api/functions/publicAddClientComment - Add comment with attachments
+• POST /api/functions/publicClientDecision - Record approval or change request
+
+Critical Data Structure Rules:
+1. ALL API responses include enriched author/decider/creator objects
+2. Timestamps: Use posted_at for attachments, decided_at for decisions, created_date for comments
+3. Attachment types: "image" | "link" | "file"
+4. Decision types: "approved" | "changes_requested" | "rejected"
+5. Target types: "request" | "attachment_image"
+6. Visibility types: "client_visible" | "internal_only" (filter internal_only from client view)
+
+Timeline Display Logic (MUST IMPLEMENT):
+1. Calculate earliestDecisionTime from all decisions
+2. Initial attachments: created BEFORE earliestDecisionTime AND no comment_id
+3. Reference attachments: created AFTER earliestDecisionTime, matched by creator+timestamp (±5s)
+4. Filter duplicate posts: Remove comments that match decision (same author+timestamp ±2s)
+5. Group decisions by decider+timestamp (1s window)
+6. Sort all events by timestamp DESC
+
+Request State Calculation (MUST IMPLEMENT):
+1. Priority: Global approved > Global changes_requested > Image decisions > Default
+2. Check latest global decision first
+3. For image reviews: All images must be approved to show "Approved"
+4. Default to "Needs Review" or "Overdue" if past due_date
+
+UI Requirements:
+• Show request type badges: approval, question, review, update, image_review
+• Show state badges: Approved (green), Changes Requested (orange), Needs Review (blue), Overdue (red)
+• Timeline posts: Initial Post → Comments → Decision Posts (with reviewed + reference images)
+• Image selection: Checkboxes for image_review types (if approver role)
+• Decision modal: Note required for changes_requested, optional for approved
+• Reference images: Upload alongside decision, displayed in separate section
+
+Authentication:
+• Use slug-based URL parameter for access (?slug=client-slug)
+• No login required - validation done server-side via ProjectClientAccess
+
+Current Changes to Sync:
+[LIST SPECIFIC CHANGES HERE - e.g., "Reference image matching now uses 5s window instead of 2s"]
+
+Action Required:
+Update the external client portal to match these exact data structures, API calls, and display logic.`}</pre>
+                  </div>
                 </div>
               </CardContent>
             </Card>
