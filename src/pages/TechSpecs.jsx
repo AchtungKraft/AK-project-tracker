@@ -1625,6 +1625,18 @@ export default function TechSpecs() {
                           <li>• <code>['clientFeedbackTaskLinks', requestId]</code></li>
                         </ul>
                       </div>
+
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <h5 className="font-semibold text-white text-sm mb-2">Data Enrichment Before Display</h5>
+                        <p className="text-xs text-gray-400 mb-2">CRITICAL: Before passing to COMP_THREAD_001, enrich:</p>
+                        <ul className="text-xs space-y-1 text-gray-300">
+                          <li>• <code>request.creator</code> - User who created request</li>
+                          <li>• <code>comment.author</code> - User/ClientContact for each comment</li>
+                          <li>• <code>decision.decider</code> - User/ClientContact for each decision</li>
+                          <li>• <code>attachment.creator</code> - User/ClientContact for each attachment</li>
+                        </ul>
+                        <p className="text-xs text-red-400 mt-2">⚠️ Missing enrichment prevents timeline reference attachment matching by creator!</p>
+                      </div>
                     </div>
                   </div>
 
@@ -1900,7 +1912,8 @@ export default function TechSpecs() {
                       <li>• <strong>MUST NOT:</strong> Show internal_only comments in client portal</li>
                       <li>• <strong>MUST:</strong> Invalidate all query keys after mutations</li>
                       <li>• <strong>MUST:</strong> Set server-side timestamps (posted_at, decided_at) not client-side</li>
-                      <li>• <strong>MUST:</strong> Enrich all comments/decisions with author/decider objects before display</li>
+                      <li>• <strong>MUST:</strong> Enrich all comments/decisions/attachments with author/decider/creator objects before passing to COMP_THREAD_001</li>
+                      <li>• <strong>MUST:</strong> Include request.creator object when passing to COMP_THREAD_001</li>
                     </ul>
                   </div>
                 </div>
