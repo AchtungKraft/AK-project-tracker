@@ -33,7 +33,18 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   const timeline = useMemo(() => {
     const events = [];
 
-    const requestAttachments = attachments.filter(a => !a.comment_id);
+    // Find earliest decision time to separate initial attachments from decision reference images
+    const earliestDecisionTime = decisions.length > 0
+      ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
+      : Infinity;
+
+    // Only include attachments created before first decision as initial request attachments
+    const requestAttachments = attachments.filter(a => {
+      if (a.comment_id) return false;
+      const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+      return attachmentTime < earliestDecisionTime;
+    });
+
     if (requestAttachments.length > 0 || request?.posted_at) {
       const timestamp = request?.posted_at || request?.created_date;
       events.push({
@@ -41,6 +52,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         timestamp: timestamp ? new Date(timestamp) : new Date(),
         message: 'Review Started',
         attachments: requestAttachments,
+        creator: request?.creator,
       });
     }
 
@@ -223,7 +235,9 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                       <ImageIcon className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">Original Request</p>
+                      <p className="font-medium text-sm">
+                        {event.creator?.full_name || 'Team'} posted review request
+                      </p>
                       <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
                     </div>
                   </div>
