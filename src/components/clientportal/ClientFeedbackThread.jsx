@@ -109,7 +109,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
       // Get reference attachments created by the decider within 5 seconds of the decision
-      // Increased time window to 5000ms to ensure we catch all related attachments
+      // Match by creator and time proximity - no earliestDecisionTime check needed here
+      // as we want to show all attachments that match this specific decision
       const referenceAttachments = attachments.filter(a => {
         if (a.comment_id) return false; // Skip attachments linked to comments
         
@@ -120,8 +121,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         return (
           a.created_by_type === firstDecision.decided_by_type &&
           a.created_by_id === firstDecision.decided_by_id &&
-          timeDiff < 5000 && // 5 second window
-          attachmentTime >= earliestDecisionTime // Only attachments created after first decision
+          timeDiff < 5000 // 5 second window
         );
       });
 
