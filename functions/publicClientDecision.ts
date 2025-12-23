@@ -120,6 +120,8 @@ Deno.serve(async (req) => {
             // Image-level decisions with note stored directly
             for (const attachmentId of targetAttachmentIds) {
                 const attachment = attachments.find(a => a.id === attachmentId);
+                const imageUrl = attachment && attachment.file_url ? attachment.file_url : null;
+                
                 const newDecision = await base44.asServiceRole.entities.ClientFeedbackDecision.create({
                     request_id: requestId,
                     decided_by_type: decidedByType,
@@ -128,7 +130,7 @@ Deno.serve(async (req) => {
                     note: note || null,
                     target_type: 'attachment_image',
                     target_attachment_id: attachmentId,
-                    target_image_url: attachment?.file_url || null,
+                    target_image_url: imageUrl,
                     decided_at: currentTimestamp
                 });
                 decisions.push(newDecision);
