@@ -1499,9 +1499,19 @@ export default function TechSpecs() {
                         <Badge className="bg-green-600">Completed</Badge>
                       </div>
                       <ul className="text-xs text-gray-400 space-y-1">
-                        <li>• <strong>Affected:</strong> COMP_THREAD_001, publicClientDecision function</li>
-                        <li>• <strong>Change:</strong> Updated attachment filtering logic to use 5s time window and match by creator</li>
+                        <li>• <strong>Affected:</strong> CP_FEEDDET_001 (ClientFeedbackDetail), COMP_THREAD_001 (ClientFeedbackThread), publicClientDecision function</li>
+                        <li>• <strong>Root Cause:</strong> (1) Incorrect timeline filtering - earliestDecisionTime check prevented new reference images from displaying; (2) Query invalidation for attachments not properly centralized</li>
+                        <li>• <strong>Changes:</strong> 
+                          <ul className="ml-4 mt-1 space-y-1">
+                            <li>- Removed earliestDecisionTime filter from referenceAttachments matching in COMP_THREAD_001</li>
+                            <li>- Reference attachments now match ONLY by creator + 5s time proximity</li>
+                            <li>- Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation using publicClientDecision</li>
+                            <li>- COMP_THREAD_001 accepts onDecisionSubmit prop for internal view, falls back to direct publicClientDecision for client portal</li>
+                            <li>- submitDecisionMutation now properly invalidates clientFeedbackAttachments query</li>
+                          </ul>
+                        </li>
                         <li>• <strong>Date:</strong> 2025-12-23</li>
+                        <li>• <strong>Client Portal Sync:</strong> Apply same timeline filter fix (remove earliestDecisionTime check). Centralized mutation pattern not required for public portal.</li>
                       </ul>
                     </div>
 
@@ -2397,12 +2407,15 @@ Authentication:
 • No login required - validation done server-side via ProjectClientAccess
 
 Current Changes to Sync:
-• CHG-2025-12-23-001: Fixed reference image display - removed earliestDecisionTime check from referenceAttachments filter
+• CHG-2025-12-23-001 (Part 1): Removed earliestDecisionTime check from referenceAttachments filter in COMP_THREAD_001
+• CHG-2025-12-23-001 (Part 2): Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation, ensuring proper query invalidation for attachments
 • Reference images now match ONLY by: creator match + 5 second time proximity
-• This ensures images uploaded with change requests always display correctly
+• Internal view uses onDecisionSubmit prop for centralized mutation handling
 
-Action Required:
-Update the external client portal to match these exact data structures, API calls, and display logic.`}</pre>
+Action Required for External Client Portal:
+1. Remove earliestDecisionTime check from referenceAttachments matching logic
+2. Ensure attachment query invalidation after decision submissions
+3. Reference images display is now controlled by creator+time matching only`}</pre>
                   </div>
                 </div>
               </CardContent>
