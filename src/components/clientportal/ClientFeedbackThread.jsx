@@ -106,14 +106,24 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     Object.values(decisionGroups).forEach(group => {
       const firstDecision = group[0];
       const decider = firstDecision.decider;
+      const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
-      // Get reference images created at the same time
-      const referenceAttachments = attachments.filter(a => 
-        !a.comment_id &&
-        a.created_by_type === firstDecision.decided_by_type &&
-        a.created_by_id === firstDecision.decided_by_id &&
-        Math.abs(new Date(a.posted_at || a.created_date) - new Date(firstDecision.decided_at || firstDecision.created_date)) < 2000
-      );
+      // Get reference attachments created by the decider within 5 seconds of the decision
+      // Increased time window to 5000ms to ensure we catch all related attachments
+      const referenceAttachments = attachments.filter(a => {
+        if (a.comment_id) return false; // Skip attachments linked to comments
+        
+        const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+        const timeDiff = Math.abs(attachmentTime - decisionTime);
+        
+        // Match by creator and time proximity
+        return (
+          a.created_by_type === firstDecision.decided_by_type &&
+          a.created_by_id === firstDecision.decided_by_id &&
+          timeDiff < 5000 && // 5 second window
+          attachmentTime >= earliestDecisionTime // Only attachments created after first decision
+        );
+      });
 
       // Get the selected/reviewed images
       const selectedImageDecisions = group.filter(d => d.target_type === 'attachment_image');
