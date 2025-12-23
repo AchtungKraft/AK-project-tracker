@@ -2407,17 +2407,18 @@ Authentication:
 • No login required - validation done server-side via ProjectClientAccess
 
 Current Changes to Sync:
-• CHG-2025-12-23-001 (Part 1): Removed earliestDecisionTime check from referenceAttachments filter in COMP_THREAD_001
-• CHG-2025-12-23-001 (Part 2): Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation, ensuring proper query invalidation for attachments
-• CHG-2025-12-23-001 (Part 3): Added reviewNewImages state and image upload UI to CP_FEEDDET_001 request decision modal
-• Reference images now match ONLY by: creator match + 5 second time proximity
-• Internal view decision modals now support uploading reference images
+• CHG-2025-12-23-001 (Part 1): Removed earliestDecisionTime check from referenceAttachments filter in COMP_THREAD_001.
+• CHG-2025-12-23-001 (Part 2): Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation, ensuring proper query invalidation for attachments.
+• CHG-2025-12-23-001 (Part 3): Added reviewNewImages state and image upload UI to CP_FEEDDET_001 request decision modal.
+• CHG-2025-12-23-001 (Part 4): Fixed quick-approve button to pass reviewNewImages instead of empty array.
+• Reference images now match ONLY by: creator match + 5 second time proximity.
+• All decision flows (request-level, image-level, quick-approve) now correctly pass newImages.
 
 Action Required for External Client Portal:
-1. Remove earliestDecisionTime check from referenceAttachments matching logic
-2. Ensure decision modals support image uploads (add reviewNewImages state and upload UI)
-3. Ensure newImages array is passed to publicClientDecision in all decision submission flows
-4. Invalidate attachment queries after decision submissions`}</pre>
+1. Remove earliestDecisionTime check from referenceAttachments matching logic.
+2. Ensure decision modals support image uploads (add reviewNewImages state and upload UI).
+3. Ensure newImages array is passed to publicClientDecision in ALL decision submission flows (modals, quick-approve buttons).
+4. Invalidate attachment queries after decision submissions.`}</pre>
                   </div>
                 </div>
               </CardContent>
