@@ -125,16 +125,25 @@ export default function ClientFeedbackDetail() {
     }
   });
 
-  const createRequestDecisionMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackDecision.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] }); // Refresh lists
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
-      setRequestDecisionNote('');
-      setShowRequestDecisionForm(false);
-      toast.success('Decision recorded');
+  const submitDecisionMutation = useMutation({
+    mutationFn: (payload) => base44.functions.invoke('publicClientDecision', payload),
+    onSuccess: (response) => {
+      if (response.data?.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
+        setRequestDecisionNote('');
+        setShowRequestDecisionForm(false);
+        toast.success('Decision recorded');
+      } else {
+        throw new Error(response.data?.error || 'Failed to record decision');
+      }
+    },
+    onError: (error) => {
+      console.error('Decision error:', error);
+      toast.error('Failed to record decision');
     }
   });
 
@@ -290,8 +299,8 @@ export default function ClientFeedbackDetail() {
     setShowRequestDecisionForm(true);
   };
 
-  const handleSubmitRequestDecision = async () => {
-    if (requestDecisionType === 'changes_requested' && !requestDecisionNote.trim()) {
+  const handleSubmitRequestDecision = (payload) => {
+    if (payload.decision === 'changes_requested' && !payload.note?.trim()) {
       toast.error('Please provide a note explaining the requested changes');
       return;
     }
@@ -301,29 +310,7 @@ export default function ClientFeedbackDetail() {
       return;
     }
 
-    try {
-      const response = await base44.functions.invoke('publicClientDecision', {
-        requestId,
-        decision: requestDecisionType,
-        note: requestDecisionNote,
-        targetAttachmentIds: null,
-        newImages: []
-      });
-
-      if (response.data?.success) {
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
-        setRequestDecisionNote('');
-        setShowRequestDecisionForm(false);
-        toast.success('Decision recorded');
-      } else {
-        throw new Error(response.data?.error || 'Failed to record decision');
-      }
-    } catch (error) {
-      console.error('Decision error:', error);
-      toast.error('Failed to record decision');
-    }
+    submitDecisionMutation.mutate(payload);
   };
 
   const handleAddComment = async () => {
@@ -404,7 +391,13 @@ export default function ClientFeedbackDetail() {
             <div className="flex gap-2">
                 <Button
                 size="sm"
-                onClick={handleApproveRequest}
+                onClick={() => handleSubmitRequestDecision({
+                  requestId,
+                  decision: 'approved',
+                  note: '',
+                  targetAttachmentIds: null,
+                  newImages: [],
+                })}
                 className="bg-green-600 hover:bg-green-700 text-white border-green-600">
 
                   <CheckCircle2 className="w-4 h-4 mr-1" />
@@ -537,6 +530,7 @@ export default function ClientFeedbackDetail() {
               setSelectedApproval(approval);
               setShowCreateTaskModal(true);
             }}
+            onDecisionSubmit={handleSubmitRequestDecision}
             isClientView={false}
             accessRole={user?.role}
             request={{
@@ -768,11 +762,17 @@ export default function ClientFeedbackDetail() {
                   Cancel
                 </Button>
                 <Button
-                onClick={handleSubmitRequestDecision}
-                disabled={createRequestDecisionMutation.isPending}
+                onClick={() => handleSubmitRequestDecision({
+                  requestId,
+                  decision: requestDecisionType,
+                  note: requestDecisionNote,
+                  targetAttachmentIds: null,
+                  newImages: [],
+                })}
+                disabled={submitDecisionMutation.isPending}
                 className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}>
 
-                  {createRequestDecisionMutation.isPending ?
+                  {submitDecisionMutation.isPending ?
                 <Loader2 className="w-4 h-4 animate-spin" /> :
 
                 `Submit ${requestDecisionType === 'approved' ? approveLabel : 'Changes'}`

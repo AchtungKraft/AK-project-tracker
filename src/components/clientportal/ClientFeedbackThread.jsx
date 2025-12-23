@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
@@ -109,15 +109,14 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
       // Get reference attachments created by the decider within 5 seconds of the decision
-      // Match by creator and time proximity - no earliestDecisionTime check needed here
-      // as we want to show all attachments that match this specific decision
+      // Match ONLY by creator and time proximity (no earliestDecisionTime check)
       const referenceAttachments = attachments.filter(a => {
         if (a.comment_id) return false; // Skip attachments linked to comments
-        
+
         const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
         const timeDiff = Math.abs(attachmentTime - decisionTime);
-        
-        // Match by creator and time proximity
+
+        // Match by creator and time proximity ONLY
         return (
           a.created_by_type === firstDecision.decided_by_type &&
           a.created_by_id === firstDecision.decided_by_id &&
@@ -199,51 +198,56 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   };
 
   const handleSubmitReview = async () => {
-    if (reviewAction === 'changes_requested' && !reviewNote.trim()) {
-      toast.error('Please provide a note for changes requested');
-      return;
-    }
+  if (reviewAction === 'changes_requested' && !reviewNote.trim()) {
+  toast.error('Please provide a note for changes requested');
+  return;
+  }
 
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        requestId: requestId,
-        decision: reviewAction,
-        note: reviewNote,
-        targetAttachmentIds: selectedImageIds.length > 0 ? selectedImageIds : null,
-        newImages: reviewNewImages
-      };
-      
-      if (token) payload.token = token;
-      if (slug) payload.slug = slug;
-      
-      const response = await base44.functions.invoke('publicClientDecision', payload);
+  setIsSubmitting(true);
+  try {
+  const payload = {
+    requestId: requestId,
+    decision: reviewAction,
+    note: reviewNote,
+    targetAttachmentIds: selectedImageIds.length > 0 ? selectedImageIds : null,
+    newImages: reviewNewImages,
+  };
 
-      if (response.data?.success) {
-        toast.success('Review submitted');
-        
-        setSelectedImageIds([]);
-        setReviewNewImages([]);
-        setReviewNote("");
-        setIsReviewing(false);
-        setReviewAction(null);
-
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
-        if (token || slug) {
-          queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
-        }
-      } else {
-        throw new Error(response.data?.error || 'Failed to submit review');
+  // Use the onDecisionSubmit prop if provided (for internal page)
+  if (onDecisionSubmit) {
+    await onDecisionSubmit(payload);
+  } else {
+    // Fallback to direct backend function invocation (for public client portal)
+    if (token) payload.token = token;
+    if (slug) payload.slug = slug;
+    const response = await base44.functions.invoke('publicClientDecision', payload);
+    if (response.data?.success) {
+      // Invalidate client portal specific queries
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+      if (token || slug) {
+        queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
       }
-    } catch (error) {
-      console.error(error);
-      toast.error(error.message || 'Failed to submit review');
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      throw new Error(response.data?.error || 'Failed to submit review');
     }
+  }
+
+  toast.success('Review submitted');
+  setSelectedImageIds([]);
+  setReviewNewImages([]);
+  setReviewNote("");
+  setIsReviewing(false);
+  setReviewAction(null);
+
+  } catch (error) {
+  console.error(error);
+  toast.error(error.message || 'Failed to submit review');
+  } finally {
+  setIsSubmitting(false);
+  }
   };
 
   const canReview = (accessRole === 'approver' && isClientView) || (!isClientView && userId);

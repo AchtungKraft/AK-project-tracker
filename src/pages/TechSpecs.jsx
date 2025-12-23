@@ -1616,12 +1616,12 @@ export default function TechSpecs() {
 
                       <div className="bg-gray-800/50 rounded p-3">
                         <h5 className="font-semibold text-white text-sm mb-2">Query Invalidation Strategy</h5>
-                        <p className="text-xs text-gray-400 mb-2">After mutations, invalidate:</p>
+                        <p className="text-xs text-gray-400 mb-2">After mutations (especially submitDecisionMutation), invalidate:</p>
                         <ul className="text-xs space-y-1 text-gray-300">
                           <li>• <code>['clientFeedbackRequest', requestId]</code></li>
                           <li>• <code>['clientFeedbackComments', requestId]</code></li>
                           <li>• <code>['clientFeedbackDecisions', requestId]</code></li>
-                          <li>• <code>['clientFeedbackAttachments', requestId]</code></li>
+                          <li>• <code>['clientFeedbackAttachments', requestId]</code> - CRITICAL for showing new images</li>
                           <li>• <code>['clientFeedbackTaskLinks', requestId]</code></li>
                         </ul>
                       </div>
@@ -1823,7 +1823,7 @@ export default function TechSpecs() {
                             <li>• <code>a.created_by_type === decision.decided_by_type</code></li>
                             <li>• <code>a.created_by_id === decision.decided_by_id</code></li>
                             <li>• <code>Math.abs(attachmentTime - decisionTime) {'<'} 5000</code> - Within 5 seconds</li>
-                            <li>• <code>attachmentTime {'>='} earliestDecisionTime</code> - Created after first decision</li>
+                            <li className="line-through text-red-400">• <code>attachmentTime {'>='} earliestDecisionTime</code> - REMOVED (was incorrectly filtering new images)</li>
                           </ul>
                         </div>
 
@@ -1914,7 +1914,8 @@ export default function TechSpecs() {
                       <li>• <strong>MUST:</strong> Set server-side timestamps (posted_at, decided_at) not client-side</li>
                       <li>• <strong>MUST:</strong> Enrich all comments/decisions/attachments with author/decider/creator objects before passing to COMP_THREAD_001</li>
                       <li>• <strong>MUST:</strong> Include request.creator object when passing to COMP_THREAD_001</li>
-                    </ul>
+                      <li>• <strong>MUST:</strong> Pass onDecisionSubmit prop to COMP_THREAD_001 for centralized mutation handling</li>
+                      </ul>
                   </div>
                 </div>
               </CardContent>
