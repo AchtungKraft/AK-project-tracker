@@ -45,6 +45,8 @@ export default function ClientFeedbackRequestDetail() {
   const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
   const [requestDecisionType, setRequestDecisionType] = useState('');
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
+  const [decisionUploadedImages, setDecisionUploadedImages] = useState([]);
+  const [uploadingDecisionImages, setUploadingDecisionImages] = useState(false);
 
   useEffect(() => {
     if (!token && !slug || !requestId) return;
@@ -160,6 +162,26 @@ export default function ClientFeedbackRequestDetail() {
     setShowRequestDecisionForm(true);
   };
 
+  const handleDecisionImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    setUploadingDecisionImages(true);
+    try {
+      const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+      const results = await Promise.all(uploadPromises);
+      const photoUrls = results.map(r => r.file_url);
+      setDecisionUploadedImages([...decisionUploadedImages, ...photoUrls]);
+      toast.success('Images uploaded');
+      e.target.value = '';
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload images');
+    } finally {
+      setUploadingDecisionImages(false);
+    }
+  };
+
   const handleSubmitRequestDecision = async () => {
     if (requestDecisionType === 'changes_requested' && !requestDecisionNote.trim()) {
       toast.error('Please provide a note explaining the requested changes');
@@ -177,7 +199,7 @@ export default function ClientFeedbackRequestDetail() {
         decision: requestDecisionType,
         note: requestDecisionNote,
         targetAttachmentIds: null,
-        newImages: []
+        newImages: decisionUploadedImages
       };
       
       if (token) payload.token = token;
@@ -188,6 +210,7 @@ export default function ClientFeedbackRequestDetail() {
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
         setRequestDecisionNote('');
+        setDecisionUploadedImages([]);
         setShowRequestDecisionForm(false);
         toast.success('Decision recorded');
       } else {
@@ -516,6 +539,60 @@ export default function ClientFeedbackRequestDetail() {
                   placeholder={requestDecisionType === 'changes_requested' ? 'Describe the changes needed...' : 'Add any comments...'}
                   className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
                 />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400 mb-2 block">Upload Reference Images (Optional)</label>
+                <div className="space-y-2">
+                  <input
+                    id="decision-image-upload"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleDecisionImageUpload}
+                    className="hidden"
+                  />
+                  <label htmlFor="decision-image-upload">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingDecisionImages}
+                      className="border-gray-700 cursor-pointer"
+                      onClick={() => document.getElementById('decision-image-upload').click()}
+                    >
+                      {uploadingDecisionImages ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-1" />
+                          Add Images
+                        </>
+                      )}
+                    </Button>
+                  </label>
+                  {decisionUploadedImages.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {decisionUploadedImages.map((url, idx) => (
+                        <div key={idx} className="relative group">
+                          <div className="w-full h-16 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                            <img src={url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDecisionUploadedImages(decisionUploadedImages.filter(u => u !== url))}
+                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2">
