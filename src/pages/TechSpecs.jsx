@@ -2409,13 +2409,15 @@ Authentication:
 Current Changes to Sync:
 • CHG-2025-12-23-001 (Part 1): Removed earliestDecisionTime check from referenceAttachments filter in COMP_THREAD_001
 • CHG-2025-12-23-001 (Part 2): Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation, ensuring proper query invalidation for attachments
+• CHG-2025-12-23-001 (Part 3): Added reviewNewImages state and image upload UI to CP_FEEDDET_001 request decision modal
 • Reference images now match ONLY by: creator match + 5 second time proximity
-• Internal view uses onDecisionSubmit prop for centralized mutation handling
+• Internal view decision modals now support uploading reference images
 
 Action Required for External Client Portal:
 1. Remove earliestDecisionTime check from referenceAttachments matching logic
-2. Ensure attachment query invalidation after decision submissions
-3. Reference images display is now controlled by creator+time matching only`}</pre>
+2. Ensure decision modals support image uploads (add reviewNewImages state and upload UI)
+3. Ensure newImages array is passed to publicClientDecision in all decision submission flows
+4. Invalidate attachment queries after decision submissions`}</pre>
                   </div>
                 </div>
               </CardContent>

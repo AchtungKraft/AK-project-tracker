@@ -40,6 +40,8 @@ export default function ClientFeedbackDetail() {
   const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
   const [requestDecisionType, setRequestDecisionType] = useState('');
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
+  const [reviewNewImages, setReviewNewImages] = useState([]);
+  const [isUploadingReviewImages, setIsUploadingReviewImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
@@ -135,6 +137,7 @@ export default function ClientFeedbackDetail() {
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
         setRequestDecisionNote('');
+        setReviewNewImages([]);
         setShowRequestDecisionForm(false);
         toast.success('Decision recorded');
       } else {
@@ -310,7 +313,10 @@ export default function ClientFeedbackDetail() {
       return;
     }
 
-    submitDecisionMutation.mutate(payload);
+    submitDecisionMutation.mutate({
+      ...payload,
+      newImages: payload.newImages || reviewNewImages // Use passed newImages or default to reviewNewImages state
+    });
   };
 
   const handleAddComment = async () => {
@@ -396,7 +402,7 @@ export default function ClientFeedbackDetail() {
                   decision: 'approved',
                   note: '',
                   targetAttachmentIds: null,
-                  newImages: [],
+                  newImages: [], // Quick approve has no images
                 })}
                 className="bg-green-600 hover:bg-green-700 text-white border-green-600">
 
@@ -753,6 +759,60 @@ export default function ClientFeedbackDetail() {
 
               </div>
 
+              <div>
+                <label className="text-sm text-gray-400 mb-2 block">Upload Reference Images (Optional)</label>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md transition-colors text-sm text-gray-300">
+                      {isUploadingReviewImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      Upload Images
+                    </div>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length === 0) return;
+                        
+                        setIsUploadingReviewImages(true);
+                        try {
+                          const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+                          const results = await Promise.all(uploadPromises);
+                          const urls = results.map(r => r.file_url);
+                          setReviewNewImages(prev => [...prev, ...urls]);
+                          toast.success('Images uploaded');
+                        } catch (error) {
+                          console.error(error);
+                          toast.error('Failed to upload images');
+                        } finally {
+                          setIsUploadingReviewImages(false);
+                        }
+                      }}
+                      disabled={isUploadingReviewImages} 
+                    />
+                  </label>
+                  <span className="text-xs text-gray-500">{reviewNewImages.length} images added</span>
+                </div>
+                
+                {reviewNewImages.length > 0 && (
+                  <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
+                    {reviewNewImages.map((url, idx) => (
+                      <div key={idx} className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden border border-gray-700">
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <button 
+                          onClick={() => setReviewNewImages(prev => prev.filter(u => u !== url))}
+                          className="absolute top-0 right-0 bg-red-600 text-white p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2">
                 <Button
                 variant="outline"
@@ -767,7 +827,7 @@ export default function ClientFeedbackDetail() {
                   decision: requestDecisionType,
                   note: requestDecisionNote,
                   targetAttachmentIds: null,
-                  newImages: [],
+                  newImages: reviewNewImages, // From modal upload
                 })}
                 disabled={submitDecisionMutation.isPending}
                 className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}>
