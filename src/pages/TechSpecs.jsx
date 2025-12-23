@@ -2247,19 +2247,19 @@ decisions.forEach(decision => {
                     </div>
 
                     <div className="bg-gray-900 rounded p-3 text-xs">
-                      <h5 className="font-semibold text-white mb-2">Step 4: Match Reference Attachments</h5>
-                      <pre className="text-gray-300 overflow-x-auto">{`const referenceAttachments = attachments.filter(a => {
-  if (a.comment_id) return false;
-  const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-  const decisionTime = new Date(decision.decided_at || decision.created_date).getTime();
-  return (
-    a.created_by_type === decision.decided_by_type &&
-    a.created_by_id === decision.decided_by_id &&
-    Math.abs(attachmentTime - decisionTime) < 5000 &&
-    attachmentTime >= earliestDecisionTime
-  );
-});`}</pre>
-                    </div>
+                       <h5 className="font-semibold text-white mb-2">Step 4: Match Reference Attachments</h5>
+                       <pre className="text-gray-300 overflow-x-auto">{`const referenceAttachments = attachments.filter(a => {
+                    if (a.comment_id) return false;
+                    const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+                    const decisionTime = new Date(decision.decided_at || decision.created_date).getTime();
+                    return (
+                    a.created_by_type === decision.decided_by_type &&
+                    a.created_by_id === decision.decided_by_id &&
+                    Math.abs(attachmentTime - decisionTime) < 5000
+                    );
+                    });`}</pre>
+                       <p className="text-yellow-400 mt-2">⚠️ Do NOT include attachmentTime {'>='} earliestDecisionTime check - it incorrectly filters new decision images!</p>
+                     </div>
 
                     <div className="bg-gray-900 rounded p-3 text-xs">
                       <h5 className="font-semibold text-white mb-2">Step 5: Filter Duplicate Comment/Decision Posts</h5>
@@ -2372,7 +2372,7 @@ Critical Data Structure Rules:
 Timeline Display Logic (MUST IMPLEMENT):
 1. Calculate earliestDecisionTime from all decisions
 2. Initial attachments: created BEFORE earliestDecisionTime AND no comment_id
-3. Reference attachments: created AFTER earliestDecisionTime, matched by creator+timestamp (±5s)
+3. Reference attachments: matched by creator+timestamp ONLY (±5s) - DO NOT check earliestDecisionTime
 4. Filter duplicate posts: Remove comments that match decision (same author+timestamp ±2s)
 5. Group decisions by decider+timestamp (1s window)
 6. Sort all events by timestamp DESC
@@ -2396,7 +2396,9 @@ Authentication:
 • No login required - validation done server-side via ProjectClientAccess
 
 Current Changes to Sync:
-[LIST SPECIFIC CHANGES HERE - e.g., "Reference image matching now uses 5s window instead of 2s"]
+• CHG-2025-12-23-001: Fixed reference image display - removed earliestDecisionTime check from referenceAttachments filter
+• Reference images now match ONLY by: creator match + 5 second time proximity
+• This ensures images uploaded with change requests always display correctly
 
 Action Required:
 Update the external client portal to match these exact data structures, API calls, and display logic.`}</pre>
