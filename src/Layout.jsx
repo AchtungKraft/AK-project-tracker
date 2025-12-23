@@ -76,6 +76,11 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("AdminConfig"),
         icon: Settings,
       },
+      {
+        title: "Tech Specs",
+        url: createPageUrl("TechSpecs"),
+        icon: Settings,
+      },
     ];
   } else {
     return [
