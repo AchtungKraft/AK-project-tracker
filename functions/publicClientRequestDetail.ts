@@ -84,6 +84,12 @@ Deno.serve(async (req) => {
         const users = await base44.asServiceRole.entities.User.list();
         const clientContacts = await base44.asServiceRole.entities.ClientContact.list();
 
+        // Enrich request with creator details
+        const requestCreator = request.created_by_user_id
+            ? users.find(u => u.id === request.created_by_user_id)
+            : null;
+        const enrichedRequest = { ...request, creator: requestCreator };
+
         // Enrich comments with author details
         const enrichedComments = comments.map(comment => {
             const author = comment.author_type === 'internal_user'
@@ -100,13 +106,21 @@ Deno.serve(async (req) => {
             return { ...decision, decider };
         });
 
+        // Enrich attachments with creator details
+        const enrichedAttachments = attachments.map(attachment => {
+            const creator = attachment.created_by_type === 'internal_user'
+                ? users.find(u => u.id === attachment.created_by_id)
+                : clientContacts.find(c => c.id === attachment.created_by_id);
+            return { ...attachment, creator };
+        });
+
         return Response.json({
             success: true,
             access,
-            request,
+            request: enrichedRequest,
             comments: enrichedComments,
             decisions: enrichedDecisions,
-            attachments
+            attachments: enrichedAttachments
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
