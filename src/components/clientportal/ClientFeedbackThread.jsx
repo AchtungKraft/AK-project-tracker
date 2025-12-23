@@ -61,16 +61,32 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       : comments;
 
     // Add standalone comments (not associated with decisions)
+    // Filter out any comments that have a matching decision with the same timestamp and author
     visibleComments.forEach(comment => {
-      const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
-
-      events.push({
-        type: 'comment',
-        timestamp: new Date(comment.posted_at || comment.created_date),
-        comment,
-        author: comment.author,
-        attachments: commentAttachments,
+      const commentTime = new Date(comment.posted_at || comment.created_date).getTime();
+      const commentAuthorId = comment.author_id;
+      const commentAuthorType = comment.author_type;
+      
+      // Check if there's a decision that matches this comment (same author, within 2 seconds)
+      const hasMatchingDecision = decisions.some(decision => {
+        const decisionTime = new Date(decision.decided_at || decision.created_date).getTime();
+        return decision.decided_by_id === commentAuthorId &&
+               decision.decided_by_type === commentAuthorType &&
+               Math.abs(decisionTime - commentTime) < 2000;
       });
+      
+      // Only add comment if it doesn't have a matching decision (avoid duplicates)
+      if (!hasMatchingDecision) {
+        const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+
+        events.push({
+          type: 'comment',
+          timestamp: new Date(comment.posted_at || comment.created_date),
+          comment,
+          author: comment.author,
+          attachments: commentAttachments,
+        });
+      }
     });
 
     // Group decisions by timestamp and decider to handle batch reviews
