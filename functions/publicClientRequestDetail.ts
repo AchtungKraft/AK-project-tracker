@@ -77,9 +77,22 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        const comments = await base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }, '-created_date', 1000);
-        const decisions = await base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }, '-created_date', 1000);
-        const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }, '-created_date', 1000);
+        // Fetch all related data with proper sorting and limits
+        const comments = await base44.asServiceRole.entities.ClientFeedbackComment.filter(
+            { request_id: requestId }, 
+            '-created_date', 
+            1000
+        );
+        const decisions = await base44.asServiceRole.entities.ClientFeedbackDecision.filter(
+            { request_id: requestId }, 
+            '-created_date', 
+            1000
+        );
+        const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter(
+            { request_id: requestId }, 
+            '-created_date', 
+            1000
+        );
 
         const users = await base44.asServiceRole.entities.User.list();
         const clientContacts = await base44.asServiceRole.entities.ClientContact.list();
