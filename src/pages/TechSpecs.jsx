@@ -1500,7 +1500,7 @@ export default function TechSpecs() {
                       </div>
                       <ul className="text-xs text-gray-400 space-y-1">
                         <li>• <strong>Affected:</strong> CP_FEEDDET_001 (ClientFeedbackDetail), COMP_THREAD_001 (ClientFeedbackThread), publicClientDecision function</li>
-                        <li>• <strong>Root Cause:</strong> (1) Incorrect timeline filtering - earliestDecisionTime check prevented new reference images from displaying; (2) Query invalidation for attachments not properly centralized</li>
+                        <li>• <strong>Root Cause:</strong> (1) Incorrect timeline filtering - earliestDecisionTime check prevented new reference images from displaying; (2) Query invalidation for attachments not properly centralized; (3) reviewNewImages state not passed from quick-approve button</li>
                         <li>• <strong>Changes:</strong> 
                           <ul className="ml-4 mt-1 space-y-1">
                             <li>- Removed earliestDecisionTime filter from referenceAttachments matching in COMP_THREAD_001</li>
@@ -1508,10 +1508,13 @@ export default function TechSpecs() {
                             <li>- Centralized decision submission in CP_FEEDDET_001 via submitDecisionMutation using publicClientDecision</li>
                             <li>- COMP_THREAD_001 accepts onDecisionSubmit prop for internal view, falls back to direct publicClientDecision for client portal</li>
                             <li>- submitDecisionMutation now properly invalidates clientFeedbackAttachments query</li>
+                            <li>- Added reviewNewImages state and image upload UI to CP_FEEDDET_001 request decision modal</li>
+                            <li>- Fixed quick-approve button in CP_FEEDDET_001 to pass reviewNewImages instead of empty array</li>
+                            <li>- For image_review types, COMP_THREAD_001 floating action bar correctly passes newImages (already working)</li>
                           </ul>
                         </li>
                         <li>• <strong>Date:</strong> 2025-12-23</li>
-                        <li>• <strong>Client Portal Sync:</strong> Apply same timeline filter fix (remove earliestDecisionTime check). Centralized mutation pattern not required for public portal.</li>
+                        <li>• <strong>Client Portal Sync:</strong> Apply same timeline filter fix (remove earliestDecisionTime check). Ensure all decision buttons pass newImages array correctly.</li>
                       </ul>
                     </div>
 
