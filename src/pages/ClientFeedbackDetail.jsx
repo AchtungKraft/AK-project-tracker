@@ -402,7 +402,7 @@ export default function ClientFeedbackDetail() {
                   decision: 'approved',
                   note: '',
                   targetAttachmentIds: null,
-                  newImages: [], // Quick approve has no images
+                  newImages: reviewNewImages,
                 })}
                 className="bg-green-600 hover:bg-green-700 text-white border-green-600">
 
