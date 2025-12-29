@@ -109,8 +109,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
       // Get reference attachments created by the decider within 5 seconds of the decision
-      // Match ONLY by creator and time proximity (no earliestDecisionTime check)
-      // IMPORTANT: Also exclude attachments that are already shown as initial request attachments
+      // Match ONLY by creator and time proximity
+      // IMPORTANT: Also exclude attachments that are already shown as initial request attachments  
       const referenceAttachments = attachments.filter(a => {
         if (a.comment_id) return false; // Skip attachments linked to comments
 
@@ -122,8 +122,14 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const timeDiff = Math.abs(attachmentTime - decisionTime);
 
         // Match by creator and time proximity
-        const creatorTypeMatches = a.created_by_type === firstDecision.decided_by_type;
-        const creatorIdMatches = a.created_by_id === firstDecision.decided_by_id;
+        // Check both direct properties and nested data properties for compatibility
+        const attachmentCreatorType = a.created_by_type;
+        const attachmentCreatorId = a.created_by_id;
+        const decisionCreatorType = firstDecision.decided_by_type;
+        const decisionCreatorId = firstDecision.decided_by_id;
+
+        const creatorTypeMatches = attachmentCreatorType === decisionCreatorType;
+        const creatorIdMatches = attachmentCreatorId === decisionCreatorId;
         const timeMatches = timeDiff < 5000; // 5 second window
 
         return creatorTypeMatches && creatorIdMatches && timeMatches;
