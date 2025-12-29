@@ -122,7 +122,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const timeDiff = Math.abs(attachmentTime - decisionTime);
 
         // Match by creator and time proximity
-        // Check both direct properties and nested data properties for compatibility
         const attachmentCreatorType = a.created_by_type;
         const attachmentCreatorId = a.created_by_id;
         const decisionCreatorType = firstDecision.decided_by_type;
@@ -131,6 +130,24 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const creatorTypeMatches = attachmentCreatorType === decisionCreatorType;
         const creatorIdMatches = attachmentCreatorId === decisionCreatorId;
         const timeMatches = timeDiff < 5000; // 5 second window
+
+        // Debug log for matching
+        if (a.attachment_type === 'image' && !a.comment_id) {
+          console.log('Reference attachment check:', {
+            attachmentId: a.id,
+            attachmentTime,
+            decisionTime,
+            timeDiff,
+            attachmentCreatorType,
+            attachmentCreatorId,
+            decisionCreatorType,
+            decisionCreatorId,
+            creatorTypeMatches,
+            creatorIdMatches,
+            timeMatches,
+            result: creatorTypeMatches && creatorIdMatches && timeMatches
+          });
+        }
 
         return creatorTypeMatches && creatorIdMatches && timeMatches;
       });
