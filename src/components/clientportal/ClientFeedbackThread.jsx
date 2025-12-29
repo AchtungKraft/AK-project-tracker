@@ -117,11 +117,12 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const timeDiff = Math.abs(attachmentTime - decisionTime);
 
         // Match by creator and time proximity ONLY
-        return (
-          a.created_by_type === firstDecision.decided_by_type &&
-          a.created_by_id === firstDecision.decided_by_id &&
-          timeDiff < 5000 // 5 second window
-        );
+        // Use raw fields (created_by_type/created_by_id) as they exist on the attachment object
+        const creatorTypeMatches = a.created_by_type === firstDecision.decided_by_type;
+        const creatorIdMatches = a.created_by_id === firstDecision.decided_by_id;
+        const timeMatches = timeDiff < 5000; // 5 second window
+
+        return creatorTypeMatches && creatorIdMatches && timeMatches;
       });
 
       // Get the selected/reviewed images
