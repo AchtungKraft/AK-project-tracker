@@ -548,26 +548,18 @@ export default function ClientFeedbackDetail() {
                   ? users.find(u => u.id === c.author_id)
                   : clientContacts.find(cc => cc.id === c.author_id)
               })),
-              decisions: decisions.map(d => {
-                // Debug: Log decision data for troubleshooting
-                console.log('Decision enrichment:', d.id, d.decided_by_type, d.decided_by_id, d.decided_at);
-                return {
-                  ...d,
-                  decider: d.decided_by_type === 'internal_user'
-                    ? users.find(u => u.id === d.decided_by_id)
-                    : clientContacts.find(cc => cc.id === d.decided_by_id)
-                };
-              }),
-              attachments: attachments.map(a => {
-                // Debug: Log attachment data for troubleshooting
-                console.log('Attachment enrichment:', a.id, a.created_by_type, a.created_by_id, a.posted_at, a.comment_id);
-                return {
-                  ...a,
-                  creator: a.created_by_type === 'internal_user'
-                    ? users.find(u => u.id === a.created_by_id)
-                    : clientContacts.find(cc => cc.id === a.created_by_id)
-                };
-              })
+              decisions: decisions.map(d => ({
+                ...d,
+                decider: d.decided_by_type === 'internal_user'
+                  ? users.find(u => u.id === d.decided_by_id)
+                  : clientContacts.find(cc => cc.id === d.decided_by_id)
+              })),
+              attachments: attachments.map(a => ({
+                ...a,
+                creator: a.created_by_type === 'internal_user'
+                  ? users.find(u => u.id === a.created_by_id)
+                  : clientContacts.find(cc => cc.id === a.created_by_id)
+              }))
             }} />
 
 
