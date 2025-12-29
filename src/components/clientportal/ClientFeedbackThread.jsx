@@ -131,24 +131,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const creatorIdMatches = attachmentCreatorId === decisionCreatorId;
         const timeMatches = timeDiff < 5000; // 5 second window
 
-        // Debug log for matching
-        if (a.attachment_type === 'image' && !a.comment_id) {
-          console.log('Reference attachment check:', {
-            attachmentId: a.id,
-            attachmentTime,
-            decisionTime,
-            timeDiff,
-            attachmentCreatorType,
-            attachmentCreatorId,
-            decisionCreatorType,
-            decisionCreatorId,
-            creatorTypeMatches,
-            creatorIdMatches,
-            timeMatches,
-            result: creatorTypeMatches && creatorIdMatches && timeMatches
-          });
-        }
-
         return creatorTypeMatches && creatorIdMatches && timeMatches;
       });
 
