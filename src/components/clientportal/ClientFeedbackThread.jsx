@@ -72,8 +72,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       if (decisionAttachmentIds.has(a.id)) return false;
       // Only include attachments from internal users as initial design images
       if (a.created_by_type !== 'internal_user') return false;
-      const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-      return attachmentTime < earliestDecisionTime;
+      return true;
     });
 
     if (requestAttachments.length > 0 || request?.posted_at) {
