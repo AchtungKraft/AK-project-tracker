@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, Paperclip, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
