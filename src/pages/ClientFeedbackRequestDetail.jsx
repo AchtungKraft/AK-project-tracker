@@ -711,6 +711,12 @@ export default function ClientFeedbackRequestDetail() {
           </DialogContent>
         </Dialog>
       )}
+
+      <ImageModal
+        isOpen={!!selectedImage}
+        onClose={() => setSelectedImage(null)}
+        imageUrl={selectedImage}
+      />
     </div>
   );
 }
