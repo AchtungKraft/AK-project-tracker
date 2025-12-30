@@ -367,23 +367,7 @@ export default function ClientFeedbackDetail() {
   const approveLabel = request?.request_type === 'image_review' ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
 
-  // Separate design images (uploaded by internal team) from client feedback images
-  const { designImages, clientFeedbackImages } = useMemo(() => {
-    const design = [];
-    const clientFeedback = [];
-    
-    attachments.forEach(att => {
-      if (att.attachment_type === 'image' && !att.comment_id) {
-        if (att.created_by_type === 'internal_user') {
-          design.push(att);
-        } else if (att.created_by_type === 'client_contact') {
-          clientFeedback.push(att);
-        }
-      }
-    });
-    
-    return { designImages: design, clientFeedbackImages: clientFeedback };
-  }, [attachments]);
+
 
   if (!request || !user) {
     return (
