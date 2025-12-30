@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
