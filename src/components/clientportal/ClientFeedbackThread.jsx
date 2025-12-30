@@ -38,9 +38,40 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
       : Infinity;
 
-    // Only include attachments created before first decision as initial request attachments
+    // Track which attachment IDs are associated with decisions (to exclude from initial request)
+    const decisionAttachmentIds = new Set();
+    
+    // Build a map of decision times by creator for matching reference attachments
+    const decisionTimesByCreator = {};
+    decisions.forEach(d => {
+      const key = `${d.decided_by_type}_${d.decided_by_id}`;
+      const time = new Date(d.decided_at || d.created_date).getTime();
+      if (!decisionTimesByCreator[key]) {
+        decisionTimesByCreator[key] = [];
+      }
+      decisionTimesByCreator[key].push(time);
+    });
+
+    // Pre-identify which attachments belong to decisions (uploaded within 5 seconds of a decision by same creator)
+    attachments.forEach(a => {
+      if (a.comment_id) return;
+      const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+      const creatorKey = `${a.created_by_type}_${a.created_by_id}`;
+      const creatorDecisionTimes = decisionTimesByCreator[creatorKey] || [];
+      
+      // Check if this attachment was uploaded close to any decision by this creator
+      const isDecisionAttachment = creatorDecisionTimes.some(dt => Math.abs(attachmentTime - dt) < 5000);
+      if (isDecisionAttachment) {
+        decisionAttachmentIds.add(a.id);
+      }
+    });
+
+    // Initial request attachments: created by internal users, not linked to comments, and not decision-related
     const requestAttachments = attachments.filter(a => {
       if (a.comment_id) return false;
+      if (decisionAttachmentIds.has(a.id)) return false;
+      // Only include attachments from internal users as initial design images
+      if (a.created_by_type !== 'internal_user') return false;
       const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
       return attachmentTime < earliestDecisionTime;
     });
