@@ -48,6 +48,7 @@ export default function ClientFeedbackRequestDetail() {
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
   const [decisionUploadedImages, setDecisionUploadedImages] = useState([]);
   const [uploadingDecisionImages, setUploadingDecisionImages] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     if (!token && !slug || !requestId) return;
