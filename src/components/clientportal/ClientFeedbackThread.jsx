@@ -141,15 +141,10 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       // Get reference attachments created by the decider within 5 seconds of the decision
       // Match ONLY by creator and time proximity
-      // IMPORTANT: Also exclude attachments that are already shown as initial request attachments  
       const referenceAttachments = attachments.filter(a => {
         if (a.comment_id) return false; // Skip attachments linked to comments
 
         const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-        
-        // Skip attachments that were created BEFORE the earliest decision (those are initial request images)
-        if (attachmentTime < earliestDecisionTime) return false;
-        
         const timeDiff = Math.abs(attachmentTime - decisionTime);
 
         // Match by creator and time proximity
