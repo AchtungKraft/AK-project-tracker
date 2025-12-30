@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, Paperclip } from "lucide-react";
+import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, Paperclip, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import { cn } from "@/lib/utils";
 import { getRequestState } from "@/components/clientportal/utils";
+import ImageModal from "../components/ui/ImageModal";
 
 const getRequestTypeInfo = (type) => {
   const map = {
