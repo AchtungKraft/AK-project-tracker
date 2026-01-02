@@ -140,15 +140,19 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const decider = firstDecision.decider;
       const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
-      // Get reference attachments created by the decider within 5 seconds of the decision
-      // Match ONLY by creator and time proximity
+      // Get reference attachments uploaded AFTER the earliest decision time
+      // These are images uploaded WITH a decision (change request or approval)
       const referenceAttachments = attachments.filter(a => {
         if (a.comment_id) return false; // Skip attachments linked to comments
 
         const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+        
+        // Must be uploaded AFTER the earliest decision (not an initial request attachment)
+        if (attachmentTime < earliestDecisionTime) return false;
+        
         const timeDiff = Math.abs(attachmentTime - decisionTime);
 
-        // Match by creator and time proximity
+        // Match by creator and time proximity (within 5 seconds of THIS decision)
         const attachmentCreatorType = a.created_by_type;
         const attachmentCreatorId = a.created_by_id;
         const decisionCreatorType = firstDecision.decided_by_type;
