@@ -165,22 +165,23 @@ Deno.serve(async (req) => {
         }
 
         // Update request status based on decision
-        console.log(`Updating request ${requestId} status to: ${decision}`);
+        console.log(`[STATUS UPDATE] Starting update for request ${requestId} to status: ${decision}`);
         let updatedRequest = null;
-        try {
-            if (decision === 'changes_requested') {
+        const statusToSet = decision === 'changes_requested' ? 'changes_requested' : (decision === 'approved' ? 'approved' : null);
+        
+        if (statusToSet) {
+            console.log(`[STATUS UPDATE] Will set status to: ${statusToSet}`);
+            try {
                 updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                    status: 'changes_requested'
+                    status: statusToSet
                 });
-                console.log('Updated to changes_requested:', updatedRequest);
-            } else if (decision === 'approved') {
-                updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                    status: 'approved'
-                });
-                console.log('Updated to approved:', updatedRequest);
+                console.log(`[STATUS UPDATE] Success! Updated request:`, JSON.stringify(updatedRequest));
+            } catch (updateError) {
+                console.error(`[STATUS UPDATE] FAILED:`, updateError.message);
+                console.error(`[STATUS UPDATE] Full error:`, JSON.stringify(updateError));
             }
-        } catch (updateError) {
-            console.error('Failed to update request status:', updateError);
+        } else {
+            console.log(`[STATUS UPDATE] Skipping - decision "${decision}" does not map to a status`);
         }
 
         return Response.json({
