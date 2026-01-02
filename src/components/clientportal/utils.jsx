@@ -14,6 +14,12 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
   if (request.status === 'draft') return { label: 'Draft', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border', icon: FileText };
   if (request.status === 'archived') return { label: 'Archived', color: 'bg-[oklch(74.6%_0.16_232.661)]/10 text-[oklch(74.6%_0.16_232.661)] border-[oklch(74.6%_0.16_232.661)]/20 border', icon: Archive };
   
+  // Explicit status check for approved
+  if (request.status === 'approved') {
+    const label = request.request_type === 'image_review' ? 'Approved' : 'Confirmed';
+    return { label, color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
+  }
+  
   // Explicit status check for changes_requested to ensure it appears in bucket even if decisions are tricky
   if (request.status === 'changes_requested') {
     return { label: 'Changes Requested', color: 'bg-[oklch(85.2%_0.199_91.936)]/20 text-[oklch(85.2%_0.199_91.936)] border-[oklch(85.2%_0.199_91.936)]/50 border', icon: AlertCircle };
