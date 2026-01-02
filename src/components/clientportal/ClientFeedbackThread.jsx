@@ -66,13 +66,15 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       }
     });
 
-    // Initial request attachments: created by internal users, not linked to comments, and not decision-related
+    // Initial request attachments: created by internal users, not linked to comments, not decision-related, and uploaded BEFORE any decisions
     const requestAttachments = attachments.filter(a => {
       if (a.comment_id) return false;
       if (decisionAttachmentIds.has(a.id)) return false;
       // Only include attachments from internal users as initial design images
       if (a.created_by_type !== 'internal_user') return false;
-      return true;
+      // Must be uploaded before any decisions were made
+      const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
+      return attachmentTime < earliestDecisionTime;
     });
 
     if (requestAttachments.length > 0 || request?.posted_at) {
@@ -385,7 +387,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
               {event.type === 'decision' && event.referenceAttachments?.length > 0 && (
                 <div className="pl-10 space-y-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reference Images</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
                   {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {event.referenceAttachments.filter(a => a.attachment_type === 'image').map(att => (
