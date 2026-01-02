@@ -148,7 +148,12 @@ Deno.serve(async (req) => {
             request: enrichedRequest,
             comments: enrichedComments,
             decisions: enrichedDecisions,
-            attachments: enrichedAttachments
+            attachments: enrichedAttachments,
+            // Include for debugging - these are used to enrich the above arrays
+            _debug: {
+                usersCount: users.length,
+                clientContactsCount: clientContacts.length
+            }
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
