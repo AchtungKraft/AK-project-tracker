@@ -108,17 +108,36 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     });
 
     // Group decisions by timestamp and decider to handle batch reviews
+    // Use 10-second window to group decisions made together
     const decisionGroups = {};
 
-    decisions.forEach(decision => {
+    // Sort decisions by time first
+    const sortedDecisions = [...decisions].sort((a, b) => 
+      new Date(a.decided_at || a.created_date) - new Date(b.decided_at || b.created_date)
+    );
+
+    sortedDecisions.forEach(decision => {
       const timestampStr = decision.decided_at || decision.created_date;
-      const timestamp = new Date(timestampStr);
-      const roundedTime = Math.floor(timestamp.getTime() / 1000);
-      const key = `${decision.decided_by_type}_${decision.decided_by_id}_${roundedTime}`;
-      if (!decisionGroups[key]) {
-        decisionGroups[key] = [];
+      const timestamp = new Date(timestampStr).getTime();
+      const deciderKey = `${decision.decided_by_type}_${decision.decided_by_id}`;
+      
+      // Find existing group within 10 seconds by same decider
+      let foundGroup = null;
+      for (const [key, group] of Object.entries(decisionGroups)) {
+        if (!key.startsWith(deciderKey)) continue;
+        const groupTime = new Date(group[0].decided_at || group[0].created_date).getTime();
+        if (Math.abs(timestamp - groupTime) < 10000) {
+          foundGroup = key;
+          break;
+        }
       }
-      decisionGroups[key].push(decision);
+      
+      if (foundGroup) {
+        decisionGroups[foundGroup].push(decision);
+      } else {
+        const key = `${deciderKey}_${timestamp}`;
+        decisionGroups[key] = [decision];
+      }
     });
 
     Object.values(decisionGroups).forEach(group => {
