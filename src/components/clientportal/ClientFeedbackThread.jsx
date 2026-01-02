@@ -36,7 +36,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     // Find earliest decision time to separate initial attachments from decision reference images
     const earliestDecisionTime = decisions.length > 0
       ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
-      : Infinity;
+      : Date.now() + 1000000; // Far future if no decisions
 
     // Track which attachment IDs are associated with decisions (to exclude from initial request)
     const decisionAttachmentIds = new Set();
