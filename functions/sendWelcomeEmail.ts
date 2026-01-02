@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
     try {
@@ -36,16 +36,7 @@ Deno.serve(async (req) => {
         }
 
         // Build portal URL
-        const appBaseUrl = Deno.env.get("APP_BASE_URL") || 'https://projects.achtungkraft.com';
-        let portalUrl;
-        
-        if (contact.url_slug) {
-            portalUrl = `${appBaseUrl}/ClientProjects?slug=${contact.url_slug}`;
-        } else if (access.share_token) {
-            portalUrl = `${appBaseUrl}/ClientProjects?token=${access.share_token}`;
-        } else {
-            return Response.json({ error: 'No valid access method found' }, { status: 400 });
-        }
+        const clientPortalBaseUrl = 'https://akclient.base44.app';
 
         const resendApiKey = Deno.env.get("RESEND_API_KEY");
         
@@ -54,7 +45,7 @@ Deno.serve(async (req) => {
             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
         }
 
-        const subject = `Welcome to ${project.name} Project Portal`;
+        const subject = `Achtung Kraft // Welcome to ${project.name} Project Portal`;
         
         const htmlBody = `
 <p>Hi ${contact.name},</p>
@@ -72,14 +63,14 @@ Deno.serve(async (req) => {
 </div>
 
 <p>
-<a href="${portalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+<a href="${clientPortalBaseUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
 ACCESS YOUR PORTAL
 </a>
 </p>
 
 <p style="color: #666; font-size: 14px;">
-Your unique portal link:<br/>
-<a href="${portalUrl}" style="color: #3b82f6;">${portalUrl}</a>
+Your portal link:<br/>
+<a href="${clientPortalBaseUrl}" style="color: #3b82f6;">${clientPortalBaseUrl}</a>
 </p>
 
 <p style="color: #666; font-size: 14px;">
@@ -104,7 +95,7 @@ What You Can Do:
 - Track project milestones
 
 Access your portal here:
-${portalUrl}
+${clientPortalBaseUrl}
 
 Bookmark this link for easy access to your project portal anytime.
 

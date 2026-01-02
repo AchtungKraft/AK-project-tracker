@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
     try {
@@ -82,9 +82,9 @@ Deno.serve(async (req) => {
         const toAddresses = Array.from(recipients);
 
         // Prepare email content
-        const appBaseUrl = Deno.env.get("APP_BASE_URL") || 'https://projects.achtungkraft.com'; 
+        const clientPortalBaseUrl = 'https://akclient.base44.app';
         
-        const subject = `Request update: ${request.title}`;
+        const subject = `Achtung Kraft // Request Update: ${request.title}`;
         
         // Using a generic greeting since there are multiple recipients
         const htmlBody = `
@@ -97,15 +97,24 @@ Status changed from <strong>${oldStatus || 'unknown'}</strong>
 to <strong>${newStatus}</strong>.
 </p>
 
+<div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
+    <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
+    <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.body || 'No description provided.'}</p>
+</div>
+
 <p>
-You can view the request details here:<br />
-<a href="${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}">
-View Request
+Access your client portal to view the full details:<br />
+<a href="${clientPortalBaseUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
+ACCESS CLIENT PORTAL
 </a>
 </p>
 
+<p style="color: #666; font-size: 14px;">
+Portal link: <a href="${clientPortalBaseUrl}" style="color: #3b82f6;">${clientPortalBaseUrl}</a>
+</p>
+
 <p>
-— Achtung Kraft
+— Achtung Kraft Projects
 </p>
 `;
 
@@ -114,8 +123,11 @@ The request "${request.title}" has been updated.
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 
-View details:
-${appBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}
+${request.title}
+${request.body || 'No description provided.'}
+
+Access your client portal:
+${clientPortalBaseUrl}
 `;
 
         // Send email via Resend
