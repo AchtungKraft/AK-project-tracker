@@ -288,13 +288,69 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   return (
     <>
       <div className="space-y-6 pb-20">
-        {timeline.map((event, idx) => (
-          <Card key={idx} className="bg-black/60 backdrop-blur-xl border border-gray-700">
+        {timeline.map((event, idx) => {
+          // Determine card styling based on event type
+          const isClientComment = event.type === 'comment' && event.comment?.author_type === 'client_contact';
+          const isInternalComment = event.type === 'comment' && event.comment?.author_type === 'internal_user';
+          const isApprovedDecision = event.type === 'decision' && event.decision.decision === 'approved';
+          const isChangesRequestedDecision = event.type === 'decision' && event.decision.decision === 'changes_requested';
+          const isRequestPost = event.type === 'request_post';
+
+          let cardClassName = "bg-black/60 backdrop-blur-xl border";
+          let cardStyle = {};
+
+          if (isRequestPost) {
+            cardClassName = "backdrop-blur-xl border border-green-500/50";
+            cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
+          } else if (isApprovedDecision) {
+            cardClassName = "bg-blue-900/30 backdrop-blur-xl border border-blue-500/50";
+          } else if (isChangesRequestedDecision) {
+            cardClassName = "bg-orange-900/30 backdrop-blur-xl border border-orange-500/50";
+          } else if (isInternalComment) {
+            cardClassName = "backdrop-blur-xl border border-green-500/50";
+            cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
+          } else if (isClientComment) {
+            cardClassName = "bg-yellow-900/20 backdrop-blur-xl border border-yellow-500/50";
+          } else {
+            cardClassName = "bg-black/60 backdrop-blur-xl border border-gray-700";
+          }
+
+          return (
+          <Card key={idx} className={cardClassName} style={cardStyle}>
             <CardContent className="p-4">
+              {/* Header Badge */}
+              <div className="mb-3">
+                {isRequestPost && (
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
+                    FOR REVIEW
+                  </Badge>
+                )}
+                {isInternalComment && (
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
+                    FOR REVIEW
+                  </Badge>
+                )}
+                {isClientComment && (
+                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
+                    COMMENT
+                  </Badge>
+                )}
+                {isApprovedDecision && (
+                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50 border font-semibold text-xs">
+                    APPROVED
+                  </Badge>
+                )}
+                {isChangesRequestedDecision && (
+                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
+                    CHANGE REQUESTED
+                  </Badge>
+                )}
+              </div>
+
               <div className="flex items-start justify-between gap-3 mb-3">
                 {event.type === 'request_post' && (
-                  <div className="flex items-center gap-2 text-blue-400">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/50">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/50">
                       <ImageIcon className="w-4 h-4" />
                     </div>
                     <div>
@@ -326,7 +382,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
                 {event.type === 'decision' && (
                   <div className="flex items-center gap-2 text-white">
-                    {event.decision.decision === 'approved' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-orange-500" />}
+                    {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
                     <div>
                       <p className="font-medium text-sm">
                         {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
@@ -485,7 +541,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               )}
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {selectedImageIds.length > 0 && requestType === 'image_review' && (
