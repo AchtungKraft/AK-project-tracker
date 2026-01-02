@@ -78,20 +78,21 @@ Deno.serve(async (req) => {
         const access = accesses[0];
 
         // Fetch all related data in parallel for better performance
-        const [comments, decisions, attachments, users, clientContacts] = await Promise.all([
+        // Sort by the actual event timestamp fields (posted_at, decided_at) for accurate chronological order
+        const [commentsRaw, decisionsRaw, attachmentsRaw, users, clientContacts] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackComment.filter(
                 { request_id: requestId }, 
-                '-created_date', 
+                '-posted_at', 
                 1000
             ),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter(
                 { request_id: requestId }, 
-                '-created_date', 
+                '-decided_at', 
                 1000
             ),
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter(
                 { request_id: requestId }, 
-                '-created_date', 
+                '-posted_at', 
                 1000
             ),
             base44.asServiceRole.entities.User.list().catch(err => {
