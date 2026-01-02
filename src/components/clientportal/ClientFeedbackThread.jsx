@@ -33,10 +33,17 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   const timeline = useMemo(() => {
     const events = [];
 
+    // Debug logging
+    console.log('=== ClientFeedbackThread Debug ===');
+    console.log('Attachments:', attachments);
+    console.log('Decisions:', decisions);
+
     // Find earliest decision time to separate initial attachments from decision reference images
     const earliestDecisionTime = decisions.length > 0
       ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
       : Date.now() + 1000000; // Far future if no decisions
+
+    console.log('Earliest decision time:', earliestDecisionTime, new Date(earliestDecisionTime));
 
     // Track which attachment IDs are associated with decisions (to exclude from initial request)
     const decisionAttachmentIds = new Set();
@@ -52,6 +59,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       decisionTimesByCreator[key].push(time);
     });
 
+    console.log('Decision times by creator:', decisionTimesByCreator);
+
     // Pre-identify which attachments belong to decisions (uploaded within 5 seconds of a decision by same creator)
     attachments.forEach(a => {
       if (a.comment_id) return;
@@ -61,21 +70,26 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       
       // Check if this attachment was uploaded close to any decision by this creator
       const isDecisionAttachment = creatorDecisionTimes.some(dt => Math.abs(attachmentTime - dt) < 5000);
+      console.log('Attachment:', a.id, 'time:', attachmentTime, 'creatorKey:', creatorKey, 'isDecisionAttachment:', isDecisionAttachment);
       if (isDecisionAttachment) {
         decisionAttachmentIds.add(a.id);
       }
     });
 
-    // Initial request attachments: created by internal users, not linked to comments, not decision-related, and uploaded BEFORE any decisions
+    console.log('Decision attachment IDs:', [...decisionAttachmentIds]);
+
+    // Initial request attachments: not linked to comments, not decision-related
+    // For initial request, include ALL non-decision attachments uploaded BEFORE any decisions
     const requestAttachments = attachments.filter(a => {
       if (a.comment_id) return false;
       if (decisionAttachmentIds.has(a.id)) return false;
-      // Only include attachments from internal users as initial design images
-      if (a.created_by_type !== 'internal_user') return false;
-      // Must be uploaded before any decisions were made
       const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-      return attachmentTime < earliestDecisionTime;
+      const result = attachmentTime < earliestDecisionTime;
+      console.log('Request attachment check:', a.id, 'time:', attachmentTime, 'beforeDecision:', result);
+      return result;
     });
+
+    console.log('Request attachments:', requestAttachments);
 
     if (requestAttachments.length > 0 || request?.posted_at) {
       const timestamp = request?.posted_at || request?.created_date;
