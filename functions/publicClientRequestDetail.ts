@@ -105,6 +105,26 @@ Deno.serve(async (req) => {
             })
         ]);
 
+        // Sort on client side using event timestamps (posted_at/decided_at) with fallback to created_date
+        // This ensures correct chronological order regardless of DB sort behavior
+        const comments = [...commentsRaw].sort((a, b) => {
+            const timeA = new Date(a.posted_at || a.created_date).getTime();
+            const timeB = new Date(b.posted_at || b.created_date).getTime();
+            return timeB - timeA; // Descending (newest first)
+        });
+
+        const decisions = [...decisionsRaw].sort((a, b) => {
+            const timeA = new Date(a.decided_at || a.created_date).getTime();
+            const timeB = new Date(b.decided_at || b.created_date).getTime();
+            return timeB - timeA; // Descending (newest first)
+        });
+
+        const attachments = [...attachmentsRaw].sort((a, b) => {
+            const timeA = new Date(a.posted_at || a.created_date).getTime();
+            const timeB = new Date(b.posted_at || b.created_date).getTime();
+            return timeB - timeA; // Descending (newest first)
+        });
+
         console.log('Fetched data counts:', {
             comments: comments.length,
             decisions: decisions.length,
