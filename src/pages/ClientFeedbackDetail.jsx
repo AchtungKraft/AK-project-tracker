@@ -91,13 +91,29 @@ export default function ClientFeedbackDetail() {
 
   const { data: decisions = [] } = useQuery({
     queryKey: ['clientFeedbackDecisions', requestId],
-    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+    queryFn: async () => {
+      const data = await base44.entities.ClientFeedbackDecision.filter({ request_id: requestId });
+      // Sort by decided_at timestamp with fallback to created_date for correct chronological order
+      return [...data].sort((a, b) => {
+        const timeA = new Date(a.decided_at || a.created_date).getTime();
+        const timeB = new Date(b.decided_at || b.created_date).getTime();
+        return timeB - timeA; // Descending (newest first)
+      });
+    },
     enabled: !!requestId
   });
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+    queryFn: async () => {
+      const data = await base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId });
+      // Sort by posted_at timestamp with fallback to created_date for correct chronological order
+      return [...data].sort((a, b) => {
+        const timeA = new Date(a.posted_at || a.created_date).getTime();
+        const timeB = new Date(b.posted_at || b.created_date).getTime();
+        return timeB - timeA; // Descending (newest first)
+      });
+    },
     enabled: !!requestId
   });
 
