@@ -32,62 +32,155 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        // Collect Recipient Emails
-        const recipients = new Set();
-
-        // 1. Client Email from Project (Legacy/Main)
-        if (project.client_email) {
-            recipients.add(project.client_email);
-        }
-
-        // 2. Client Contacts with Access to Project
+        // Get client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
             project_id: request.project_id,
             access_status: 'active'
         });
-        
-        const clientContactIds = accesses.map(a => a.client_contact_id);
-        if (clientContactIds.length > 0) {
-            // Fetch contacts manually as we don't have bulk fetch by ID list easily without loop or complex filter
-            // Assuming filter supports $in or similar or just loop
-            // Standard entity filter is often simple. Let's loop for safety or use filter if supported.
-            // Base44 filter: { id: { $in: [...] } } or just loop. The SDK instructions don't explicitly show $in support for 'filter'. 
-            // It says "Query filter (e.g. {"id": "123"}, {"status": "active"}, {"age": {"$gte": 18}})"
-            // So let's try Promise.all for parallel fetch which is fast enough for small numbers.
-            const contactPromises = clientContactIds.map(id => 
-                base44.asServiceRole.entities.ClientContact.filter({ id })
-            );
-            const contactResults = await Promise.all(contactPromises);
-            contactResults.flat().forEach(contact => {
-                if (contact && contact.email) recipients.add(contact.email);
-            });
-        }
 
-        // 3. Team Members Assigned to Project
-        if (project.assigned_team && Array.isArray(project.assigned_team) && project.assigned_team.length > 0) {
-             const teamPromises = project.assigned_team.map(id => 
-                base44.asServiceRole.entities.TeamMember.filter({ id })
-            );
-            const teamResults = await Promise.all(teamPromises);
-            teamResults.flat().forEach(member => {
-                if (member && member.email) recipients.add(member.email);
-            });
-        }
 
-        if (recipients.size === 0) {
-            console.log(`No recipients found for project ${project.id}. Skipping email.`);
-            return Response.json({ message: 'No recipients found' });
-        }
-
-        const toAddresses = Array.from(recipients);
 
         // Prepare email content
         const clientPortalBaseUrl = 'https://akclient.base44.app';
         
-        const subject = `Achtung Kraft // Request Update: ${request.title}`;
+        // For status update emails, we need to send personalized emails per client contact with their slug
+        // First, separate client recipients from team members
+        const clientEmails = new Set();
+        const teamEmails = new Set();
         
-        // Using a generic greeting since there are multiple recipients
-        const htmlBody = `
+        // Get client contact emails with their slugs
+        const clientContactsWithSlugs = [];
+        if (accesses.length > 0) {
+            const contactPromises = accesses.map(async (access) => {
+                const contactResults = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
+                const contact = contactResults[0];
+                if (contact && contact.email) {
+                    clientContactsWithSlugs.push({
+                        email: contact.email,
+                        name: contact.name,
+                        slug: contact.url_slug || access.url_slug,
+                        token: access.share_token
+                    });
+                }
+            });
+            await Promise.all(contactPromises);
+        }
+        
+        // Add project client email if exists and not already in contacts
+        if (project.client_email) {
+            const existingContact = clientContactsWithSlugs.find(c => c.email === project.client_email);
+            if (!existingContact) {
+                clientContactsWithSlugs.push({
+                    email: project.client_email,
+                    name: project.client_name || 'Client',
+                    slug: null,
+                    token: null
+                });
+            }
+        }
+        
+        // Get team member emails
+        if (project.assigned_team && Array.isArray(project.assigned_team) && project.assigned_team.length > 0) {
+            const teamPromises = project.assigned_team.map(id => 
+                base44.asServiceRole.entities.TeamMember.filter({ id })
+            );
+            const teamResults = await Promise.all(teamPromises);
+            teamResults.flat().forEach(member => {
+                if (member && member.email) teamEmails.add(member.email);
+            });
+        }
+
+        const resendApiKey = Deno.env.get("RESEND_API_KEY");
+        if (!resendApiKey) {
+             console.error("RESEND_API_KEY not set");
+             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
+        }
+
+        const subject = `Achtung Kraft // Request Update: ${request.title}`;
+        const emailResults = [];
+
+        // Send personalized emails to client contacts with direct links
+        for (const clientContact of clientContactsWithSlugs) {
+            let requestDetailUrl = clientPortalBaseUrl;
+            if (clientContact.slug) {
+                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${clientContact.slug}`;
+            } else if (clientContact.token) {
+                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${clientContact.token}`;
+            }
+
+            const htmlBody = `
+<p>Hi ${clientContact.name},</p>
+
+<p>The request <strong>${request.title}</strong> has been updated.</p>
+
+<p>
+Status changed from <strong>${oldStatus || 'unknown'}</strong>
+to <strong>${newStatus}</strong>.
+</p>
+
+<div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
+    <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
+    <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.body || 'No description provided.'}</p>
+</div>
+
+<p>
+<a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
+VIEW REQUEST
+</a>
+</p>
+
+<p style="color: #666; font-size: 14px;">
+Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDetailUrl}</a>
+</p>
+
+<p>
+— Achtung Kraft Projects
+</p>
+`;
+
+            const textBody = `
+Hi ${clientContact.name},
+
+The request "${request.title}" has been updated.
+
+Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
+
+${request.title}
+${request.body || 'No description provided.'}
+
+View the request:
+${requestDetailUrl}
+`;
+
+            const emailResponse = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${resendApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
+                    to: [clientContact.email],
+                    subject: subject,
+                    html: htmlBody,
+                    text: textBody
+                })
+            });
+
+            if (emailResponse.ok) {
+                const data = await emailResponse.json();
+                emailResults.push({ email: clientContact.email, success: true, id: data.id });
+            } else {
+                const errorData = await emailResponse.json();
+                emailResults.push({ email: clientContact.email, success: false, error: errorData });
+            }
+        }
+
+        // Send generic email to team members (internal link)
+        if (teamEmails.size > 0) {
+            const internalUrl = `https://projects.achtungkraft.com/ClientFeedbackDetail?id=${request.id}&projectId=${request.project_id}`;
+            
+            const teamHtmlBody = `
 <p>Hello,</p>
 
 <p>The request <strong>${request.title}</strong> has been updated.</p>
@@ -103,14 +196,9 @@ to <strong>${newStatus}</strong>.
 </div>
 
 <p>
-Access your client portal to view the full details:<br />
-<a href="${clientPortalBaseUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
-ACCESS CLIENT PORTAL
+<a href="${internalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
+VIEW REQUEST
 </a>
-</p>
-
-<p style="color: #666; font-size: 14px;">
-Portal link: <a href="${clientPortalBaseUrl}" style="color: #3b82f6;">${clientPortalBaseUrl}</a>
 </p>
 
 <p>
@@ -118,7 +206,7 @@ Portal link: <a href="${clientPortalBaseUrl}" style="color: #3b82f6;">${clientPo
 </p>
 `;
 
-        const textBody = `
+            const teamTextBody = `
 The request "${request.title}" has been updated.
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
@@ -126,43 +214,34 @@ Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 ${request.title}
 ${request.body || 'No description provided.'}
 
-Access your client portal:
-${clientPortalBaseUrl}
+View the request:
+${internalUrl}
 `;
 
-        // Send email via Resend
-        const resendApiKey = Deno.env.get("RESEND_API_KEY");
-        if (!resendApiKey) {
-             console.error("RESEND_API_KEY not set");
-             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
+            const teamEmailResponse = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${resendApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
+                    to: Array.from(teamEmails),
+                    subject: subject,
+                    html: teamHtmlBody,
+                    text: teamTextBody
+                })
+            });
+
+            if (teamEmailResponse.ok) {
+                const data = await teamEmailResponse.json();
+                emailResults.push({ emails: Array.from(teamEmails), success: true, id: data.id });
+            }
         }
 
-        const emailResponse = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${resendApiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
-                to: toAddresses, 
-                subject: subject,
-                html: htmlBody,
-                text: textBody
-            })
-        });
+        console.log(`Status update emails sent for Request ${requestId}: ${oldStatus} -> ${newStatus}`);
 
-        if (!emailResponse.ok) {
-            const errorData = await emailResponse.json();
-            console.error("Resend API Error:", errorData);
-            return Response.json({ error: "Failed to send email", details: errorData }, { status: 500 });
-        }
-
-        const emailData = await emailResponse.json();
-
-        console.log(`Email sent for Request ${requestId}: ${oldStatus} -> ${newStatus} to ${toAddresses.join(', ')}. ID: ${emailData.id}`);
-
-        return Response.json({ success: true, emailId: emailData.id });
+        return Response.json({ success: true, results: emailResults });
 
     } catch (error) {
         console.error("Error in sendRequestStatusUpdateEmail:", error);

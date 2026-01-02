@@ -65,6 +65,19 @@ Deno.serve(async (req) => {
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) return null;
 
+            // Build the direct request URL with slug or token
+            let requestDetailUrl;
+            if (contact.url_slug) {
+                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${contact.url_slug}`;
+            } else if (access.url_slug) {
+                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${access.url_slug}`;
+            } else if (access.share_token) {
+                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${access.share_token}`;
+            } else {
+                console.warn(`No slug or token for contact ${contact.id}, skipping email`);
+                return null;
+            }
+
             const subject = `Achtung Kraft // REVIEW NEEDED: ${request.title}`;
 
             const htmlBody = `
@@ -80,13 +93,13 @@ Deno.serve(async (req) => {
 </div>
 
 <p style="margin: 30px 0;">
-<a href="${clientPortalBaseUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-ACCESS CLIENT PORTAL
+<a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+VIEW & APPROVE REQUEST
 </a>
 </p>
 
 <p style="color: #666; font-size: 14px;">
-Portal link: <a href="${clientPortalBaseUrl}" style="color: #3b82f6;">${clientPortalBaseUrl}</a>
+Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDetailUrl}</a>
 </p>
 
 <p>
@@ -104,8 +117,8 @@ Project: ${project.name}
 ${request.title}
 ${request.body || 'No description provided.'}
 
-Access your client portal:
-${clientPortalBaseUrl}
+View and approve the request here:
+${requestDetailUrl}
 
 — Achtung Kraft Projects
 `;
