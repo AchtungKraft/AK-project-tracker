@@ -34,6 +34,15 @@ const getTypeColor = (type) => {
 
 const STATE_ORDER = ['Needs Review', 'Needs Your Review', 'Changes Requested', 'Approved/Confirmed', 'Draft', 'Archived'];
 
+const STATE_DESCRIPTIONS = {
+  'Needs Review': 'Client to Review for Feedback/Approval',
+  'Needs Your Review': 'Client to Review for Feedback/Approval',
+  'Changes Requested': 'Achtung Kraft to Review',
+  'Approved/Confirmed': 'Finished Tasks',
+  'Draft': 'Not Yet Posted to Client',
+  'Archived': 'Confirmed by Achtung Kraft'
+};
+
 export default function ClientPortalDashboard({ projectId, onCreateRequest, onManageAccess, onSelectRequest }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('last_activity');
@@ -215,7 +224,16 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
                     <FolderKanban className="w-5 h-5" style={{ color: group.color }} />
-                    <CardTitle className="text-lg" style={{ color: group.color }}>{group.label}</CardTitle>
+                    <div>
+                      <CardTitle className="text-lg" style={{ color: group.color }}>
+                        {group.label.toUpperCase()}
+                      </CardTitle>
+                      {STATE_DESCRIPTIONS[group.label] && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          ({STATE_DESCRIPTIONS[group.label]})
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <Badge 
                     variant="outline" 
