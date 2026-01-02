@@ -33,63 +33,35 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   const timeline = useMemo(() => {
     const events = [];
 
-    // Debug logging
-    console.log('=== ClientFeedbackThread Debug ===');
-    console.log('Attachments:', attachments);
-    console.log('Decisions:', decisions);
-
-    // Find earliest decision time to separate initial attachments from decision reference images
-    const earliestDecisionTime = decisions.length > 0
-      ? Math.min(...decisions.map(d => new Date(d.decided_at || d.created_date).getTime()))
-      : Date.now() + 1000000; // Far future if no decisions
-
-    console.log('Earliest decision time:', earliestDecisionTime, new Date(earliestDecisionTime));
-
-    // Track which attachment IDs are associated with decisions (to exclude from initial request)
-    const decisionAttachmentIds = new Set();
+    // Get all decision times for matching attachments by time proximity only
+    const allDecisionTimes = decisions.map(d => new Date(d.decided_at || d.created_date).getTime());
     
-    // Build a map of decision times by creator for matching reference attachments
-    const decisionTimesByCreator = {};
-    decisions.forEach(d => {
-      const key = `${d.decided_by_type}_${d.decided_by_id}`;
-      const time = new Date(d.decided_at || d.created_date).getTime();
-      if (!decisionTimesByCreator[key]) {
-        decisionTimesByCreator[key] = [];
-      }
-      decisionTimesByCreator[key].push(time);
-    });
+    // Find earliest decision time (with small buffer to handle same-millisecond cases)
+    const earliestDecisionTime = allDecisionTimes.length > 0
+      ? Math.min(...allDecisionTimes) - 100 // 100ms buffer
+      : Date.now() + 1000000;
 
-    console.log('Decision times by creator:', decisionTimesByCreator);
-
-    // Pre-identify which attachments belong to decisions (uploaded within 5 seconds of a decision by same creator)
+    // Pre-identify which attachments belong to decisions by TIME PROXIMITY ONLY (not creator)
+    // Because backend creates attachments with service role, creator IDs won't match
+    const decisionAttachmentIds = new Set();
     attachments.forEach(a => {
       if (a.comment_id) return;
       const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-      const creatorKey = `${a.created_by_type}_${a.created_by_id}`;
-      const creatorDecisionTimes = decisionTimesByCreator[creatorKey] || [];
       
-      // Check if this attachment was uploaded close to any decision by this creator
-      const isDecisionAttachment = creatorDecisionTimes.some(dt => Math.abs(attachmentTime - dt) < 5000);
-      console.log('Attachment:', a.id, 'time:', attachmentTime, 'creatorKey:', creatorKey, 'isDecisionAttachment:', isDecisionAttachment);
+      // Check if this attachment was uploaded close to ANY decision (within 5 seconds)
+      const isDecisionAttachment = allDecisionTimes.some(dt => Math.abs(attachmentTime - dt) < 5000);
       if (isDecisionAttachment) {
         decisionAttachmentIds.add(a.id);
       }
     });
 
-    console.log('Decision attachment IDs:', [...decisionAttachmentIds]);
-
-    // Initial request attachments: not linked to comments, not decision-related
-    // For initial request, include ALL non-decision attachments uploaded BEFORE any decisions
+    // Initial request attachments: not linked to comments, not decision-related, uploaded BEFORE first decision
     const requestAttachments = attachments.filter(a => {
       if (a.comment_id) return false;
       if (decisionAttachmentIds.has(a.id)) return false;
       const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-      const result = attachmentTime < earliestDecisionTime;
-      console.log('Request attachment check:', a.id, 'time:', attachmentTime, 'beforeDecision:', result);
-      return result;
+      return attachmentTime < earliestDecisionTime;
     });
-
-    console.log('Request attachments:', requestAttachments);
 
     if (requestAttachments.length > 0 || request?.posted_at) {
       const timestamp = request?.posted_at || request?.created_date;
@@ -154,29 +126,16 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       const decider = firstDecision.decider;
       const decisionTime = new Date(firstDecision.decided_at || firstDecision.created_date).getTime();
 
-      // Get reference attachments uploaded AFTER the earliest decision time
-      // These are images uploaded WITH a decision (change request or approval)
+      // Get reference attachments uploaded WITH this decision (by TIME PROXIMITY only)
+      // Creator matching doesn't work because backend uses service role
       const referenceAttachments = attachments.filter(a => {
-        if (a.comment_id) return false; // Skip attachments linked to comments
-
+        if (a.comment_id) return false;
+        
         const attachmentTime = new Date(a.posted_at || a.created_date).getTime();
-        
-        // Must be uploaded AFTER the earliest decision (not an initial request attachment)
-        if (attachmentTime < earliestDecisionTime) return false;
-        
         const timeDiff = Math.abs(attachmentTime - decisionTime);
-
-        // Match by creator and time proximity (within 5 seconds of THIS decision)
-        const attachmentCreatorType = a.created_by_type;
-        const attachmentCreatorId = a.created_by_id;
-        const decisionCreatorType = firstDecision.decided_by_type;
-        const decisionCreatorId = firstDecision.decided_by_id;
-
-        const creatorTypeMatches = attachmentCreatorType === decisionCreatorType;
-        const creatorIdMatches = attachmentCreatorId === decisionCreatorId;
-        const timeMatches = timeDiff < 5000; // 5 second window
-
-        return creatorTypeMatches && creatorIdMatches && timeMatches;
+        
+        // Match by time proximity only (within 5 seconds of this decision)
+        return timeDiff < 5000;
       });
 
       // Get the selected/reviewed images
