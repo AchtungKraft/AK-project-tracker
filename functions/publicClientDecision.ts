@@ -165,19 +165,28 @@ Deno.serve(async (req) => {
         }
 
         // Update request status based on decision
-        if (decision === 'changes_requested') {
-            await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                status: 'changes_requested'
-            });
-        } else if (decision === 'approved') {
-            await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                status: 'approved'
-            });
+        console.log(`Updating request ${requestId} status to: ${decision}`);
+        let updatedRequest = null;
+        try {
+            if (decision === 'changes_requested') {
+                updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+                    status: 'changes_requested'
+                });
+                console.log('Updated to changes_requested:', updatedRequest);
+            } else if (decision === 'approved') {
+                updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+                    status: 'approved'
+                });
+                console.log('Updated to approved:', updatedRequest);
+            }
+        } catch (updateError) {
+            console.error('Failed to update request status:', updateError);
         }
 
         return Response.json({
             success: true,
-            decisions
+            decisions,
+            updatedStatus: updatedRequest?.status || null
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
