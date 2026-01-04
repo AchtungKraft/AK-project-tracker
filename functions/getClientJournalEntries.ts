@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     // Validate client access using token or slug
     let access = null;
     
-    if (token) {
+    if (token && token !== 'null' && token.trim() !== '') {
       const accessRecords = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
         share_token: token,
         access_status: 'active'
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       access = accessRecords.find(a => a.project_id === projectId);
     }
     
-    if (!access && slug) {
+    if (!access && slug && slug !== 'null' && slug.trim() !== '') {
       // Try to find by client slug
       const clients = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug });
       if (clients.length > 0) {
