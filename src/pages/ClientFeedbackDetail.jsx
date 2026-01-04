@@ -324,7 +324,7 @@ export default function ClientFeedbackDetail() {
 
 
 
-  if (!request || !user) {
+  if (!request || !user || isLoadingDetail) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
