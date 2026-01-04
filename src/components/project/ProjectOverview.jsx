@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Loader2, X, Edit2, Check, Calendar, FileText } from "lucide-react";
+import { Upload, Loader2, X, Edit2, Check, Calendar, FileText, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
@@ -20,6 +25,7 @@ export default function ProjectOverview({ project, projectId }) {
   const [uploadingImages, setUploadingImages] = useState(false);
 
   const [selectedImage, setSelectedImage] = useState(null);
+  const [infoExpanded, setInfoExpanded] = useState(false);
   const [formData, setFormData] = useState({
     name: project?.name || "",
     client_name: project?.client_name || "",
@@ -109,133 +115,153 @@ export default function ProjectOverview({ project, projectId }) {
   return (
     <>
       <div className="space-y-4">
-        {/* Project Info Header - Compact */}
-        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardHeader className="border-b border-red-900/30 p-4">
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-white text-base">Project Information</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => editing ? handleSaveChanges() : setEditing(true)}
-                disabled={updateMutation.isPending}
-                className="bg-red-600 hover:bg-red-700 border-gray-700 gap-2"
-              >
-                {updateMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : editing ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Save
-                  </>
-                ) : (
-                  <>
-                    <Edit2 className="w-4 h-4" />
-                    Edit
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4">
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-gray-400 text-xs">Project Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-400 text-xs">Client Name</Label>
-                  <Input
-                    value={formData.client_name}
-                    onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-400 text-xs">VIN / Chassis</Label>
-                  <Input
-                    value={formData.vin}
-                    onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Client</p>
-                  <p className="text-white text-sm">{project?.client_name || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">VIN / Chassis</p>
-                  <p className="text-white font-mono text-sm">{project?.vin || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Type</p>
-                  <p className="text-white text-sm">{projectType?.name || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Status</p>
-                  {currentStatus && (
-                    <Badge style={{ backgroundColor: currentStatus.color }} className="text-white text-xs">
-                      {currentStatus.label}
-                    </Badge>
+        {/* Project Info & Images - Collapsible */}
+        <Collapsible open={infoExpanded} onOpenChange={setInfoExpanded}>
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="border-b border-red-900/30 p-4 cursor-pointer hover:bg-gray-900/30 transition-colors">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    {infoExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    )}
+                    <CardTitle className="text-white text-base">Project Information & Images</CardTitle>
+                    {project?.images && project.images.length > 0 && (
+                      <Badge className="bg-gray-700 text-gray-300 text-xs ml-2">
+                        {project.images.length} images
+                      </Badge>
+                    )}
+                  </div>
+                  {infoExpanded && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        editing ? handleSaveChanges() : setEditing(true);
+                      }}
+                      disabled={updateMutation.isPending}
+                      className="bg-red-600 hover:bg-red-700 border-gray-700 gap-2"
+                    >
+                      {updateMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : editing ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Save
+                        </>
+                      ) : (
+                        <>
+                          <Edit2 className="w-4 h-4" />
+                          Edit
+                        </>
+                      )}
+                    </Button>
                   )}
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Start Date</p>
-                  <p className="text-white text-sm">
-                    {project?.start_date ? format(new Date(project.start_date), 'MMM d, yyyy') : '-'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Target Completion</p>
-                  <p className="text-white text-sm">
-                    {project?.target_completion ? format(new Date(project.target_completion), 'MMM d, yyyy') : '-'}
-                  </p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-xs text-gray-400 mb-1">Progress</p>
-                  <div className="flex items-center gap-2">
-                    <Progress value={project?.progress_percent || 0} className="h-2 flex-1 bg-gray-800" />
-                    <span className="text-xs text-gray-400">{project?.progress_percent || 0}%</span>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="p-4 space-y-4">
+                {/* Project Info */}
+                {editing ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-gray-400 text-xs">Project Name</Label>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs">Client Name</Label>
+                      <Input
+                        value={formData.client_name}
+                        onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs">VIN / Chassis</Label>
+                      <Input
+                        value={formData.vin}
+                        onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Client</p>
+                      <p className="text-white text-sm">{project?.client_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">VIN / Chassis</p>
+                      <p className="text-white font-mono text-sm">{project?.vin || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Type</p>
+                      <p className="text-white text-sm">{projectType?.name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Status</p>
+                      {currentStatus && (
+                        <Badge style={{ backgroundColor: currentStatus.color }} className="text-white text-xs">
+                          {currentStatus.label}
+                        </Badge>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Start Date</p>
+                      <p className="text-white text-sm">
+                        {project?.start_date ? format(new Date(project.start_date), 'MMM d, yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Target Completion</p>
+                      <p className="text-white text-sm">
+                        {project?.target_completion ? format(new Date(project.target_completion), 'MMM d, yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-xs text-gray-400 mb-1">Progress</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={project?.progress_percent || 0} className="h-2 flex-1 bg-gray-800" />
+                        <span className="text-xs text-gray-400">{project?.progress_percent || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-        {/* Project Images Thumbnails */}
-        {project?.images && project.images.length > 0 && (
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-            <CardHeader className="border-b border-red-900/30 p-4">
-              <CardTitle className="text-white text-base">Project Images</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                {project.images.map((url, idx) => (
-                  <div
-                    key={idx}
-                    className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
-                    onClick={() => setSelectedImage(url)}
-                  >
-                    <img
-                      src={url}
-                      alt={`Project ${idx + 1}`}
-                      className="max-w-full max-h-full object-contain"
-                    />
+                {/* Project Images */}
+                {project?.images && project.images.length > 0 && (
+                  <div className="pt-4 border-t border-gray-800">
+                    <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide">Project Images</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {project.images.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="w-full aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
+                          onClick={() => setSelectedImage(url)}
+                        >
+                          <img
+                            src={url}
+                            alt={`Project ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
+                )}
+              </CardContent>
+            </CollapsibleContent>
           </Card>
-        )}
+        </Collapsible>
 
         {/* Main Task Groups Board */}
         <ProjectKanban projectId={projectId} />
