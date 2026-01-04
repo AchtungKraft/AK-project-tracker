@@ -133,10 +133,6 @@ export default function ClientFeedbackDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
       toast.success('Feedback request deleted');
       navigate(createPageUrl('ProjectDetail') + '?id=' + projectId + '&tab=clientportal');
     }
