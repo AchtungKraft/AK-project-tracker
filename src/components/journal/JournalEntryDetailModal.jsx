@@ -5,8 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Trash2, Upload, X, Paperclip, Link2 } from "lucide-react";
+import { Loader2, Trash2, Upload, X, Paperclip, Link2, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
@@ -18,6 +25,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const [photos, setPhotos] = useState([]);
   const [url, setUrl] = useState("");
   const [attachments, setAttachments] = useState([]);
+  const [visibility, setVisibility] = useState("internal");
   const [uploading, setUploading] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -29,6 +37,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
       setPhotos(entry.photos || []);
       setUrl(entry.url || "");
       setAttachments(entry.attachments || []);
+      setVisibility(entry.visibility || "internal");
     }
   }, [entry]);
 
@@ -113,6 +122,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
       photos,
       url,
       attachments,
+      visibility,
       project_id: entry.project_id,
     });
   };
@@ -163,6 +173,27 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
                 placeholder="https://example.com"
                 className="bg-gray-800 border-gray-700 text-white"
               />
+            </div>
+
+            <div>
+              <Label>Visibility</Label>
+              <Select value={visibility} onValueChange={setVisibility}>
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white w-48 mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="internal">
+                    <span className="flex items-center gap-2">
+                      <EyeOff className="w-4 h-4" /> Internal Only
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="client">
+                    <span className="flex items-center gap-2">
+                      <Eye className="w-4 h-4" /> Visible to Client
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
