@@ -2435,6 +2435,7 @@ API Endpoints (Use these exact endpoints):
 • POST /api/functions/publicClientRequestDetail - Get detailed request with enriched data
 • POST /api/functions/publicAddClientComment - Add comment with attachments
 • POST /api/functions/publicClientDecision - Record approval or change request
+• POST /api/functions/getClientJournalEntries - Get client-visible journal entries
 
 Critical Data Structure Rules:
 1. ALL API responses include enriched author/decider/creator objects
