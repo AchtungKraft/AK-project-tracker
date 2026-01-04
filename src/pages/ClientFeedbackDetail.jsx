@@ -498,25 +498,9 @@ export default function ClientFeedbackDetail() {
             accessRole={user?.role}
             request={{
               ...request,
-              creator: users.find(u => u.id === request.created_by_user_id),
-              comments: comments.map(c => ({
-                ...c,
-                author: c.author_type === 'internal_user'
-                  ? users.find(u => u.id === c.author_id)
-                  : clientContacts.find(cc => cc.id === c.author_id)
-              })),
-              decisions: decisions.map(d => ({
-                ...d,
-                decider: d.decided_by_type === 'internal_user'
-                  ? users.find(u => u.id === d.decided_by_id)
-                  : clientContacts.find(cc => cc.id === d.decided_by_id)
-              })),
-              attachments: attachments.map(a => ({
-                ...a,
-                creator: a.created_by_type === 'internal_user'
-                  ? users.find(u => u.id === a.created_by_id)
-                  : clientContacts.find(cc => cc.id === a.created_by_id)
-              }))
+              comments,
+              decisions,
+              attachments
             }} />
 
 
