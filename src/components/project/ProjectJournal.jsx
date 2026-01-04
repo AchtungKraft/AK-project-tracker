@@ -126,7 +126,7 @@ export default function ProjectJournal({ projectId }) {
   };
 
   const sortedEntries = [...entries].sort((a, b) => 
-    new Date(b.entry_date || b.created_date) - new Date(a.entry_date || a.created_date)
+    new Date(b.updated_date || b.entry_date || b.created_date) - new Date(a.updated_date || a.entry_date || a.created_date)
   );
 
   const handleEntryClick = (entry) => {
@@ -305,25 +305,34 @@ export default function ProjectJournal({ projectId }) {
               No journal entries yet. Add one to document your progress.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-6">
               {sortedEntries.map(entry => (
-                <div
+                <article
                   key={entry.id}
-                  className="p-4 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors cursor-pointer border border-gray-800"
+                  className="p-6 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-red-900/50 transition-colors cursor-pointer"
                   onClick={() => handleEntryClick(entry)}
                 >
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                    <Calendar className="w-3 h-3" />
-                    {format(new Date(entry.entry_date || entry.created_date), 'MMM d, yyyy')}
+                  {/* Header */}
+                  <div className="flex items-center gap-3 text-sm text-gray-400 mb-4 pb-4 border-b border-gray-800">
+                    <Calendar className="w-4 h-4" />
+                    <span>{format(new Date(entry.entry_date || entry.created_date), 'MMMM d, yyyy')}</span>
+                    {entry.updated_date && entry.updated_date !== entry.created_date && (
+                      <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
+                    )}
                   </div>
-                  <p className="text-white text-sm line-clamp-3 mb-3">{entry.content}</p>
+
+                  {/* Content */}
+                  <div className="prose prose-invert max-w-none mb-6">
+                    <p className="text-gray-200 text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                  </div>
                   
+                  {/* Photos Grid - 2 columns */}
                   {entry.photos && entry.photos.length > 0 && (
-                    <div className="grid grid-cols-3 gap-1 mb-3">
-                      {entry.photos.slice(0, 3).map((url, idx) => (
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {entry.photos.map((url, idx) => (
                         <div 
                           key={idx}
-                          className="w-full h-16 bg-gray-800 rounded border border-gray-700 flex items-center justify-center overflow-hidden hover:border-red-500 transition-colors"
+                          className="relative aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden hover:border-red-500 transition-colors group"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedImage(url);
@@ -332,33 +341,46 @@ export default function ProjectJournal({ projectId }) {
                           <img
                             src={url}
                             alt={`Photo ${idx + 1}`}
-                            className="max-w-full max-h-full object-contain"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
                         </div>
                       ))}
                     </div>
                   )}
 
+                  {/* URL Link */}
                   {entry.url && (
                     <a
                       href={entry.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 mb-2 truncate"
+                      className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300 mb-3 px-3 py-2 bg-gray-800/50 rounded-lg"
                     >
-                      <Link2 className="w-3 h-3 flex-shrink-0" />
+                      <Link2 className="w-4 h-4 flex-shrink-0" />
                       {entry.url}
                     </a>
                   )}
 
+                  {/* Attachments */}
                   {entry.attachments && entry.attachments.length > 0 && (
-                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                      <Paperclip className="w-3 h-3" />
-                      {entry.attachments.length} document{entry.attachments.length !== 1 ? 's' : ''}
+                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-800">
+                      {entry.attachments.map((att, idx) => (
+                        <a
+                          key={idx}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-2 text-sm text-gray-300 hover:text-white px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+                        >
+                          <Paperclip className="w-4 h-4" />
+                          {att.name}
+                        </a>
+                      ))}
                     </div>
                   )}
-                </div>
+                </article>
               ))}
             </div>
           )}
