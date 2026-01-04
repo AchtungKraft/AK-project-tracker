@@ -346,6 +346,8 @@ export default function ClientProjectPortal() {
           })}
           </div>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
