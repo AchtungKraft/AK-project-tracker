@@ -150,7 +150,7 @@ export default function ClientFeedbackDetail() {
       
       try {
         await base44.functions.invoke('updateRequestStatus', { requestId, status: newStatus });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+        queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         
         if (oldStatus !== newStatus) {
