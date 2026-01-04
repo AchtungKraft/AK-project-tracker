@@ -300,8 +300,7 @@ export default function ClientFeedbackDetail() {
       });
 
       if (response.data?.success) {
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+        queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         setNewComment('');
         setNewLinks(['']);
         setUploadedPhotos([]);
