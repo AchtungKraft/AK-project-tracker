@@ -202,6 +202,23 @@ export default function ClientProjectPortal() {
           </div>
         </div>
 
+        <Tabs defaultValue="requests" className="w-full">
+          <TabsList className="bg-black/40 border border-gray-700">
+            <TabsTrigger value="requests" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
+              <FolderKanban className="w-4 h-4 mr-2" />
+              Requests
+            </TabsTrigger>
+            <TabsTrigger value="journal" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
+              <BookOpen className="w-4 h-4 mr-2" />
+              Journal
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="journal" className="mt-6">
+            <ClientJournal projectId={projectId} token={token} slug={slug} />
+          </TabsContent>
+
+          <TabsContent value="requests" className="mt-6 space-y-6">
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
