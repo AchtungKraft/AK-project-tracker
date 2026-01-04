@@ -2370,6 +2370,56 @@ decisions.forEach(decision => {
                   </div>
                 </div>
 
+                <div className="bg-gray-800/50 rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-white">6. getClientJournalEntries</h4>
+                    <div className="bg-gray-900 rounded p-3 text-xs space-y-2">
+                      <div>
+                        <strong className="text-white">Endpoint:</strong>
+                        <code className="text-green-400 ml-2">POST /api/functions/getClientJournalEntries</code>
+                      </div>
+                      <div>
+                        <strong className="text-white">Input:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "projectId": "project-id-here",
+  "slug": "client-slug-here"  // OR use "token" instead
+}`}</pre>
+                      </div>
+                      <div>
+                        <strong className="text-white">Output:</strong>
+                        <pre className="bg-black rounded p-2 mt-1 text-gray-400 overflow-x-auto">{`{
+  "success": true,
+  "entries": [
+    {
+      "id": "entry-id",
+      "headline": "Project Update Title",
+      "content": "Rich text content of the journal entry...",
+      "photos": ["https://photo1.jpg", "https://photo2.jpg"],
+      "entry_date": "2025-01-03T12:00:00Z",
+      "url": "https://optional-link.com",
+      "attachments": [
+        { "name": "document.pdf", "url": "https://...", "uploaded_date": "..." }
+      ],
+      "visibility": "client",
+      "created_date": "2025-01-03T12:00:00Z"
+    }
+  ]
+}`}</pre>
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Purpose:</strong> Fetches all journal entries marked as client-visible for a project
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Access Validation:</strong> Validates client access via ProjectClientAccess using slug or token
+                      </div>
+                      <div className="text-gray-400">
+                        <strong className="text-white">Sorting:</strong> Returns entries sorted by entry_date descending (newest first)
+                      </div>
+                      <div className="text-yellow-400">
+                        <strong>⚠️ Important:</strong> Only returns entries where <code>visibility === 'client'</code>. Internal entries are filtered out.
+                      </div>
+                    </div>
+                  </div>
+
                 <div className="bg-purple-900/20 border-2 border-purple-700 rounded-lg p-4 space-y-3">
                   <h3 className="text-xl font-semibold text-purple-400">Synchronization Prompt Template</h3>
                   <p className="text-sm text-gray-300">Use this prompt when updating the external client portal:</p>
