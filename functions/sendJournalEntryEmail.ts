@@ -74,11 +74,11 @@ Deno.serve(async (req) => {
             // Build the direct journal URL with slug or token
             let journalUrl;
             if (contact.url_slug) {
-                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&slug=${contact.url_slug}`;
+                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&slug=${contact.url_slug}&tab=journal`;
             } else if (access.url_slug) {
-                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&slug=${access.url_slug}`;
+                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&slug=${access.url_slug}&tab=journal`;
             } else if (access.share_token) {
-                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&token=${access.share_token}`;
+                journalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${entry.project_id}&token=${access.share_token}&tab=journal`;
             } else {
                 console.warn(`No slug or token for contact ${contact.id}, skipping email`);
                 return null;
@@ -91,19 +91,6 @@ Deno.serve(async (req) => {
                 ? entry.content.substring(0, 500) + '...' 
                 : entry.content;
 
-            // Build photos HTML if any
-            let photosHtml = '';
-            if (entry.photos && entry.photos.length > 0) {
-                const photoImages = entry.photos.slice(0, 4).map(url => 
-                    `<img src="${url}" alt="Journal photo" style="max-width: 100%; height: auto; border-radius: 8px; margin-bottom: 10px;" />`
-                ).join('');
-                photosHtml = `
-                <div style="margin: 20px 0;">
-                    ${photoImages}
-                    ${entry.photos.length > 4 ? `<p style="color: #666; font-size: 14px;">+ ${entry.photos.length - 4} more photos</p>` : ''}
-                </div>`;
-            }
-
             const htmlBody = `
 <p>Hi ${contact.name},</p>
 
@@ -115,8 +102,6 @@ Deno.serve(async (req) => {
     ${entry.headline ? `<h3 style="margin: 0 0 12px 0; color: #c00;">${entry.headline}</h3>` : ''}
     <p style="margin: 0; color: #333; white-space: pre-wrap;">${contentPreview}</p>
 </div>
-
-${photosHtml}
 
 <p style="margin: 30px 0;">
 <a href="${journalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
