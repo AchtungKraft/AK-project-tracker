@@ -52,11 +52,6 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Flame,
       },
       {
-        title: "Projects",
-        url: createPageUrl("Projects"),
-        icon: FolderKanban,
-      },
-      {
         title: "Tasks",
         url: createPageUrl("TasksExplorer"),
         icon: ListChecks,
@@ -65,11 +60,6 @@ const getNavigationItems = (isAchtungKraft) => {
         title: "Parts Tracker",
         url: createPageUrl("PartsTracker"),
         icon: Package,
-      },
-      {
-        title: "Reports",
-        url: createPageUrl("Reports"),
-        icon: BarChart3,
       },
       {
         title: "Admin Config",
