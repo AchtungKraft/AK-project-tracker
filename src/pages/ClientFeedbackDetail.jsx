@@ -78,7 +78,7 @@ export default function ClientFeedbackDetail() {
   const createCommentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments'] });
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
       setNewComment('');
       setNewLinks(['']);
       setUploadedPhotos([]);
