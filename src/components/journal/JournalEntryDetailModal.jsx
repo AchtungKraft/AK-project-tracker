@@ -13,6 +13,7 @@ import ImageModal from "../ui/ImageModal";
 
 export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const queryClient = useQueryClient();
+  const [headline, setHeadline] = useState("");
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState([]);
   const [url, setUrl] = useState("");
@@ -23,6 +24,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
   useEffect(() => {
     if (entry) {
+      setHeadline(entry.headline || "");
       setContent(entry.content || "");
       setPhotos(entry.photos || []);
       setUrl(entry.url || "");
@@ -106,6 +108,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     updateMutation.mutate({
+      headline,
       content,
       photos,
       url,
@@ -131,6 +134,16 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            <div>
+              <Label>Headline</Label>
+              <Input
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                placeholder="Entry headline..."
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+
             <div>
               <Label>Entry Content</Label>
               <Textarea

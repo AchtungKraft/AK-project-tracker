@@ -18,6 +18,7 @@ export default function ProjectJournal({ projectId }) {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [newEntry, setNewEntry] = useState({
+    headline: "",
     content: "",
     photos: [],
     url: "",
@@ -35,7 +36,7 @@ export default function ProjectJournal({ projectId }) {
     mutationFn: (data) => base44.entities.JournalEntry.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries', projectId] }); // Invalidate specific project's entries
-      setNewEntry({ content: "", photos: [], url: "", attachments: [] });
+      setNewEntry({ headline: "", content: "", photos: [], url: "", attachments: [] });
       setShowAddEntry(false);
       toast.success('Journal entry added');
     },
@@ -117,6 +118,7 @@ export default function ProjectJournal({ projectId }) {
 
     createMutation.mutate({
       project_id: projectId,
+      headline: newEntry.headline,
       content: newEntry.content,
       photos: newEntry.photos,
       url: newEntry.url,
@@ -152,6 +154,16 @@ export default function ProjectJournal({ projectId }) {
         <CardContent className="p-6 space-y-6">
           {showAddEntry && (
             <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+              <div>
+                <Label className="text-gray-400">Headline</Label>
+                <Input
+                  value={newEntry.headline}
+                  onChange={(e) => setNewEntry({ ...newEntry, headline: e.target.value })}
+                  placeholder="Entry headline..."
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+
               <div>
                 <Label className="text-gray-400">Entry Content</Label>
                 <Textarea
@@ -320,6 +332,11 @@ export default function ProjectJournal({ projectId }) {
                       <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
                     )}
                   </div>
+
+                  {/* Headline */}
+                  {entry.headline && (
+                    <h2 className="text-2xl font-bold text-white mb-4">{entry.headline}</h2>
+                  )}
 
                   {/* Content */}
                   <div className="prose prose-invert max-w-none mb-6">
