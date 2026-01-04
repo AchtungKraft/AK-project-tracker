@@ -28,13 +28,13 @@ export default function PartsExplorerLayout({ onPartClick }) {
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // Load saved state - but validate that saved category still exists
+  // Load saved state
   useEffect(() => {
     try {
       const saved = localStorage.getItem(EXPLORER_STORAGE_KEY);
       if (saved) {
         const state = JSON.parse(saved);
-        // Don't restore selectedCategoryId here - wait until categories load to validate
+        setSelectedCategoryId(state.selectedCategoryId || null);
         setExpandedCategories(state.expandedCategories || {});
         setShowLeftPane(state.showLeftPane !== false);
         setViewMode(state.viewMode || 'list');
@@ -42,22 +42,6 @@ export default function PartsExplorerLayout({ onPartClick }) {
       }
     } catch (e) {}
   }, []);
-
-  // Validate and restore selected category only after categories load
-  useEffect(() => {
-    if (categories.length > 0) {
-      try {
-        const saved = localStorage.getItem(EXPLORER_STORAGE_KEY);
-        if (saved) {
-          const state = JSON.parse(saved);
-          // Only restore if category still exists
-          if (state.selectedCategoryId && categories.find(c => c.id === state.selectedCategoryId)) {
-            setSelectedCategoryId(state.selectedCategoryId);
-          }
-        }
-      } catch (e) {}
-    }
-  }, [categories]);
 
   // Save state
   useEffect(() => {
