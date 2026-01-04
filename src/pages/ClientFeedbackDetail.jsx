@@ -70,7 +70,7 @@ export default function ClientFeedbackDetail() {
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest'] });
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
     }
   });
