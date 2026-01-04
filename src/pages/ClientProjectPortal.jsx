@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ArrowLeft, Search, FolderKanban } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, ArrowLeft, Search, FolderKanban, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/utils";
+import ClientJournal from "@/components/clientportal/ClientJournal";
 
 // Helper for hex/oklch colors
 const getStateColor = (label) => {

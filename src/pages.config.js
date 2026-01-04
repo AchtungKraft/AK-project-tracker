@@ -1,6 +1,7 @@
 import AdminConfig from './pages/AdminConfig';
 import ClientFeedbackDetail from './pages/ClientFeedbackDetail';
 import ClientFeedbackRequestDetail from './pages/ClientFeedbackRequestDetail';
+import ClientPortalAdmin from './pages/ClientPortalAdmin';
 import ClientProjectPortal from './pages/ClientProjectPortal';
 import ClientProjects from './pages/ClientProjects';
 import Dashboard from './pages/Dashboard';
@@ -16,7 +17,6 @@ import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import ClientPortalAdmin from './pages/ClientPortalAdmin';
 import __Layout from './Layout.jsx';
 
 
@@ -24,6 +24,7 @@ export const PAGES = {
     "AdminConfig": AdminConfig,
     "ClientFeedbackDetail": ClientFeedbackDetail,
     "ClientFeedbackRequestDetail": ClientFeedbackRequestDetail,
+    "ClientPortalAdmin": ClientPortalAdmin,
     "ClientProjectPortal": ClientProjectPortal,
     "ClientProjects": ClientProjects,
     "Dashboard": Dashboard,
@@ -39,7 +40,6 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "ClientPortalAdmin": ClientPortalAdmin,
 }
 
 export const pagesConfig = {
