@@ -455,6 +455,17 @@ export default function TechSpecs() {
                       <strong>Auth:</strong> Public (slug or token-based)
                     </div>
                   </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-2">
+                    <h4 className="font-semibold text-white">getClientJournalEntries</h4>
+                    <p className="text-sm">Fetches client-visible journal entries for a project</p>
+                    <div className="text-xs bg-gray-900 rounded p-2 mt-2">
+                      <strong>Input:</strong> <code>{"{ projectId, token?, slug? }"}</code><br/>
+                      <strong>Returns:</strong> <code>{"{ success, entries: [{ id, headline, content, photos, entry_date, url, attachments, visibility }] }"}</code><br/>
+                      <strong>Auth:</strong> Public (token or slug-based validation via ProjectClientAccess)<br/>
+                      <strong>Filter:</strong> Only returns entries where <code>visibility === 'client'</code>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-3 pt-4 border-t border-gray-700">
