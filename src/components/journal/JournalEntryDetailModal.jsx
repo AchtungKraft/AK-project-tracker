@@ -43,9 +43,24 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.JournalEntry.update(entry.id, data),
-    onSuccess: () => {
+    onSuccess: async (updatedEntry, variables) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
-      toast.success('Journal entry updated successfully');
+      
+      // Send email if visibility changed from internal to client
+      const wasInternal = entry.visibility !== 'client';
+      const nowClient = variables.visibility === 'client';
+      
+      if (wasInternal && nowClient) {
+        try {
+          await base44.functions.invoke('sendJournalEntryEmail', { journalEntryId: entry.id });
+          toast.success('Journal entry updated and clients notified');
+        } catch (emailError) {
+          console.error("Failed to send journal email:", emailError);
+          toast.success('Journal entry updated (email notification failed)');
+        }
+      } else {
+        toast.success('Journal entry updated successfully');
+      }
       onClose();
     },
     onError: () => {
