@@ -494,6 +494,28 @@ export default function ClientFeedbackDetail() {
               setShowCreateTaskModal(true);
             }}
             onDecisionSubmit={handleSubmitRequestDecision}
+            onDeleteComment={async (commentId) => {
+              try {
+                // Delete associated attachments first
+                const commentAttachments = attachments.filter(a => a.comment_id === commentId);
+                await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
+                await base44.entities.ClientFeedbackComment.delete(commentId);
+                queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                toast.success('Comment deleted');
+              } catch (error) {
+                toast.error('Failed to delete comment');
+              }
+            }}
+            onDeleteDecision={async (decisionIds) => {
+              try {
+                // Delete all decisions in the group
+                await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
+                queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                toast.success('Decision deleted');
+              } catch (error) {
+                toast.error('Failed to delete decision');
+              }
+            }}
             isClientView={false}
             accessRole={user?.role}
             request={{

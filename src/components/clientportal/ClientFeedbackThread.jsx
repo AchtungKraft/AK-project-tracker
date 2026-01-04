@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
+import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
@@ -365,32 +365,64 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 )}
 
                 {event.type === 'comment' && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
-                      <span className="text-white font-bold text-xs">
-                        {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
-                      </span>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
+                        <span className="text-white font-bold text-xs">
+                          {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-white text-sm">
+                          {event.author?.name || event.author?.full_name || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {format(event.timestamp, 'MMM d, h:mm a')}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-white text-sm">
-                        {event.author?.name || event.author?.full_name || 'Unknown'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {format(event.timestamp, 'MMM d, h:mm a')}
-                      </p>
-                    </div>
+                    {!isClientView && onDeleteComment && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm('Delete this comment?')) {
+                            onDeleteComment(event.comment.id);
+                          }
+                        }}
+                        className="text-gray-500 hover:text-red-500 h-8 w-8"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 )}
 
                 {event.type === 'decision' && (
-                  <div className="flex items-center gap-2 text-white">
-                    {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
-                    <div>
-                      <p className="font-medium text-sm">
-                        {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
-                      </p>
-                      <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2 text-white">
+                      {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
+                      <div>
+                        <p className="font-medium text-sm">
+                          {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
+                        </p>
+                        <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+                      </div>
                     </div>
+                    {!isClientView && onDeleteDecision && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm('Delete this decision and its associated attachments?')) {
+                            onDeleteDecision(event.groupedDecisions.map(d => d.id));
+                          }
+                        }}
+                        className="text-gray-500 hover:text-red-500 h-8 w-8"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
