@@ -317,7 +317,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
           return (
           <Card key={idx} className={cardClassName} style={cardStyle}>
-            <CardContent className="p-4">
+            <CardContent className="p-3 md:p-4">
               {/* Header Badge */}
               <div className="mb-3">
                 {isRequestPost && (
@@ -394,16 +394,16 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               </div>
 
               {event.comment?.body && (
-                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.comment.body}</p>
+                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.comment.body}</p>
               )}
               {event.decision?.note && (
-                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-10">{event.decision.note}</p>
+                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.decision.note}</p>
               )}
 
               {event.type === 'decision' && event.selectedImages?.length > 0 && (
-                <div className="pl-10 space-y-3 mb-3">
+                <div className="pl-0 md:pl-10 space-y-3 mb-3">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {event.selectedImages.map(att => {
                       const decision = att.decision || 'approved';
 
@@ -411,7 +411,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                         <div key={att.id} className="relative group">
                           <div 
                             className={`
-                              relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                              relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
                               ${decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
                             `}
                             onClick={() => setSelectedImage(att.file_url)}
@@ -438,14 +438,14 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               )}
 
               {event.type === 'decision' && event.referenceAttachments?.length > 0 && (
-                <div className="pl-10 space-y-3">
+                <div className="pl-0 md:pl-10 space-y-3">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
                   {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {event.referenceAttachments.filter(a => a.attachment_type === 'image').map(att => (
                         <div key={att.id} className="relative group">
                           <div 
-                            className="relative w-full h-40 bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
+                            className="relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
                             onClick={() => setSelectedImage(att.file_url)}
                           >
                             <img src={att.file_url} alt="" className="w-full h-full object-contain" />
@@ -473,9 +473,9 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               )}
 
               {event.type !== 'decision' && event.attachments?.length > 0 && (
-                <div className="pl-10 space-y-3">
+                <div className="pl-0 md:pl-10 space-y-3">
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {event.attachments.filter(a => a.attachment_type === 'image').map(att => {
                         const isSelected = selectedImageIds.includes(att.id);
                         const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
@@ -485,7 +485,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                           <div key={att.id} className="relative group">
                             <div 
                               className={`
-                                relative w-full h-40 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                                relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
                                 ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
                               `}
                               onClick={() => setSelectedImage(att.file_url)}
@@ -546,29 +546,31 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
       </div>
 
       {selectedImageIds.length > 0 && requestType === 'image_review' && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in w-[95%] md:w-auto">
           <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
-            <CardContent className="p-3 flex items-center gap-4">
-              <span className="text-white font-medium pl-2">{selectedImageIds.length} selected</span>
+            <CardContent className="p-2 md:p-3 flex flex-col md:flex-row items-center gap-2 md:gap-4">
+              <span className="text-white font-medium text-sm">{selectedImageIds.length} selected</span>
               
-              <div className="h-6 w-px bg-gray-700" />
+              <div className="hidden md:block h-6 w-px bg-gray-700" />
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full md:w-auto">
                 <Button 
                   size="sm"
                   onClick={() => handleReviewAction('approved')}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="bg-green-600 hover:bg-green-700 text-white flex-1 md:flex-none text-xs md:text-sm"
                 >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Approve Selected
+                  <CheckCircle2 className="w-4 h-4 md:mr-2" />
+                  <span className="hidden md:inline">Approve Selected</span>
+                  <span className="md:hidden">Approve</span>
                 </Button>
                 <Button 
                   size="sm"
                   onClick={() => handleReviewAction('changes_requested')}
-                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                  className="bg-orange-600 hover:bg-orange-700 text-white flex-1 md:flex-none text-xs md:text-sm"
                 >
-                  <AlertCircle className="w-4 h-4 mr-2" />
-                  Request Changes
+                  <AlertCircle className="w-4 h-4 md:mr-2" />
+                  <span className="hidden md:inline">Request Changes</span>
+                  <span className="md:hidden">Changes</span>
                 </Button>
                 <Button
                   size="sm"
