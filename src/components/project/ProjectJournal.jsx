@@ -4,9 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Upload, Loader2, Calendar, X, Paperclip, Link2 } from "lucide-react";
+import { Plus, Upload, Loader2, Calendar, X, Paperclip, Link2, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import JournalEntryDetailModal from "../journal/JournalEntryDetailModal";
@@ -25,6 +33,7 @@ export default function ProjectJournal({ projectId }) {
     photos: [],
     url: "",
     attachments: [],
+    visibility: "internal",
   });
   const [uploading, setUploading] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -37,8 +46,8 @@ export default function ProjectJournal({ projectId }) {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.JournalEntry.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['journalEntries', projectId] }); // Invalidate specific project's entries
-      setNewEntry({ headline: "", content: "", photos: [], url: "", attachments: [] });
+      queryClient.invalidateQueries({ queryKey: ['journalEntries', projectId] });
+      setNewEntry({ headline: "", content: "", photos: [], url: "", attachments: [], visibility: "internal" });
       setShowAddEntry(false);
       toast.success('Journal entry added');
     },
@@ -119,14 +128,15 @@ export default function ProjectJournal({ projectId }) {
     }
 
     createMutation.mutate({
-      project_id: projectId,
-      headline: newEntry.headline,
-      content: newEntry.content,
-      photos: newEntry.photos,
-      url: newEntry.url,
-      attachments: newEntry.attachments,
-      entry_date: new Date().toISOString(),
-    });
+            project_id: projectId,
+            headline: newEntry.headline,
+            content: newEntry.content,
+            photos: newEntry.photos,
+            url: newEntry.url,
+            attachments: newEntry.attachments,
+            visibility: newEntry.visibility,
+            entry_date: new Date().toISOString(),
+          });
   };
 
   const sortedEntries = [...entries].sort((a, b) => 
@@ -185,6 +195,30 @@ export default function ProjectJournal({ projectId }) {
                   placeholder="https://example.com"
                   className="bg-gray-800 border-gray-700 text-white"
                 />
+              </div>
+
+              <div>
+                <Label className="text-gray-400">Visibility</Label>
+                <Select
+                  value={newEntry.visibility}
+                  onValueChange={(value) => setNewEntry({ ...newEntry, visibility: value })}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="internal">
+                      <span className="flex items-center gap-2">
+                        <EyeOff className="w-4 h-4" /> Internal Only
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="client">
+                      <span className="flex items-center gap-2">
+                        <Eye className="w-4 h-4" /> Visible to Client
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="flex items-center gap-4">
@@ -327,12 +361,24 @@ export default function ProjectJournal({ projectId }) {
                   onClick={() => handleEntryClick(entry)}
                 >
                   {/* Header */}
-                  <div className="flex items-center gap-3 text-sm text-gray-400 mb-4 pb-4 border-b border-gray-800">
-                    <Calendar className="w-4 h-4" />
-                    <span>{format(new Date(entry.entry_date || entry.created_date), 'MMMM d, yyyy')}</span>
-                    {entry.updated_date && entry.updated_date !== entry.created_date && (
-                      <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
-                    )}
+                  <div className="flex items-center justify-between gap-3 text-sm text-gray-400 mb-4 pb-4 border-b border-gray-800">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-4 h-4" />
+                      <span>{format(new Date(entry.entry_date || entry.created_date), 'MMMM d, yyyy')}</span>
+                      {entry.updated_date && entry.updated_date !== entry.created_date && (
+                        <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
+                      )}
+                    </div>
+                    <Badge className={entry.visibility === 'client' 
+                      ? 'bg-green-500/20 text-green-400 border-green-500/50' 
+                      : 'bg-gray-500/20 text-gray-400 border-gray-500/50'
+                    }>
+                      {entry.visibility === 'client' ? (
+                        <><Eye className="w-3 h-3 mr-1" /> Client Visible</>
+                      ) : (
+                        <><EyeOff className="w-3 h-3 mr-1" /> Internal</>
+                      )}
+                    </Badge>
                   </div>
 
                   {/* Headline */}
