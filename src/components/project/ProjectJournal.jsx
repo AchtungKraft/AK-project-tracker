@@ -45,11 +45,24 @@ export default function ProjectJournal({ projectId }) {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.JournalEntry.create(data),
-    onSuccess: () => {
+    onSuccess: async (createdEntry) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries', projectId] });
+      
+      // Send email notification if visibility is client
+      if (createdEntry.visibility === 'client') {
+        try {
+          await base44.functions.invoke('sendJournalEntryEmail', { journalEntryId: createdEntry.id });
+          toast.success('Journal entry added and clients notified');
+        } catch (emailError) {
+          console.error("Failed to send journal email:", emailError);
+          toast.success('Journal entry added (email notification failed)');
+        }
+      } else {
+        toast.success('Journal entry added');
+      }
+      
       setNewEntry({ headline: "", content: "", photos: [], url: "", attachments: [], visibility: "internal" });
       setShowAddEntry(false);
-      toast.success('Journal entry added');
     },
     onError: (error) => {
       console.error("Failed to add journal entry:", error);
