@@ -15,14 +15,18 @@ export default function ClientJournal({ projectId, token, slug }) {
   const { data: entries = [], isLoading, error } = useQuery({
     queryKey: ['clientJournalEntries', projectId, token, slug],
     queryFn: async () => {
-      const response = await base44.functions.invoke('getClientJournalEntries', { 
-        projectId, 
-        token: token || undefined,
-        slug: slug || undefined
-      });
+      const payload = { projectId };
+      // Only include token/slug if they have actual values
+      if (token && token !== 'null' && token.trim()) {
+        payload.token = token;
+      }
+      if (slug && slug !== 'null' && slug.trim()) {
+        payload.slug = slug;
+      }
+      const response = await base44.functions.invoke('getClientJournalEntries', payload);
       return response.data?.entries || [];
     },
-    enabled: !!projectId && !!(token || slug),
+    enabled: !!projectId && !!((token && token !== 'null') || (slug && slug !== 'null')),
   });
 
   const sortedEntries = [...entries].sort((a, b) => 
