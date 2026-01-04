@@ -15,6 +15,8 @@ import ImageModal from "../ui/ImageModal";
 export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit }) {
   const queryClient = useQueryClient();
   const [selectedImage, setSelectedImage] = useState(null);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewAction, setReviewAction] = useState(null);
@@ -403,20 +405,25 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               {event.type === 'decision' && event.selectedImages?.length > 0 && (
                 <div className="pl-0 md:pl-10 space-y-3 mb-3">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {event.selectedImages.map(att => {
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {event.selectedImages.map((att, idx) => {
                       const decision = att.decision || 'approved';
+                      const allImages = event.selectedImages.map(a => a.file_url);
 
                       return (
                         <div key={att.id} className="relative group">
                           <div 
                             className={`
-                              relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                              relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
                               ${decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
                             `}
-                            onClick={() => setSelectedImage(att.file_url)}
+                            onClick={() => {
+                              setGalleryImages(allImages);
+                              setGalleryIndex(idx);
+                              setSelectedImage(att.file_url);
+                            }}
                           >
-                            <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                            <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
 
                             <div className="absolute bottom-2 left-2 z-10">
                               {decision === 'approved' ? (
@@ -441,17 +448,24 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <div className="pl-0 md:pl-10 space-y-3">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
                   {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {event.referenceAttachments.filter(a => a.attachment_type === 'image').map(att => (
-                        <div key={att.id} className="relative group">
-                          <div 
-                            className="relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
-                            onClick={() => setSelectedImage(att.file_url)}
-                          >
-                            <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {event.referenceAttachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
+                        const allImages = event.referenceAttachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
+                        return (
+                          <div key={att.id} className="relative group">
+                            <div 
+                              className="relative w-full bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
+                              onClick={() => {
+                                setGalleryImages(allImages);
+                                setGalleryIndex(idx);
+                                setSelectedImage(att.file_url);
+                              }}
+                            >
+                              <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
@@ -475,22 +489,27 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               {event.type !== 'decision' && event.attachments?.length > 0 && (
                 <div className="pl-0 md:pl-10 space-y-3">
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {event.attachments.filter(a => a.attachment_type === 'image').map(att => {
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {event.attachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
                         const isSelected = selectedImageIds.includes(att.id);
                         const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
                         const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+                        const allImages = event.attachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
 
                         return (
                           <div key={att.id} className="relative group">
                             <div 
                               className={`
-                                relative w-full h-48 md:h-56 bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                                relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
                                 ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
                               `}
-                              onClick={() => setSelectedImage(att.file_url)}
+                              onClick={() => {
+                                setGalleryImages(allImages);
+                                setGalleryIndex(idx);
+                                setSelectedImage(att.file_url);
+                              }}
                             >
-                              <img src={att.file_url} alt="" className="w-full h-full object-contain" />
+                              <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
 
                               {canReview && requestType === 'image_review' && (
                                 <div className="absolute top-2 right-2 z-10">
@@ -653,8 +672,18 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       <ImageModal
         isOpen={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
+        onClose={() => {
+          setSelectedImage(null);
+          setGalleryImages([]);
+          setGalleryIndex(0);
+        }}
         imageUrl={selectedImage}
+        images={galleryImages}
+        currentIndex={galleryIndex}
+        onNavigate={(newIndex) => {
+          setGalleryIndex(newIndex);
+          setSelectedImage(galleryImages[newIndex]);
+        }}
       />
     </>
   );
