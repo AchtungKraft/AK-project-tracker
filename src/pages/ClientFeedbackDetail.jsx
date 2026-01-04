@@ -48,74 +48,24 @@ export default function ClientFeedbackDetail() {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
-  const { data: request } = useQuery({
-    queryKey: ['clientFeedbackRequest', requestId],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
-    select: (data) => data[0],
-    enabled: !!requestId
-  });
-
-  const { data: comments = [] } = useQuery({
-    queryKey: ['clientFeedbackComments', requestId],
-    queryFn: () => base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-    enabled: !!requestId
-  });
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => base44.entities.User.list(),
-  });
-
-  const { data: clientContacts = [] } = useQuery({
-    queryKey: ['clientContacts'],
-    queryFn: () => base44.entities.ClientContact.list(),
-  });
-
-  const { data: project } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => base44.entities.Project.filter({ id: projectId }),
-    select: (data) => data[0],
-    enabled: !!projectId
-  });
-
-  const { data: linkedTasks = [] } = useQuery({
-    queryKey: ['feedbackTaskLinks', requestId],
-    queryFn: () => base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
-    enabled: !!requestId
-  });
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list()
-  });
-
-  const { data: decisions = [] } = useQuery({
-    queryKey: ['clientFeedbackDecisions', requestId],
+  // Single consolidated API call for all feedback detail data
+  const { data: feedbackDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ['internalFeedbackDetail', requestId, projectId],
     queryFn: async () => {
-      const data = await base44.entities.ClientFeedbackDecision.filter({ request_id: requestId });
-      // Sort by decided_at timestamp with fallback to created_date for correct chronological order
-      return [...data].sort((a, b) => {
-        const timeA = new Date(a.decided_at || a.created_date).getTime();
-        const timeB = new Date(b.decided_at || b.created_date).getTime();
-        return timeB - timeA; // Descending (newest first)
-      });
+      const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
+      return response.data;
     },
     enabled: !!requestId
   });
 
-  const { data: attachments = [] } = useQuery({
-    queryKey: ['clientFeedbackAttachments', requestId],
-    queryFn: async () => {
-      const data = await base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId });
-      // Sort by posted_at timestamp with fallback to created_date for correct chronological order
-      return [...data].sort((a, b) => {
-        const timeA = new Date(a.posted_at || a.created_date).getTime();
-        const timeB = new Date(b.posted_at || b.created_date).getTime();
-        return timeB - timeA; // Descending (newest first)
-      });
-    },
-    enabled: !!requestId
-  });
+  const request = feedbackDetail?.request;
+  const comments = feedbackDetail?.comments || [];
+  const decisions = feedbackDetail?.decisions || [];
+  const attachments = feedbackDetail?.attachments || [];
+  const project = feedbackDetail?.project;
+  const linkedTaskDetails = feedbackDetail?.linkedTasks || [];
+  const users = feedbackDetail?.users || [];
+  const clientContacts = feedbackDetail?.clientContacts || [];
 
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
