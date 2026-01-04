@@ -62,6 +62,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Package,
       },
       {
+        title: "Client Portal",
+        url: createPageUrl("ClientPortalAdmin"),
+        icon: Building2,
+      },
+      {
         title: "Admin Config",
         url: createPageUrl("AdminConfig"),
         icon: Settings,
