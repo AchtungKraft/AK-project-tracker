@@ -17,6 +17,8 @@ export default function ProjectJournal({ projectId }) {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [newEntry, setNewEntry] = useState({
     headline: "",
     content: "",
@@ -352,6 +354,8 @@ export default function ProjectJournal({ projectId }) {
                           className="relative aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden hover:border-red-500 transition-colors group"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setGalleryImages(entry.photos);
+                            setGalleryIndex(idx);
                             setSelectedImage(url);
                           }}
                         >
@@ -414,8 +418,18 @@ export default function ProjectJournal({ projectId }) {
 
       <ImageModal
         isOpen={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
+        onClose={() => {
+          setSelectedImage(null);
+          setGalleryImages([]);
+          setGalleryIndex(0);
+        }}
         imageUrl={selectedImage}
+        images={galleryImages}
+        currentIndex={galleryIndex}
+        onNavigate={(newIndex) => {
+          setGalleryIndex(newIndex);
+          setSelectedImage(galleryImages[newIndex]);
+        }}
       />
     </>
   );
