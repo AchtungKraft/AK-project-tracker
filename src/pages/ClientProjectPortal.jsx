@@ -44,6 +44,7 @@ export default function ClientProjectPortal() {
   const token = urlParams.get('token');
   const slug = urlParams.get('slug');
   const projectId = urlParams.get('projectId');
+  const initialTab = urlParams.get('tab') || 'requests';
   const [clientAccess, setClientAccess] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -202,7 +203,7 @@ export default function ClientProjectPortal() {
           </div>
         </div>
 
-        <Tabs defaultValue="requests" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-black/40 border border-gray-700">
             <TabsTrigger value="requests" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
               <FolderKanban className="w-4 h-4 mr-2" />
