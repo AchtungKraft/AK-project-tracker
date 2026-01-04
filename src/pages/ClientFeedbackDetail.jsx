@@ -89,7 +89,7 @@ export default function ClientFeedbackDetail() {
   const createAttachmentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments'] });
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
     }
   });
 
