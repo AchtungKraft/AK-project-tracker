@@ -2483,7 +2483,51 @@ Action Required for External Client Portal:
 1. Remove earliestDecisionTime check from referenceAttachments matching logic.
 2. Ensure decision modals support image uploads (add reviewNewImages state and upload UI).
 3. Ensure newImages array is passed to publicClientDecision in ALL decision submission flows (modals, quick-approve buttons).
-4. Invalidate attachment queries after decision submissions.`}</pre>
+4. Invalidate attachment queries after decision submissions.
+
+---
+
+JOURNAL ENTRIES API
+
+Endpoint: POST /api/functions/getClientJournalEntries
+
+Input:
+{
+  "projectId": "project-id-here",
+  "slug": "client-slug-here"  // OR use "token" instead
+}
+
+Output:
+{
+  "success": true,
+  "entries": [
+    {
+      "id": "entry-id",
+      "headline": "Update Title",
+      "content": "Rich text content...",
+      "photos": ["https://..."],
+      "entry_date": "2025-01-03T12:00:00Z",
+      "url": "https://optional-link.com",
+      "attachments": [{ "name": "doc.pdf", "url": "https://..." }],
+      "visibility": "client"
+    }
+  ]
+}
+
+Journal Entry Fields:
+• headline: Optional title for the entry
+• content: Rich text (HTML) content
+• photos: Array of image URLs
+• entry_date: When the entry was made
+• url: Optional related URL
+• attachments: Array of { name, url, uploaded_date } objects
+• visibility: "client" (visible to clients) or "internal" (team only)
+
+Implementation Notes:
+• Only entries with visibility="client" are returned
+• Sorted by entry_date descending (newest first)
+• Access validated via ProjectClientAccess using slug or token
+• Use this to show project updates/progress to clients`}</pre>
                   </div>
                 </div>
               </CardContent>
