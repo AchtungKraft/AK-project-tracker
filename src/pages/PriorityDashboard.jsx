@@ -16,7 +16,7 @@ export default function PriorityDashboard() {
   const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState(null);
   const [primaryGroupBy, setPrimaryGroupBy] = useState('project');
-  const [secondaryGroupBy, setSecondaryGroupBy] = useState('status');
+  const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
