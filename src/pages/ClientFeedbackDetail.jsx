@@ -322,10 +322,7 @@ export default function ClientFeedbackDetail() {
     }
   };
 
-  const linkedTaskDetails = linkedTasks.map((link) => {
-    const task = tasks.find((t) => t.id === link.task_id);
-    return task ? { ...link, task } : null;
-  }).filter(Boolean);
+
 
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
 
