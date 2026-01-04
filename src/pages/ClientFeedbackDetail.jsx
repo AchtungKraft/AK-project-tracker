@@ -97,11 +97,8 @@ export default function ClientFeedbackDetail() {
     mutationFn: (payload) => base44.functions.invoke('publicClientDecision', payload),
     onSuccess: (response) => {
       if (response.data?.success) {
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+        queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', projectId] });
         setRequestDecisionNote('');
         setReviewNewImages([]);
         setShowRequestDecisionForm(false);
