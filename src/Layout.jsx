@@ -63,7 +63,7 @@ const getNavigationItems = (isAchtungKraft) => {
       },
       {
         title: "Client Portal",
-        url: createPageUrl("ClientPortalAdmin"),
+        url: createPageUrl("ClientPortalHub"),
         icon: Building2,
       },
       {
