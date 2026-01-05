@@ -64,9 +64,18 @@ const getRequestState = (request, decisions, attachments) => {
 };
 
 export default function ClientPortalHub() {
+  const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const initialTab = urlParams.get('tab') || 'awaiting';
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    // Refetch all data when switching tabs
+    queryClient.invalidateQueries({ queryKey: ["allFeedbackRequests"] });
+    queryClient.invalidateQueries({ queryKey: ["allFeedbackDecisions"] });
+    queryClient.invalidateQueries({ queryKey: ["allFeedbackAttachments"] });
+  };
 
   // Fetch all data
   const { data: allRequests = [], isLoading: loadingRequests } = useQuery({
