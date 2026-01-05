@@ -47,25 +47,26 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: LayoutDashboard,
       },
       {
-        title: "Priority",
+        title: "Team Priorities",
         url: createPageUrl("PriorityDashboard"),
         icon: Flame,
       },
       {
-        title: "Tasks",
+        title: "All Tasks",
         url: createPageUrl("TasksExplorer"),
         icon: ListChecks,
-      },
-      {
-        title: "Parts Tracker",
-        url: createPageUrl("PartsTracker"),
-        icon: Package,
       },
       {
         title: "Client Portal",
         url: createPageUrl("ClientPortalHub"),
         icon: Building2,
       },
+      {
+        title: "Parts Tracker",
+        url: createPageUrl("PartsTracker"),
+        icon: Package,
+      },
+      { divider: true },
       {
         title: "Admin Config",
         url: createPageUrl("AdminConfig"),
@@ -97,10 +98,10 @@ const getNavigationItems = (isAchtungKraft) => {
 const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
   const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-    { title: "Priority", url: createPageUrl("PriorityDashboard"), icon: Flame },
+    { title: "Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
     { title: "Tasks", url: createPageUrl("TasksExplorer"), icon: ListChecks },
+    { title: "Clients", url: createPageUrl("ClientPortalHub"), icon: Building2 },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
-    { title: "Admin", url: createPageUrl("AdminConfig"), icon: Settings },
   ] : [
     { title: "Projects", url: createPageUrl("MyProjects"), icon: FolderKanban },
     { title: "Priorities", url: createPageUrl("MyPriorities"), icon: Flame },
@@ -288,23 +289,27 @@ export default function Layout({ children, currentPageName }) {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        className={cn(
-                          "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
-                          location.pathname === item.url && "bg-red-950/40 text-red-400"
-                        )}
-                      >
-                        <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
-                          <item.icon className="w-4 h-4" />
-                          <span className="font-medium text-sm">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
+                    {navigationItems.map((item, index) => (
+                      item.divider ? (
+                        <div key={`divider-${index}`} className="my-2 border-t border-gray-700/50" />
+                      ) : (
+                        <SidebarMenuItem key={item.title}>
+                          <SidebarMenuButton 
+                            asChild 
+                            className={cn(
+                              "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
+                              location.pathname === item.url && "bg-red-950/40 text-red-400"
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
+                              <item.icon className="w-4 h-4" />
+                              <span className="font-medium text-sm">{item.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      )
+                    ))}
+                  </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
