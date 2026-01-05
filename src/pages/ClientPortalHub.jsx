@@ -174,7 +174,7 @@ export default function ClientPortalHub() {
     );
   }
 
-  const renderRequestList = (groupedData, emptyMessage, stateColor, tabName) => {
+  const renderRequestList = (groupedData, emptyMessage, stateColor, tabName, showEmailButton = false) => {
     if (groupedData.length === 0) {
       return (
         <Card className="bg-black/40 border-gray-700">
@@ -196,6 +196,25 @@ export default function ClientPortalHub() {
                   <CardTitle className="text-lg text-white">
                     {project?.name || 'Unknown Project'}
                   </CardTitle>
+                  {showEmailButton && project?.id && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleSendBulkEmail(project.id, requests.map(r => r.id));
+                      }}
+                      disabled={sendingEmailForProject === project.id}
+                      className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+                    >
+                      {sendingEmailForProject === project.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-1" />
+                      )}
+                      Email All
+                    </Button>
+                  )}
                 </div>
                 <Badge className="bg-gray-800 text-gray-300">
                   {requests.length} {requests.length === 1 ? 'item' : 'items'}
@@ -216,6 +235,12 @@ export default function ClientPortalHub() {
                         <span className="capitalize">{request.request_type?.replace('_', ' ')}</span>
                         {request.due_date && (
                           <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
+                        )}
+                        {showEmailButton && request.last_email_sent_at && (
+                          <span className="flex items-center gap-1 text-gray-500">
+                            <Mail className="w-3 h-3" />
+                            {format(new Date(request.last_email_sent_at), 'MMM d, h:mm a')}
+                          </span>
                         )}
                       </div>
                     </div>
