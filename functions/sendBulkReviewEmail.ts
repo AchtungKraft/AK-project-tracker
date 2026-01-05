@@ -3,38 +3,41 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
         
-        // Parse payload
-        const { requestId } = await req.json();
-
-        if (!requestId) {
-            return Response.json({ error: 'Missing requestId' }, { status: 400 });
+        if (!user) {
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Fetch Request details
-        const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
-        const request = requests[0];
+        const { projectId, requestIds } = await req.json();
 
-        if (!request) {
-            return Response.json({ error: 'Request not found' }, { status: 404 });
+        if (!projectId || !requestIds || requestIds.length === 0) {
+            return Response.json({ error: 'Missing projectId or requestIds' }, { status: 400 });
         }
 
         // Fetch Project details
-        const projects = await base44.asServiceRole.entities.Project.filter({ id: request.project_id });
+        const projects = await base44.asServiceRole.entities.Project.filter({ id: projectId });
         const project = projects[0];
 
         if (!project) {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
 
+        // Fetch all requests
+        const allRequests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
+        const requests = allRequests.filter(r => requestIds.includes(r.id));
+
+        if (requests.length === 0) {
+            return Response.json({ error: 'No requests found' }, { status: 404 });
+        }
+
         // Get all active client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
-            project_id: request.project_id,
+            project_id: projectId,
             access_status: 'active'
         });
 
         if (accesses.length === 0) {
-            console.log(`No active client accesses found for project ${project.id}. Skipping email.`);
             return Response.json({ message: 'No active clients found' });
         }
 
@@ -47,7 +50,6 @@ Deno.serve(async (req) => {
         const contacts = contactResults.flat().filter(Boolean);
 
         if (contacts.length === 0) {
-            console.log(`No client contacts found for project ${project.id}. Skipping email.`);
             return Response.json({ message: 'No client contacts found' });
         }
 
@@ -55,51 +57,58 @@ Deno.serve(async (req) => {
         const resendApiKey = Deno.env.get("RESEND_API_KEY");
         
         if (!resendApiKey) {
-            console.error("RESEND_API_KEY not set");
             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
         }
 
+        // Build items list HTML
+        const itemsListHtml = requests.map(r => `
+            <li style="margin-bottom: 12px; padding: 12px; background-color: #f9f9f9; border-left: 4px solid #c00;">
+                <strong style="color: #333;">${r.title}</strong>
+                <br><span style="color: #666; font-size: 14px;">${r.request_type?.replace('_', ' ') || 'Review'}</span>
+            </li>
+        `).join('');
+
+        const itemsListText = requests.map(r => `- ${r.title} (${r.request_type?.replace('_', ' ') || 'Review'})`).join('\n');
+
         // Send personalized email to each client
         const emailPromises = contacts.map(async (contact) => {
-            // Find the access record for this contact
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) return null;
 
-            // Build the direct request URL with slug or token
-            let requestDetailUrl;
+            // Build the portal URL
+            let portalUrl;
             if (contact.url_slug) {
-                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${contact.url_slug}`;
+                portalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${projectId}&slug=${contact.url_slug}`;
             } else if (access.url_slug) {
-                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${access.url_slug}`;
+                portalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${projectId}&slug=${access.url_slug}`;
             } else if (access.share_token) {
-                requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${access.share_token}`;
+                portalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${projectId}&token=${access.share_token}`;
             } else {
                 console.warn(`No slug or token for contact ${contact.id}, skipping email`);
                 return null;
             }
 
-            const subject = `Achtung Kraft // REVIEW NEEDED: ${request.title}`;
+            const subject = `Achtung Kraft // ${requests.length} ITEMS NEED YOUR REVIEW: ${project.name}`;
 
             const htmlBody = `
 <p>Hi ${contact.name},</p>
 
-<p>You have a new item that requires your review:</p>
+<p>You have <strong>${requests.length} item${requests.length > 1 ? 's' : ''}</strong> that need your review for:</p>
 
-<p><strong>Project: ${project.name}</strong></p>
+<p><strong style="font-size: 18px;">${project.name}</strong></p>
 
-<div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
-    <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
-    <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.body || 'No description provided.'}</p>
-</div>
+<ul style="list-style: none; padding: 0; margin: 20px 0;">
+${itemsListHtml}
+</ul>
 
 <p style="margin: 30px 0;">
-<a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-VIEW & APPROVE REQUEST
+<a href="${portalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+VIEW ALL ITEMS
 </a>
 </p>
 
 <p style="color: #666; font-size: 14px;">
-Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDetailUrl}</a>
+Direct link: <a href="${portalUrl}" style="color: #3b82f6;">${portalUrl}</a>
 </p>
 
 <p>
@@ -110,20 +119,18 @@ Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDeta
             const textBody = `
 Hi ${contact.name},
 
-You have a new item that requires your review:
+You have ${requests.length} item${requests.length > 1 ? 's' : ''} that need your review for:
 
-Project: ${project.name}
+${project.name}
 
-${request.title}
-${request.body || 'No description provided.'}
+${itemsListText}
 
-View and approve the request here:
-${requestDetailUrl}
+View all items here:
+${portalUrl}
 
 — Achtung Kraft Projects
 `;
 
-            // Send individual email
             const emailResponse = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
@@ -146,28 +153,29 @@ ${requestDetailUrl}
             }
 
             const emailData = await emailResponse.json();
-            console.log(`Email sent to ${contact.email} for Request ${requestId}. ID: ${emailData.id}`);
+            console.log(`Bulk review email sent to ${contact.email} for project ${projectId}. ID: ${emailData.id}`);
             return { contact: contact.email, success: true, emailId: emailData.id };
         });
 
         const results = await Promise.all(emailPromises);
         const successfulEmails = results.filter(r => r && r.success);
 
-        // Update last_email_sent_at on the request
-        if (successfulEmails.length > 0) {
-            await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, { 
-                last_email_sent_at: new Date().toISOString() 
-            });
-        }
+        // Update last_email_sent_at for all requests
+        const now = new Date().toISOString();
+        const updatePromises = requestIds.map(id => 
+            base44.asServiceRole.entities.ClientFeedbackRequest.update(id, { last_email_sent_at: now })
+        );
+        await Promise.all(updatePromises);
 
         return Response.json({ 
             success: true, 
             emailsSent: successfulEmails.length,
+            requestsUpdated: requestIds.length,
             results: results.filter(Boolean)
         });
 
     } catch (error) {
-        console.error("Error in sendNeedsReviewEmail:", error);
+        console.error("Error in sendBulkReviewEmail:", error);
         return Response.json({ error: error.message }, { status: 500 });
     }
 });
