@@ -385,6 +385,10 @@ export default function ClientFeedbackDetail() {
               </div>
             }
 
+            {request.status === 'posted' && request.request_type === 'design_review' &&
+            <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
+            }
+
           </div>
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
