@@ -27,6 +27,7 @@ export default function ClientFeedbackDetail() {
   const requestId = urlParams.get('id');
   const projectId = urlParams.get('projectId');
   const fromHub = urlParams.get('from') === 'hub';
+  const hubTab = urlParams.get('tab') || 'awaiting';
 
   const [user, setUser] = useState(null);
   const [newComment, setNewComment] = useState('');
@@ -343,7 +344,7 @@ export default function ClientFeedbackDetail() {
               size="icon"
               onClick={() => {
                 if (fromHub) {
-                  navigate(createPageUrl("ClientPortalHub"));
+                  navigate(createPageUrl("ClientPortalHub") + `?tab=${hubTab}`);
                 } else {
                   navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=clientportal");
                 }

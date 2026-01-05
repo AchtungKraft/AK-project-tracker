@@ -51,7 +51,9 @@ const getRequestState = (request, decisions, attachments) => {
 };
 
 export default function ClientPortalHub() {
-  const [activeTab, setActiveTab] = useState("awaiting");
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTab = urlParams.get('tab') || 'awaiting';
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // Fetch all data
   const { data: requests = [], isLoading: loadingRequests } = useQuery({
@@ -162,7 +164,7 @@ export default function ClientPortalHub() {
                 {requests.map(request => (
                   <Link
                     key={request.id}
-                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub`}
+                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${stateColor.includes('amber') ? 'awaiting' : stateColor.includes('orange') ? 'changes' : 'approved'}`}
                     className="flex items-center justify-between p-4 hover:bg-gray-800/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
