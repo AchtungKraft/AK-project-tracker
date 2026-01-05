@@ -12,8 +12,11 @@ import {
   Users, 
   FolderKanban,
   ChevronRight,
-  Loader2
+  Loader2,
+  Mail,
+  Send
 } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
