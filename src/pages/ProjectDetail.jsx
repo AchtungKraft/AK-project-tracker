@@ -73,7 +73,7 @@ export default function ProjectDetail() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(createPageUrl("Dashboard"))}
+            onClick={handleBack}
             className="border-gray-700 text-white">
 
             <ArrowLeft className="w-4 h-4" />
