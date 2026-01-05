@@ -131,7 +131,7 @@ export default function ClientPortalHub() {
     );
   }
 
-  const renderRequestList = (groupedData, emptyMessage, stateColor) => {
+  const renderRequestList = (groupedData, emptyMessage, stateColor, tabName) => {
     if (groupedData.length === 0) {
       return (
         <Card className="bg-black/40 border-gray-700">
@@ -164,7 +164,7 @@ export default function ClientPortalHub() {
                 {requests.map(request => (
                   <Link
                     key={request.id}
-                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${stateColor.includes('amber') ? 'awaiting' : stateColor.includes('orange') ? 'changes' : 'approved'}`}
+                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
                     className="flex items-center justify-between p-4 hover:bg-gray-800/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
@@ -257,7 +257,8 @@ export default function ClientPortalHub() {
           {renderRequestList(
             groupByProject(categorizedRequests.awaiting),
             "No items awaiting client review",
-            "bg-amber-500/20 text-amber-400 border-amber-500/50"
+            "bg-amber-500/20 text-amber-400 border-amber-500/50",
+            "awaiting"
           )}
         </TabsContent>
 
@@ -265,7 +266,8 @@ export default function ClientPortalHub() {
           {renderRequestList(
             groupByProject(categorizedRequests.changesRequested),
             "No items with change requests",
-            "bg-orange-500/20 text-orange-400 border-orange-500/50"
+            "bg-orange-500/20 text-orange-400 border-orange-500/50",
+            "changes"
           )}
         </TabsContent>
 
@@ -273,7 +275,8 @@ export default function ClientPortalHub() {
           {renderRequestList(
             groupByProject(categorizedRequests.approved),
             "No approved items yet",
-            "bg-green-500/20 text-green-400 border-green-500/50"
+            "bg-green-500/20 text-green-400 border-green-500/50",
+            "approved"
           )}
         </TabsContent>
 
