@@ -216,7 +216,7 @@ export default function ClientPortalHub() {
                         Email All
                       </Button>
                       <Link
-                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal`}
+                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal&from=hub&fromTab=${tabName}`}
                         onClick={(e) => e.stopPropagation()}
                         className="ml-1"
                       >
@@ -225,7 +225,7 @@ export default function ClientPortalHub() {
                         </Button>
                       </Link>
                       <Link
-                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=clientportal`}
+                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=clientportal&from=hub&fromTab=${tabName}`}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
