@@ -313,7 +313,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && (
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type !== 'design_review' && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -332,6 +332,10 @@ export default function ClientFeedbackRequestDetail() {
                   Request Changes
                 </Button>
               </div>
+            )}
+            
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type === 'design_review' && (
+              <p className="text-sm text-gray-400 italic mt-4">Select images below to approve or request changes</p>
             )}
           </div>
         </div>
