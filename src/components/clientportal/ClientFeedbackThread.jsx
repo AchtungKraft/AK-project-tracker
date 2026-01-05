@@ -520,6 +520,11 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
               {event.type !== 'decision' && event.attachments?.length > 0 && (
                 <div className="pl-0 md:pl-10 space-y-3">
+                  {canReview && requestType === 'design_review' && event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+                    <p className="text-sm text-purple-400 font-medium">
+                      SELECT CHECKBOX on IMAGE(s) above to APPROVE or REQUEST CHANGES
+                    </p>
+                  )}
                   {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {event.attachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
