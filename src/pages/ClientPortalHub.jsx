@@ -72,12 +72,32 @@ export default function ClientPortalHub() {
   const initialTab = urlParams.get('tab') || 'awaiting';
   const [activeTab, setActiveTab] = useState(initialTab);
 
+  const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
+
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     // Refetch all data when switching tabs
     queryClient.invalidateQueries({ queryKey: ["allFeedbackRequests"] });
     queryClient.invalidateQueries({ queryKey: ["allFeedbackDecisions"] });
     queryClient.invalidateQueries({ queryKey: ["allFeedbackAttachments"] });
+  };
+
+  const handleSendBulkEmail = async (projectId, requestIds) => {
+    setSendingEmailForProject(projectId);
+    try {
+      const response = await base44.functions.invoke('sendBulkReviewEmail', { projectId, requestIds });
+      if (response.data?.success) {
+        toast.success(`Email sent to ${response.data.emailsSent} client(s)`);
+        queryClient.invalidateQueries({ queryKey: ["allFeedbackRequests"] });
+      } else {
+        toast.error(response.data?.error || 'Failed to send email');
+      }
+    } catch (error) {
+      console.error('Error sending bulk email:', error);
+      toast.error('Failed to send email');
+    } finally {
+      setSendingEmailForProject(null);
+    }
   };
 
   // Fetch all data
