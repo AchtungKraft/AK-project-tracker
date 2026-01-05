@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 0 84% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 0 84% 60%;
+    --radius: 0.5rem;
+  }
+}
+
+/* Consistent Button Styles */
+@layer components {
+  /* Primary buttons - high contrast, always readable */
+  .btn-primary {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors shadow-sm;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+  
+  /* Secondary buttons - outline style */
+  .btn-secondary {
+    @apply bg-transparent border border-gray-600 text-gray-200 hover:bg-gray-800 hover:border-gray-500 font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+  
+  /* Ghost buttons - minimal style */
+  .btn-ghost {
+    @apply bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  /* Destructive buttons */
+  .btn-destructive {
+    @apply bg-red-700 hover:bg-red-800 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+  
+  /* Small button variant */
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  /* Icon button variant */
+  .btn-icon {
+    @apply p-2 aspect-square;
+  }
+}
+
+/* Ensure shadcn buttons have good contrast */
+@layer utilities {
+  /* Fix default button text visibility */
+  [data-slot="button"] {
+    font-weight: 500;
+  }
+  
+  /* Ensure outline buttons are visible on dark backgrounds */
+  .dark button[data-variant="outline"],
+  button[data-variant="outline"] {
+    border-color: rgb(75 85 99);
+    color: rgb(229 231 235);
+  }
+  
+  /* Better ghost button visibility */
+  .dark button[data-variant="ghost"],
+  button[data-variant="ghost"] {
+    color: rgb(209 213 219);
+  }
+}
