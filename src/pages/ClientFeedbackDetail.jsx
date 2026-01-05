@@ -395,18 +395,8 @@ export default function ClientFeedbackDetail() {
             <CardContent className="p-4 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={cn("text-xs border", 
-                    request.request_type === 'question' ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' :
-                    request.request_type === 'feedback_needed' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50' :
-                    request.request_type === 'design_review' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50' :
-                    request.request_type === 'client_need' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' :
-                    'bg-gray-500/20 text-gray-400 border-gray-500/50'
-                  )}>
-                    {request.request_type === 'design_review' ? 'Design Review' : 
-                     request.request_type === 'feedback_needed' ? 'Feedback Needed' :
-                     request.request_type === 'client_need' ? 'Client Need' :
-                     request.request_type === 'question' ? 'Question' :
-                     request.request_type.replace('_', ' ')}
+                  <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
+                    {getRequestTypeInfo(request.request_type).label}
                   </Badge>
                   {requestState && (
                     <Badge className={cn("flex items-center gap-1", requestState.color)}>
