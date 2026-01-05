@@ -42,9 +42,9 @@ const getNavigationItems = (isAchtungKraft) => {
   if (isAchtungKraft) {
     return [
       {
-        title: "Dashboard",
+        title: "Projects",
         url: createPageUrl("Dashboard"),
-        icon: LayoutDashboard,
+        icon: FolderKanban,
       },
       {
         title: "Team Priorities",
