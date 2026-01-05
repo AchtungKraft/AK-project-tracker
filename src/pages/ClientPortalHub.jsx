@@ -197,24 +197,26 @@ export default function ClientPortalHub() {
                     {project?.name || 'Unknown Project'}
                   </CardTitle>
                   {showEmailButton && project?.id && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleSendBulkEmail(project.id, requests.map(r => r.id));
+                      }}
+                      disabled={sendingEmailForProject === project.id}
+                      className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+                    >
+                      {sendingEmailForProject === project.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-1" />
+                      )}
+                      Email All
+                    </Button>
+                  )}
+                  {project?.id && (
                     <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleSendBulkEmail(project.id, requests.map(r => r.id));
-                        }}
-                        disabled={sendingEmailForProject === project.id}
-                        className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
-                      >
-                        {sendingEmailForProject === project.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                        ) : (
-                          <Send className="w-4 h-4 mr-1" />
-                        )}
-                        Email All
-                      </Button>
                       <Link
                         to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal&from=hub&fromTab=${tabName}`}
                         onClick={(e) => e.stopPropagation()}
