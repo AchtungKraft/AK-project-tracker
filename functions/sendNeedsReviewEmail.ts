@@ -1,5 +1,26 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Default templates
+const DEFAULT_TEMPLATES = {
+    needs_review: {
+        subject: "Achtung Kraft // REVIEW NEEDED: {request_title}",
+        body_intro: "You have a new item that requires your review:",
+        button_text: "VIEW & APPROVE REQUEST",
+        closing_text: "— Achtung Kraft Projects",
+    }
+};
+
+// Replace placeholders in text
+function replacePlaceholders(text, data) {
+    if (!text) return '';
+    return text
+        .replace(/{project_name}/g, data.project_name || '')
+        .replace(/{request_title}/g, data.request_title || '')
+        .replace(/{request_body}/g, data.request_body || '')
+        .replace(/{client_name}/g, data.client_name || '')
+        .replace(/{client_slug}/g, data.client_slug || '');
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -26,6 +47,11 @@ Deno.serve(async (req) => {
         if (!project) {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
+
+        // Fetch email template
+        const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'needs_review' });
+        const savedTemplate = templates[0];
+        const defaultTpl = DEFAULT_TEMPLATES.needs_review;
 
         // Get all active client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
@@ -65,6 +91,9 @@ Deno.serve(async (req) => {
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) return null;
 
+            // Get client slug
+            const clientSlug = contact.url_slug || access.url_slug || '';
+
             // Build the direct request URL with slug or token
             let requestDetailUrl;
             if (contact.url_slug) {
@@ -78,7 +107,25 @@ Deno.serve(async (req) => {
                 return null;
             }
 
-            const subject = `Achtung Kraft // REVIEW NEEDED: ${request.title}`;
+            // Prepare placeholder data
+            const placeholderData = {
+                project_name: project.name,
+                request_title: request.title,
+                request_body: request.body || 'No description provided.',
+                client_name: contact.name,
+                client_slug: clientSlug
+            };
+
+            // Get template values
+            const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
+            const bodyIntro = savedTemplate?.body_intro || defaultTpl.body_intro;
+            const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
+            const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
+
+            // Replace placeholders
+            const subject = replacePlaceholders(subjectTemplate, placeholderData);
+            const intro = replacePlaceholders(bodyIntro, placeholderData);
+            const closing = replacePlaceholders(closingText, placeholderData);
 
             const htmlBody = `
 <h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
@@ -86,7 +133,7 @@ Deno.serve(async (req) => {
 
 <p>Hi ${contact.name},</p>
 
-<p>You have a new item that requires your review:</p>
+<p>${intro}</p>
 
 <div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
     <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
@@ -95,7 +142,7 @@ Deno.serve(async (req) => {
 
 <p style="margin: 30px 0;">
 <a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-VIEW & APPROVE REQUEST
+${buttonText}
 </a>
 </p>
 
@@ -103,8 +150,10 @@ VIEW & APPROVE REQUEST
 Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDetailUrl}</a>
 </p>
 
+${clientSlug ? `<p style="color: #666; font-size: 14px;">Your portal code: <strong>${clientSlug}</strong></p>` : ''}
+
 <p>
-— Achtung Kraft Projects
+${closing}
 </p>
 `;
 
@@ -114,7 +163,7 @@ REVIEW NEEDED: ${request.title}
 
 Hi ${contact.name},
 
-You have a new item that requires your review:
+${intro}
 
 ${request.title}
 ${request.body || 'No description provided.'}
@@ -122,7 +171,9 @@ ${request.body || 'No description provided.'}
 View and approve the request here:
 ${requestDetailUrl}
 
-— Achtung Kraft Projects
+${clientSlug ? `Your portal code: ${clientSlug}` : ''}
+
+${closing}
 `;
 
             // Send individual email

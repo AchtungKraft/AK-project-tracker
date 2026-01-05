@@ -1,5 +1,26 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Default templates
+const DEFAULT_TEMPLATES = {
+    bulk_review: {
+        subject: "Achtung Kraft // {item_count} ITEMS NEED YOUR REVIEW: {project_name}",
+        body_intro: "You have {item_count} item(s) that need your review:",
+        item_format: "{request_title} ({request_type})",
+        button_text: "VIEW ALL ITEMS",
+        closing_text: "— Achtung Kraft Projects",
+    }
+};
+
+// Replace placeholders in text
+function replacePlaceholders(text, data) {
+    if (!text) return '';
+    return text
+        .replace(/{project_name}/g, data.project_name || '')
+        .replace(/{item_count}/g, data.item_count || '')
+        .replace(/{client_name}/g, data.client_name || '')
+        .replace(/{client_slug}/g, data.client_slug || '');
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -31,6 +52,11 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'No requests found' }, { status: 404 });
         }
 
+        // Fetch email template
+        const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'bulk_review' });
+        const savedTemplate = templates[0];
+        const defaultTpl = DEFAULT_TEMPLATES.bulk_review;
+
         // Get all active client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
             project_id: projectId,
@@ -60,6 +86,13 @@ Deno.serve(async (req) => {
             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
         }
 
+        // Get template values
+        const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
+        const bodyIntroTemplate = savedTemplate?.body_intro || defaultTpl.body_intro;
+        const itemFormat = savedTemplate?.item_format || defaultTpl.item_format;
+        const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
+        const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
+
         // Build items list HTML
         const itemsListHtml = requests.map(r => `
             <li style="margin-bottom: 12px; padding: 12px; background-color: #f9f9f9; border-left: 4px solid #c00;">
@@ -75,6 +108,9 @@ Deno.serve(async (req) => {
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) return null;
 
+            // Get client slug
+            const clientSlug = contact.url_slug || access.url_slug || '';
+
             // Build the portal URL
             let portalUrl;
             if (contact.url_slug) {
@@ -88,7 +124,18 @@ Deno.serve(async (req) => {
                 return null;
             }
 
-            const subject = `Achtung Kraft // ${requests.length} ITEMS NEED YOUR REVIEW: ${project.name}`;
+            // Prepare placeholder data
+            const placeholderData = {
+                project_name: project.name,
+                item_count: requests.length,
+                client_name: contact.name,
+                client_slug: clientSlug
+            };
+
+            // Replace placeholders
+            const subject = replacePlaceholders(subjectTemplate, placeholderData);
+            const bodyIntro = replacePlaceholders(bodyIntroTemplate, placeholderData);
+            const closing = replacePlaceholders(closingText, placeholderData);
 
             const htmlBody = `
 <h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
@@ -96,7 +143,7 @@ Deno.serve(async (req) => {
 
 <p>Hi ${contact.name},</p>
 
-<p>You have <strong>${requests.length} item${requests.length > 1 ? 's' : ''}</strong> that need your review:</p>
+<p>${bodyIntro}</p>
 
 <ul style="list-style: none; padding: 0; margin: 20px 0;">
 ${itemsListHtml}
@@ -104,7 +151,7 @@ ${itemsListHtml}
 
 <p style="margin: 30px 0;">
 <a href="${portalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-VIEW ALL ITEMS
+${buttonText}
 </a>
 </p>
 
@@ -112,8 +159,10 @@ VIEW ALL ITEMS
 Direct link: <a href="${portalUrl}" style="color: #3b82f6;">${portalUrl}</a>
 </p>
 
+${clientSlug ? `<p style="color: #666; font-size: 14px;">Your portal code: <strong>${clientSlug}</strong></p>` : ''}
+
 <p>
-— Achtung Kraft Projects
+${closing}
 </p>
 `;
 
@@ -123,14 +172,16 @@ ${requests.length} ITEMS NEED YOUR REVIEW
 
 Hi ${contact.name},
 
-You have ${requests.length} item${requests.length > 1 ? 's' : ''} that need your review:
+${bodyIntro}
 
 ${itemsListText}
 
 View all items here:
 ${portalUrl}
 
-— Achtung Kraft Projects
+${clientSlug ? `Your portal code: ${clientSlug}` : ''}
+
+${closing}
 `;
 
             const emailResponse = await fetch('https://api.resend.com/emails', {

@@ -1,5 +1,27 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Default templates
+const DEFAULT_TEMPLATES = {
+    status_update: {
+        subject: "Achtung Kraft // Request Update: {request_title}",
+        body_intro: "The request has been updated.",
+        button_text: "VIEW REQUEST",
+        closing_text: "— Achtung Kraft Projects",
+    }
+};
+
+// Replace placeholders in text
+function replacePlaceholders(text, data) {
+    if (!text) return '';
+    return text
+        .replace(/{project_name}/g, data.project_name || '')
+        .replace(/{request_title}/g, data.request_title || '')
+        .replace(/{old_status}/g, data.old_status || '')
+        .replace(/{new_status}/g, data.new_status || '')
+        .replace(/{client_name}/g, data.client_name || '')
+        .replace(/{client_slug}/g, data.client_slug || '');
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -32,24 +54,31 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
 
+        // Fetch email template
+        const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'status_update' });
+        const savedTemplate = templates[0];
+        const defaultTpl = DEFAULT_TEMPLATES.status_update;
+
+        // Get template values
+        const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
+        const bodyIntroTemplate = savedTemplate?.body_intro || defaultTpl.body_intro;
+        const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
+        const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
+
         // Get client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
             project_id: request.project_id,
             access_status: 'active'
         });
 
-
-
         // Prepare email content
         const clientPortalBaseUrl = 'https://akclient.base44.app';
         
         // For status update emails, we need to send personalized emails per client contact with their slug
-        // First, separate client recipients from team members
-        const clientEmails = new Set();
+        const clientContactsWithSlugs = [];
         const teamEmails = new Set();
         
         // Get client contact emails with their slugs
-        const clientContactsWithSlugs = [];
         if (accesses.length > 0) {
             const contactPromises = accesses.map(async (access) => {
                 const contactResults = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
@@ -96,7 +125,6 @@ Deno.serve(async (req) => {
              return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
         }
 
-        const subject = `Achtung Kraft // Request Update: ${request.title}`;
         const emailResults = [];
 
         // Send personalized emails to client contacts with direct links
@@ -108,13 +136,28 @@ Deno.serve(async (req) => {
                 requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&token=${clientContact.token}`;
             }
 
+            // Prepare placeholder data
+            const placeholderData = {
+                project_name: project.name,
+                request_title: request.title,
+                old_status: oldStatus || 'unknown',
+                new_status: newStatus,
+                client_name: clientContact.name,
+                client_slug: clientContact.slug || ''
+            };
+
+            // Replace placeholders
+            const subject = replacePlaceholders(subjectTemplate, placeholderData);
+            const bodyIntro = replacePlaceholders(bodyIntroTemplate, placeholderData);
+            const closing = replacePlaceholders(closingText, placeholderData);
+
             const htmlBody = `
 <h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
 <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">Request Update: ${request.title}</h2>
 
 <p>Hi ${clientContact.name},</p>
 
-<p>The request <strong>${request.title}</strong> has been updated.</p>
+<p>${bodyIntro}</p>
 
 <p>
 Status changed from <strong>${oldStatus || 'unknown'}</strong>
@@ -128,7 +171,7 @@ to <strong>${newStatus}</strong>.
 
 <p>
 <a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
-VIEW REQUEST
+${buttonText}
 </a>
 </p>
 
@@ -136,8 +179,10 @@ VIEW REQUEST
 Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDetailUrl}</a>
 </p>
 
+${clientContact.slug ? `<p style="color: #666; font-size: 14px;">Your portal code: <strong>${clientContact.slug}</strong></p>` : ''}
+
 <p>
-— Achtung Kraft Projects
+${closing}
 </p>
 `;
 
@@ -147,7 +192,7 @@ Request Update: ${request.title}
 
 Hi ${clientContact.name},
 
-The request "${request.title}" has been updated.
+${bodyIntro}
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 
@@ -156,6 +201,10 @@ ${request.body || 'No description provided.'}
 
 View the request:
 ${requestDetailUrl}
+
+${clientContact.slug ? `Your portal code: ${clientContact.slug}` : ''}
+
+${closing}
 `;
 
             const emailResponse = await fetch('https://api.resend.com/emails', {
@@ -186,13 +235,27 @@ ${requestDetailUrl}
         if (teamEmails.size > 0) {
             const internalUrl = `https://projects.achtungkraft.com/ClientFeedbackDetail?id=${request.id}&projectId=${request.project_id}`;
             
+            // Prepare placeholder data for team
+            const teamPlaceholderData = {
+                project_name: project.name,
+                request_title: request.title,
+                old_status: oldStatus || 'unknown',
+                new_status: newStatus,
+                client_name: 'Team',
+                client_slug: ''
+            };
+
+            const teamSubject = replacePlaceholders(subjectTemplate, teamPlaceholderData);
+            const teamBodyIntro = replacePlaceholders(bodyIntroTemplate, teamPlaceholderData);
+            const teamClosing = replacePlaceholders(closingText, teamPlaceholderData);
+            
             const teamHtmlBody = `
 <h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
 <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">Request Update: ${request.title}</h2>
 
 <p>Hello,</p>
 
-<p>The request <strong>${request.title}</strong> has been updated.</p>
+<p>${teamBodyIntro}</p>
 
 <p>
 Status changed from <strong>${oldStatus || 'unknown'}</strong>
@@ -206,12 +269,12 @@ to <strong>${newStatus}</strong>.
 
 <p>
 <a href="${internalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
-VIEW REQUEST
+${buttonText}
 </a>
 </p>
 
 <p>
-— Achtung Kraft Projects
+${teamClosing}
 </p>
 `;
 
@@ -219,7 +282,7 @@ VIEW REQUEST
 PROJECT: ${project.name}
 Request Update: ${request.title}
 
-The request "${request.title}" has been updated.
+${teamBodyIntro}
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 
@@ -228,6 +291,8 @@ ${request.body || 'No description provided.'}
 
 View the request:
 ${internalUrl}
+
+${teamClosing}
 `;
 
             const teamEmailResponse = await fetch('https://api.resend.com/emails', {
@@ -239,7 +304,7 @@ ${internalUrl}
                 body: JSON.stringify({
                     from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
                     to: Array.from(teamEmails),
-                    subject: subject,
+                    subject: teamSubject,
                     html: teamHtmlBody,
                     text: teamTextBody
                 })

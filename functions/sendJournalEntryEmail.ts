@@ -1,5 +1,26 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Default templates
+const DEFAULT_TEMPLATES = {
+    journal_entry: {
+        subject: "Achtung Kraft // New Update: {headline}",
+        body_intro: "There's a new update on your project:",
+        button_text: "VIEW FULL UPDATE",
+        closing_text: "— Achtung Kraft Projects",
+    }
+};
+
+// Replace placeholders in text
+function replacePlaceholders(text, data) {
+    if (!text) return '';
+    return text
+        .replace(/{project_name}/g, data.project_name || '')
+        .replace(/{headline}/g, data.headline || '')
+        .replace(/{content_preview}/g, data.content_preview || '')
+        .replace(/{client_name}/g, data.client_name || '')
+        .replace(/{client_slug}/g, data.client_slug || '');
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -33,6 +54,11 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Project not found' }, { status: 404 });
         }
 
+        // Fetch email template
+        const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'journal_entry' });
+        const savedTemplate = templates[0];
+        const defaultTpl = DEFAULT_TEMPLATES.journal_entry;
+
         // Get all active client accesses for this project
         const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
             project_id: entry.project_id,
@@ -65,11 +91,25 @@ Deno.serve(async (req) => {
             return Response.json({ error: "RESEND_API_KEY not set" }, { status: 500 });
         }
 
+        // Get template values
+        const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
+        const bodyIntroTemplate = savedTemplate?.body_intro || defaultTpl.body_intro;
+        const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
+        const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
+
+        // Truncate content for email preview
+        const contentPreview = entry.content.length > 500 
+            ? entry.content.substring(0, 500) + '...' 
+            : entry.content;
+
         // Send personalized email to each client
         const emailPromises = contacts.map(async (contact) => {
             // Find the access record for this contact
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) return null;
+
+            // Get client slug
+            const clientSlug = contact.url_slug || access.url_slug || '';
 
             // Build the direct journal URL with slug or token
             let journalUrl;
@@ -84,12 +124,19 @@ Deno.serve(async (req) => {
                 return null;
             }
 
-            const subject = `Achtung Kraft // New Update: ${entry.headline || project.name}`;
+            // Prepare placeholder data
+            const placeholderData = {
+                project_name: project.name,
+                headline: entry.headline || project.name,
+                content_preview: contentPreview,
+                client_name: contact.name,
+                client_slug: clientSlug
+            };
 
-            // Truncate content for email preview
-            const contentPreview = entry.content.length > 500 
-                ? entry.content.substring(0, 500) + '...' 
-                : entry.content;
+            // Replace placeholders
+            const subject = replacePlaceholders(subjectTemplate, placeholderData);
+            const bodyIntro = replacePlaceholders(bodyIntroTemplate, placeholderData);
+            const closing = replacePlaceholders(closingText, placeholderData);
 
             const htmlBody = `
 <h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
@@ -97,7 +144,7 @@ Deno.serve(async (req) => {
 
 <p>Hi ${contact.name},</p>
 
-<p>There's a new update on your project:</p>
+<p>${bodyIntro}</p>
 
 <div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
     ${entry.headline ? `<h3 style="margin: 0 0 12px 0; color: #c00;">${entry.headline}</h3>` : ''}
@@ -106,7 +153,7 @@ Deno.serve(async (req) => {
 
 <p style="margin: 30px 0;">
 <a href="${journalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-VIEW FULL UPDATE
+${buttonText}
 </a>
 </p>
 
@@ -114,8 +161,10 @@ VIEW FULL UPDATE
 Direct link: <a href="${journalUrl}" style="color: #3b82f6;">${journalUrl}</a>
 </p>
 
+${clientSlug ? `<p style="color: #666; font-size: 14px;">Your portal code: <strong>${clientSlug}</strong></p>` : ''}
+
 <p>
-— Achtung Kraft Projects
+${closing}
 </p>
 `;
 
@@ -125,14 +174,16 @@ New Update: ${entry.headline || 'Project Journal'}
 
 Hi ${contact.name},
 
-There's a new update on your project:
+${bodyIntro}
 
 ${entry.headline ? entry.headline + '\n\n' : ''}${contentPreview}
 
 View the full update here:
 ${journalUrl}
 
-— Achtung Kraft Projects
+${clientSlug ? `Your portal code: ${clientSlug}` : ''}
+
+${closing}
 `;
 
             // Send individual email
