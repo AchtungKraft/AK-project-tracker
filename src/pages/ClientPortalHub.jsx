@@ -57,8 +57,8 @@ const getRequestState = (request, decisions, attachments) => {
   if (hasApproval) return 'approved';
   if (hasChangesRequested) return 'changes_requested';
   
-  // For image reviews, check if all images are decided
-  if (request.request_type === 'image_review') {
+  // For design reviews, check if all images are decided
+  if (request.request_type === 'design_review') {
     const imageAttachments = attachments.filter(a => a.request_id === request.id && a.attachment_type === 'image');
     const imageDecisions = requestDecisions.filter(d => d.target_type === 'attachment_image');
     if (imageAttachments.length > 0 && imageDecisions.length >= imageAttachments.length) {

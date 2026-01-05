@@ -321,7 +321,7 @@ export default function ClientFeedbackDetail() {
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
 
   // Determine button labels based on request type
-  const approveLabel = request?.request_type === 'image_review' ? 'Approve' : 'Confirm';
+  const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
 
 
@@ -358,7 +358,7 @@ export default function ClientFeedbackDetail() {
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
 
-            {request.status === 'posted' && request.request_type !== 'image_review' &&
+            {request.status === 'posted' && request.request_type !== 'design_review' &&
             <div className="flex gap-2">
                 <Button
                 size="sm"
@@ -392,7 +392,11 @@ export default function ClientFeedbackDetail() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="border-gray-600 text-gray-200">
-                    {request.request_type === 'image_review' ? 'Design Review' : request.request_type.replace('_', ' ')}
+                    {request.request_type === 'design_review' ? 'Design Review' : 
+                     request.request_type === 'feedback_needed' ? 'Feedback Needed' :
+                     request.request_type === 'client_need' ? 'Client Need' :
+                     request.request_type === 'question' ? 'Question' :
+                     request.request_type.replace('_', ' ')}
                   </Badge>
                   {requestState && (
                     <Badge className={cn("flex items-center gap-1", requestState.color)}>

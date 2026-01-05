@@ -543,7 +543,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                             >
                               <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
 
-                              {canReview && requestType === 'image_review' && (
+                              {canReview && requestType === 'design_review' && (
                                 <div className="absolute top-2 right-2 z-10">
                                   <Checkbox 
                                     checked={isSelected}
@@ -596,7 +596,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         })}
       </div>
 
-      {selectedImageIds.length > 0 && requestType === 'image_review' && (
+      {selectedImageIds.length > 0 && requestType === 'design_review' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in w-[95%] md:w-auto">
           <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
             <CardContent className="p-2 md:p-3 flex flex-col md:flex-row items-center gap-2 md:gap-4">
