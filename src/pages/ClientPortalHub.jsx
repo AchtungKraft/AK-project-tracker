@@ -78,11 +78,13 @@ export default function ClientPortalHub() {
   const { data: decisions = [] } = useQuery({
     queryKey: ["allFeedbackDecisions"],
     queryFn: () => base44.entities.ClientFeedbackDecision.list(),
+    refetchOnMount: 'always',
   });
 
   const { data: attachments = [] } = useQuery({
     queryKey: ["allFeedbackAttachments"],
     queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
+    refetchOnMount: 'always',
   });
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
