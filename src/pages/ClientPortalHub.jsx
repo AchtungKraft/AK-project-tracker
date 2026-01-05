@@ -326,7 +326,8 @@ export default function ClientPortalHub() {
             groupByProject(categorizedRequests.awaiting),
             "No items awaiting client review",
             "bg-amber-500/20 text-amber-400 border-amber-500/50",
-            "awaiting"
+            "awaiting",
+            true
           )}
         </TabsContent>
 
