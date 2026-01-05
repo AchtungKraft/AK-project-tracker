@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -85,13 +91,94 @@ export default function ProjectDetail() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-gray-900/50 border border-red-900/30">
-            <TabsTrigger value="overview" className="bg-transparent text-slate-400 px-3 py-1 text-sm font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow">Overview</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="parts">Parts</TabsTrigger>
-            <TabsTrigger value="journal">Journal</TabsTrigger>
-            <TabsTrigger value="clientportal">Client Portal</TabsTrigger>
+          {/* Desktop Tabs */}
+          <TabsList className="hidden md:flex bg-black/40 border border-gray-700 p-1 h-auto">
+            <TabsTrigger 
+              value="overview" 
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger 
+              value="tasks"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <ListChecks className="w-4 h-4" />
+              Tasks
+            </TabsTrigger>
+            <TabsTrigger 
+              value="parts"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Package className="w-4 h-4" />
+              Parts
+            </TabsTrigger>
+            <TabsTrigger 
+              value="journal"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              Journal
+            </TabsTrigger>
+            <TabsTrigger 
+              value="clientportal"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Users className="w-4 h-4" />
+              Client Portal
+            </TabsTrigger>
           </TabsList>
+
+          {/* Mobile Hamburger Menu */}
+          <div className="md:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between border-gray-700 text-white bg-black/40">
+                  <span className="flex items-center gap-2">
+                    {activeTab === 'overview' && <><LayoutGrid className="w-4 h-4" /> Overview</>}
+                    {activeTab === 'tasks' && <><ListChecks className="w-4 h-4" /> Tasks</>}
+                    {activeTab === 'parts' && <><Package className="w-4 h-4" /> Parts</>}
+                    {activeTab === 'journal' && <><BookOpen className="w-4 h-4" /> Journal</>}
+                    {activeTab === 'clientportal' && <><Users className="w-4 h-4" /> Client Portal</>}
+                  </span>
+                  <Menu className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-gray-900 border-gray-700">
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('overview')}
+                  className={`gap-2 ${activeTab === 'overview' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <LayoutGrid className="w-4 h-4" /> Overview
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('tasks')}
+                  className={`gap-2 ${activeTab === 'tasks' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <ListChecks className="w-4 h-4" /> Tasks
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('parts')}
+                  className={`gap-2 ${activeTab === 'parts' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <Package className="w-4 h-4" /> Parts
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('journal')}
+                  className={`gap-2 ${activeTab === 'journal' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <BookOpen className="w-4 h-4" /> Journal
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('clientportal')}
+                  className={`gap-2 ${activeTab === 'clientportal' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <Users className="w-4 h-4" /> Client Portal
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <TabsContent value="overview" className="mt-6">
             <ProjectOverview project={project} projectId={projectId} />
