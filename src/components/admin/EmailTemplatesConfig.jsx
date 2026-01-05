@@ -20,7 +20,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Mail, Edit2, Save, RotateCcw, Loader2, Info } from "lucide-react";
+import { Mail, Edit2, Save, RotateCcw, Loader2, Info, Send } from "lucide-react";
 import { toast } from "sonner";
 
 const DEFAULT_TEMPLATES = [
@@ -83,6 +83,7 @@ export default function EmailTemplatesConfig() {
   const queryClient = useQueryClient();
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [formData, setFormData] = useState({});
+  const [sendingTest, setSendingTest] = useState(null);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["emailTemplates"],
@@ -138,6 +139,26 @@ export default function EmailTemplatesConfig() {
   const handleReset = (templateKey) => {
     if (confirm("Reset this template to defaults?")) {
       resetMutation.mutate(templateKey);
+    }
+  };
+
+  const handleSendTest = async (template) => {
+    setSendingTest(template.template_key);
+    try {
+      const response = await base44.functions.invoke('sendTestEmail', {
+        templateKey: template.template_key,
+        to: 'sales@achtungkraft.com'
+      });
+      if (response.data?.success) {
+        toast.success('Test email sent to sales@achtungkraft.com');
+      } else {
+        toast.error(response.data?.error || 'Failed to send test email');
+      }
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      toast.error('Failed to send test email');
+    } finally {
+      setSendingTest(null);
     }
   };
 
@@ -226,6 +247,20 @@ export default function EmailTemplatesConfig() {
                   >
                     <Edit2 className="w-4 h-4 mr-1" />
                     Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSendTest(template)}
+                    disabled={sendingTest === template.template_key}
+                    className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+                  >
+                    {sendingTest === template.template_key ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-1" />
+                    )}
+                    Send Test
                   </Button>
                   {!template.isDefault && (
                     <Button
