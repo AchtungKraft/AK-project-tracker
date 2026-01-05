@@ -29,6 +29,8 @@ import {
   Phone,
   ChevronDown,
   ChevronRight,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,6 +43,7 @@ export default function ClientPortalAdminTab() {
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", url_slug: "" });
+  const [sendingWelcome, setSendingWelcome] = useState(null);
 
   // Fetch all data
   const { data: clients = [], isLoading: loadingClients } = useQuery({
@@ -70,11 +73,23 @@ export default function ClientPortalAdminTab() {
 
   const addAccessMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
-    onSuccess: () => {
+    onSuccess: async (newAccess, variables) => {
       queryClient.invalidateQueries({ queryKey: ["projectClientAccess"] });
       setShowAddProjectModal(false);
       setSelectedProjectId("");
       toast.success("Project access granted");
+      
+      // Send welcome email for new project access
+      try {
+        await base44.functions.invoke('sendWelcomeEmail', {
+          clientContactId: variables.client_contact_id,
+          projectId: variables.project_id,
+          accessId: newAccess.id
+        });
+        toast.success("Welcome email sent");
+      } catch (error) {
+        console.error('Error sending welcome email:', error);
+      }
     },
     onError: () => toast.error("Failed to add access"),
   });
@@ -105,6 +120,38 @@ export default function ClientPortalAdminTab() {
     },
     onError: () => toast.error("Failed to delete client"),
   });
+
+  const handleSendWelcomeEmail = async (client) => {
+    // Get first project access for this client
+    const clientAccesses = projectAccess.filter(
+      pa => pa.client_contact_id === client.id && pa.access_status === "active"
+    );
+    
+    if (clientAccesses.length === 0) {
+      toast.error("Client needs project access before sending welcome email");
+      return;
+    }
+
+    setSendingWelcome(client.id);
+    try {
+      const access = clientAccesses[0];
+      const response = await base44.functions.invoke('sendWelcomeEmail', {
+        clientContactId: client.id,
+        projectId: access.project_id,
+        accessId: access.id
+      });
+      if (response.data?.success) {
+        toast.success(`Welcome email sent to ${client.email}`);
+      } else {
+        toast.error(response.data?.error || 'Failed to send welcome email');
+      }
+    } catch (error) {
+      console.error('Error sending welcome email:', error);
+      toast.error('Failed to send welcome email');
+    } finally {
+      setSendingWelcome(null);
+    }
+  };
 
   // Filter clients by search
   const filteredClients = clients.filter(
@@ -265,6 +312,23 @@ export default function ClientPortalAdminTab() {
                       <FolderKanban className="w-3 h-3 mr-1" />
                       {clientProjects.length} projects
                     </Badge>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSendWelcomeEmail(client);
+                      }}
+                      disabled={sendingWelcome === client.id || clientProjects.length === 0}
+                      className="text-amber-500 hover:text-amber-400 hover:bg-gray-800 h-8 w-8"
+                      title="Send welcome email"
+                    >
+                      {sendingWelcome === client.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"
