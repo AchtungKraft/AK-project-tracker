@@ -162,7 +162,7 @@ export default function ClientPortalHub() {
                 {requests.map(request => (
                   <Link
                     key={request.id}
-                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}`}
+                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub`}
                     className="flex items-center justify-between p-4 hover:bg-gray-800/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
