@@ -297,9 +297,9 @@ export default function Layout({ children, currentPageName }) {
                           <SidebarMenuButton 
                             asChild 
                             className={cn(
-                              "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
-                              location.pathname === item.url && "bg-red-950/40 text-red-400"
-                            )}
+                                                              "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
+                                                              location.pathname === item.url && "bg-red-600 text-white"
+                                                            )}
                           >
                             <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
                               <item.icon className="w-4 h-4" />
