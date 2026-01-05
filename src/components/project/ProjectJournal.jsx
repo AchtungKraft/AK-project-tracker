@@ -370,18 +370,11 @@ export default function ProjectJournal({ projectId }) {
               {sortedEntries.map(entry => (
                 <article
                   key={entry.id}
-                  className="p-6 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-red-900/50 transition-colors cursor-pointer"
+                  className="p-4 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-red-900/50 transition-colors cursor-pointer"
                   onClick={() => handleEntryClick(entry)}
                 >
-                  {/* Header */}
-                  <div className="flex items-center justify-between gap-3 text-sm text-gray-400 mb-4 pb-4 border-b border-gray-800">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="w-4 h-4" />
-                      <span>{format(new Date(entry.entry_date || entry.created_date), 'MMMM d, yyyy')}</span>
-                      {entry.updated_date && entry.updated_date !== entry.created_date && (
-                        <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
-                      )}
-                    </div>
+                  {/* Header with visibility badge */}
+                  <div className="flex items-center justify-end mb-2">
                     <Badge className={entry.visibility === 'client' 
                       ? 'bg-green-500/20 text-green-400 border-green-500/50' 
                       : 'bg-gray-500/20 text-gray-400 border-gray-500/50'
@@ -396,17 +389,26 @@ export default function ProjectJournal({ projectId }) {
 
                   {/* Headline */}
                   {entry.headline && (
-                    <h2 className="text-2xl font-bold text-white mb-4">{entry.headline}</h2>
+                    <h2 className="text-2xl font-bold text-white mb-1">{entry.headline}</h2>
                   )}
 
+                  {/* Date under headline */}
+                  <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
+                    <Calendar className="w-4 h-4" />
+                    <span>{format(new Date(entry.entry_date || entry.created_date), 'MMMM d, yyyy')}</span>
+                    {entry.updated_date && entry.updated_date !== entry.created_date && (
+                      <span className="text-xs text-gray-500">(Updated {format(new Date(entry.updated_date), 'MMM d, yyyy')})</span>
+                    )}
+                  </div>
+
                   {/* Content */}
-                  <div className="prose prose-invert max-w-none mb-6">
+                  <div className="prose prose-invert max-w-none mb-4">
                     <p className="text-gray-200 text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
                   </div>
-                  
+
                   {/* Photos Grid - 2 columns */}
                   {entry.photos && entry.photos.length > 0 && (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="grid grid-cols-2 gap-2 mb-3">
                       {entry.photos.map((url, idx) => (
                         <div 
                           key={idx}
@@ -435,7 +437,7 @@ export default function ProjectJournal({ projectId }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300 mb-3 px-3 py-2 bg-gray-800/50 rounded-lg"
+                      className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300 mb-2 px-2 py-1.5 bg-gray-800/50 rounded-lg"
                     >
                       <Link2 className="w-4 h-4 flex-shrink-0" />
                       {entry.url}
@@ -444,7 +446,7 @@ export default function ProjectJournal({ projectId }) {
 
                   {/* Attachments */}
                   {entry.attachments && entry.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-800">
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-800">
                       {entry.attachments.map((att, idx) => (
                         <a
                           key={idx}
