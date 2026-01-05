@@ -11,6 +11,7 @@ import CarMakesConfig from "../components/admin/CarMakesConfig";
 import CarModelsConfig from "../components/admin/CarModelsConfig";
 import CarYearsConfig from "../components/admin/CarYearsConfig";
 import UsersConfig from "../components/admin/UsersConfig";
+import EmailTemplatesConfig from "../components/admin/EmailTemplatesConfig";
 
 export default function AdminConfig() {
   return (
@@ -36,6 +37,7 @@ export default function AdminConfig() {
             <TabsTrigger value="car-makes">Car Makes</TabsTrigger>
             <TabsTrigger value="car-models">Car Models</TabsTrigger>
             <TabsTrigger value="car-years">Car Years</TabsTrigger>
+            <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
@@ -80,6 +82,10 @@ export default function AdminConfig() {
 
           <TabsContent value="car-years" className="mt-6">
             <CarYearsConfig />
+          </TabsContent>
+
+          <TabsContent value="email-templates" className="mt-6">
+            <EmailTemplatesConfig />
           </TabsContent>
         </Tabs>
       </div>
