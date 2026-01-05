@@ -10,7 +10,7 @@ import { CheckCircle2, XCircle, Clock, MessageSquare, Loader2 } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export default function ImageReviewGallery({ images, decisions, requestId, userId, onCreateTask }) {
+export default function DesignReviewGallery({ images, decisions, requestId, userId, onCreateTask }) {
   const queryClient = useQueryClient();
   const [selectedImages, setSelectedImages] = useState([]);
   const [viewingImage, setViewingImage] = useState(null);
@@ -99,7 +99,7 @@ export default function ImageReviewGallery({ images, decisions, requestId, userI
       <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-white">Image Review</h3>
+            <h3 className="font-semibold text-white">Design Review</h3>
             {selectedImages.length > 0 && (
               <div className="flex gap-2">
                 <Button
