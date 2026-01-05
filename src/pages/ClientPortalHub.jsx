@@ -197,23 +197,42 @@ export default function ClientPortalHub() {
                     {project?.name || 'Unknown Project'}
                   </CardTitle>
                   {showEmailButton && project?.id && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSendBulkEmail(project.id, requests.map(r => r.id));
-                      }}
-                      disabled={sendingEmailForProject === project.id}
-                      className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
-                    >
-                      {sendingEmailForProject === project.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                      ) : (
-                        <Send className="w-4 h-4 mr-1" />
-                      )}
-                      Email All
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSendBulkEmail(project.id, requests.map(r => r.id));
+                        }}
+                        disabled={sendingEmailForProject === project.id}
+                        className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+                      >
+                        {sendingEmailForProject === project.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-1" />
+                        )}
+                        Email All
+                      </Button>
+                      <Link
+                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-1"
+                      >
+                        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
+                          Journal
+                        </Button>
+                      </Link>
+                      <Link
+                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=clientportal`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
+                          Portal
+                        </Button>
+                      </Link>
+                    </>
                   )}
                 </div>
                 <Badge className="bg-gray-800 text-gray-300">
