@@ -226,7 +226,7 @@ export default function ClientPortalHub() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="bg-black/40 border border-gray-700 p-1 h-auto flex-wrap">
           <TabsTrigger 
             value="awaiting" 
