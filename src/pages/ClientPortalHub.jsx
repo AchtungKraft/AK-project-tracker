@@ -26,8 +26,21 @@ const getRequestState = (request, decisions, attachments) => {
   if (request.status === 'approved') return 'approved';
   if (request.status === 'changes_requested') return 'changes_requested';
   
-  // Check decisions
-  const requestDecisions = decisions.filter(d => d.request_id === request.id);
+  // Only consider decisions made AFTER the request was last posted
+  const postedAt = request.posted_at ? new Date(request.posted_at) : null;
+  const requestDecisions = decisions.filter(d => {
+    if (d.request_id !== request.id) return false;
+    // If we have a posted_at, only count decisions made after that time
+    if (postedAt && d.decided_at) {
+      return new Date(d.decided_at) > postedAt;
+    }
+    // Fallback: use created_date if decided_at not available
+    if (postedAt && d.created_date) {
+      return new Date(d.created_date) > postedAt;
+    }
+    return true;
+  });
+  
   const hasApproval = requestDecisions.some(d => d.decision === 'approved' && d.target_type === 'request');
   const hasChangesRequested = requestDecisions.some(d => d.decision === 'changes_requested');
   
