@@ -56,14 +56,10 @@ export default function ClientPortalHub() {
   const [activeTab, setActiveTab] = useState(initialTab);
 
   // Fetch all data
-  const { data: requests = [], isLoading: loadingRequests } = useQuery({
+  const { data: allRequests = [], isLoading: loadingRequests } = useQuery({
     queryKey: ["allFeedbackRequests"],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ status: 'posted' }),
-  });
-
-  const { data: allRequests = [] } = useQuery({
-    queryKey: ["allFeedbackRequestsAll"],
     queryFn: () => base44.entities.ClientFeedbackRequest.list(),
+    refetchOnMount: 'always',
   });
 
   const { data: decisions = [] } = useQuery({
