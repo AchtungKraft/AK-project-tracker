@@ -544,7 +544,8 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                               <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
 
                               {canReview && requestType === 'design_review' && (
-                                <div className="absolute top-2 right-2 z-10">
+                                <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
+                                  <span className="text-white text-xs font-medium">SELECT</span>
                                   <Checkbox 
                                     checked={isSelected}
                                     onCheckedChange={() => handleImageSelect(att.id)}
