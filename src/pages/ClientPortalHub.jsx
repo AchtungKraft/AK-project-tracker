@@ -14,8 +14,15 @@ import {
   ChevronRight,
   Loader2,
   Mail,
-  Send
+  Send,
+  Menu
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -296,7 +303,8 @@ export default function ClientPortalHub() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="bg-black/40 border border-gray-700 p-1 h-auto flex-wrap">
+        {/* Desktop Tabs */}
+        <TabsList className="hidden md:flex bg-black/40 border border-gray-700 p-1 h-auto">
           <TabsTrigger 
             value="awaiting" 
             className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
@@ -341,6 +349,64 @@ export default function ClientPortalHub() {
             Admin
           </TabsTrigger>
         </TabsList>
+
+        {/* Mobile Hamburger Menu */}
+        <div className="md:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-between border-gray-700 text-white bg-black/40">
+                <span className="flex items-center gap-2">
+                  {activeTab === 'awaiting' && <><Clock className="w-4 h-4" /> Awaiting Review</>}
+                  {activeTab === 'changes' && <><AlertTriangle className="w-4 h-4" /> Change Requests</>}
+                  {activeTab === 'approved' && <><CheckCircle2 className="w-4 h-4" /> Approved</>}
+                  {activeTab === 'admin' && <><Users className="w-4 h-4" /> Admin</>}
+                </span>
+                <Menu className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 bg-gray-900 border-gray-700">
+              <DropdownMenuItem 
+                onClick={() => handleTabChange('awaiting')}
+                className={`gap-2 ${activeTab === 'awaiting' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+              >
+                <Clock className="w-4 h-4" /> Awaiting Review
+                {categorizedRequests.awaiting.length > 0 && (
+                  <Badge className="bg-amber-500/20 text-amber-400 ml-auto">
+                    {categorizedRequests.awaiting.length}
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleTabChange('changes')}
+                className={`gap-2 ${activeTab === 'changes' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+              >
+                <AlertTriangle className="w-4 h-4" /> Change Requests
+                {categorizedRequests.changesRequested.length > 0 && (
+                  <Badge className="bg-orange-500/20 text-orange-400 ml-auto">
+                    {categorizedRequests.changesRequested.length}
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleTabChange('approved')}
+                className={`gap-2 ${activeTab === 'approved' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+              >
+                <CheckCircle2 className="w-4 h-4" /> Approved
+                {categorizedRequests.approved.length > 0 && (
+                  <Badge className="bg-green-500/20 text-green-400 ml-auto">
+                    {categorizedRequests.approved.length}
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleTabChange('admin')}
+                className={`gap-2 ${activeTab === 'admin' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+              >
+                <Users className="w-4 h-4" /> Admin
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <TabsContent value="awaiting" className="mt-6">
           {renderRequestList(
