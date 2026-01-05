@@ -37,8 +37,10 @@ export default function ClientPortalAdminTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedClients, setExpandedClients] = useState({});
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", url_slug: "" });
 
   // Fetch all data
   const { data: clients = [], isLoading: loadingClients } = useQuery({
@@ -75,6 +77,33 @@ export default function ClientPortalAdminTab() {
       toast.success("Project access granted");
     },
     onError: () => toast.error("Failed to add access"),
+  });
+
+  const createClientMutation = useMutation({
+    mutationFn: (data) => base44.entities.ClientContact.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clientContacts"] });
+      setShowAddClientModal(false);
+      setNewClient({ name: "", email: "", phone: "", url_slug: "" });
+      toast.success("Client created");
+    },
+    onError: () => toast.error("Failed to create client"),
+  });
+
+  const deleteClientMutation = useMutation({
+    mutationFn: async (clientId) => {
+      // First remove all project accesses for this client
+      const accesses = projectAccess.filter(pa => pa.client_contact_id === clientId);
+      await Promise.all(accesses.map(a => base44.entities.ProjectClientAccess.delete(a.id)));
+      // Then delete the client
+      return base44.entities.ClientContact.delete(clientId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clientContacts"] });
+      queryClient.invalidateQueries({ queryKey: ["projectClientAccess"] });
+      toast.success("Client deleted");
+    },
+    onError: () => toast.error("Failed to delete client"),
   });
 
   // Filter clients by search
@@ -132,15 +161,24 @@ export default function ClientPortalAdminTab() {
 
   return (
     <div className="space-y-6">
-      {/* Search */}
-      <div className="relative w-full md:w-72">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-        <Input
-          placeholder="Search clients..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9 bg-gray-900 border-gray-700 text-white"
-        />
+      {/* Search and Add */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-full md:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Input
+            placeholder="Search clients..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-gray-900 border-gray-700 text-white"
+          />
+        </div>
+        <Button
+          onClick={() => setShowAddClientModal(true)}
+          className="bg-red-600 hover:bg-red-700 text-white gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Client
+        </Button>
       </div>
 
       {/* Stats */}
@@ -227,6 +265,19 @@ export default function ClientPortalAdminTab() {
                       <FolderKanban className="w-3 h-3 mr-1" />
                       {clientProjects.length} projects
                     </Badge>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete client "${client.name}"? This will also remove all project access.`)) {
+                          deleteClientMutation.mutate(client.id);
+                        }
+                      }}
+                      className="text-gray-500 hover:text-red-500 hover:bg-gray-800 h-8 w-8"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                     {isExpanded ? (
                       <ChevronDown className="w-5 h-5 text-gray-400" />
                     ) : (
@@ -361,6 +412,76 @@ export default function ClientPortalAdminTab() {
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {addAccessMutation.isPending ? "Adding..." : "Add Access"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Client Modal */}
+      <Dialog open={showAddClientModal} onOpenChange={setShowAddClientModal}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>Add New Client</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">Name *</label>
+              <Input
+                value={newClient.name}
+                onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                placeholder="Client name"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">Email *</label>
+              <Input
+                type="email"
+                value={newClient.email}
+                onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                placeholder="client@example.com"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">Phone</label>
+              <Input
+                value={newClient.phone}
+                onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                placeholder="(555) 123-4567"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 mb-2 block">Portal Slug</label>
+              <Input
+                value={newClient.url_slug}
+                onChange={(e) => setNewClient({ ...newClient, url_slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                placeholder="client-slug"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+              <p className="text-xs text-gray-500 mt-1">Used for portal access URL</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddClientModal(false);
+                setNewClient({ name: "", email: "", phone: "", url_slug: "" });
+              }}
+              className="border-gray-600 text-gray-200 hover:bg-gray-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createClientMutation.mutate({ ...newClient, active: true })}
+              disabled={!newClient.name || !newClient.email || createClientMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {createClientMutation.isPending ? "Creating..." : "Create Client"}
             </Button>
           </DialogFooter>
         </DialogContent>
