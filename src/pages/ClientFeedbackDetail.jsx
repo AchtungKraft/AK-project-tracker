@@ -14,7 +14,7 @@ import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircl
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRequestState } from "@/components/clientportal/utils";
+import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
