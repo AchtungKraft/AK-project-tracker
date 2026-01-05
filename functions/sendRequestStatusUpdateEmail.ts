@@ -109,6 +109,9 @@ Deno.serve(async (req) => {
             }
 
             const htmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">Request Update: ${request.title}</h2>
+
 <p>Hi ${clientContact.name},</p>
 
 <p>The request <strong>${request.title}</strong> has been updated.</p>
@@ -139,6 +142,9 @@ Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDeta
 `;
 
             const textBody = `
+PROJECT: ${project.name}
+Request Update: ${request.title}
+
 Hi ${clientContact.name},
 
 The request "${request.title}" has been updated.
@@ -181,6 +187,9 @@ ${requestDetailUrl}
             const internalUrl = `https://projects.achtungkraft.com/ClientFeedbackDetail?id=${request.id}&projectId=${request.project_id}`;
             
             const teamHtmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">Request Update: ${request.title}</h2>
+
 <p>Hello,</p>
 
 <p>The request <strong>${request.title}</strong> has been updated.</p>
@@ -207,6 +216,9 @@ VIEW REQUEST
 `;
 
             const teamTextBody = `
+PROJECT: ${project.name}
+Request Update: ${request.title}
+
 The request "${request.title}" has been updated.
 
 Status changed from ${oldStatus || 'unknown'} to ${newStatus}.

@@ -92,11 +92,12 @@ Deno.serve(async (req) => {
                 : entry.content;
 
             const htmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">New Update: ${entry.headline || 'Project Journal'}</h2>
+
 <p>Hi ${contact.name},</p>
 
 <p>There's a new update on your project:</p>
-
-<p><strong>Project: ${project.name}</strong></p>
 
 <div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
     ${entry.headline ? `<h3 style="margin: 0 0 12px 0; color: #c00;">${entry.headline}</h3>` : ''}
@@ -119,11 +120,12 @@ Direct link: <a href="${journalUrl}" style="color: #3b82f6;">${journalUrl}</a>
 `;
 
             const textBody = `
+PROJECT: ${project.name}
+New Update: ${entry.headline || 'Project Journal'}
+
 Hi ${contact.name},
 
 There's a new update on your project:
-
-Project: ${project.name}
 
 ${entry.headline ? entry.headline + '\n\n' : ''}${contentPreview}
 

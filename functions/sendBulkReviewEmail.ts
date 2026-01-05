@@ -91,11 +91,12 @@ Deno.serve(async (req) => {
             const subject = `Achtung Kraft // ${requests.length} ITEMS NEED YOUR REVIEW: ${project.name}`;
 
             const htmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">${requests.length} ITEMS NEED YOUR REVIEW</h2>
+
 <p>Hi ${contact.name},</p>
 
-<p>You have <strong>${requests.length} item${requests.length > 1 ? 's' : ''}</strong> that need your review for:</p>
-
-<p><strong style="font-size: 18px;">${project.name}</strong></p>
+<p>You have <strong>${requests.length} item${requests.length > 1 ? 's' : ''}</strong> that need your review:</p>
 
 <ul style="list-style: none; padding: 0; margin: 20px 0;">
 ${itemsListHtml}
@@ -117,11 +118,12 @@ Direct link: <a href="${portalUrl}" style="color: #3b82f6;">${portalUrl}</a>
 `;
 
             const textBody = `
+PROJECT: ${project.name}
+${requests.length} ITEMS NEED YOUR REVIEW
+
 Hi ${contact.name},
 
-You have ${requests.length} item${requests.length > 1 ? 's' : ''} that need your review for:
-
-${project.name}
+You have ${requests.length} item${requests.length > 1 ? 's' : ''} that need your review:
 
 ${itemsListText}
 

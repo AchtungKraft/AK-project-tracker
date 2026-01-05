@@ -81,11 +81,12 @@ Deno.serve(async (req) => {
             const subject = `Achtung Kraft // REVIEW NEEDED: ${request.title}`;
 
             const htmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">REVIEW NEEDED: ${request.title}</h2>
+
 <p>Hi ${contact.name},</p>
 
 <p>You have a new item that requires your review:</p>
-
-<p><strong>Project: ${project.name}</strong></p>
 
 <div style="background-color: #f9f9f9; border-left: 4px solid #c00; padding: 16px; margin: 20px 0;">
     <h3 style="margin: 0 0 8px 0; color: #c00;">${request.title}</h3>
@@ -108,11 +109,12 @@ Direct link: <a href="${requestDetailUrl}" style="color: #3b82f6;">${requestDeta
 `;
 
             const textBody = `
+PROJECT: ${project.name}
+REVIEW NEEDED: ${request.title}
+
 Hi ${contact.name},
 
 You have a new item that requires your review:
-
-Project: ${project.name}
 
 ${request.title}
 ${request.body || 'No description provided.'}

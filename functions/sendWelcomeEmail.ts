@@ -48,6 +48,9 @@ Deno.serve(async (req) => {
         const subject = `Achtung Kraft // Welcome to ${project.name} Project Portal`;
         
         const htmlBody = `
+<h1 style="margin: 0 0 8px 0; color: #c00; font-size: 24px;">PROJECT: ${project.name}</h1>
+<h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: normal;">Welcome to Your Project Portal</h2>
+
 <p>Hi ${contact.name},</p>
 
 <p>Welcome! You've been given access to the <strong>${project.name}</strong> project portal.</p>
@@ -84,6 +87,9 @@ If you have any questions, feel free to reach out.<br/>
 `;
 
         const textBody = `
+PROJECT: ${project.name}
+Welcome to Your Project Portal
+
 Hi ${contact.name},
 
 Welcome! You've been given access to the ${project.name} project portal.
