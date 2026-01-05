@@ -72,11 +72,11 @@ const DEFAULT_TEMPLATES = [
 ];
 
 const PLACEHOLDER_INFO = {
-  needs_review: ["{project_name}", "{request_title}", "{request_body}", "{client_name}"],
-  bulk_review: ["{project_name}", "{item_count}", "{client_name}"],
-  journal_entry: ["{project_name}", "{headline}", "{content_preview}", "{client_name}"],
-  status_update: ["{project_name}", "{request_title}", "{old_status}", "{new_status}", "{client_name}"],
-  welcome: ["{project_name}", "{client_name}"],
+  needs_review: ["{project_name}", "{request_title}", "{request_body}", "{client_name}", "{client_slug}"],
+  bulk_review: ["{project_name}", "{item_count}", "{client_name}", "{client_slug}"],
+  journal_entry: ["{project_name}", "{headline}", "{content_preview}", "{client_name}", "{client_slug}"],
+  status_update: ["{project_name}", "{request_title}", "{old_status}", "{new_status}", "{client_name}", "{client_slug}"],
+  welcome: ["{project_name}", "{client_name}", "{client_slug}"],
 };
 
 export default function EmailTemplatesConfig() {

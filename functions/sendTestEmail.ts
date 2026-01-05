@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
             old_status: "posted",
             new_status: "approved",
             client_name: "Test Client",
+            client_slug: "test-client-abc123",
             item_count: 3,
         };
 
@@ -81,10 +82,15 @@ Deno.serve(async (req) => {
             .replace(/{project_name}/g, testData.project_name)
             .replace(/{request_title}/g, testData.request_title)
             .replace(/{headline}/g, testData.headline)
-            .replace(/{item_count}/g, testData.item_count);
+            .replace(/{item_count}/g, testData.item_count)
+            .replace(/{client_slug}/g, testData.client_slug)
+            .replace(/{client_name}/g, testData.client_name);
 
         const bodyIntro = (savedTemplate?.body_intro || defaultTemplates[templateKey].body_intro)
-            .replace(/{item_count}/g, testData.item_count);
+            .replace(/{item_count}/g, testData.item_count)
+            .replace(/{client_slug}/g, testData.client_slug)
+            .replace(/{client_name}/g, testData.client_name)
+            .replace(/{project_name}/g, testData.project_name);
         const buttonText = savedTemplate?.button_text || defaultTemplates[templateKey].button_text;
         const closingText = savedTemplate?.closing_text || defaultTemplates[templateKey].closing_text;
 
