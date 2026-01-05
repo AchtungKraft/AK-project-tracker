@@ -18,7 +18,17 @@ export default function ProjectDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('id');
   const tabParam = urlParams.get('tab') || 'overview';
+  const fromPage = urlParams.get('from');
+  const fromTab = urlParams.get('fromTab');
   const [activeTab, setActiveTab] = useState(tabParam);
+
+  const handleBack = () => {
+    if (fromPage === 'hub') {
+      navigate(createPageUrl("ClientPortalHub") + (fromTab ? `?tab=${fromTab}` : ''));
+    } else {
+      navigate(createPageUrl("Dashboard"));
+    }
+  };
 
   useEffect(() => {
     const newTab = urlParams.get('tab') || 'overview';
