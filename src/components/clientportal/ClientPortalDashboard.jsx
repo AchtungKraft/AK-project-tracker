@@ -25,9 +25,9 @@ const getStateColor = (label) => {
 const getTypeColor = (type) => {
   switch (type) {
     case 'question': return '#3b82f6'; // blue-500
-    case 'update': return '#6366f1'; // indigo-500
-    case 'image_review': return '#a855f7'; // purple-500
-    case 'approval': return '#f59e0b'; // amber-500
+    case 'feedback_needed': return '#6366f1'; // indigo-500
+    case 'design_review': return '#a855f7'; // purple-500
+    case 'client_need': return '#f59e0b'; // amber-500
     default: return '#6b7280';
   }
 };
