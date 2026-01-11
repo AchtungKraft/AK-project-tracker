@@ -1,7 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
-    // Enable CORS for cross-origin requests
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
@@ -16,7 +15,6 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         let token, slug;
         
-        // Safely parse request parameters
         try {
             const contentType = req.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -25,7 +23,6 @@ Deno.serve(async (req) => {
                 slug = body.slug;
             }
         } catch (e) {
-            // If JSON parsing fails, try URL parameters
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
@@ -38,8 +35,8 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Find client contact
         let clientContactId;
+        let contact;
         
         if (slug) {
             const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
@@ -49,7 +46,8 @@ Deno.serve(async (req) => {
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
-            clientContactId = contacts[0].id;
+            contact = contacts[0];
+            clientContactId = contact.id;
         } else {
             const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ share_token: token, access_status: 'active' });
             if (accesses.length === 0) {
@@ -59,10 +57,10 @@ Deno.serve(async (req) => {
                 });
             }
             clientContactId = accesses[0].client_contact_id;
+            
+            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ id: clientContactId });
+            contact = contacts[0];
         }
-
-        const contacts = await base44.asServiceRole.entities.ClientContact.filter({ id: clientContactId });
-        const contact = contacts[0];
 
         if (!contact) {
             return Response.json({ error: 'Contact not found' }, { 
@@ -71,11 +69,17 @@ Deno.serve(async (req) => {
             });
         }
 
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ 
-            client_contact_id: clientContactId,
-            access_status: 'active'
-        });
+        // Fetch accesses, statuses, and project types in parallel
+        const [accesses, statuses, projectTypes] = await Promise.all([
+            base44.asServiceRole.entities.ProjectClientAccess.filter({ 
+                client_contact_id: clientContactId,
+                access_status: 'active'
+            }),
+            base44.asServiceRole.entities.StatusList.filter({ scope: 'Project', active: true }),
+            base44.asServiceRole.entities.ProjectType.filter({ active: true })
+        ]);
 
+        // Fetch all projects in parallel
         const projectIds = accesses.map(a => a.project_id);
         const projectPromises = projectIds.map(id => 
             base44.asServiceRole.entities.Project.filter({ id })
@@ -83,16 +87,51 @@ Deno.serve(async (req) => {
         const projectResults = await Promise.all(projectPromises);
         const projects = projectResults.flat();
 
-        const statuses = await base44.asServiceRole.entities.StatusList.list();
-        const projectTypes = await base44.asServiceRole.entities.ProjectType.list();
+        // Return minimal data
+        const minimalContact = {
+            id: contact.id,
+            name: contact.name,
+            email: contact.email
+        };
+
+        const minimalAccesses = accesses.map(a => ({
+            id: a.id,
+            project_id: a.project_id,
+            access_role: a.access_role
+        }));
+
+        const minimalProjects = projects.map(p => ({
+            id: p.id,
+            name: p.name,
+            featured_image_url: p.featured_image_url,
+            status_id: p.status_id,
+            project_type_id: p.project_type_id,
+            progress_percent: p.progress_percent
+        }));
+
+        const minimalStatuses = statuses
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+            .map(s => ({
+                id: s.id,
+                label: s.label,
+                color: s.color
+            }));
+
+        const minimalProjectTypes = projectTypes
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+            .map(t => ({
+                id: t.id,
+                name: t.name,
+                color: t.color
+            }));
 
         return Response.json({
             success: true,
-            contact,
-            accesses,
-            projects,
-            statuses: statuses.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-            projectTypes: projectTypes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+            contact: minimalContact,
+            accesses: minimalAccesses,
+            projects: minimalProjects,
+            statuses: minimalStatuses,
+            projectTypes: minimalProjectTypes
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });

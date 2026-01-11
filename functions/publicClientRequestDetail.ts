@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         let token, slug, requestId;
         
-        // Safely parse request parameters
         try {
             const contentType = req.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -25,7 +24,6 @@ Deno.serve(async (req) => {
                 requestId = body.requestId;
             }
         } catch (e) {
-            // If JSON parsing fails, try URL parameters
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
@@ -39,9 +37,13 @@ Deno.serve(async (req) => {
             });
         }
 
-        const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
-        const request = requests[0];
+        // Fetch request and contact in parallel where possible
+        const [requestResults, contactResults] = await Promise.all([
+            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
+            slug ? base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true }) : Promise.resolve([])
+        ]);
 
+        const request = requestResults[0];
         if (!request) {
             return Response.json({ error: 'Request not found' }, { 
                 status: 404,
@@ -49,17 +51,15 @@ Deno.serve(async (req) => {
             });
         }
 
-        // If using slug, first find the client contact
         let clientContactId;
         if (slug) {
-            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
-            if (contacts.length === 0) {
+            if (contactResults.length === 0) {
                 return Response.json({ error: 'Invalid slug' }, { 
                     status: 403,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
-            clientContactId = contacts[0].id;
+            clientContactId = contactResults[0].id;
         }
 
         const filter = { project_id: request.project_id, access_status: 'active' };
@@ -77,104 +77,99 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // Fetch all related data in parallel for better performance
-        // Sort by the actual event timestamp fields (posted_at, decided_at) for accurate chronological order
+        // Fetch all related data in parallel
         const [commentsRaw, decisionsRaw, attachmentsRaw, users, clientContacts] = await Promise.all([
-            base44.asServiceRole.entities.ClientFeedbackComment.filter(
-                { request_id: requestId }, 
-                '-posted_at', 
-                1000
-            ),
-            base44.asServiceRole.entities.ClientFeedbackDecision.filter(
-                { request_id: requestId }, 
-                '-decided_at', 
-                1000
-            ),
-            base44.asServiceRole.entities.ClientFeedbackAttachment.filter(
-                { request_id: requestId }, 
-                '-posted_at', 
-                1000
-            ),
-            base44.asServiceRole.entities.User.list().catch(err => {
-                console.error('Failed to fetch users:', err);
-                return [];
-            }),
-            base44.asServiceRole.entities.ClientContact.list().catch(err => {
-                console.error('Failed to fetch client contacts:', err);
-                return [];
-            })
+            base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
+            base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
+            base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+            base44.asServiceRole.entities.User.list('-created_date', 100).catch(() => []),
+            base44.asServiceRole.entities.ClientContact.list('-created_date', 100).catch(() => [])
         ]);
 
-        // Sort on client side using event timestamps (posted_at/decided_at) with fallback to created_date
-        // This ensures correct chronological order regardless of DB sort behavior
-        const comments = [...commentsRaw].sort((a, b) => {
-            const timeA = new Date(a.posted_at || a.created_date).getTime();
-            const timeB = new Date(b.posted_at || b.created_date).getTime();
-            return timeB - timeA; // Descending (newest first)
-        });
+        // Sort by event timestamps
+        const comments = [...commentsRaw].sort((a, b) => 
+            new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
+        );
+        const decisions = [...decisionsRaw].sort((a, b) => 
+            new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date)
+        );
+        const attachments = [...attachmentsRaw].sort((a, b) => 
+            new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
+        );
 
-        const decisions = [...decisionsRaw].sort((a, b) => {
-            const timeA = new Date(a.decided_at || a.created_date).getTime();
-            const timeB = new Date(b.decided_at || b.created_date).getTime();
-            return timeB - timeA; // Descending (newest first)
-        });
+        // Create lookup maps for enrichment
+        const userMap = new Map(users.map(u => [u.id, { id: u.id, full_name: u.full_name }]));
+        const contactMap = new Map(clientContacts.map(c => [c.id, { id: c.id, name: c.name }]));
 
-        const attachments = [...attachmentsRaw].sort((a, b) => {
-            const timeA = new Date(a.posted_at || a.created_date).getTime();
-            const timeB = new Date(b.posted_at || b.created_date).getTime();
-            return timeB - timeA; // Descending (newest first)
-        });
+        // Enrich request with creator
+        const requestCreator = request.created_by_user_id ? userMap.get(request.created_by_user_id) : null;
 
-        console.log('Fetched data counts:', {
-            comments: comments.length,
-            decisions: decisions.length,
-            attachments: attachments.length,
-            users: users.length,
-            clientContacts: clientContacts.length
-        });
+        // Enrich and minimize comments
+        const enrichedComments = comments.map(c => ({
+            id: c.id,
+            request_id: c.request_id,
+            author_type: c.author_type,
+            author_id: c.author_id,
+            body: c.body,
+            visibility: c.visibility,
+            posted_at: c.posted_at,
+            created_date: c.created_date,
+            author: c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id)
+        }));
 
-        // Enrich request with creator details
-        const requestCreator = request.created_by_user_id
-            ? users.find(u => u.id === request.created_by_user_id)
-            : null;
-        const enrichedRequest = { ...request, creator: requestCreator };
+        // Enrich and minimize decisions
+        const enrichedDecisions = decisions.map(d => ({
+            id: d.id,
+            request_id: d.request_id,
+            decided_by_type: d.decided_by_type,
+            decided_by_id: d.decided_by_id,
+            decision: d.decision,
+            note: d.note,
+            target_type: d.target_type,
+            target_attachment_id: d.target_attachment_id,
+            target_image_url: d.target_image_url,
+            decided_at: d.decided_at,
+            created_date: d.created_date,
+            decider: d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id)
+        }));
 
-        // Enrich comments with author details
-        const enrichedComments = comments.map(comment => {
-            const author = comment.author_type === 'internal_user'
-                ? users.find(u => u.id === comment.author_id)
-                : clientContacts.find(c => c.id === comment.author_id);
-            return { ...comment, author };
-        });
-
-        // Enrich decisions with decider details
-        const enrichedDecisions = decisions.map(decision => {
-            const decider = decision.decided_by_type === 'internal_user'
-                ? users.find(u => u.id === decision.decided_by_id)
-                : clientContacts.find(c => c.id === decision.decided_by_id);
-            return { ...decision, decider };
-        });
-
-        // Enrich attachments with creator details
-        const enrichedAttachments = attachments.map(attachment => {
-            const creator = attachment.created_by_type === 'internal_user'
-                ? users.find(u => u.id === attachment.created_by_id)
-                : clientContacts.find(c => c.id === attachment.created_by_id);
-            return { ...attachment, creator };
-        });
+        // Minimize attachments
+        const minimalAttachments = attachments.map(a => ({
+            id: a.id,
+            request_id: a.request_id,
+            comment_id: a.comment_id,
+            attachment_type: a.attachment_type,
+            file_url: a.file_url,
+            link_url: a.link_url,
+            label: a.label,
+            created_by_type: a.created_by_type,
+            created_by_id: a.created_by_id,
+            posted_at: a.posted_at,
+            created_date: a.created_date
+        }));
 
         return Response.json({
             success: true,
-            access,
-            request: enrichedRequest,
+            access: {
+                id: access.id,
+                access_role: access.access_role,
+                client_contact_id: access.client_contact_id
+            },
+            request: {
+                id: request.id,
+                title: request.title,
+                body: request.body,
+                request_type: request.request_type,
+                status: request.status,
+                due_date: request.due_date,
+                posted_at: request.posted_at,
+                project_id: request.project_id,
+                created_date: request.created_date,
+                creator: requestCreator
+            },
             comments: enrichedComments,
             decisions: enrichedDecisions,
-            attachments: enrichedAttachments,
-            // Include for debugging - these are used to enrich the above arrays
-            _debug: {
-                usersCount: users.length,
-                clientContactsCount: clientContacts.length
-            }
+            attachments: minimalAttachments
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
