@@ -81,16 +81,7 @@ export default function ClientFeedbackDetail() {
     }
   });
 
-  const createCommentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackComment.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-      setNewComment('');
-      setNewLinks(['']);
-      setUploadedPhotos([]);
-      setUploadedFiles([]);
-    }
-  });
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
   const createAttachmentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
@@ -295,6 +286,7 @@ export default function ClientFeedbackDetail() {
       return;
     }
 
+    setIsAddingComment(true);
     try {
       const response = await base44.functions.invoke('addInternalComment', {
         requestId,
@@ -316,7 +308,10 @@ export default function ClientFeedbackDetail() {
         throw new Error(response.data?.error || 'Failed to add comment');
       }
     } catch (error) {
+      console.error('Add comment error:', error);
       toast.error('Failed to add comment');
+    } finally {
+      setIsAddingComment(false);
     }
   };
 
@@ -714,10 +709,10 @@ export default function ClientFeedbackDetail() {
 
                 <Button
                   onClick={handleAddComment}
-                  disabled={createCommentMutation.isPending}
+                  disabled={isAddingComment}
                   className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
 
-                  {createCommentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
+                  {isAddingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
                   Send
                 </Button>
               </div>
