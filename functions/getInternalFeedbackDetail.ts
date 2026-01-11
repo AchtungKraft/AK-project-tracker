@@ -56,7 +56,9 @@ Deno.serve(async (req) => {
             clientContacts,
             linkedTasks,
             tasks,
-            projects
+            projects,
+            projectClientAccesses,
+            teamMembers
         ] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
@@ -67,7 +69,9 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ClientContact.list(),
             base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
             base44.asServiceRole.entities.Task.list(),
-            projectId ? base44.asServiceRole.entities.Project.filter({ id: projectId }) : Promise.resolve([])
+            projectId ? base44.asServiceRole.entities.Project.filter({ id: projectId }) : Promise.resolve([]),
+            base44.asServiceRole.entities.ProjectClientAccess.list(),
+            base44.asServiceRole.entities.TeamMember.list().catch(() => [])
         ]);
 
         const request = requests[0];
@@ -141,6 +145,29 @@ Deno.serve(async (req) => {
             return { ...t, assignee };
         });
 
+        // Get project-specific client contacts
+        const projectIdForAccess = request.project_id || projectId;
+        const projectAccesses = projectClientAccesses.filter(
+            pa => pa.project_id === projectIdForAccess && pa.access_status === 'active'
+        );
+        const projectClientContactIds = projectAccesses.map(pa => pa.client_contact_id);
+        const projectClients = clientContacts.filter(c => projectClientContactIds.includes(c.id) && c.active);
+
+        // Get Achtung Kraft team members (is_achtung_kraft_member = true)
+        const achtungKraftMembers = teamMembers.filter(tm => tm.is_achtung_kraft_member);
+        
+        // Build assignable users: only Achtung Kraft members (matched to User records)
+        const assignableUsers = achtungKraftMembers
+            .filter(tm => tm.user_id)
+            .map(tm => {
+                const userRecord = users.find(u => u.id === tm.user_id);
+                return userRecord ? { id: userRecord.id, full_name: tm.full_name || userRecord.full_name, type: 'internal_user' } : null;
+            })
+            .filter(Boolean);
+
+        // Only project-assigned clients
+        const assignableContacts = projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
+
         return Response.json({
             success: true,
             request: enrichedRequest,
@@ -152,8 +179,8 @@ Deno.serve(async (req) => {
             project: projects[0] || null,
             users,
             clientContacts,
-            assignableUsers: users.map(u => ({ id: u.id, full_name: u.full_name, type: 'internal_user' })),
-            assignableContacts: clientContacts.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
+            assignableUsers,
+            assignableContacts
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });

@@ -36,12 +36,14 @@ export default function ToDoListDisplay({
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [editingTask, setEditingTask] = useState(null);
 
-  // Combine users and contacts for dropdown
-  const allAssignees = useMemo(() => {
-    const users = assignableUsers.map(u => ({ id: u.id, name: u.full_name, type: 'internal_user' }));
-    const contacts = assignableContacts.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
-    return [...users, ...contacts];
-  }, [assignableUsers, assignableContacts]);
+  // Combine users and contacts for dropdown - separate groups
+  const achtungKraftAssignees = useMemo(() => {
+    return assignableUsers.map(u => ({ id: u.id, name: u.full_name, type: 'internal_user' }));
+  }, [assignableUsers]);
+
+  const clientAssignees = useMemo(() => {
+    return assignableContacts.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
+  }, [assignableContacts]);
 
   // Group and sort tasks
   const groupedTasks = useMemo(() => {
@@ -408,11 +410,26 @@ export default function ToDoListDisplay({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {allAssignees.map(a => (
-                    <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
-                      {a.name} {a.type === 'client_contact' ? '(Client)' : ''}
-                    </SelectItem>
-                  ))}
+                  {achtungKraftAssignees.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-red-400 uppercase tracking-wide">Achtung Kraft</div>
+                      {achtungKraftAssignees.map(a => (
+                        <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {clientAssignees.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-yellow-400 uppercase tracking-wide border-t border-gray-700 mt-1 pt-2">Project Clients</div>
+                      {clientAssignees.map(a => (
+                        <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -532,11 +549,26 @@ export default function ToDoListDisplay({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {allAssignees.map(a => (
-                      <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
-                        {a.name} {a.type === 'client_contact' ? '(Client)' : ''}
-                      </SelectItem>
-                    ))}
+                    {achtungKraftAssignees.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-red-400 uppercase tracking-wide">Achtung Kraft</div>
+                        {achtungKraftAssignees.map(a => (
+                          <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {clientAssignees.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-yellow-400 uppercase tracking-wide border-t border-gray-700 mt-1 pt-2">Project Clients</div>
+                        {clientAssignees.map(a => (
+                          <SelectItem key={`${a.type}::${a.id}`} value={`${a.type}::${a.id}`}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
