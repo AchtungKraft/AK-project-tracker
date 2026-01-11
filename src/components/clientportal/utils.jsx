@@ -6,6 +6,7 @@ export const getRequestTypeInfo = (type) => {
     feedback_needed: { label: 'Feedback Needed', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
     design_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
     client_need: { label: 'Client Need', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
+    todo_list: { label: 'ToDo List', color: 'bg-teal-500/20 text-teal-400 border-teal-500/50 border' },
   };
   return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
 };

@@ -14,6 +14,7 @@ import { ArrowLeft, Send, Upload, Plus, Loader2, CheckCircle2, AlertCircle, X, P
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
+import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import { cn } from "@/lib/utils";
 import { getRequestState } from "@/components/clientportal/utils";
 import ImageModal from "../components/ui/ImageModal";
@@ -348,21 +349,33 @@ export default function ClientFeedbackRequestDetail() {
           </Card>
         )}
 
-        <ClientFeedbackThread
-          requestId={requestId}
-          clientContactId={clientAccess.client_contact_id}
-          isClientView={true}
-          requestType={request.request_type}
-          accessRole={clientAccess.access_role}
-          token={token}
-          slug={slug}
-          request={{
-            ...request,
-            comments: requestData?.comments || [],
-            decisions: requestData?.decisions || [],
-            attachments: requestData?.attachments || []
-          }}
-        />
+        {request.request_type === 'todo_list' ? (
+          <ToDoListDisplay
+            requestId={requestId}
+            tasks={requestData?.todoTasks || []}
+            assignableUsers={requestData?.assignableUsers || []}
+            assignableContacts={requestData?.assignableContacts || []}
+            token={token}
+            slug={slug}
+            queryKey={['clientRequestDetail', token, slug, requestId]}
+          />
+        ) : (
+          <ClientFeedbackThread
+            requestId={requestId}
+            clientContactId={clientAccess.client_contact_id}
+            isClientView={true}
+            requestType={request.request_type}
+            accessRole={clientAccess.access_role}
+            token={token}
+            slug={slug}
+            request={{
+              ...request,
+              comments: requestData?.comments || [],
+              decisions: requestData?.decisions || [],
+              attachments: requestData?.attachments || []
+            }}
+          />
+        )}
 
         <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
           <CardContent className="p-4 space-y-3">
