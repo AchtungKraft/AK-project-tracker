@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
         const body = await req.json();
         const { token, slug, requestId, action, task } = body;
 
-        if ((!token && !slug) || !requestId || !action) {
+        if (!requestId || !action) {
             return Response.json({ error: 'Missing required parameters' }, { 
                 status: 400,
                 headers: { 'Access-Control-Allow-Origin': '*' }
@@ -33,29 +33,53 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Verify access
-        let clientContactId;
-        if (slug) {
-            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
-            if (contacts.length === 0) {
-                return Response.json({ error: 'Invalid slug' }, { 
+        // Check if internal user (authenticated) or public access (token/slug)
+        let hasAccess = false;
+        
+        // Try authenticated user first
+        try {
+            const user = await base44.auth.me();
+            if (user) {
+                // Internal authenticated user has access
+                hasAccess = true;
+            }
+        } catch (e) {
+            // Not authenticated, will check public access
+        }
+
+        // If not authenticated internally, check public access via token/slug
+        if (!hasAccess) {
+            if (!token && !slug) {
+                return Response.json({ error: 'Missing access credentials' }, { 
                     status: 403,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
-            clientContactId = contacts[0].id;
-        }
 
-        const filter = { project_id: request.project_id, access_status: 'active' };
-        if (token) filter.share_token = token;
-        if (clientContactId) filter.client_contact_id = clientContactId;
+            let clientContactId;
+            if (slug) {
+                const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+                if (contacts.length === 0) {
+                    return Response.json({ error: 'Invalid slug' }, { 
+                        status: 403,
+                        headers: { 'Access-Control-Allow-Origin': '*' }
+                    });
+                }
+                clientContactId = contacts[0].id;
+            }
 
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
-        if (accesses.length === 0) {
-            return Response.json({ error: 'Invalid access' }, { 
-                status: 403,
-                headers: { 'Access-Control-Allow-Origin': '*' }
-            });
+            const filter = { project_id: request.project_id, access_status: 'active' };
+            if (token) filter.share_token = token;
+            if (clientContactId) filter.client_contact_id = clientContactId;
+
+            const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
+            if (accesses.length === 0) {
+                return Response.json({ error: 'Invalid access' }, { 
+                    status: 403,
+                    headers: { 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+            hasAccess = true;
         }
 
         let result;
