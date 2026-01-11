@@ -2466,6 +2466,7 @@ API Endpoints (Use these exact endpoints):
 • POST /api/functions/publicClientRequestDetail - Get detailed request with enriched data
 • POST /api/functions/publicAddClientComment - Add comment with attachments
 • POST /api/functions/publicClientDecision - Record approval or change request
+• POST /api/functions/publicManageToDoTask - CRUD operations for ToDo list tasks
 • POST /api/functions/getClientJournalEntries - Get client-visible journal entries
 
 Critical Data Structure Rules:
@@ -2475,6 +2476,7 @@ Critical Data Structure Rules:
 4. Decision types: "approved" | "changes_requested" | "rejected"
 5. Target types: "request" | "attachment_image"
 6. Visibility types: "client_visible" | "internal_only" (filter internal_only from client view)
+7. Request types: "question" | "feedback_needed" | "design_review" | "client_need" | "todo_list"
 
 Timeline Display Logic (MUST IMPLEMENT):
 1. Calculate earliestDecisionTime from all decisions
@@ -2491,12 +2493,13 @@ Request State Calculation (MUST IMPLEMENT):
 4. Default to "Needs Review" or "Overdue" if past due_date
 
 UI Requirements:
-• Show request type badges: approval, question, review, update, image_review
+• Show request type badges: question, feedback_needed, design_review, client_need, todo_list
 • Show state badges: Approved (green), Changes Requested (orange), Needs Review (blue), Overdue (red)
 • Timeline posts: Initial Post → Comments → Decision Posts (with reviewed + reference images)
 • Image selection: Checkboxes for image_review types (if approver role)
 • Decision modal: Note required for changes_requested, optional for approved
 • Reference images: Upload alongside decision, displayed in separate section
+• ToDo Lists: For todo_list type, show ToDoListDisplay component instead of ClientFeedbackThread
 
 Authentication:
 • Use slug-based URL parameter for access (?slug=client-slug)
@@ -2509,12 +2512,17 @@ Current Changes to Sync:
 • CHG-2025-12-23-001 (Part 4): Fixed quick-approve button to pass reviewNewImages instead of empty array.
 • Reference images now match ONLY by: creator match + 5 second time proximity.
 • All decision flows (request-level, image-level, quick-approve) now correctly pass newImages.
+• NEW: Added todo_list request type with ToDoListTask entity and publicManageToDoTask function.
+• NEW: ToDoListDisplay component for managing tasks with assignees, due dates, and images.
 
 Action Required for External Client Portal:
 1. Remove earliestDecisionTime check from referenceAttachments matching logic.
 2. Ensure decision modals support image uploads (add reviewNewImages state and upload UI).
 3. Ensure newImages array is passed to publicClientDecision in ALL decision submission flows (modals, quick-approve buttons).
 4. Invalidate attachment queries after decision submissions.
+5. NEW: Add ToDoListDisplay component for todo_list request types.
+6. NEW: Implement publicManageToDoTask API calls for task CRUD operations.
+7. NEW: For todo_list requests, render ToDoListDisplay instead of ClientFeedbackThread.
 
 ---
 
