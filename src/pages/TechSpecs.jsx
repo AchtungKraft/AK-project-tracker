@@ -2566,7 +2566,70 @@ Implementation Notes:
 • Only entries with visibility="client" are returned
 • Sorted by entry_date descending (newest first)
 • Access validated via ProjectClientAccess using slug or token
-• Use this to show project updates/progress to clients`}</pre>
+• Use this to show project updates/progress to clients
+
+---
+
+TODO LIST API
+
+Endpoint: POST /api/functions/publicManageToDoTask
+
+Input (Create):
+{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "action": "create",
+  "task": {
+    "title": "Task title",
+    "details": "Optional details",
+    "assigned_to_id": "user-or-contact-id",
+    "assigned_to_type": "internal_user" | "client_contact",
+    "due_date": "2025-01-15",
+    "image_url": "https://..."
+  }
+}
+
+Input (Update):
+{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "action": "update",
+  "task": {
+    "id": "task-id",
+    "is_complete": true,  // or any other field to update
+    "title": "Updated title"
+  }
+}
+
+Input (Delete):
+{
+  "slug": "client-slug-here",
+  "requestId": "request-id-here",
+  "action": "delete",
+  "task": { "id": "task-id" }
+}
+
+Output:
+{ "success": true, "result": { ...taskData } }
+
+ToDoListTask Entity Fields:
+• request_id: Reference to ClientFeedbackRequest
+• title: Task text (required)
+• is_complete: Boolean, default false
+• assigned_to_id: User or ClientContact ID
+• assigned_to_type: "internal_user" | "client_contact"
+• details: Optional additional text
+• image_url: Optional attached image
+• due_date: Optional due date
+
+UI Component: ToDoListDisplay
+• Groups tasks by assignee name
+• Shows checkboxes to toggle completion
+• Supports inline editing via Edit button
+• Shows due dates with overdue highlighting
+• Expandable details and image preview
+• Add task form with all fields
+• Delete confirmation dialog`}</pre>
                   </div>
                 </div>
               </CardContent>
