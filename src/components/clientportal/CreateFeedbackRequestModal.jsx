@@ -72,6 +72,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
                 <SelectItem value="feedback_needed">Feedback Needed</SelectItem>
                 <SelectItem value="design_review">Design Review</SelectItem>
                 <SelectItem value="client_need">Client Need</SelectItem>
+                <SelectItem value="todo_list">ToDo List</SelectItem>
               </SelectContent>
             </Select>
           </div>
