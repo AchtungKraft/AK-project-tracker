@@ -78,10 +78,11 @@ Deno.serve(async (req) => {
         const access = accesses[0];
 
         // Fetch all related data in parallel
-        const [commentsRaw, decisionsRaw, attachmentsRaw, users, clientContacts] = await Promise.all([
+        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, users, clientContacts] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+            base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
             base44.asServiceRole.entities.User.list('-created_date', 100).catch(() => []),
             base44.asServiceRole.entities.ClientContact.list('-created_date', 100).catch(() => [])
         ]);
@@ -100,6 +101,22 @@ Deno.serve(async (req) => {
         // Create lookup maps for enrichment
         const userMap = new Map(users.map(u => [u.id, { id: u.id, full_name: u.full_name }]));
         const contactMap = new Map(clientContacts.map(c => [c.id, { id: c.id, name: c.name }]));
+
+        // Enrich todo tasks with assignee info
+        const enrichedTodoTasks = todoTasksRaw.map(t => ({
+            id: t.id,
+            request_id: t.request_id,
+            title: t.title,
+            is_complete: t.is_complete,
+            assigned_to_id: t.assigned_to_id,
+            assigned_to_type: t.assigned_to_type,
+            details: t.details,
+            image_url: t.image_url,
+            due_date: t.due_date,
+            created_date: t.created_date,
+            created_by: t.created_by,
+            assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
+        }));
 
         // Enrich request with creator
         const requestCreator = request.created_by_user_id ? userMap.get(request.created_by_user_id) : null;
@@ -169,7 +186,10 @@ Deno.serve(async (req) => {
             },
             comments: enrichedComments,
             decisions: enrichedDecisions,
-            attachments: minimalAttachments
+            attachments: minimalAttachments,
+            todoTasks: enrichedTodoTasks,
+            assignableUsers: users.map(u => ({ id: u.id, full_name: u.full_name, type: 'internal_user' })),
+            assignableContacts: clientContacts.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
