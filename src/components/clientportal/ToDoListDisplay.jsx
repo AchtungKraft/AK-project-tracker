@@ -319,16 +319,23 @@ export default function ToDoListDisplay({
                             {task.details}
                           </p>
                         )}
-                        {task.due_date && (
-                          <p className={cn(
-                            "text-xs mt-1",
-                            new Date(task.due_date) < new Date() && !task.is_complete
-                              ? "text-red-400"
-                              : "text-gray-500"
-                          )}>
-                            Due: {format(new Date(task.due_date), 'MMM d, yyyy')}
-                          </p>
-                        )}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                          {task.due_date && (
+                            <p className={cn(
+                              "text-xs",
+                              new Date(task.due_date) < new Date() && !task.is_complete
+                                ? "text-red-400"
+                                : "text-gray-500"
+                            )}>
+                              Due: {format(new Date(task.due_date), 'MMM d, yyyy')}
+                            </p>
+                          )}
+                          {task.is_complete && task.completed_at && (
+                            <p className="text-xs text-green-500">
+                              ✓ Completed: {format(new Date(task.completed_at), 'MMM d, yyyy h:mm a')}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       <button

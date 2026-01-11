@@ -121,7 +121,11 @@ Deno.serve(async (req) => {
                 }
                 const updateData = {};
                 if (task.title !== undefined) updateData.title = task.title;
-                if (task.is_complete !== undefined) updateData.is_complete = task.is_complete;
+                if (task.is_complete !== undefined) {
+                    updateData.is_complete = task.is_complete;
+                    // Set completed_at timestamp when marking complete, clear when unmarking
+                    updateData.completed_at = task.is_complete ? new Date().toISOString() : null;
+                }
                 if (task.assigned_to_id !== undefined) updateData.assigned_to_id = task.assigned_to_id;
                 if (task.assigned_to_type !== undefined) updateData.assigned_to_type = task.assigned_to_type;
                 if (task.details !== undefined) updateData.details = task.details;
