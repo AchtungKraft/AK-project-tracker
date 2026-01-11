@@ -65,10 +65,13 @@ export default function ClientFeedbackDetail() {
   const comments = feedbackDetail?.comments || [];
   const decisions = feedbackDetail?.decisions || [];
   const attachments = feedbackDetail?.attachments || [];
+  const todoTasks = feedbackDetail?.todoTasks || [];
   const project = feedbackDetail?.project;
   const linkedTaskDetails = feedbackDetail?.linkedTasks || [];
   const users = feedbackDetail?.users || [];
   const clientContacts = feedbackDetail?.clientContacts || [];
+  const assignableUsers = feedbackDetail?.assignableUsers || [];
+  const assignableContacts = feedbackDetail?.assignableContacts || [];
 
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
@@ -498,45 +501,56 @@ export default function ClientFeedbackDetail() {
             </CardContent>
           </Card>
 
-          <ClientFeedbackThread
-            requestId={requestId}
-            userId={user.id}
-            requestType={request.request_type}
-            onCreateTask={(approval) => {
-              setSelectedApproval(approval);
-              setShowCreateTaskModal(true);
-            }}
-            onDecisionSubmit={handleSubmitRequestDecision}
-            onDeleteComment={async (commentId) => {
-              try {
-                // Delete associated attachments first
-                const commentAttachments = attachments.filter(a => a.comment_id === commentId);
-                await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
-                await base44.entities.ClientFeedbackComment.delete(commentId);
-                queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                toast.success('Comment deleted');
-              } catch (error) {
-                toast.error('Failed to delete comment');
-              }
-            }}
-            onDeleteDecision={async (decisionIds) => {
-              try {
-                // Delete all decisions in the group
-                await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
-                queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                toast.success('Decision deleted');
-              } catch (error) {
-                toast.error('Failed to delete decision');
-              }
-            }}
-            isClientView={false}
-            accessRole={user?.role}
-            request={{
-              ...request,
-              comments,
-              decisions,
-              attachments
-            }} />
+          {request.request_type === 'todo_list' ? (
+            <ToDoListDisplay
+              requestId={requestId}
+              tasks={todoTasks}
+              assignableUsers={assignableUsers}
+              assignableContacts={assignableContacts}
+              queryKey={['internalFeedbackDetail', requestId, projectId]}
+            />
+          ) : (
+            <ClientFeedbackThread
+              requestId={requestId}
+              userId={user.id}
+              requestType={request.request_type}
+              onCreateTask={(approval) => {
+                setSelectedApproval(approval);
+                setShowCreateTaskModal(true);
+              }}
+              onDecisionSubmit={handleSubmitRequestDecision}
+              onDeleteComment={async (commentId) => {
+                try {
+                  // Delete associated attachments first
+                  const commentAttachments = attachments.filter(a => a.comment_id === commentId);
+                  await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
+                  await base44.entities.ClientFeedbackComment.delete(commentId);
+                  queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                  toast.success('Comment deleted');
+                } catch (error) {
+                  toast.error('Failed to delete comment');
+                }
+              }}
+              onDeleteDecision={async (decisionIds) => {
+                try {
+                  // Delete all decisions in the group
+                  await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
+                  queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                  toast.success('Decision deleted');
+                } catch (error) {
+                  toast.error('Failed to delete decision');
+                }
+              }}
+              isClientView={false}
+              accessRole={user?.role}
+              request={{
+                ...request,
+                comments,
+                decisions,
+                attachments
+              }}
+            />
+          )}
 
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">

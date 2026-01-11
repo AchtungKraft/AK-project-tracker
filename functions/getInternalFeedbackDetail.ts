@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
             commentsRaw,
             decisionsRaw,
             attachmentsRaw,
+            todoTasksRaw,
             users,
             clientContacts,
             linkedTasks,
@@ -61,6 +62,7 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
+            base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
             base44.asServiceRole.entities.User.list(),
             base44.asServiceRole.entities.ClientContact.list(),
             base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
@@ -131,16 +133,27 @@ Deno.serve(async (req) => {
             return task ? { ...link, task } : null;
         }).filter(Boolean);
 
+        // Enrich todo tasks with assignee info
+        const enrichedTodoTasks = todoTasksRaw.map(t => {
+            const assignee = t.assigned_to_type === 'internal_user'
+                ? users.find(u => u.id === t.assigned_to_id)
+                : clientContacts.find(c => c.id === t.assigned_to_id);
+            return { ...t, assignee };
+        });
+
         return Response.json({
             success: true,
             request: enrichedRequest,
             comments: enrichedComments,
             decisions: enrichedDecisions,
             attachments: enrichedAttachments,
+            todoTasks: enrichedTodoTasks,
             linkedTasks: linkedTaskDetails,
             project: projects[0] || null,
             users,
-            clientContacts
+            clientContacts,
+            assignableUsers: users.map(u => ({ id: u.id, full_name: u.full_name, type: 'internal_user' })),
+            assignableContacts: clientContacts.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
