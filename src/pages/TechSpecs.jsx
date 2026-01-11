@@ -322,7 +322,15 @@ export default function TechSpecs() {
                     <h4 className="font-semibold text-white">ClientFeedbackRequest</h4>
                     <p className="text-sm">Feedback requests sent to clients</p>
                     <div className="text-xs text-gray-400">
-                      <strong>Key Fields:</strong> project_id, title, body, request_type (approval, question, review, update, image_review), status (draft, posted, archived), due_date
+                      <strong>Key Fields:</strong> project_id, title, body, request_type (question, feedback_needed, design_review, client_need, todo_list), status (draft, posted, approved, changes_requested, archived), due_date
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
+                    <h4 className="font-semibold text-white">ToDoListTask</h4>
+                    <p className="text-sm">Tasks within a todo_list type feedback request</p>
+                    <div className="text-xs text-gray-400">
+                      <strong>Key Fields:</strong> request_id, title, is_complete, assigned_to_id, assigned_to_type (internal_user, client_contact), details, image_url, due_date
                     </div>
                   </div>
 
@@ -431,8 +439,19 @@ export default function TechSpecs() {
                     <p className="text-sm">Fetches detailed feedback request with enriched author/decider data</p>
                     <div className="text-xs bg-gray-900 rounded p-2 mt-2">
                       <strong>Input:</strong> <code>{"{ slug, requestId }"}</code><br/>
-                      <strong>Returns:</strong> request with comments, decisions, attachments (all enriched with user/contact details)<br/>
+                      <strong>Returns:</strong> request with comments, decisions, attachments, todoTasks (for todo_list type), assignableUsers, assignableContacts<br/>
                       <strong>Auth:</strong> Public (slug-based access validation)
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-4 space-y-2">
+                    <h4 className="font-semibold text-white">publicManageToDoTask</h4>
+                    <p className="text-sm">CRUD operations for ToDo list tasks within a feedback request</p>
+                    <div className="text-xs bg-gray-900 rounded p-2 mt-2">
+                      <strong>Input:</strong> <code>{"{ slug, requestId, action: 'create'|'update'|'delete', task: {...} }"}</code><br/>
+                      <strong>Returns:</strong> <code>{"{ success, result }"}</code><br/>
+                      <strong>Auth:</strong> Public (slug-based access validation)<br/>
+                      <strong>Actions:</strong> create (new task), update (toggle complete, edit details), delete (remove task)
                     </div>
                   </div>
 
@@ -533,6 +552,12 @@ export default function TechSpecs() {
                     <h4 className="font-semibold text-white text-sm">ClientFeedbackThread</h4>
                     <p className="text-xs text-gray-400">Displays threaded comments, decisions, and attachments with timeline view</p>
                     <p className="text-xs text-gray-500 mt-1">Location: <code>components/clientportal/ClientFeedbackThread</code></p>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-3">
+                    <h4 className="font-semibold text-white text-sm">ToDoListDisplay</h4>
+                    <p className="text-xs text-gray-400">Displays and manages ToDo list tasks grouped by assignee with CRUD operations</p>
+                    <p className="text-xs text-gray-500 mt-1">Location: <code>components/clientportal/ToDoListDisplay</code></p>
                   </div>
 
                   <div className="bg-gray-800/50 rounded-lg p-3">
@@ -788,6 +813,12 @@ export default function TechSpecs() {
                       <h4 className="font-semibold text-white text-sm">ManageClientAccessModal</h4>
                       <p className="text-xs text-gray-400">Client access management</p>
                     </div>
+
+                    <div className="bg-gray-800/50 rounded-lg p-3">
+                      <Badge className="bg-purple-600 mb-2 text-xs">COMP_TODO_001</Badge>
+                      <h4 className="font-semibold text-white text-sm">ToDoListDisplay</h4>
+                      <p className="text-xs text-gray-400">ToDo task list with assignees</p>
+                    </div>
                   </div>
                 </div>
 
@@ -801,8 +832,8 @@ export default function TechSpecs() {
                     </div>
 
                     <div className="bg-gray-800/50 rounded-lg p-3">
-                      <h4 className="font-semibold text-white">Client Portal Entities (7)</h4>
-                      <p className="text-xs text-gray-400 mt-1">ClientContact, ProjectClientAccess, ClientFeedbackRequest, ClientFeedbackComment, ClientFeedbackDecision, ClientFeedbackAttachment, ClientFeedbackTaskLink</p>
+                      <h4 className="font-semibold text-white">Client Portal Entities (8)</h4>
+                      <p className="text-xs text-gray-400 mt-1">ClientContact, ProjectClientAccess, ClientFeedbackRequest, ClientFeedbackComment, ClientFeedbackDecision, ClientFeedbackAttachment, ClientFeedbackTaskLink, ToDoListTask</p>
                     </div>
 
                     <div className="bg-gray-800/50 rounded-lg p-3">
