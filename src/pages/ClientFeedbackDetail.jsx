@@ -497,13 +497,50 @@ export default function ClientFeedbackDetail() {
           </Card>
 
           {request.request_type === 'todo_list' ? (
-            <ToDoListDisplay
-              requestId={requestId}
-              tasks={todoTasks}
-              assignableUsers={assignableUsers}
-              assignableContacts={assignableContacts}
-              queryKey={['internalFeedbackDetail', requestId, projectId]}
-            />
+            <>
+              <ToDoListDisplay
+                requestId={requestId}
+                tasks={todoTasks}
+                assignableUsers={assignableUsers}
+                assignableContacts={assignableContacts}
+                queryKey={['internalFeedbackDetail', requestId, projectId]}
+              />
+              {/* Show comments thread for ToDo list requests */}
+              <ClientFeedbackThread
+                requestId={requestId}
+                userId={user.id}
+                requestType={request.request_type}
+                onDecisionSubmit={handleSubmitRequestDecision}
+                onDeleteComment={async (commentId) => {
+                  try {
+                    const commentAttachments = attachments.filter(a => a.comment_id === commentId);
+                    await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
+                    await base44.entities.ClientFeedbackComment.delete(commentId);
+                    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                    toast.success('Comment deleted');
+                  } catch (error) {
+                    toast.error('Failed to delete comment');
+                  }
+                }}
+                onDeleteDecision={async (decisionIds) => {
+                  try {
+                    await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
+                    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                    toast.success('Decision deleted');
+                  } catch (error) {
+                    toast.error('Failed to delete decision');
+                  }
+                }}
+                isClientView={false}
+                accessRole={user?.role}
+                request={{
+                  ...request,
+                  comments,
+                  decisions,
+                  attachments
+                }}
+              />
+            </>
           ) : (
             <ClientFeedbackThread
               requestId={requestId}
