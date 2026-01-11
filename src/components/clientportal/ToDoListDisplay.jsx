@@ -50,7 +50,11 @@ export default function ToDoListDisplay({
     const groups = {};
     
     tasks.forEach(task => {
-      const assigneeName = task.assignee?.full_name || task.assignee?.name || 'Unassigned';
+      let assigneeName = task.assignee?.full_name || task.assignee?.name || 'Unassigned';
+      // Add (Client) suffix for client contacts
+      if (task.assigned_to_type === 'client_contact' && assigneeName !== 'Unassigned') {
+        assigneeName = `${assigneeName} (Client)`;
+      }
       if (!groups[assigneeName]) {
         groups[assigneeName] = [];
       }
