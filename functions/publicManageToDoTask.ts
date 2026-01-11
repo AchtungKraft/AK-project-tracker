@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
                     assigned_to_id: task.assigned_to_id || null,
                     assigned_to_type: task.assigned_to_type || null,
                     details: task.details || null,
-                    image_url: task.image_url || null,
+                    images: task.images || null,
                     due_date: task.due_date || null
                 });
                 break;
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
                 if (task.assigned_to_id !== undefined) updateData.assigned_to_id = task.assigned_to_id;
                 if (task.assigned_to_type !== undefined) updateData.assigned_to_type = task.assigned_to_type;
                 if (task.details !== undefined) updateData.details = task.details;
-                if (task.image_url !== undefined) updateData.image_url = task.image_url;
+                if (task.images !== undefined) updateData.images = task.images;
                 if (task.due_date !== undefined) updateData.due_date = task.due_date;
                 
                 result = await base44.asServiceRole.entities.ToDoListTask.update(task.id, updateData);

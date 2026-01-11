@@ -27,11 +27,13 @@ export default function ToDoListDisplay({
 }) {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newTask, setNewTask] = useState({ title: '', details: '', assigned_to_id: '', assigned_to_type: '', due_date: null, image_url: '' });
+  const [newTask, setNewTask] = useState({ title: '', details: '', assigned_to_id: '', assigned_to_type: '', due_date: null, images: [] });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   const [selectedImage, setSelectedImage] = useState(null);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [editingTask, setEditingTask] = useState(null);
 
   // Combine users and contacts for dropdown
@@ -80,20 +82,23 @@ export default function ToDoListDisplay({
   }, [tasks]);
 
   const handleImageUpload = async (e, forEdit = false) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     setIsUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+      const results = await Promise.all(uploadPromises);
+      const urls = results.map(r => r.file_url);
+      
       if (forEdit && editingTask) {
-        setEditingTask({ ...editingTask, image_url: file_url });
+        setEditingTask({ ...editingTask, images: [...(editingTask.images || []), ...urls] });
       } else {
-        setNewTask({ ...newTask, image_url: file_url });
+        setNewTask({ ...newTask, images: [...(newTask.images || []), ...urls] });
       }
-      toast.success('Image uploaded');
+      toast.success('Images uploaded');
     } catch (error) {
-      toast.error('Failed to upload image');
+      toast.error('Failed to upload images');
     } finally {
       setIsUploading(false);
       e.target.value = '';
@@ -117,7 +122,7 @@ export default function ToDoListDisplay({
           assigned_to_id: newTask.assigned_to_id || null,
           assigned_to_type: newTask.assigned_to_type || null,
           due_date: newTask.due_date || null,
-          image_url: newTask.image_url || null
+          images: newTask.images?.length > 0 ? newTask.images : null
         }
       };
       if (token) payload.token = token;
@@ -126,7 +131,7 @@ export default function ToDoListDisplay({
       const response = await base44.functions.invoke('publicManageToDoTask', payload);
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey });
-        setNewTask({ title: '', details: '', assigned_to_id: '', assigned_to_type: '', due_date: null, image_url: '' });
+        setNewTask({ title: '', details: '', assigned_to_id: '', assigned_to_type: '', due_date: null, images: [] });
         setShowAddForm(false);
         toast.success('Task added');
       } else {
@@ -173,7 +178,7 @@ export default function ToDoListDisplay({
           assigned_to_id: editingTask.assigned_to_id || null,
           assigned_to_type: editingTask.assigned_to_type || null,
           due_date: editingTask.due_date || null,
-          image_url: editingTask.image_url || null
+          images: editingTask.images?.length > 0 ? editingTask.images : null
         }
       };
       if (token) payload.token = token;
@@ -260,7 +265,8 @@ export default function ToDoListDisplay({
             <div className="space-y-2">
               {groupedTasks.groups[assigneeName].map(task => {
                 const isExpanded = expandedTasks.has(task.id);
-                const hasDetails = task.details || task.image_url;
+                const taskImages = task.images || (task.image_url ? [task.image_url] : []);
+                const hasImages = taskImages.length > 0;
                 
                 return (
                   <div 
@@ -272,77 +278,90 @@ export default function ToDoListDisplay({
                         : "bg-gray-800/50 border-gray-600"
                     )}
                   >
-                    <div className="flex items-center gap-3 p-3">
+                    <div 
+                      className={cn(
+                        "flex items-start gap-3 p-3",
+                        hasImages && "cursor-pointer"
+                      )}
+                      onClick={() => hasImages && toggleExpand(task.id)}
+                    >
                       <Checkbox
                         checked={task.is_complete}
                         onCheckedChange={() => handleToggleComplete(task)}
-                        className="border-gray-500 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                        onClick={(e) => e.stopPropagation()}
+                        className="border-gray-500 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 mt-0.5"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "font-medium",
-                          task.is_complete ? "text-gray-500 line-through" : "text-white"
-                        )}>
-                          {task.title}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className={cn(
+                            "font-medium",
+                            task.is_complete ? "text-gray-500 line-through" : "text-white"
+                          )}>
+                            {task.title}
+                          </p>
+                          {hasImages && (
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3" />
+                              {taskImages.length}
+                            </span>
+                          )}
+                          {hasImages && (
+                            isExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />
+                          )}
+                        </div>
+                        {task.details && (
+                          <p className={cn(
+                            "text-sm mt-0.5",
+                            task.is_complete ? "text-gray-600" : "text-gray-400"
+                          )}>
+                            {task.details}
+                          </p>
+                        )}
                         {task.due_date && (
                           <p className={cn(
-                            "text-xs",
+                            "text-xs mt-1",
                             new Date(task.due_date) < new Date() && !task.is_complete
                               ? "text-red-400"
-                              : "text-gray-400"
+                              : "text-gray-500"
                           )}>
                             Due: {format(new Date(task.due_date), 'MMM d, yyyy')}
                           </p>
                         )}
                       </div>
-                      
-                      {task.image_url && (
-                        <button
-                          onClick={() => setSelectedImage(task.image_url)}
-                          className="p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
-                        >
-                          <ImageIcon className="w-4 h-4" />
-                        </button>
-                      )}
-                      
-                      {hasDetails && (
-                        <button
-                          onClick={() => toggleExpand(task.id)}
-                          className="p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
-                        >
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                      )}
 
                       <button
-                        onClick={() => setEditingTask(task)}
-                        className="p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTask({ ...task, images: taskImages });
+                        }}
+                        className="p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs shrink-0"
                       >
                         Edit
                       </button>
                     </div>
                     
-                    {isExpanded && hasDetails && (
-                      <div className="px-3 pb-3 pt-0 border-t border-gray-700 mt-2">
-                        {task.details && (
-                          <p className="text-gray-400 text-sm mt-2 whitespace-pre-wrap">{task.details}</p>
-                        )}
-                        {task.image_url && (
-                          <div 
-                            className="mt-2 cursor-pointer"
-                            onClick={() => setSelectedImage(task.image_url)}
-                          >
-                            <img 
-                              src={task.image_url} 
-                              alt="" 
-                              className="max-h-48 rounded-lg border border-gray-700"
-                            />
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-500 mt-2">
-                          Created: {format(new Date(task.created_date), 'MMM d, yyyy')}
-                        </p>
+                    {isExpanded && hasImages && (
+                      <div className="px-3 pb-3 border-t border-gray-700">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                          {taskImages.map((url, idx) => (
+                            <div 
+                              key={idx}
+                              className="cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setGalleryImages(taskImages);
+                                setGalleryIndex(idx);
+                                setSelectedImage(url);
+                              }}
+                            >
+                              <img 
+                                src={url} 
+                                alt="" 
+                                className="w-full h-32 object-cover rounded-lg border border-gray-700 hover:border-gray-500 transition-colors"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -428,39 +447,49 @@ export default function ToDoListDisplay({
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Image</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleImageUpload(e)}
-                  className="hidden"
-                  id="new-task-image"
-                />
-                <label htmlFor="new-task-image">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isUploading}
-                    className="border-gray-700 cursor-pointer"
-                    asChild
-                  >
-                    <span>
-                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
-                      Upload
-                    </span>
-                  </Button>
-                </label>
-                {newTask.image_url && (
-                  <div className="relative">
-                    <img src={newTask.image_url} alt="" className="h-10 w-10 object-cover rounded" />
-                    <button
-                      onClick={() => setNewTask({ ...newTask, image_url: '' })}
-                      className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+              <label className="text-sm text-gray-400 mb-1 block">Images</label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => handleImageUpload(e)}
+                    className="hidden"
+                    id="new-task-image"
+                  />
+                  <label htmlFor="new-task-image">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploading}
+                      className="border-gray-700 cursor-pointer"
+                      asChild
                     >
-                      <X className="w-3 h-3" />
-                    </button>
+                      <span>
+                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                        Upload Images
+                      </span>
+                    </Button>
+                  </label>
+                  {newTask.images?.length > 0 && (
+                    <span className="text-xs text-gray-400">{newTask.images.length} image(s)</span>
+                  )}
+                </div>
+                {newTask.images?.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newTask.images.map((url, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={url} alt="" className="h-16 w-16 object-cover rounded" />
+                        <button
+                          onClick={() => setNewTask({ ...newTask, images: newTask.images.filter((_, i) => i !== idx) })}
+                          className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+                        >
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -541,39 +570,49 @@ export default function ToDoListDisplay({
               </div>
 
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Image</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e, true)}
-                    className="hidden"
-                    id="edit-task-image"
-                  />
-                  <label htmlFor="edit-task-image">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isUploading}
-                      className="border-gray-700 cursor-pointer"
-                      asChild
-                    >
-                      <span>
-                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
-                        Upload
-                      </span>
-                    </Button>
-                  </label>
-                  {editingTask.image_url && (
-                    <div className="relative">
-                      <img src={editingTask.image_url} alt="" className="h-10 w-10 object-cover rounded" />
-                      <button
-                        onClick={() => setEditingTask({ ...editingTask, image_url: '' })}
-                        className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+                <label className="text-sm text-gray-400 mb-1 block">Images</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleImageUpload(e, true)}
+                      className="hidden"
+                      id="edit-task-image"
+                    />
+                    <label htmlFor="edit-task-image">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploading}
+                        className="border-gray-700 cursor-pointer"
+                        asChild
                       >
-                        <X className="w-3 h-3" />
-                      </button>
+                        <span>
+                          {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                          Upload Images
+                        </span>
+                      </Button>
+                    </label>
+                    {editingTask.images?.length > 0 && (
+                      <span className="text-xs text-gray-400">{editingTask.images.length} image(s)</span>
+                    )}
+                  </div>
+                  {editingTask.images?.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {editingTask.images.map((url, idx) => (
+                        <div key={idx} className="relative">
+                          <img src={url} alt="" className="h-16 w-16 object-cover rounded" />
+                          <button
+                            onClick={() => setEditingTask({ ...editingTask, images: editingTask.images.filter((_, i) => i !== idx) })}
+                            className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3 text-white" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -603,8 +642,18 @@ export default function ToDoListDisplay({
       {/* Image Modal */}
       <ImageModal
         isOpen={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
+        onClose={() => {
+          setSelectedImage(null);
+          setGalleryImages([]);
+          setGalleryIndex(0);
+        }}
         imageUrl={selectedImage}
+        images={galleryImages}
+        currentIndex={galleryIndex}
+        onNavigate={(newIndex) => {
+          setGalleryIndex(newIndex);
+          setSelectedImage(galleryImages[newIndex]);
+        }}
       />
     </div>
   );
