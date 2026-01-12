@@ -134,7 +134,10 @@ export default function ToDoListDisplay({
       if (token) payload.token = token;
       if (slug) payload.slug = slug;
 
+      console.log('Create task payload:', JSON.stringify(payload, null, 2));
       const response = await base44.functions.invoke('publicManageToDoTask', payload);
+      console.log('Create task response:', response.data);
+      
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey });
         setNewTask({ title: '', details: '', assigned_to_id: '', assigned_to_type: '', due_date: null, images: [] });
@@ -144,6 +147,7 @@ export default function ToDoListDisplay({
         throw new Error(response.data?.error || 'Failed to add task');
       }
     } catch (error) {
+      console.error('Create task error:', error);
       toast.error(error.message);
     } finally {
       setIsSubmitting(false);
@@ -160,11 +164,15 @@ export default function ToDoListDisplay({
       if (token) payload.token = token;
       if (slug) payload.slug = slug;
 
+      console.log('Toggle complete payload:', JSON.stringify(payload, null, 2));
       const response = await base44.functions.invoke('publicManageToDoTask', payload);
+      console.log('Toggle complete response:', response.data);
+      
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey });
       }
     } catch (error) {
+      console.error('Toggle complete error:', error);
       toast.error('Failed to update task');
     }
   };
@@ -181,6 +189,7 @@ export default function ToDoListDisplay({
           id: editingTask.id,
           title: editingTask.title,
           details: editingTask.details || null,
+          is_complete: editingTask.is_complete,
           assigned_to_id: editingTask.assigned_to_id || null,
           assigned_to_type: editingTask.assigned_to_type || null,
           due_date: editingTask.due_date || null,
@@ -190,7 +199,10 @@ export default function ToDoListDisplay({
       if (token) payload.token = token;
       if (slug) payload.slug = slug;
 
+      console.log('Update task payload:', JSON.stringify(payload, null, 2));
       const response = await base44.functions.invoke('publicManageToDoTask', payload);
+      console.log('Update task response:', response.data);
+      
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey });
         setEditingTask(null);
@@ -199,6 +211,7 @@ export default function ToDoListDisplay({
         throw new Error(response.data?.error || 'Failed to update task');
       }
     } catch (error) {
+      console.error('Update task error:', error);
       toast.error(error.message);
     } finally {
       setIsSubmitting(false);
@@ -217,12 +230,16 @@ export default function ToDoListDisplay({
       if (token) payload.token = token;
       if (slug) payload.slug = slug;
 
+      console.log('Delete task payload:', JSON.stringify(payload, null, 2));
       const response = await base44.functions.invoke('publicManageToDoTask', payload);
+      console.log('Delete task response:', response.data);
+      
       if (response.data?.success) {
         queryClient.invalidateQueries({ queryKey });
         toast.success('Task deleted');
       }
     } catch (error) {
+      console.error('Delete task error:', error);
       toast.error('Failed to delete task');
     }
   };
@@ -240,6 +257,16 @@ export default function ToDoListDisplay({
   };
 
   const handleAssigneeChange = (value, forEdit = false) => {
+    // Handle "unassigned" case - clear both fields
+    if (value === 'unassigned' || !value) {
+      if (forEdit && editingTask) {
+        setEditingTask({ ...editingTask, assigned_to_id: null, assigned_to_type: null });
+      } else {
+        setNewTask({ ...newTask, assigned_to_id: null, assigned_to_type: null });
+      }
+      return;
+    }
+    
     const [type, id] = value.split('::');
     if (forEdit && editingTask) {
       setEditingTask({ ...editingTask, assigned_to_id: id, assigned_to_type: type });
@@ -413,7 +440,7 @@ export default function ToDoListDisplay({
             <div>
               <label className="text-sm text-gray-400 mb-1 block">Assigned To</label>
               <Select
-                value={newTask.assigned_to_id ? `${newTask.assigned_to_type}::${newTask.assigned_to_id}` : ''}
+                value={newTask.assigned_to_id ? `${newTask.assigned_to_type}::${newTask.assigned_to_id}` : 'unassigned'}
                 onValueChange={(v) => handleAssigneeChange(v)}
               >
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
