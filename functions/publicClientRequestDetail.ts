@@ -78,14 +78,15 @@ Deno.serve(async (req) => {
         const access = accesses[0];
 
         // Fetch all related data in parallel
-        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, users, clientContacts, projectClientAccesses] = await Promise.all([
+        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, users, clientContacts, projectClientAccesses, teamMembers] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
             base44.asServiceRole.entities.User.list('-created_date', 100).catch(() => []),
             base44.asServiceRole.entities.ClientContact.list('-created_date', 100).catch(() => []),
-            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' }).catch(() => [])
+            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' }).catch(() => []),
+            base44.asServiceRole.entities.TeamMember.list().catch(() => [])
         ]);
 
         // Sort by event timestamps
@@ -123,6 +124,18 @@ Deno.serve(async (req) => {
         // Filter assignable contacts to only those with access to this project
         const projectClientContactIds = projectClientAccesses.map(pa => pa.client_contact_id);
         const projectClients = clientContacts.filter(c => projectClientContactIds.includes(c.id) && c.active !== false);
+
+        // Get Achtung Kraft team members (is_achtung_kraft_member = true)
+        const achtungKraftMembers = teamMembers.filter(tm => tm.is_achtung_kraft_member);
+        
+        // Build assignable users: only Achtung Kraft members (matched to User records)
+        const assignableUsers = achtungKraftMembers
+            .filter(tm => tm.user_id)
+            .map(tm => {
+                const userRecord = userMap.get(tm.user_id);
+                return userRecord ? { id: userRecord.id, full_name: tm.full_name || userRecord.full_name, type: 'internal_user' } : null;
+            })
+            .filter(Boolean);
 
         // Enrich request with creator
         const requestCreator = request.created_by_user_id ? userMap.get(request.created_by_user_id) : null;
@@ -194,7 +207,7 @@ Deno.serve(async (req) => {
             decisions: enrichedDecisions,
             attachments: minimalAttachments,
             todoTasks: enrichedTodoTasks,
-            assignableUsers: [],
+            assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
