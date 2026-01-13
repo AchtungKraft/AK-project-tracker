@@ -106,10 +106,15 @@ Deno.serve(async (req) => {
 
         const itemsListText = requests.map(r => `- ${r.title} (${r.request_type?.replace('_', ' ') || 'Review'})`).join('\n');
 
-        // Send personalized email to each client
-        const emailPromises = contacts.map(async (contact) => {
+        // Send personalized email to each client sequentially to respect rate limits (2 per second)
+        const results = [];
+        for (let i = 0; i < contacts.length; i++) {
+            const contact = contacts[i];
             const access = accesses.find(a => a.client_contact_id === contact.id);
-            if (!access) return null;
+            if (!access) {
+                results.push(null);
+                continue;
+            }
 
             // Get client slug
             const clientSlug = contact.url_slug || access.url_slug || '';
@@ -124,7 +129,8 @@ Deno.serve(async (req) => {
                 portalUrl = `${clientPortalBaseUrl}/ClientProjectPortal?projectId=${projectId}&token=${access.share_token}`;
             } else {
                 console.warn(`No slug or token for contact ${contact.id}, skipping email`);
-                return null;
+                results.push(null);
+                continue;
             }
 
             // Prepare placeholder data
@@ -187,33 +193,41 @@ ${clientSlug ? `Your portal code: ${clientSlug}` : ''}
 ${closing}
 `;
 
-            const emailResponse = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${resendApiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
-                    to: [contact.email],
-                    subject: subject,
-                    html: htmlBody,
-                    text: textBody
-                })
-            });
+            try {
+                const emailResponse = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${resendApiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
+                        to: [contact.email],
+                        subject: subject,
+                        html: htmlBody,
+                        text: textBody
+                    })
+                });
 
-            if (!emailResponse.ok) {
-                const errorData = await emailResponse.json();
-                console.error(`Failed to send email to ${contact.email}:`, errorData);
-                return { contact: contact.email, success: false, error: errorData };
+                if (!emailResponse.ok) {
+                    const errorData = await emailResponse.json();
+                    console.error(`Failed to send email to ${contact.email}:`, errorData);
+                    results.push({ contact: contact.email, success: false, error: errorData });
+                } else {
+                    const emailData = await emailResponse.json();
+                    console.log(`Bulk review email sent to ${contact.email} for project ${projectId}. ID: ${emailData.id}`);
+                    results.push({ contact: contact.email, success: true, emailId: emailData.id });
+                }
+            } catch (emailError) {
+                console.error(`Error sending email to ${contact.email}:`, emailError);
+                results.push({ contact: contact.email, success: false, error: emailError.message });
             }
 
-            const emailData = await emailResponse.json();
-            console.log(`Bulk review email sent to ${contact.email} for project ${projectId}. ID: ${emailData.id}`);
-            return { contact: contact.email, success: true, emailId: emailData.id };
-        });
-
-        const results = await Promise.all(emailPromises);
+            // Wait 600ms between emails to stay well under the 2/second rate limit
+            if (i < contacts.length - 1) {
+                await delay(600);
+            }
+        }
         const successfulEmails = results.filter(r => r && r.success);
 
         // Update last_email_sent_at for all requests

@@ -130,8 +130,9 @@ Deno.serve(async (req) => {
 
         const emailResults = [];
 
-        // Send personalized emails to client contacts with direct links
-        for (const clientContact of clientContactsWithSlugs) {
+        // Send personalized emails to client contacts with direct links sequentially to respect rate limits
+        for (let i = 0; i < clientContactsWithSlugs.length; i++) {
+            const clientContact = clientContactsWithSlugs[i];
             let requestDetailUrl = clientPortalBaseUrl;
             if (clientContact.slug) {
                 requestDetailUrl = `${clientPortalBaseUrl}/ClientFeedbackRequestDetail?id=${request.id}&slug=${clientContact.slug}`;
@@ -210,27 +211,37 @@ ${clientContact.slug ? `Your portal code: ${clientContact.slug}` : ''}
 ${closing}
 `;
 
-            const emailResponse = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${resendApiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
-                    to: [clientContact.email],
-                    subject: subject,
-                    html: htmlBody,
-                    text: textBody
-                })
-            });
+            try {
+                const emailResponse = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${resendApiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        from: "Achtung Kraft Projects <updates@projects.achtungkraft.com>",
+                        to: [clientContact.email],
+                        subject: subject,
+                        html: htmlBody,
+                        text: textBody
+                    })
+                });
 
-            if (emailResponse.ok) {
-                const data = await emailResponse.json();
-                emailResults.push({ email: clientContact.email, success: true, id: data.id });
-            } else {
-                const errorData = await emailResponse.json();
-                emailResults.push({ email: clientContact.email, success: false, error: errorData });
+                if (emailResponse.ok) {
+                    const data = await emailResponse.json();
+                    emailResults.push({ email: clientContact.email, success: true, id: data.id });
+                } else {
+                    const errorData = await emailResponse.json();
+                    emailResults.push({ email: clientContact.email, success: false, error: errorData });
+                }
+            } catch (emailError) {
+                console.error(`Error sending email to ${clientContact.email}:`, emailError);
+                emailResults.push({ email: clientContact.email, success: false, error: emailError.message });
+            }
+
+            // Wait 600ms between emails to stay well under the 2/second rate limit
+            if (i < clientContactsWithSlugs.length - 1 || teamEmails.size > 0) {
+                await delay(600);
             }
         }
 
