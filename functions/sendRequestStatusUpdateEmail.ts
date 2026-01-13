@@ -10,6 +10,9 @@ const DEFAULT_TEMPLATES = {
     }
 };
 
+// Helper to delay execution
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Replace placeholders in text
 function replacePlaceholders(text, data) {
     if (!text) return '';
