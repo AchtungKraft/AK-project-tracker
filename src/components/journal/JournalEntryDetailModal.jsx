@@ -46,11 +46,10 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
     onSuccess: async (updatedEntry, variables) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
       
-      // Send email if visibility changed from internal to client
-      const wasInternal = entry.visibility !== 'client';
+      // Send email if visibility is client (either changed to client, or was already client and content updated)
       const nowClient = variables.visibility === 'client';
       
-      if (wasInternal && nowClient) {
+      if (nowClient) {
         try {
           await base44.functions.invoke('sendJournalEntryEmail', { journalEntryId: entry.id });
           toast.success('Journal entry updated and clients notified');
