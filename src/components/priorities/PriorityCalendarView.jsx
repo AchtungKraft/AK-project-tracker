@@ -243,6 +243,8 @@ export default function PriorityCalendarView({
             </SelectContent>
           </Select>
           
+          <span className="text-xs text-gray-500 hidden sm:inline">Within weeks:</span>
+          
           <Select value={calendarPrimaryGroup} onValueChange={setCalendarPrimaryGroup}>
             <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white h-8 text-xs">
               <SelectValue placeholder="Group by" />
