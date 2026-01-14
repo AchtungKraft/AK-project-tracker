@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Flame, Loader2, FolderKanban, RefreshCw } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
+import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -19,6 +21,7 @@ export default function PriorityDashboard() {
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('card-view');
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
@@ -217,45 +220,68 @@ export default function PriorityDashboard() {
             </Button>
           </div>
 
-          {/* Filters */}
-          {allTasks.length > 0 && (
-            <div className="flex justify-end gap-3 flex-wrap">
-              <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
-                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="Filter by Assigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Team Members</SelectItem>
-                  {teamMembers.filter(tm => tm.active).map(member => (
-                    <SelectItem key={member.id} value={member.id}>
-                      {member.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
-                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="Primary Group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="project">Group by Project</SelectItem>
-                  <SelectItem value="category">Group by Category</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={secondaryGroupBy} onValueChange={setSecondaryGroupBy}>
-                <SelectTrigger className="w-48 bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="Secondary Group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="status">Then by Status</SelectItem>
-                  <SelectItem value="assigned">Then by Assigned</SelectItem>
-                  {primaryGroupBy !== 'category' && <SelectItem value="category">Then by Category</SelectItem>}
-                  {primaryGroupBy !== 'project' && <SelectItem value="project">Then by Project</SelectItem>}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <TabsList className="bg-gray-800/80 border border-gray-700 p-1">
+                <TabsTrigger 
+                  value="card-view" 
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  <span className="hidden sm:inline">Card View</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="calendar-view" 
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span className="hidden sm:inline">Calendar View</span>
+                </TabsTrigger>
+              </TabsList>
 
+              {/* Filters - only show on card view */}
+              {activeTab === 'card-view' && allTasks.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+                    <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
+                      <SelectValue placeholder="Filter by Assigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Team Members</SelectItem>
+                      {teamMembers.filter(tm => tm.active).map(member => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
+                    <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
+                      <SelectValue placeholder="Primary Group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="project">Group by Project</SelectItem>
+                      <SelectItem value="category">Group by Category</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={secondaryGroupBy} onValueChange={setSecondaryGroupBy}>
+                    <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
+                      <SelectValue placeholder="Secondary Group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="status">Then by Status</SelectItem>
+                      <SelectItem value="assigned">Then by Assigned</SelectItem>
+                      {primaryGroupBy !== 'category' && <SelectItem value="category">Then by Category</SelectItem>}
+                      {primaryGroupBy !== 'project' && <SelectItem value="project">Then by Project</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Card View Tab Content */}
+            <TabsContent value="card-view" className="mt-0">
           {/* Priority Tasks Grouped */}
           {activePriorityTasks.length === 0 ? (
             <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -363,6 +389,23 @@ export default function PriorityDashboard() {
               })}
             </div>
           )}
+            </TabsContent>
+
+            {/* Calendar View Tab Content */}
+            <TabsContent value="calendar-view" className="mt-0">
+              <PriorityCalendarView
+                tasks={activePriorityTasks}
+                projects={projects}
+                categories={categories}
+                teamMembers={teamMembers}
+                statuses={statuses}
+                onTaskClick={setSelectedTask}
+                updateTaskMutation={updateTaskMutation}
+                primaryGroupBy={primaryGroupBy}
+                secondaryGroupBy={secondaryGroupBy}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
