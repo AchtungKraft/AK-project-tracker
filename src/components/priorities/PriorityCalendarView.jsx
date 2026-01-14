@@ -75,7 +75,7 @@ export default function PriorityCalendarView({
     return grouped;
   }, [tasksWithDueDate, weekRanges]);
 
-  // Get non-priority tasks with due dates in the visible range
+  // Get non-priority tasks with due dates or start dates in the visible range
   const dueButNotPriorityTasks = useMemo(() => {
     if (!allTasks || allTasks.length === 0) return [];
     
@@ -96,11 +96,24 @@ export default function PriorityCalendarView({
       if (priorityTaskIds.has(task.id)) return false;
       // Skip if completed
       if (task.status_id === completedStatus?.id) return false;
-      // Must have a due date
-      if (!task.due_date) return false;
       
-      const dueDate = parseISO(task.due_date);
-      return isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd });
+      // Check if start_date is in range
+      if (task.start_date) {
+        const startDate = parseISO(task.start_date);
+        if (isWithinInterval(startDate, { start: rangeStart, end: rangeEnd })) {
+          return true;
+        }
+      }
+      
+      // Check if due_date is in range (only if no start_date matched)
+      if (task.due_date) {
+        const dueDate = parseISO(task.due_date);
+        if (isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd })) {
+          return true;
+        }
+      }
+      
+      return false;
     });
   }, [allTasks, tasks, weekRanges, statuses]);
 
