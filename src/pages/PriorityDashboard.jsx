@@ -21,7 +21,7 @@ export default function PriorityDashboard() {
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('card-view');
+  const [activeTab, setActiveTab] = useState('calendar-view');
 
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],

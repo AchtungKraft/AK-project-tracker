@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 export default function PriorityCalendarView({
   tasks,
+  allTasks = [],
   projects,
   categories,
   teamMembers,
@@ -73,6 +74,35 @@ export default function PriorityCalendarView({
     
     return grouped;
   }, [tasksWithDueDate, weekRanges]);
+
+  // Get non-priority tasks with due dates in the visible range
+  const dueButNotPriorityTasks = useMemo(() => {
+    if (!allTasks || allTasks.length === 0) return [];
+    
+    const priorityTaskIds = new Set(tasks.map(t => t.id));
+    const completedStatus = statuses.find(s => {
+      const label = s.label?.toLowerCase() || '';
+      return s.scope === 'Task' && (label.includes('complete') || label.includes('done'));
+    });
+    
+    // Get start and end of visible range
+    const rangeStart = weekRanges[0]?.start;
+    const rangeEnd = weekRanges[weekRanges.length - 1]?.end;
+    
+    if (!rangeStart || !rangeEnd) return [];
+    
+    return allTasks.filter(task => {
+      // Skip if already a priority task
+      if (priorityTaskIds.has(task.id)) return false;
+      // Skip if completed
+      if (task.status_id === completedStatus?.id) return false;
+      // Must have a due date
+      if (!task.due_date) return false;
+      
+      const dueDate = parseISO(task.due_date);
+      return isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd });
+    });
+  }, [allTasks, tasks, weekRanges, statuses]);
 
   // Helper to get grouping info
   const getGroupInfo = (task, groupBy) => {
@@ -381,7 +411,7 @@ export default function PriorityCalendarView({
           );
         })}
 
-        {/* No Due Date Section */}
+        {/* Priority No Due Date Section */}
         {tasksWithoutDueDate.length > 0 && (
           <Card className="bg-black/40 backdrop-blur-xl border-2 border-amber-600/50">
             <CardHeader className="p-3 border-b border-amber-600/30 bg-amber-600/10">
@@ -389,7 +419,7 @@ export default function PriorityCalendarView({
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-500" />
                   <CardTitle className="text-sm font-semibold text-amber-400">
-                    No Due Date
+                    PRIORITY NO DUE DATE
                   </CardTitle>
                 </div>
                 <Badge variant="outline" className="border-amber-600 text-amber-400">
@@ -399,6 +429,28 @@ export default function PriorityCalendarView({
             </CardHeader>
             <CardContent className="p-3">
               {renderGroupedTasks(groupTasksForWeek(tasksWithoutDueDate))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Due But Not Priority Section */}
+        {dueButNotPriorityTasks.length > 0 && (
+          <Card className="bg-black/40 backdrop-blur-xl border-2 border-blue-600/50">
+            <CardHeader className="p-3 border-b border-blue-600/30 bg-blue-600/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-blue-500" />
+                  <CardTitle className="text-sm font-semibold text-blue-400">
+                    DUE BUT NOT PRIORITY
+                  </CardTitle>
+                </div>
+                <Badge variant="outline" className="border-blue-600 text-blue-400">
+                  {dueButNotPriorityTasks.length} {dueButNotPriorityTasks.length === 1 ? 'task' : 'tasks'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-3">
+              {renderGroupedTasks(groupTasksForWeek(dueButNotPriorityTasks))}
             </CardContent>
           </Card>
         )}
