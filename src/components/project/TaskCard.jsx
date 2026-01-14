@@ -21,7 +21,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate }) {
+export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate }) {
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
   const category = categories.find(c => c.id === task.category_id);
   const categoryPath = getCategoryPath(task.category_id, categories);
@@ -40,7 +40,8 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
   });
 
   const hasComments = comments.length > 0 || task.description;
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [dueDateCalendarOpen, setDueDateCalendarOpen] = useState(false);
+  const [startDateCalendarOpen, setStartDateCalendarOpen] = useState(false);
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
@@ -49,11 +50,18 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
     }
   };
 
-  const handleDateSelect = (date) => {
+  const handleDueDateSelect = (date) => {
     if (onUpdateDueDate) {
       onUpdateDueDate(task, date ? format(date, 'yyyy-MM-dd') : null);
     }
-    setCalendarOpen(false);
+    setDueDateCalendarOpen(false);
+  };
+
+  const handleStartDateSelect = (date) => {
+    if (onUpdateStartDate) {
+      onUpdateStartDate(task, date ? format(date, 'yyyy-MM-dd') : null);
+    }
+    setStartDateCalendarOpen(false);
   };
 
   return (
@@ -102,29 +110,66 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
               </div>
             )}
             
-            {onUpdateDueDate && (
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className={`p-1 rounded hover:bg-gray-700 transition-colors ${
-                      task.due_date ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'
-                    }`}
-                    title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
-                  >
-                    <CalendarIcon className="w-3.5 h-3.5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" onClick={(e) => e.stopPropagation()}>
-                  <Calendar
-                    mode="single"
-                    selected={task.due_date ? new Date(task.due_date) : undefined}
-                    onSelect={handleDateSelect}
-                    defaultMonth={task.due_date ? new Date(task.due_date) : new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-            )}
+            <div className="flex items-center gap-1">
+              {onUpdateStartDate && (
+                <Popover open={startDateCalendarOpen} onOpenChange={setStartDateCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className={`p-1 rounded hover:bg-gray-700 transition-colors ${
+                        task.start_date ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-300'
+                      }`}
+                      title={task.start_date ? `Start: ${format(new Date(task.start_date), 'MMM d, yyyy')}` : 'Set start date'}
+                    >
+                      <CalendarIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" onClick={(e) => e.stopPropagation()}>
+                    <Calendar
+                      mode="single"
+                      selected={task.start_date ? new Date(task.start_date) : undefined}
+                      onSelect={handleStartDateSelect}
+                      defaultMonth={task.start_date ? new Date(task.start_date) : new Date()}
+                      modifiers={{
+                        startDate: task.start_date ? [new Date(task.start_date)] : []
+                      }}
+                      modifiersStyles={{
+                        startDate: { backgroundColor: '#EAB308', color: 'white', borderRadius: '50%' }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+              {onUpdateDueDate && (
+                <Popover open={dueDateCalendarOpen} onOpenChange={setDueDateCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className={`p-1 rounded hover:bg-gray-700 transition-colors ${
+                        task.due_date ? 'text-green-400' : 'text-gray-500 hover:text-green-300'
+                      }`}
+                      title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
+                    >
+                      <CalendarIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" onClick={(e) => e.stopPropagation()}>
+                    <Calendar
+                      mode="single"
+                      selected={task.due_date ? new Date(task.due_date) : undefined}
+                      onSelect={handleDueDateSelect}
+                      defaultMonth={task.due_date ? new Date(task.due_date) : new Date()}
+                      modifiers={{
+                        dueDate: task.due_date ? [new Date(task.due_date)] : []
+                      }}
+                      modifiersStyles={{
+                        dueDate: { backgroundColor: '#22C55E', color: 'white', borderRadius: '50%' }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
           </div>
         </div>
       </div>
