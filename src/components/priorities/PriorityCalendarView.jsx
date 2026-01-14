@@ -160,49 +160,92 @@ export default function PriorityCalendarView({
   };
 
   const renderGroupedTasks = (groupedTasks) => {
-    return Object.entries(groupedTasks).map(([primaryKey, primaryGroup]) => {
-      const PrimaryIcon = primaryGroup.icon;
-      return (
-        <div key={primaryKey} className="mb-4 last:mb-0">
-          <div className="flex items-center gap-2 mb-2">
-            <PrimaryIcon className="w-4 h-4" style={{ color: primaryGroup.color }} />
-            <span className="font-medium text-sm" style={{ color: primaryGroup.color }}>
-              {primaryGroup.label}
-            </span>
-            <Badge variant="outline" className="text-xs" style={{ borderColor: primaryGroup.color, color: primaryGroup.color }}>
-              {Object.values(primaryGroup.secondaryGroups).reduce((sum, sg) => sum + sg.tasks.length, 0)}
-            </Badge>
-          </div>
-          <div className="pl-4 space-y-3">
-            {Object.entries(primaryGroup.secondaryGroups).map(([secondaryKey, secondaryGroup]) => {
-              const SecondaryIcon = secondaryGroup.icon;
-              return (
-                <div key={secondaryKey} className="bg-black/30 rounded-lg p-3 border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2">
-                    <SecondaryIcon className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-400">{secondaryGroup.label}</span>
-                    <span className="text-xs text-gray-500">({secondaryGroup.tasks.length})</span>
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Object.entries(groupedTasks).map(([primaryKey, primaryGroup]) => {
+          const PrimaryIcon = primaryGroup.icon;
+          const project = calendarPrimaryGroup === 'project' ? projects.find(p => p.id === primaryKey) : null;
+          const totalTasks = Object.values(primaryGroup.secondaryGroups).reduce((sum, sg) => sum + sg.tasks.length, 0);
+          
+          return (
+            <Card 
+              key={primaryKey} 
+              className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+              style={{ 
+                borderColor: `${primaryGroup.color}80`,
+                boxShadow: `0 10px 15px -3px ${primaryGroup.color}20`
+              }}
+            >
+              <CardHeader 
+                className="border-b p-3"
+                style={{ borderBottomColor: `${primaryGroup.color}50` }}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <PrimaryIcon className="w-4 h-4" style={{ color: primaryGroup.color }} />
+                    <div>
+                      <CardTitle className="text-sm" style={{ color: primaryGroup.color }}>
+                        {primaryGroup.label}
+                      </CardTitle>
+                      {calendarPrimaryGroup === 'project' && project?.client_name && (
+                        <p className="text-xs text-gray-400">{project.client_name}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {secondaryGroup.tasks.map(task => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        categories={categories}
-                        teamMembers={teamMembers}
-                        statuses={statuses}
-                        onToggleComplete={handleToggleComplete}
-                        onClick={() => onTaskClick(task)}
-                      />
-                    ))}
-                  </div>
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs"
+                    style={{ borderColor: primaryGroup.color, color: primaryGroup.color, backgroundColor: `${primaryGroup.color}15` }}
+                  >
+                    {totalTasks} {totalTasks === 1 ? 'task' : 'tasks'}
+                  </Badge>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    });
+              </CardHeader>
+              <CardContent className="p-3 space-y-3">
+                {Object.entries(primaryGroup.secondaryGroups).map(([secondaryKey, secondaryGroup]) => (
+                  <div 
+                    key={secondaryKey} 
+                    className="bg-black/40 rounded-lg border-2 overflow-hidden"
+                    style={{ borderColor: secondaryGroup.color }}
+                  >
+                    <div 
+                      className="p-2 border-b-2"
+                      style={{ 
+                        borderBottomColor: secondaryGroup.color,
+                        backgroundColor: `${secondaryGroup.color}15`
+                      }}
+                    >
+                      <h3 
+                        className="font-semibold text-xs"
+                        style={{ color: secondaryGroup.color }}
+                      >
+                        {secondaryGroup.label}
+                      </h3>
+                      <span className="text-xs text-gray-400">
+                        {secondaryGroup.tasks.length} {secondaryGroup.tasks.length === 1 ? 'task' : 'tasks'}
+                      </span>
+                    </div>
+                    <div className="p-2 space-y-2">
+                      {secondaryGroup.tasks.map(task => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          categories={categories}
+                          teamMembers={teamMembers}
+                          statuses={statuses}
+                          onToggleComplete={handleToggleComplete}
+                          onClick={() => onTaskClick(task)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
