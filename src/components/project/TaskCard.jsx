@@ -120,6 +120,7 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
                     mode="single"
                     selected={task.due_date ? new Date(task.due_date) : undefined}
                     onSelect={handleDateSelect}
+                    defaultMonth={task.due_date ? new Date(task.due_date) : new Date()}
                   />
                 </PopoverContent>
               </Popover>
