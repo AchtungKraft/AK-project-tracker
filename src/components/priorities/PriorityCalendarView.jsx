@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle } from "lucide-react";
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore, isAfter } from "date-fns";
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore } from "date-fns";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
 
