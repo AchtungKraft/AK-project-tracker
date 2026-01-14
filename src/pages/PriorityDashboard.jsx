@@ -246,7 +246,7 @@ export default function PriorityDashboard() {
               </TabsList>
 
               {/* Filters - only show on card view */}
-              {activeTab === 'card-view' && allTasks.length > 0 && (
+              {activeTab === 'card-view' && priorityTasks.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
                     <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
