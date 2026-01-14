@@ -37,20 +37,27 @@ export default function PriorityCalendarView({
     return ranges;
   }, [currentDate, weeksToShow]);
 
-  // Separate tasks with and without due dates
-  const { tasksWithDueDate, tasksWithoutDueDate } = useMemo(() => {
+  // Separate tasks: past due, with due date (future), without due date
+  const { tasksPastDue, tasksWithDueDate, tasksWithoutDueDate } = useMemo(() => {
+    const pastDue = [];
     const withDate = [];
     const withoutDate = [];
+    const today = startOfWeek(new Date(), { weekStartsOn: 1 });
     
     tasks.forEach(task => {
       if (task.due_date) {
-        withDate.push(task);
+        const dueDate = parseISO(task.due_date);
+        if (isBefore(dueDate, today)) {
+          pastDue.push(task);
+        } else {
+          withDate.push(task);
+        }
       } else {
         withoutDate.push(task);
       }
     });
     
-    return { tasksWithDueDate: withDate, tasksWithoutDueDate: withoutDate };
+    return { tasksPastDue: pastDue, tasksWithDueDate: withDate, tasksWithoutDueDate: withoutDate };
   }, [tasks]);
 
   // Group tasks by week
@@ -271,6 +278,28 @@ export default function PriorityCalendarView({
 
       {/* Week Sections */}
       <div className="space-y-4">
+        {/* Past Due Section */}
+        {tasksPastDue.length > 0 && (
+          <Card className="bg-black/40 backdrop-blur-xl border-2 border-red-600">
+            <CardHeader className="p-3 border-b border-red-600/50 bg-red-600/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <CardTitle className="text-sm font-semibold text-red-400">
+                    PAST DUE
+                  </CardTitle>
+                </div>
+                <Badge variant="outline" className="border-red-600 text-red-400 bg-red-600/10">
+                  {tasksPastDue.length} {tasksPastDue.length === 1 ? 'task' : 'tasks'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-3">
+              {renderGroupedTasks(groupTasksForWeek(tasksPastDue))}
+            </CardContent>
+          </Card>
+        )}
+
         {weekRanges.map((range, weekIndex) => {
           const weekTasks = tasksByWeek[weekIndex] || [];
           const groupedTasks = groupTasksForWeek(weekTasks);
