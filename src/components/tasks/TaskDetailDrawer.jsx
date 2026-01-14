@@ -170,6 +170,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       setEditing(false);
       toast.success('Task updated successfully');
     },
@@ -185,6 +186,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       toast.success('Task deleted successfully');
       onClose();
     },
