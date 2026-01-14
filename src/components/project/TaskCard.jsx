@@ -1,7 +1,10 @@
-import React from "react";
-import { User, CheckCircle2, Circle, MessageSquare } from "lucide-react";
+import React, { useState } from "react";
+import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -18,7 +21,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick }) {
+export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate }) {
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
   const category = categories.find(c => c.id === task.category_id);
   const categoryPath = getCategoryPath(task.category_id, categories);
@@ -37,12 +40,20 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
   });
 
   const hasComments = comments.length > 0 || task.description;
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
     if (onToggleComplete) {
       onToggleComplete(task);
     }
+  };
+
+  const handleDateSelect = (date) => {
+    if (onUpdateDueDate) {
+      onUpdateDueDate(task, date ? format(date, 'yyyy-MM-dd') : null);
+    }
+    setCalendarOpen(false);
   };
 
   return (
@@ -83,12 +94,37 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
             </div>
           )}
           
-          {assignedMember && (
-            <div className="flex items-center gap-1 text-xs text-gray-400">
-              <User className="w-3 h-3 text-gray-500" />
-              <span>{assignedMember.full_name}</span>
-            </div>
-          )}
+          <div className="flex items-center justify-between gap-1">
+            {assignedMember && (
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <User className="w-3 h-3 text-gray-500" />
+                <span>{assignedMember.full_name}</span>
+              </div>
+            )}
+            
+            {onUpdateDueDate && (
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className={`p-1 rounded hover:bg-gray-700 transition-colors ${
+                      task.due_date ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                    title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
+                  >
+                    <CalendarIcon className="w-3.5 h-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" onClick={(e) => e.stopPropagation()}>
+                  <Calendar
+                    mode="single"
+                    selected={task.due_date ? new Date(task.due_date) : undefined}
+                    onSelect={handleDateSelect}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         </div>
       </div>
     </div>

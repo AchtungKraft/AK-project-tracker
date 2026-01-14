@@ -23,9 +23,14 @@ export default function PriorityDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('calendar-view');
 
-  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: priorityTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
     queryFn: () => base44.entities.Task.filter({ is_priority: true }),
+  });
+
+  const { data: allTasksData = [] } = useQuery({
+    queryKey: ['allTasksForCalendar'],
+    queryFn: () => base44.entities.Task.list(),
   });
 
   const updateTaskMutation = useMutation({
@@ -62,7 +67,7 @@ export default function PriorityDashboard() {
     const label = s.label.toLowerCase();
     return label.includes('complete') || label.includes('done');
   });
-  const activePriorityTasks = allTasks.filter(t => {
+  const activePriorityTasks = priorityTasks.filter(t => {
     if (t.status_id === completedStatus?.id) return false;
     if (assignedToFilter !== 'all' && t.assigned_team_member_id !== assignedToFilter) return false;
     return true;
@@ -395,6 +400,7 @@ export default function PriorityDashboard() {
             <TabsContent value="calendar-view" className="mt-0">
               <PriorityCalendarView
                 tasks={activePriorityTasks}
+                allTasks={allTasksData}
                 projects={projects}
                 categories={categories}
                 teamMembers={teamMembers}
