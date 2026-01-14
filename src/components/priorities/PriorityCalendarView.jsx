@@ -198,6 +198,14 @@ export default function PriorityCalendarView({
     toast.success(dueDate ? 'Due date updated' : 'Due date removed');
   };
 
+  const handleUpdateStartDate = async (task, startDate) => {
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: { start_date: startDate }
+    });
+    toast.success(startDate ? 'Start date updated' : 'Start date removed');
+  };
+
   const navigateWeeks = (direction) => {
     if (direction === 'prev') {
       setCurrentDate(subWeeks(currentDate, weeksToShow));
@@ -287,6 +295,7 @@ export default function PriorityCalendarView({
                           onToggleComplete={handleToggleComplete}
                           onClick={() => onTaskClick(task)}
                           onUpdateDueDate={handleUpdateDueDate}
+                          onUpdateStartDate={handleUpdateStartDate}
                         />
                       ))}
                     </div>
