@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon } from "lucide-react";
+import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon, AlertCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -21,7 +21,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate }) {
+export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority }) {
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
   const category = categories.find(c => c.id === task.category_id);
   const categoryPath = getCategoryPath(task.category_id, categories);
@@ -111,6 +111,20 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
             )}
             
             <div className="flex items-center gap-1">
+              {onTogglePriority && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePriority(task);
+                  }}
+                  className={`p-1 rounded hover:bg-gray-700 transition-colors ${
+                    task.is_priority ? 'text-red-500' : 'text-gray-500 hover:text-red-400'
+                  }`}
+                  title={task.is_priority ? 'Remove from priority' : 'Mark as priority'}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                </button>
+              )}
               {onUpdateStartDate && (
                 <Popover open={startDateCalendarOpen} onOpenChange={setStartDateCalendarOpen}>
                   <PopoverTrigger asChild>
