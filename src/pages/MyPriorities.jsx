@@ -79,6 +79,21 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
+  // Fetch all task comments in one query to avoid rate limiting
+  const { data: allTaskComments = [] } = useQuery({
+    queryKey: ['allTaskComments'],
+    queryFn: () => base44.entities.TaskComment.list(),
+  });
+
+  // Create a map of task_id -> comment count for efficient lookup
+  const commentCountByTaskId = useMemo(() => {
+    const map = {};
+    allTaskComments.forEach(comment => {
+      map[comment.task_id] = (map[comment.task_id] || 0) + 1;
+    });
+    return map;
+  }, [allTaskComments]);
+
   // Filter projects to only those where currentTeamMember's company is assigned
   const projects = useMemo(() => {
     if (!currentTeamMember) return [];
@@ -334,6 +349,7 @@ export default function MyPriorities() {
                                     statuses={statuses}
                                     onToggleComplete={handleToggleComplete}
                                     onClick={() => setSelectedTask(task)}
+                                    commentCount={commentCountByTaskId[task.id] || 0}
                                   />
                                 ))}
                               </div>
