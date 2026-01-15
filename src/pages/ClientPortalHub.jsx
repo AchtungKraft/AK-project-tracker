@@ -15,7 +15,8 @@ import {
   Loader2,
   Mail,
   Send,
-  Menu
+  Menu,
+  MessageSquareText
 } from "lucide-react";
 import {
   DropdownMenu,
