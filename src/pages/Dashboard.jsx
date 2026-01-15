@@ -160,6 +160,7 @@ export default function Dashboard() {
                 <SelectContent>
                   <SelectItem value="projectType">Group by Type</SelectItem>
                   <SelectItem value="status">Group by Status</SelectItem>
+                  <SelectItem value="client">Group by Client</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -179,19 +180,54 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            {/* Type Filter */}
+            {/* Type Filter - Multi-select */}
             <div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800"
+                  >
+                    <span className="truncate">
+                      {selectedTypes.length === 0 
+                        ? 'All Types' 
+                        : selectedTypes.length === 1 
+                          ? projectTypes.find(t => t.id === selectedTypes[0])?.name || 'Type'
+                          : `${selectedTypes.length} Types`}
+                    </span>
+                    {selectedTypes.length > 0 && (
+                      <X 
+                        className="w-4 h-4 ml-2 hover:text-red-400" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTypes([]);
+                        }}
+                      />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
                   {projectTypes.filter(t => t.active).map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    <DropdownMenuCheckboxItem
+                      key={t.id}
+                      checked={selectedTypes.includes(t.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedTypes([...selectedTypes, t.id]);
+                        } else {
+                          setSelectedTypes(selectedTypes.filter(id => id !== t.id));
+                        }
+                      }}
+                    >
+                      <span 
+                        className="w-2 h-2 rounded-full mr-2" 
+                        style={{ backgroundColor: t.color }}
+                      />
+                      {t.name}
+                    </DropdownMenuCheckboxItem>
                   ))}
-                </SelectContent>
-              </Select>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
