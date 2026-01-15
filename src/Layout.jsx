@@ -5,7 +5,6 @@ import { base44 } from "@/api/base44Client";
 import { 
   LayoutDashboard, 
   FolderKanban, 
-  ListChecks, 
   Settings, 
   BarChart3,
   Menu,
