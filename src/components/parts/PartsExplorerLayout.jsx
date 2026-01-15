@@ -121,9 +121,17 @@ export default function PartsExplorerLayout({ onPartClick }) {
   };
 
   const filteredParts = parts.filter(part => {
+    const searchLower = debouncedSearchTerm?.toLowerCase() || '';
+    
+    // Get category name for this part
+    const partCategory = categories.find(c => c.id === part.part_category_id);
+    const categoryName = partCategory?.name?.toLowerCase() || '';
+    
     const matchesSearch = debouncedSearchTerm ? (
-      part.part_name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      part.vendor_part_number?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+      part.part_name?.toLowerCase().includes(searchLower) ||
+      part.vendor_part_number?.toLowerCase().includes(searchLower) ||
+      part.notes?.toLowerCase().includes(searchLower) ||
+      categoryName.includes(searchLower)
     ) : true;
     
     if (!selectedCategoryId) {
