@@ -263,6 +263,20 @@ export default function Dashboard() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+
+            {/* Clear Filters */}
+            {(searchTerm || statusFilter !== 'all' || selectedTypes.length > 0 || groupBy !== 'projectType') && (
+              <div>
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
