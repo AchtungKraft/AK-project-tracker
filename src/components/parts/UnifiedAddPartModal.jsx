@@ -336,7 +336,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="text-gray-400">Category</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Category
+                  <button type="button" onClick={() => setShowCreateModal('PartCategory')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </Label>
                 <Select
                   value={formData.part_category_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, part_category_id: value === 'none' ? '' : value })}
@@ -366,7 +369,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-400">Vendor</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Vendor
+                  <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </Label>
                 <Select
                   value={formData.vendor_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, vendor_id: value === 'none' ? '' : value })}
@@ -396,7 +402,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-400">Location</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Location
+                  <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </Label>
                 <Select
                   value={formData.location_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, location_id: value === 'none' ? '' : value })}
