@@ -19,7 +19,7 @@ import ImageModal from "../ui/ImageModal";
 import ProjectKanban from "./ProjectKanban";
 import CompletedTasksSection from "./CompletedTasksSection";
 
-export default function ProjectOverview({ project, projectId }) {
+export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -38,20 +38,12 @@ export default function ProjectOverview({ project, projectId }) {
     status_id: project?.status_id || ""
   });
 
-  const { data: projectTypes = [] } = useQuery({
-    queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list()
-  });
-
-  const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list()
-  });
-
-  const { data: journalEntries = [] } = useQuery({
-    queryKey: ['journalEntries', projectId],
-    queryFn: () => base44.entities.JournalEntry.filter({ project_id: projectId })
-  });
+  // Use shared data from parent to avoid redundant API calls
+  const { 
+    statuses = [], 
+    projectTypes = [], 
+    journalEntries = [] 
+  } = sharedData;
 
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
   const projectType = projectTypes.find((t) => t.id === project?.project_type_id);
@@ -264,10 +256,10 @@ export default function ProjectOverview({ project, projectId }) {
         </Collapsible>
 
         {/* Main Task Groups Board */}
-        <ProjectKanban projectId={projectId} />
+        <ProjectKanban projectId={projectId} sharedData={sharedData} />
 
         {/* Completed Tasks Section */}
-        <CompletedTasksSection projectId={projectId} />
+        <CompletedTasksSection projectId={projectId} sharedData={sharedData} />
 
         {/* Recent Journal Entries Grid */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
