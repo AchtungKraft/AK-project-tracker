@@ -181,12 +181,35 @@ export default function ClientPortalHub() {
     );
   }
 
-  // Get color based on tab/state
+  // Get color based on tab/state - matching ProjectClientPortal colors
   const getStateColors = (tabName) => {
-    if (tabName === 'awaiting') return { border: '#F59E0B', bg: '#F59E0B' }; // amber
-    if (tabName === 'changes') return { border: '#F97316', bg: '#F97316' }; // orange  
-    if (tabName === 'approved') return { border: '#22C55E', bg: '#22C55E' }; // green
-    return { border: '#EF4444', bg: '#EF4444' }; // red default
+    if (tabName === 'awaiting') return { 
+      border: 'oklch(57.7% 0.245 27.325)', // Red - Needs Review
+      bg: 'oklch(39.6% 0.141 25.723)',
+      isNeedsReview: true
+    };
+    if (tabName === 'changes') return { 
+      border: 'oklch(85.2% 0.199 91.936)', // Yellow - Changes Requested
+      bg: 'oklch(85.2% 0.199 91.936)',
+      isNeedsReview: false
+    };
+    if (tabName === 'approved') return { 
+      border: 'oklch(64.8% 0.2 131.684)', // Green - Approved
+      bg: 'oklch(64.8% 0.2 131.684)',
+      isNeedsReview: false
+    };
+    return { border: '#EF4444', bg: '#EF4444', isNeedsReview: false };
+  };
+
+  // Get type color matching ProjectClientPortal
+  const getTypeColor = (type) => {
+    switch (type) {
+      case 'question': return '#3b82f6'; // blue-500
+      case 'feedback_needed': return '#6366f1'; // indigo-500
+      case 'design_review': return '#a855f7'; // purple-500
+      case 'client_need': return '#f59e0b'; // amber-500
+      default: return '#6b7280';
+    }
   };
 
   // Group requests by type within a project
