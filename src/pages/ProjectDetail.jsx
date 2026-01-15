@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users, Loader2 } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users, Loader2, Edit2 } from "lucide-react";
+import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -27,6 +28,7 @@ export default function ProjectDetail() {
   const fromPage = urlParams.get('from');
   const fromTab = urlParams.get('fromTab');
   const [activeTab, setActiveTab] = useState(tabParam);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -142,19 +144,29 @@ export default function ProjectDetail() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleBack}
+              className="border-gray-700 text-white">
+
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">{project.name}</h1>
+              <p className="text-gray-400">{project.client_name || 'No client'}</p>
+            </div>
+          </div>
           <Button
             variant="outline"
-            size="icon"
-            onClick={handleBack}
-            className="border-gray-700 text-white">
-
-            <ArrowLeft className="w-4 h-4" />
+            onClick={() => setShowEditModal(true)}
+            className="border-gray-700 text-white gap-2"
+          >
+            <Edit2 className="w-4 h-4" />
+            Edit Project
           </Button>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white">{project.name}</h1>
-            <p className="text-gray-400">{project.client_name || 'No client'}</p>
-          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -268,6 +280,13 @@ export default function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {showEditModal && (
+        <EditProjectModal
+          project={project}
+          onClose={() => setShowEditModal(false)}
+        />
+      )}
     </div>);
 
 }
