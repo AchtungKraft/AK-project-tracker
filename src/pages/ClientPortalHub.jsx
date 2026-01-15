@@ -153,8 +153,8 @@ export default function ClientPortalHub() {
       const postedAt = request.posted_at ? new Date(request.posted_at) : null;
       const newClientComments = comments.filter(c => {
         if (c.request_id !== request.id || c.author_type !== 'client_contact') return false;
-        if (!postedAt) return true; // If never posted, all comments are "new"
-        const commentDate = new Date(c.created_date);
+        if (!postedAt) return false; // If never posted, no comments are considered "new" yet
+        const commentDate = c.posted_at ? new Date(c.posted_at) : new Date(c.created_date);
         return commentDate > postedAt;
       });
       const clientCommentCount = newClientComments.length;
