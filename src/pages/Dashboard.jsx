@@ -89,6 +89,9 @@ export default function Dashboard() {
       const status = statuses.find(s => s.id === project.status_id);
       groupKey = status?.label || 'No Status';
       groupColor = status?.color || '#6B7280';
+    } else if (groupBy === 'client') {
+      groupKey = project.client_name || 'No Client';
+      groupColor = '#3B82F6';
     }
     
     if (!groupedProjects[groupKey]) {
