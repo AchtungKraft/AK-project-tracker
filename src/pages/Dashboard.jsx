@@ -187,7 +187,7 @@ export default function Dashboard() {
 
             {/* Group By */}
             <div>
-              <Select value={groupBy} onValueChange={setGroupBy}>
+              <Select value={groupBy} onValueChange={handleGroupByChange}>
                 <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue placeholder="Group By" />
                 </SelectTrigger>
@@ -201,7 +201,7 @@ export default function Dashboard() {
 
             {/* Status Filter */}
             <div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
                 <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
@@ -234,7 +234,7 @@ export default function Dashboard() {
                         className="w-4 h-4 ml-2 hover:text-red-400" 
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedTypes([]);
+                          handleSelectedTypesChange([]);
                         }}
                       />
                     )}
@@ -247,9 +247,9 @@ export default function Dashboard() {
                       checked={selectedTypes.includes(t.id)}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          setSelectedTypes([...selectedTypes, t.id]);
+                          handleSelectedTypesChange([...selectedTypes, t.id]);
                         } else {
-                          setSelectedTypes(selectedTypes.filter(id => id !== t.id));
+                          handleSelectedTypesChange(selectedTypes.filter(id => id !== t.id));
                         }
                       }}
                     >
@@ -268,7 +268,7 @@ export default function Dashboard() {
 
         {/* View Tabs */}
         <div className="flex items-center gap-4">
-          <Tabs value={viewMode} onValueChange={setViewMode} className="w-auto">
+          <Tabs value={viewMode} onValueChange={handleViewModeChange} className="w-auto">
             <TabsList className="bg-gray-900/50 border border-gray-700">
               <TabsTrigger value="cards" className="gap-2 data-[state=active]:bg-red-600">
                 <LayoutGrid className="w-4 h-4" />
