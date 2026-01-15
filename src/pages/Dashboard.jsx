@@ -29,11 +29,45 @@ export default function Dashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [groupBy, setGroupBy] = useState('projectType');
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('dashboard_statusFilter') || 'all');
+  const [selectedTypes, setSelectedTypes] = useState(() => {
+    const saved = localStorage.getItem('dashboard_selectedTypes');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [groupBy, setGroupBy] = useState(() => localStorage.getItem('dashboard_groupBy') || 'projectType');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState('cards');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('dashboard_viewMode') || 'list');
+
+  // Persist filter changes
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    localStorage.setItem('dashboard_statusFilter', value);
+  };
+
+  const handleSelectedTypesChange = (newTypes) => {
+    setSelectedTypes(newTypes);
+    localStorage.setItem('dashboard_selectedTypes', JSON.stringify(newTypes));
+  };
+
+  const handleGroupByChange = (value) => {
+    setGroupBy(value);
+    localStorage.setItem('dashboard_groupBy', value);
+  };
+
+  const handleViewModeChange = (value) => {
+    setViewMode(value);
+    localStorage.setItem('dashboard_viewMode', value);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setSelectedTypes([]);
+    setGroupBy('projectType');
+    localStorage.removeItem('dashboard_statusFilter');
+    localStorage.removeItem('dashboard_selectedTypes');
+    localStorage.removeItem('dashboard_groupBy');
+  };
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
