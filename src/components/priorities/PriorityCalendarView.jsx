@@ -256,11 +256,10 @@ export default function PriorityCalendarView({
                       {calendarPrimaryGroup === 'project' && project ? (
                         <Link 
                           to={createPageUrl("ProjectDetail") + "?id=" + project.id}
-                          className="hover:opacity-80 transition-opacity"
+                          className="text-sm font-semibold hover:underline"
+                          style={{ color: primaryGroup.color }}
                         >
-                          <CardTitle className="text-sm hover:underline" style={{ color: primaryGroup.color }}>
-                            {primaryGroup.label}
-                          </CardTitle>
+                          {primaryGroup.label}
                         </Link>
                       ) : (
                         <CardTitle className="text-sm" style={{ color: primaryGroup.color }}>
