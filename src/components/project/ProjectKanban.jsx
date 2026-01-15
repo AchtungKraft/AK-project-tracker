@@ -26,7 +26,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function ProjectKanban({ projectId }) {
+export default function ProjectKanban({ projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
   const [showManageBuckets, setShowManageBuckets] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -34,46 +34,68 @@ export default function ProjectKanban({ projectId }) {
   const [groupBy, setGroupBy] = useState('buckets');
   const [subGroupBy, setSubGroupBy] = useState('status');
 
-  const { data: buckets = [], isLoading: bucketsLoading } = useQuery({
+  // Use shared data from parent when available to avoid redundant API calls
+  const {
+    statuses: sharedStatuses,
+    categories: sharedCategories,
+    teamMembers: sharedTeamMembers,
+    projectTasks: sharedTasks,
+    projectBuckets: sharedBuckets,
+    commentCountByTaskId: sharedCommentCount,
+  } = sharedData;
+
+  // Only fetch if not provided via sharedData
+  const { data: fetchedBuckets = [], isLoading: bucketsLoading } = useQuery({
     queryKey: ['kanbanBuckets', projectId],
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
+    enabled: !sharedBuckets,
   });
 
-  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: fetchedTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && !sharedTasks,
   });
 
-  const { data: categories = [] } = useQuery({
+  const { data: fetchedCategories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
+    enabled: !sharedCategories,
   });
 
-  const { data: teamMembers = [] } = useQuery({
+  const { data: fetchedTeamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    enabled: !sharedTeamMembers,
   });
 
-  const { data: statuses = [] } = useQuery({
+  const { data: fetchedStatuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
+    enabled: !sharedStatuses,
   });
 
-  // Fetch all task comments for the project in one query to avoid rate limiting
-  const { data: allTaskComments = [] } = useQuery({
+  const { data: fetchedTaskComments = [] } = useQuery({
     queryKey: ['allTaskComments'],
     queryFn: () => base44.entities.TaskComment.list(),
+    enabled: !sharedCommentCount,
   });
 
+  // Use shared data if available, otherwise use fetched data
+  const buckets = sharedBuckets || fetchedBuckets;
+  const allTasks = sharedTasks || fetchedTasks;
+  const categories = sharedCategories || fetchedCategories;
+  const teamMembers = sharedTeamMembers || fetchedTeamMembers;
+  const statuses = sharedStatuses || fetchedStatuses;
+
   // Create a map of task_id -> comment count for efficient lookup
-  const commentCountByTaskId = React.useMemo(() => {
+  const commentCountByTaskId = sharedCommentCount || React.useMemo(() => {
     const map = {};
-    allTaskComments.forEach(comment => {
+    fetchedTaskComments.forEach(comment => {
       map[comment.task_id] = (map[comment.task_id] || 0) + 1;
     });
     return map;
-  }, [allTaskComments]);
+  }, [fetchedTaskComments]);
 
   // Filter out completed tasks from Kanban view
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
@@ -320,7 +342,9 @@ export default function ProjectKanban({ projectId }) {
     }
   };
 
-  if (bucketsLoading || tasksLoading) {
+  const isLoading = (!sharedBuckets && bucketsLoading) || (!sharedTasks && tasksLoading);
+  
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
