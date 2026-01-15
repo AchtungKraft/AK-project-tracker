@@ -177,7 +177,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="None (Top Level)" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 999999 }}>
                   <SelectItem value="none">None (Top Level)</SelectItem>
                   {parentVendors.map(v => (
                     <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
@@ -240,7 +240,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="None (Top Level)" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 999999 }}>
                   <SelectItem value="none">None (Top Level)</SelectItem>
                   {parentLocations.map(l => (
                     <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
@@ -327,7 +327,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="Select make..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 999999 }}>
                   <SelectItem value="none">Select make...</SelectItem>
                   {availableMakes.map(m => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
@@ -379,7 +379,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="Select model..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 999999 }}>
                   <SelectItem value="none">Select model...</SelectItem>
                   {availableModels.map(m => {
                     const make = makes.find(mk => mk.id === m.car_make_id);
