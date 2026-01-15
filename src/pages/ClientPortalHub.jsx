@@ -127,6 +127,12 @@ export default function ClientPortalHub() {
     refetchOnMount: 'always',
   });
 
+  const { data: comments = [] } = useQuery({
+    queryKey: ["allFeedbackComments"],
+    queryFn: () => base44.entities.ClientFeedbackComment.list(),
+    refetchOnMount: 'always',
+  });
+
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list(),
