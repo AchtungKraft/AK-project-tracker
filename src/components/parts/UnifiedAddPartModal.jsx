@@ -269,7 +269,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="text-gray-400">Car Make</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Car Make
+                  <button type="button" onClick={() => setShowCreateModal('CarMake')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </Label>
                 <Select
                   value={formData.car_make_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_make_id: value === 'none' ? '' : value, car_model_id: '', car_year_id: '' })}
@@ -287,7 +290,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-400">Car Model</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Car Model
+                  <button type="button" onClick={() => setShowCreateModal('CarModel')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!formData.car_make_id}>+ New</button>
+                </Label>
                 <Select
                   value={formData.car_model_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_model_id: value === 'none' ? '' : value, car_year_id: '' })}
@@ -306,7 +312,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-400">Year/Series</Label>
+                <Label className="text-gray-400 flex items-center justify-between">
+                  Year/Series
+                  <button type="button" onClick={() => setShowCreateModal('CarYear')} className="text-xs text-blue-400 hover:text-blue-300" disabled={!formData.car_model_id}>+ New</button>
+                </Label>
                 <Select
                   value={formData.car_year_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, car_year_id: value === 'none' ? '' : value })}
