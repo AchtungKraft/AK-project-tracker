@@ -52,11 +52,6 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Flame,
       },
       {
-        title: "All Tasks",
-        url: createPageUrl("TasksExplorer"),
-        icon: ListChecks,
-      },
-      {
         title: "Client Portal",
         url: createPageUrl("ClientPortalHub"),
         icon: Building2,
