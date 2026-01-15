@@ -181,12 +181,44 @@ export default function ClientPortalHub() {
     );
   }
 
+  // Get color based on tab/state
+  const getStateColors = (tabName) => {
+    if (tabName === 'awaiting') return { border: '#F59E0B', bg: '#F59E0B' }; // amber
+    if (tabName === 'changes') return { border: '#F97316', bg: '#F97316' }; // orange  
+    if (tabName === 'approved') return { border: '#22C55E', bg: '#22C55E' }; // green
+    return { border: '#EF4444', bg: '#EF4444' }; // red default
+  };
+
+  // Group requests by type within a project
+  const groupRequestsByType = (requests) => {
+    const grouped = {};
+    requests.forEach(request => {
+      const type = request.request_type || 'general';
+      const typeLabel = type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+      if (!grouped[type]) {
+        grouped[type] = { label: typeLabel, requests: [] };
+      }
+      grouped[type].requests.push(request);
+    });
+    return grouped;
+  };
+
   const renderRequestList = (groupedData, emptyMessage, stateColor, tabName, showEmailButton = false) => {
+    const colors = getStateColors(tabName);
+    
     if (groupedData.length === 0) {
       return (
-        <Card className="bg-black/40 border-gray-700">
-          <CardContent className="p-8 text-center text-gray-400">
-            {emptyMessage}
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardContent className="p-8 md:p-12 text-center">
+            <div 
+              className="flex items-center justify-center w-16 h-16 rounded-full border-2 mx-auto mb-4"
+              style={{ backgroundColor: `${colors.bg}10`, borderColor: `${colors.border}30` }}
+            >
+              {tabName === 'awaiting' && <Clock className="w-8 h-8" style={{ color: `${colors.bg}80` }} />}
+              {tabName === 'changes' && <AlertTriangle className="w-8 h-8" style={{ color: `${colors.bg}80` }} />}
+              {tabName === 'approved' && <CheckCircle2 className="w-8 h-8" style={{ color: `${colors.bg}80` }} />}
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">{emptyMessage}</h3>
           </CardContent>
         </Card>
       );
@@ -194,98 +226,152 @@ export default function ClientPortalHub() {
 
     return (
       <div className="space-y-6">
-        {groupedData.map(({ project, requests }) => (
-          <Card key={project?.id || 'unknown'} className="bg-black/40 border-gray-700">
-            <CardHeader className="border-b border-gray-700 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FolderKanban className="w-5 h-5 text-red-500" />
-                  <CardTitle className="text-lg text-white">
-                    {project?.name || 'Unknown Project'}
-                  </CardTitle>
-                  {showEmailButton && project?.id && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSendBulkEmail(project.id, requests.map(r => r.id));
-                      }}
-                      disabled={sendingEmailForProject === project.id}
-                      className="ml-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
-                    >
-                      {sendingEmailForProject === project.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
+        {groupedData.map(({ project, requests }) => {
+          const groupedByType = groupRequestsByType(requests);
+          
+          return (
+            <Card 
+              key={project?.id || 'unknown'} 
+              className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+              style={{ 
+                borderColor: `${colors.border}80`,
+                boxShadow: `0 10px 15px -3px ${colors.bg}20`
+              }}
+            >
+              <CardHeader 
+                className="border-b p-4"
+                style={{ borderBottomColor: `${colors.border}50` }}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <FolderKanban className="w-5 h-5" style={{ color: colors.border }} />
+                    <div>
+                      {project?.id ? (
+                        <Link 
+                          to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                          className="hover:opacity-80 transition-opacity"
+                        >
+                          <CardTitle className="text-lg hover:underline" style={{ color: colors.border }}>
+                            {project?.name || 'Unknown Project'}
+                          </CardTitle>
+                        </Link>
                       ) : (
-                        <Send className="w-4 h-4 mr-1" />
+                        <CardTitle className="text-lg" style={{ color: colors.border }}>
+                          {project?.name || 'Unknown Project'}
+                        </CardTitle>
                       )}
-                      Email All
-                    </Button>
-                  )}
-                  {project?.id && (
-                    <>
-                      <Link
-                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal&from=hub&fromTab=${tabName}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="ml-1"
+                      {project?.client_name && (
+                        <p className="text-sm text-gray-400">{project.client_name}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {showEmailButton && project?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSendBulkEmail(project.id, requests.map(r => r.id));
+                        }}
+                        disabled={sendingEmailForProject === project.id}
+                        className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
                       >
-                        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
-                          Journal
-                        </Button>
-                      </Link>
-                      <Link
-                        to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=clientportal&from=hub&fromTab=${tabName}`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
-                          Portal
-                        </Button>
-                      </Link>
-                    </>
-                  )}
+                        {sendingEmailForProject === project.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-1" />
+                        )}
+                        Email All
+                      </Button>
+                    )}
+                    {project?.id && (
+                      <>
+                        <Link
+                          to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=journal&from=hub&fromTab=${tabName}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
+                            Journal
+                          </Button>
+                        </Link>
+                        <Link
+                          to={createPageUrl("ProjectDetail") + `?id=${project.id}&tab=clientportal&from=hub&fromTab=${tabName}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
+                            Portal
+                          </Button>
+                        </Link>
+                      </>
+                    )}
+                    <Badge 
+                      variant="outline" 
+                      style={{ borderColor: colors.border, color: colors.border, backgroundColor: `${colors.bg}15` }}
+                    >
+                      {requests.length} {requests.length === 1 ? 'request' : 'requests'}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge className="bg-gray-800 text-gray-300">
-                  {requests.length} {requests.length === 1 ? 'item' : 'items'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-gray-800">
-                {requests.map(request => (
-                  <Link
-                    key={request.id}
-                    to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
-                    className="flex items-center justify-between p-4 hover:bg-gray-800/50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-white font-medium truncate">{request.title}</h4>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
-                        <span className="capitalize">{request.request_type?.replace('_', ' ')}</span>
-                        {request.due_date && (
-                          <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
-                        )}
-                        {showEmailButton && request.last_email_sent_at && (
-                          <span className="flex items-center gap-1 text-gray-500">
-                            <Mail className="w-3 h-3" />
-                            {format(new Date(request.last_email_sent_at), 'MMM d, h:mm a')}
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(groupedByType).map(([typeKey, typeGroup]) => (
+                    <div key={typeKey} className="col-span-1">
+                      <div 
+                        className="bg-black/40 rounded-lg border-2 overflow-hidden"
+                        style={{ borderColor: colors.border }}
+                      >
+                        <div 
+                          className="p-3 border-b-2"
+                          style={{ 
+                            borderBottomColor: colors.border,
+                            backgroundColor: `${colors.bg}15`
+                          }}
+                        >
+                          <h3 
+                            className="font-semibold text-sm"
+                            style={{ color: colors.border }}
+                          >
+                            {typeGroup.label}
+                          </h3>
+                          <span className="text-xs text-gray-400">
+                            {typeGroup.requests.length} {typeGroup.requests.length === 1 ? 'request' : 'requests'}
                           </span>
-                        )}
+                        </div>
+                        <div className="p-3 space-y-2">
+                          {typeGroup.requests.map(request => (
+                            <Link
+                              key={request.id}
+                              to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
+                              className="block p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-gray-600 transition-colors"
+                            >
+                              <h4 className="text-white font-medium text-sm truncate">{request.title}</h4>
+                              <div className="flex items-center justify-between mt-2">
+                                <div className="flex items-center gap-2 text-xs text-gray-400">
+                                  {request.due_date && (
+                                    <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
+                                  )}
+                                  {showEmailButton && request.last_email_sent_at && (
+                                    <span className="flex items-center gap-1 text-gray-500">
+                                      <Mail className="w-3 h-3" />
+                                      {format(new Date(request.last_email_sent_at), 'MMM d')}
+                                    </span>
+                                  )}
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-gray-500" />
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className={stateColor}>
-                        {request.state === 'awaiting_review' && 'Awaiting Review'}
-                        {request.state === 'changes_requested' && 'Changes Requested'}
-                        {request.state === 'approved' && 'Approved'}
-                      </Badge>
-                      <ChevronRight className="w-4 h-4 text-gray-500" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     );
   };
