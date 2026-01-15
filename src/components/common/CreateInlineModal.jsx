@@ -446,10 +446,10 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     e.stopPropagation();
   };
 
-  return (
+  const modalContent = (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      onClick={stopPropagation}
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
       onMouseDown={stopPropagation}
       onPointerDown={stopPropagation}
     >
@@ -461,7 +461,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       >
         <div className="flex items-center justify-between p-4 border-b border-red-900/30">
           <h3 className="text-white font-semibold">{getTitle()}</h3>
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-gray-400 hover:text-white">
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -474,13 +474,14 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
           <Button
             type="button"
             variant="outline"
-            onClick={onClose}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
             className="flex-1 border-gray-700 text-white"
             disabled={creating}
           >
             Cancel
           </Button>
           <Button
+            type="button"
             onClick={handleSubmit}
             disabled={!isValid() || creating}
             className="flex-1 bg-red-600 hover:bg-red-700 gap-2"
@@ -495,4 +496,6 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
