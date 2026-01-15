@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 
 export default function CreateInlineModal({ entityType, onClose, onCreate, parentData = {} }) {
   const [formData, setFormData] = useState(() => {
@@ -74,7 +79,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
   });
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setCreating(true);
     try {
       await onCreate(entityType, formData);
@@ -442,44 +447,21 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     }
   };
 
-  // Only close when clicking the backdrop itself
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  const modalContent = (
-    <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-      style={{ zIndex: 99999 }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-inline-modal-title"
-      aria-describedby={undefined}
-      onClick={handleBackdropClick}
-    >
-      <div 
-        className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent 
+        className="bg-gray-900 border border-red-900/30 text-white max-w-md"
+        style={{ zIndex: 99999 }}
       >
-        <div className="flex items-center justify-between p-4 border-b border-red-900/30">
-          <h3 id="create-inline-modal-title" className="text-white font-semibold">{getTitle()}</h3>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={onClose} 
-            className="text-gray-400 hover:text-white"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
+        <DialogHeader>
+          <DialogTitle className="text-white">{getTitle()}</DialogTitle>
+        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {renderForm()}
         </form>
 
-        <div className="flex gap-3 p-4 border-t border-red-900/30">
+        <div className="flex gap-3 pt-4">
           <Button
             type="button"
             variant="outline"
@@ -502,9 +484,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
             )}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
-
-  return createPortal(modalContent, document.body);
 }
