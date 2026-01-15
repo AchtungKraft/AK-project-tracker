@@ -88,6 +88,21 @@ export default function TasksExplorerLayout() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
+  // Fetch all task comments in one query to avoid rate limiting
+  const { data: allTaskComments = [] } = useQuery({
+    queryKey: ['allTaskComments'],
+    queryFn: () => base44.entities.TaskComment.list(),
+  });
+
+  // Create a map of task_id -> comment count for efficient lookup
+  const commentCountByTaskId = React.useMemo(() => {
+    const map = {};
+    allTaskComments.forEach(comment => {
+      map[comment.task_id] = (map[comment.task_id] || 0) + 1;
+    });
+    return map;
+  }, [allTaskComments]);
+
   const { data: buckets = [] } = useQuery({
     queryKey: ['kanbanBuckets', selectedNodeType === 'project' ? selectedNodeId : null],
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: selectedNodeId }),
@@ -422,6 +437,7 @@ export default function TasksExplorerLayout() {
                                 teamMembers={teamMembers}
                                 statuses={statuses}
                                 onClick={() => setSelectedTask(task)}
+                                commentCount={commentCountByTaskId[task.id] || 0}
                               />
                             ))}
                           </div>

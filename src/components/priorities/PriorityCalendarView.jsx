@@ -21,6 +21,7 @@ export default function PriorityCalendarView({
   updateTaskMutation,
   primaryGroupBy,
   secondaryGroupBy,
+  commentCountByTaskId = {},
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [weeksToShow, setWeeksToShow] = useState(4);
@@ -317,6 +318,7 @@ export default function PriorityCalendarView({
                           onUpdateDueDate={handleUpdateDueDate}
                           onUpdateStartDate={handleUpdateStartDate}
                           onTogglePriority={handleTogglePriority}
+                          commentCount={commentCountByTaskId[task.id] || 0}
                         />
                       ))}
                     </div>

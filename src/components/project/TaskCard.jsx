@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon, AlertCircle } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -21,7 +19,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority }) {
+export default function TaskCard({ task, teamMembers, categories, statuses, onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0 }) {
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
   const category = categories.find(c => c.id === task.category_id);
   const categoryPath = getCategoryPath(task.category_id, categories);
@@ -33,13 +31,7 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
     taskStatus.label.toLowerCase().includes('done')
   );
 
-  const { data: comments = [] } = useQuery({
-    queryKey: ['taskComments', task.id],
-    queryFn: () => base44.entities.TaskComment.filter({ task_id: task.id }),
-    enabled: !!task.id,
-  });
-
-  const hasComments = comments.length > 0 || task.description;
+  const hasComments = commentCount > 0 || task.description;
   const [dueDateCalendarOpen, setDueDateCalendarOpen] = useState(false);
   const [startDateCalendarOpen, setStartDateCalendarOpen] = useState(false);
 
