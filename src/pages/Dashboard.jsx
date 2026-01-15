@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Plus, Search, RefreshCw, LayoutGrid, List, X, Check } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,8 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CreateProjectModal from "../components/dashboard/CreateProjectModal";
 import ProjectCard from "../components/dashboard/ProjectCard";
+import ProjectListView from "../components/dashboard/ProjectListView";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Skeleton } from "@/components/ui/skeleton";
 
