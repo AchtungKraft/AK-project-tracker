@@ -36,6 +36,8 @@ export default function EditProjectModal({ project, onClose }) {
     assigned_team: [],
     images: [],
     featured_image_url: "",
+    is_shareable: false,
+    progress_percent: 0,
   });
 
   useEffect(() => {
@@ -53,6 +55,8 @@ export default function EditProjectModal({ project, onClose }) {
         assigned_team: project.assigned_team || [],
         images: project.images || [],
         featured_image_url: project.featured_image_url || "",
+        is_shareable: project.is_shareable || false,
+        progress_percent: project.progress_percent || 0,
       });
     }
   }, [project]);
@@ -288,6 +292,34 @@ export default function EditProjectModal({ project, onClose }) {
                 </PopoverContent>
               </Popover>
             </div>
+
+            <div>
+              <Label>Progress %</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={projectData.progress_percent}
+                onChange={(e) => setProjectData({ ...projectData, progress_percent: parseInt(e.target.value) || 0 })}
+                placeholder="0-100"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+          </div>
+
+          {/* Shareable Toggle */}
+          <div className="flex items-center space-x-3 py-2">
+            <Checkbox
+              id="is_shareable"
+              checked={projectData.is_shareable}
+              onCheckedChange={(checked) => setProjectData({ ...projectData, is_shareable: checked })}
+            />
+            <label
+              htmlFor="is_shareable"
+              className="text-sm text-white cursor-pointer"
+            >
+              Allow public sharing (Client Portal Link)
+            </label>
           </div>
 
           {/* Project Images */}
