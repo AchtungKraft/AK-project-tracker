@@ -354,18 +354,18 @@ export default function ClientPortalHub() {
                     <div key={typeKey} className="col-span-1">
                       <div 
                         className="bg-black/40 rounded-lg border-2 overflow-hidden"
-                        style={{ borderColor: colors.border }}
+                        style={{ borderColor: typeGroup.color }}
                       >
                         <div 
                           className="p-3 border-b-2"
                           style={{ 
-                            borderBottomColor: colors.border,
-                            backgroundColor: `${colors.bg}15`
+                            borderBottomColor: typeGroup.color,
+                            backgroundColor: `${typeGroup.color}15`
                           }}
                         >
                           <h3 
                             className="font-semibold text-sm"
-                            style={{ color: colors.border }}
+                            style={{ color: typeGroup.color }}
                           >
                             {typeGroup.label}
                           </h3>
@@ -378,7 +378,7 @@ export default function ClientPortalHub() {
                             <Link
                               key={request.id}
                               to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
-                              className="block p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-gray-600 transition-colors"
+                              className="block p-3 bg-gray-900/50 rounded-lg border border-gray-700 hover:bg-gray-800/80 transition-colors"
                             >
                               <h4 className="text-white font-medium text-sm truncate">{request.title}</h4>
                               <div className="flex items-center justify-between mt-2">
