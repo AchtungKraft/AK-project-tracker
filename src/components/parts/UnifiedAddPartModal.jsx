@@ -185,6 +185,57 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const availableModels = models.filter(m => m.car_make_id === formData.car_make_id && m.active);
   const availableYears = years.filter(y => y.car_model_id === formData.car_model_id && y.active);
 
+  const handleInlineCreate = async (entityType, data) => {
+    let mutation;
+    let queryKey;
+    
+    switch(entityType) {
+      case 'PartCategory':
+        mutation = base44.entities.PartCategory.create;
+        queryKey = 'partCategories';
+        break;
+      case 'Vendor':
+        mutation = base44.entities.Vendor.create;
+        queryKey = 'vendors';
+        break;
+      case 'Location':
+        mutation = base44.entities.Location.create;
+        queryKey = 'locations';
+        break;
+      case 'CarMake':
+        mutation = base44.entities.CarMake.create;
+        queryKey = 'carMakes';
+        break;
+      case 'CarModel':
+        mutation = base44.entities.CarModel.create;
+        queryKey = 'carModels';
+        break;
+      case 'CarYear':
+        mutation = base44.entities.CarYear.create;
+        queryKey = 'carYears';
+        break;
+      default:
+        return;
+    }
+    
+    try {
+      const newItem = await mutation(data);
+      await queryClient.invalidateQueries({ queryKey: [queryKey] });
+      
+      if (entityType === 'PartCategory') setFormData({ ...formData, part_category_id: newItem.id });
+      else if (entityType === 'Vendor') setFormData({ ...formData, vendor_id: newItem.id });
+      else if (entityType === 'Location') setFormData({ ...formData, location_id: newItem.id });
+      else if (entityType === 'CarMake') setFormData({ ...formData, car_make_id: newItem.id });
+      else if (entityType === 'CarModel') setFormData({ ...formData, car_model_id: newItem.id });
+      else if (entityType === 'CarYear') setFormData({ ...formData, car_year_id: newItem.id });
+      
+      toast.success(`${entityType} created`);
+      setShowCreateModal(null);
+    } catch (error) {
+      toast.error(`Failed to create ${entityType}`);
+    }
+  };
+
   return (
     <>
       <Dialog open={true} onOpenChange={onClose}>
