@@ -266,9 +266,9 @@ export default function ClientPortalHub() {
           return (
             <Card 
               key={project?.id || 'unknown'} 
-              className="bg-black/40 backdrop-blur-xl border-2 shadow-lg"
+              className={`backdrop-blur-xl border-2 shadow-lg ${colors.isNeedsReview ? 'bg-[oklch(39.6%_0.141_25.723)]' : 'bg-black/40'}`}
               style={{ 
-                borderColor: `${colors.border}80`,
+                borderColor: colors.border,
                 boxShadow: `0 10px 15px -3px ${colors.bg}20`
               }}
             >
