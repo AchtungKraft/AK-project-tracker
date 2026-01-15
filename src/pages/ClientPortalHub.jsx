@@ -149,9 +149,15 @@ export default function ClientPortalHub() {
       
       const state = getRequestState(request, decisions, attachments);
       
-      // Count client comments for this request
-      const clientComments = comments.filter(c => c.request_id === request.id && c.author_type === 'client_contact');
-      const clientCommentCount = clientComments.length;
+      // Count client comments made AFTER the last posted_at (new comments since last review send)
+      const postedAt = request.posted_at ? new Date(request.posted_at) : null;
+      const newClientComments = comments.filter(c => {
+        if (c.request_id !== request.id || c.author_type !== 'client_contact') return false;
+        if (!postedAt) return true; // If never posted, all comments are "new"
+        const commentDate = new Date(c.created_date);
+        return commentDate > postedAt;
+      });
+      const clientCommentCount = newClientComments.length;
       const hasClientComments = clientCommentCount > 0;
       
       if (state === 'approved') {
