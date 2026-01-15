@@ -10,7 +10,8 @@ import {
   Menu,
   Plus,
   Package,
-  Flame
+  Flame,
+  ListChecks
 } from "lucide-react";
 import {
   Sidebar,
