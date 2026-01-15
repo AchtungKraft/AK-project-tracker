@@ -8,9 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import CreateInlineModal from "../common/CreateInlineModal";
 
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
