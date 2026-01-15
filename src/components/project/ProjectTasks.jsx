@@ -30,7 +30,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function ProjectTasks({ projectId }) {
+export default function ProjectTasks({ projectId, sharedData = {} }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -65,35 +65,53 @@ export default function ProjectTasks({ projectId }) {
     } catch (e) {}
   }, [searchTerm, statusFilter, categoryFilter, assignedFilter, groupBy]);
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  // Use shared data from parent when available to avoid redundant API calls
+  const {
+    statuses: sharedStatuses,
+    categories: sharedCategories,
+    teamMembers: sharedTeamMembers,
+    projectTasks: sharedTasks,
+  } = sharedData;
+
+  // Only fetch if not provided via sharedData
+  const { data: fetchedTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }, '-created_date'),
-    enabled: !!projectId,
+    enabled: !!projectId && !sharedTasks,
   });
 
-  const { data: statuses = [] } = useQuery({
+  const { data: fetchedStatuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: async () => {
       const list = await base44.entities.StatusList.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    enabled: !sharedStatuses,
   });
 
-  const { data: categories = [] } = useQuery({
+  const { data: fetchedCategories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: async () => {
       const list = await base44.entities.TaskCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    enabled: !sharedCategories,
   });
 
-  const { data: teamMembers = [] } = useQuery({
+  const { data: fetchedTeamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
       const list = await base44.entities.TeamMember.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    enabled: !sharedTeamMembers,
   });
+
+  // Use shared data if available, otherwise use fetched data
+  const tasks = sharedTasks || fetchedTasks;
+  const statuses = sharedStatuses || fetchedStatuses;
+  const categories = sharedCategories || fetchedCategories;
+  const teamMembers = sharedTeamMembers || fetchedTeamMembers;
 
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const parentCategories = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
