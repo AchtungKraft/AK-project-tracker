@@ -232,7 +232,26 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Projects Grid */}
+        {/* View Tabs */}
+        <div className="flex items-center gap-4">
+          <Tabs value={viewMode} onValueChange={setViewMode} className="w-auto">
+            <TabsList className="bg-gray-900/50 border border-gray-700">
+              <TabsTrigger value="cards" className="gap-2 data-[state=active]:bg-red-600">
+                <LayoutGrid className="w-4 h-4" />
+                <span className="hidden sm:inline">Cards</span>
+              </TabsTrigger>
+              <TabsTrigger value="list" className="gap-2 data-[state=active]:bg-red-600">
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">List</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <span className="text-sm text-gray-500">
+            {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Projects Content */}
         {projectsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array(6).fill(0).map((_, i) => (
@@ -244,6 +263,15 @@ export default function Dashboard() {
             <p className="text-gray-500 text-lg">No projects found</p>
             <p className="text-gray-600 mt-2">Create your first project to get started</p>
           </div>
+        ) : viewMode === 'list' ? (
+          <ProjectListView
+            groupedProjects={groupedProjects}
+            statuses={statuses}
+            projectTypes={projectTypes}
+            teamMembers={teamMembers}
+            groupBy={groupBy}
+            onEdit={setEditingProject}
+          />
         ) : (
           <div className="space-y-6">
             {Object.entries(groupedProjects).sort((a, b) => {
@@ -256,7 +284,7 @@ export default function Dashboard() {
                 const statusB = statuses.find(s => s.label === b[0]);
                 return (statusA?.sort_order || 0) - (statusB?.sort_order || 0);
               }
-              return 0;
+              return a[0].localeCompare(b[0]);
             }).map(([groupLabel, groupData]) => {
               const { projects: groupProjects, color: groupColor } = groupData;
               
