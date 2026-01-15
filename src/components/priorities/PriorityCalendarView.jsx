@@ -437,18 +437,18 @@ export default function PriorityCalendarView({
               key={weekIndex} 
               className={`bg-black/40 backdrop-blur-xl border-2 ${isCurrentWeek ? 'border-red-600/50' : 'border-gray-800'}`}
             >
-              <CardHeader className={`p-3 border-b ${isCurrentWeek ? 'border-red-600/30 bg-red-600/10' : 'border-gray-800'}`}>
+              <CardHeader className={`p-3 border-b ${isCurrentWeek ? 'border-red-600/30 bg-red-600' : 'border-gray-800 bg-gray-700'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Calendar className={`w-4 h-4 ${isCurrentWeek ? 'text-red-500' : 'text-gray-400'}`} />
-                    <CardTitle className={`text-base font-bold uppercase ${isCurrentWeek ? 'text-red-400' : 'text-white'}`}>
+                    <Calendar className="w-4 h-4 text-white" />
+                    <CardTitle className="text-base font-bold uppercase text-white">
                       {range.label}
                       {isCurrentWeek && <span className="ml-2 text-xs font-normal">(THIS WEEK)</span>}
                     </CardTitle>
                   </div>
                   <Badge 
                     variant="outline" 
-                    className={isCurrentWeek ? 'border-red-600 text-red-400' : 'border-gray-600 text-gray-400'}
+                    className="border-white/50 text-white bg-white/10"
                   >
                     {weekTasks.length} {weekTasks.length === 1 ? 'task' : 'tasks'}
                   </Badge>
