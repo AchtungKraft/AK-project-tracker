@@ -571,18 +571,22 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   )}
                 </Button>
               </div>
-              <Button
-                type="button"
-                onClick={onClose}
-                variant="outline"
-                className="w-full border-gray-700 min-h-[44px]"
-              >
-                Close
-              </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
+
+      {showCreateModal && (
+        <CreateInlineModal
+          entityType={showCreateModal}
+          onClose={() => setShowCreateModal(null)}
+          onCreate={handleInlineCreate}
+          parentData={{
+            car_make_id: formData.car_make_id,
+            car_model_id: formData.car_model_id
+          }}
+        />
+      )}
     </>
   );
 }
