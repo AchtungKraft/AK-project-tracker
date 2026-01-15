@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore } from "date-fns";
+import { createPageUrl } from "@/utils";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
 
@@ -251,9 +253,20 @@ export default function PriorityCalendarView({
                   <div className="flex items-center gap-2">
                     <PrimaryIcon className="w-4 h-4" style={{ color: primaryGroup.color }} />
                     <div>
-                      <CardTitle className="text-sm" style={{ color: primaryGroup.color }}>
-                        {primaryGroup.label}
-                      </CardTitle>
+                      {calendarPrimaryGroup === 'project' && project ? (
+                        <Link 
+                          to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                          className="hover:opacity-80 transition-opacity"
+                        >
+                          <CardTitle className="text-sm hover:underline" style={{ color: primaryGroup.color }}>
+                            {primaryGroup.label}
+                          </CardTitle>
+                        </Link>
+                      ) : (
+                        <CardTitle className="text-sm" style={{ color: primaryGroup.color }}>
+                          {primaryGroup.label}
+                        </CardTitle>
+                      )}
                       {calendarPrimaryGroup === 'project' && project?.client_name && (
                         <p className="text-xs text-gray-400">{project.client_name}</p>
                       )}
