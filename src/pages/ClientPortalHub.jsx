@@ -149,17 +149,22 @@ export default function ClientPortalHub() {
       
       const state = getRequestState(request, decisions, attachments);
       
+      // Count client comments for this request
+      const clientComments = comments.filter(c => c.request_id === request.id && c.author_type === 'client_contact');
+      const clientCommentCount = clientComments.length;
+      const hasClientComments = clientCommentCount > 0;
+      
       if (state === 'approved') {
         approved.push({ ...request, state });
       } else if (state === 'changes_requested') {
         changesRequested.push({ ...request, state });
       } else if (state === 'awaiting_review') {
-        awaiting.push({ ...request, state });
+        awaiting.push({ ...request, state, hasClientComments, clientCommentCount });
       }
     });
 
     return { awaiting, changesRequested, approved };
-  }, [allRequests, decisions, attachments]);
+  }, [allRequests, decisions, attachments, comments]);
 
   // Group requests by project
   const groupByProject = (requestList) => {
