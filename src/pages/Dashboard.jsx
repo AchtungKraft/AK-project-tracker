@@ -71,7 +71,7 @@ export default function Dashboard() {
                          p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          p.vin?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status_id === statusFilter;
-    const matchesType = typeFilter === 'all' || p.project_type_id === typeFilter;
+    const matchesType = selectedTypes.length === 0 || selectedTypes.includes(p.project_type_id);
     return matchesSearch && matchesStatus && matchesType;
   });
 
