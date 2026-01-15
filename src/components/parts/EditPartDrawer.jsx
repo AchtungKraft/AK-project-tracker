@@ -437,20 +437,18 @@ export default function EditPartDrawer({ partId, onClose }) {
                           <SelectItem value="none">None</SelectItem>
                           {categories.filter(c => c.active && !c.parent_id).map(parent => {
                             const children = categories.filter(c => c.parent_id === parent.id && c.active);
-                            return (
-                              <React.Fragment key={parent.id}>
-                                <SelectItem value={parent.id}>
-                                  <span style={{ color: parent.color }}>{parent.name}</span>
+                            return [
+                              <SelectItem key={parent.id} value={parent.id}>
+                                <span style={{ color: parent.color }}>{parent.name}</span>
+                              </SelectItem>,
+                              ...children.map(child => (
+                                <SelectItem key={child.id} value={child.id}>
+                                  <span className="ml-4" style={{ color: child.color }}>
+                                    → {child.name}
+                                  </span>
                                 </SelectItem>
-                                {children.map(child => (
-                                  <SelectItem key={child.id} value={child.id}>
-                                    <span className="ml-4" style={{ color: child.color }}>
-                                      → {child.name}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </React.Fragment>
-                            );
+                              ))
+                            ];
                           })}
                         </SelectContent>
                       </Select>
@@ -474,20 +472,18 @@ export default function EditPartDrawer({ partId, onClose }) {
                           <SelectItem value="none">None</SelectItem>
                           {vendors.filter(v => v.active && !v.parent_id).map(parent => {
                             const children = vendors.filter(v => v.parent_id === parent.id && v.active);
-                            return (
-                              <React.Fragment key={parent.id}>
-                                <SelectItem value={parent.id}>
-                                  <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                            return [
+                              <SelectItem key={parent.id} value={parent.id}>
+                                <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                              </SelectItem>,
+                              ...children.map(child => (
+                                <SelectItem key={child.id} value={child.id}>
+                                  <span className="ml-4" style={{ color: child.color }}>
+                                    → {child.vendor_name}
+                                  </span>
                                 </SelectItem>
-                                {children.map(child => (
-                                  <SelectItem key={child.id} value={child.id}>
-                                    <span className="ml-4" style={{ color: child.color }}>
-                                      → {child.vendor_name}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </React.Fragment>
-                            );
+                              ))
+                            ];
                           })}
                         </SelectContent>
                       </Select>
@@ -511,20 +507,18 @@ export default function EditPartDrawer({ partId, onClose }) {
                           <SelectItem value="none">None</SelectItem>
                           {locations.filter(l => l.active && !l.parent_id).map(parent => {
                             const children = locations.filter(l => l.parent_id === parent.id && l.active);
-                            return (
-                              <React.Fragment key={parent.id}>
-                                <SelectItem value={parent.id}>
-                                  <span style={{ color: parent.color }}>{parent.location_area}</span>
+                            return [
+                              <SelectItem key={parent.id} value={parent.id}>
+                                <span style={{ color: parent.color }}>{parent.location_area}</span>
+                              </SelectItem>,
+                              ...children.map(child => (
+                                <SelectItem key={child.id} value={child.id}>
+                                  <span className="ml-4" style={{ color: child.color }}>
+                                    → {child.location_area}
+                                  </span>
                                 </SelectItem>
-                                {children.map(child => (
-                                  <SelectItem key={child.id} value={child.id}>
-                                    <span className="ml-4" style={{ color: child.color }}>
-                                      → {child.location_area}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </React.Fragment>
-                            );
+                              ))
+                            ];
                           })}
                         </SelectContent>
                       </Select>
