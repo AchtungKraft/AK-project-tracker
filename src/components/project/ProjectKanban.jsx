@@ -60,6 +60,21 @@ export default function ProjectKanban({ projectId }) {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
+  // Fetch all task comments for the project in one query to avoid rate limiting
+  const { data: allTaskComments = [] } = useQuery({
+    queryKey: ['allTaskComments'],
+    queryFn: () => base44.entities.TaskComment.list(),
+  });
+
+  // Create a map of task_id -> comment count for efficient lookup
+  const commentCountByTaskId = React.useMemo(() => {
+    const map = {};
+    allTaskComments.forEach(comment => {
+      map[comment.task_id] = (map[comment.task_id] || 0) + 1;
+    });
+    return map;
+  }, [allTaskComments]);
+
   // Filter out completed tasks from Kanban view
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const completedStatus = taskStatuses.find(s => {
@@ -445,6 +460,7 @@ export default function ProjectKanban({ projectId }) {
                                             statuses={statuses}
                                             onToggleComplete={handleToggleComplete}
                                             onClick={() => setSelectedTask(task)}
+                                            commentCount={commentCountByTaskId[task.id] || 0}
                                           />
                                         </div>
                                       )}
@@ -547,6 +563,7 @@ export default function ProjectKanban({ projectId }) {
                                                     statuses={statuses}
                                                     onToggleComplete={handleToggleComplete}
                                                     onClick={() => setSelectedTask(task)}
+                                                    commentCount={commentCountByTaskId[task.id] || 0}
                                                   />
                                                 </div>
                                               )}
@@ -609,6 +626,7 @@ export default function ProjectKanban({ projectId }) {
                                         statuses={statuses}
                                         onToggleComplete={handleToggleComplete}
                                         onClick={() => setSelectedTask(task)}
+                                        commentCount={commentCountByTaskId[task.id] || 0}
                                       />
                                     </div>
                                   )}
@@ -690,6 +708,7 @@ export default function ProjectKanban({ projectId }) {
                                                 statuses={statuses}
                                                 onToggleComplete={handleToggleComplete}
                                                 onClick={() => setSelectedTask(task)}
+                                                commentCount={commentCountByTaskId[task.id] || 0}
                                               />
                                             </div>
                                           )}
@@ -720,6 +739,7 @@ export default function ProjectKanban({ projectId }) {
                                       statuses={statuses}
                                       onToggleComplete={handleToggleComplete}
                                       onClick={() => setSelectedTask(task)}
+                                      commentCount={commentCountByTaskId[task.id] || 0}
                                     />
                                   ))}
                                 </div>
