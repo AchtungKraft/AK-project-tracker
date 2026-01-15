@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectPortal } from "@/components/ui/select";
 import { Plus, Loader2 } from "lucide-react";
 
 export default function CreateInlineModal({ entityType, onClose, onCreate, parentData = {} }) {
@@ -124,7 +124,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="None (Top Level)" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 999999 }}>
                   <SelectItem value="none">None (Top Level)</SelectItem>
                   {categories.filter(c => c.active && !c.parent_id).map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
