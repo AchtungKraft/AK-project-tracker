@@ -20,6 +20,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const [formData, setFormData] = useState({
     part_name: "",
     vendor_part_number: "",
+    order_url: "",
     car_make_id: "",
     car_model_id: "",
     car_year_id: "",
