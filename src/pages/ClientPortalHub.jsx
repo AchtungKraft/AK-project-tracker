@@ -549,13 +549,51 @@ export default function ClientPortalHub() {
         </div>
 
         <TabsContent value="awaiting" className="mt-6">
-          {renderRequestList(
-            groupByProject(categorizedRequests.awaiting),
-            "No items awaiting client review",
-            "bg-amber-500/20 text-amber-400 border-amber-500/50",
-            "awaiting",
-            true
-          )}
+          {(() => {
+            const requestsWithComments = categorizedRequests.awaiting.filter(r => r.hasClientComments);
+            const requestsWithoutComments = categorizedRequests.awaiting.filter(r => !r.hasClientComments);
+
+            if (requestsWithComments.length === 0 && requestsWithoutComments.length === 0) {
+              return renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
+            }
+
+            return (
+              <div className="space-y-8">
+                {requestsWithComments.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <MessageSquareText className="w-5 h-5 text-green-400" />
+                      Requests with Client Comments
+                      <Badge className="bg-green-500/20 text-green-400 ml-2">{requestsWithComments.length}</Badge>
+                    </h2>
+                    {renderRequestList(
+                      groupByProject(requestsWithComments),
+                      "No items with client comments",
+                      "bg-amber-500/20 text-amber-400 border-amber-500/50",
+                      "awaiting",
+                      true
+                    )}
+                  </div>
+                )}
+                {requestsWithoutComments.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-amber-400" />
+                      Requests Awaiting Review (No Comments)
+                      <Badge className="bg-amber-500/20 text-amber-400 ml-2">{requestsWithoutComments.length}</Badge>
+                    </h2>
+                    {renderRequestList(
+                      groupByProject(requestsWithoutComments),
+                      "No items awaiting review without comments",
+                      "bg-amber-500/20 text-amber-400 border-amber-500/50",
+                      "awaiting",
+                      true
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="changes" className="mt-6">
