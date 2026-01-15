@@ -29,7 +29,9 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState(tabParam);
 
   const handleBack = () => {
-    if (fromPage === 'hub') {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else if (fromPage === 'hub') {
       navigate(createPageUrl("ClientPortalHub") + (fromTab ? `?tab=${fromTab}` : ''));
     } else {
       navigate(createPageUrl("Dashboard"));
