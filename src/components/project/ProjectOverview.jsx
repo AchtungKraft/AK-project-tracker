@@ -188,8 +188,16 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-gray-400 mb-1">Client</p>
+                      <p className="text-xs text-gray-400 mb-1">Client Name</p>
                       <p className="text-white text-sm">{project?.client_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Client Email</p>
+                      <p className="text-white text-sm">{project?.client_email || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Client Phone</p>
+                      <p className="text-white text-sm">{project?.client_phone || '-'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400 mb-1">VIN / Chassis</p>
@@ -201,10 +209,12 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                     </div>
                     <div>
                       <p className="text-xs text-gray-400 mb-1">Status</p>
-                      {currentStatus && (
+                      {currentStatus ? (
                         <Badge style={{ backgroundColor: currentStatus.color }} className="text-white text-xs">
                           {currentStatus.label}
                         </Badge>
+                      ) : (
+                        <p className="text-white text-sm">-</p>
                       )}
                     </div>
                     <div>
@@ -219,13 +229,32 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                         {project?.target_completion ? format(new Date(project.target_completion), 'MMM d, yyyy') : '-'}
                       </p>
                     </div>
-                    <div className="md:col-span-2">
+                    <div>
                       <p className="text-xs text-gray-400 mb-1">Progress</p>
                       <div className="flex items-center gap-2">
                         <Progress value={project?.progress_percent || 0} className="h-2 flex-1 bg-gray-800" />
                         <span className="text-xs text-gray-400">{project?.progress_percent || 0}%</span>
                       </div>
                     </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Shareable</p>
+                      <p className="text-white text-sm">{project?.is_shareable ? 'Yes' : 'No'}</p>
+                    </div>
+                    {sharedData.teamMembers && project?.assigned_team?.length > 0 && (
+                      <div className="md:col-span-2">
+                        <p className="text-xs text-gray-400 mb-1">Assigned Team</p>
+                        <div className="flex flex-wrap gap-1">
+                          {project.assigned_team.map(memberId => {
+                            const member = sharedData.teamMembers.find(tm => tm.id === memberId);
+                            return member ? (
+                              <Badge key={memberId} className="bg-gray-700 text-gray-200 text-xs">
+                                {member.full_name}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
