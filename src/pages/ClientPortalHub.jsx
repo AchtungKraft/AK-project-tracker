@@ -212,14 +212,25 @@ export default function ClientPortalHub() {
     }
   };
 
+  // Get request type info matching ProjectClientPortal
+  const getRequestTypeInfo = (type) => {
+    switch (type) {
+      case 'question': return { label: 'Question' };
+      case 'feedback_needed': return { label: 'Feedback Needed' };
+      case 'design_review': return { label: 'Design Review' };
+      case 'client_need': return { label: 'Client Need' };
+      default: return { label: 'General' };
+    }
+  };
+
   // Group requests by type within a project
   const groupRequestsByType = (requests) => {
     const grouped = {};
     requests.forEach(request => {
       const type = request.request_type || 'general';
-      const typeLabel = type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const typeInfo = getRequestTypeInfo(type);
       if (!grouped[type]) {
-        grouped[type] = { label: typeLabel, requests: [] };
+        grouped[type] = { label: typeInfo.label, color: getTypeColor(type), requests: [] };
       }
       grouped[type].requests.push(request);
     });
