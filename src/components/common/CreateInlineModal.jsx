@@ -458,6 +458,10 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     <div 
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       style={{ zIndex: 99999 }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-inline-modal-title"
+      aria-describedby={undefined}
       onClick={handleBackdropClick}
       onMouseDown={handleContentClick}
       onPointerDown={handleContentClick}
@@ -471,7 +475,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
         onTouchStart={handleContentClick}
       >
         <div className="flex items-center justify-between p-4 border-b border-red-900/30">
-          <h3 className="text-white font-semibold">{getTitle()}</h3>
+          <h3 id="create-inline-modal-title" className="text-white font-semibold">{getTitle()}</h3>
           <Button 
             variant="ghost" 
             size="sm" 
