@@ -24,31 +24,49 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function CompletedTasksSection({ projectId }) {
+export default function CompletedTasksSection({ projectId, sharedData = {} }) {
   const [groupBy, setGroupBy] = useState('date');
   const [dateFilter, setDateFilter] = useState('all');
   const [selectedTask, setSelectedTask] = useState(null);
 
-  const { data: allTasks = [] } = useQuery({
+  // Use shared data from parent when available to avoid redundant API calls
+  const {
+    statuses: sharedStatuses,
+    categories: sharedCategories,
+    teamMembers: sharedTeamMembers,
+    projectTasks: sharedTasks,
+  } = sharedData;
+
+  // Only fetch if not provided via sharedData
+  const { data: fetchedTasks = [] } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && !sharedTasks,
   });
 
-  const { data: statuses = [] } = useQuery({
+  const { data: fetchedStatuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
+    enabled: !sharedStatuses,
   });
 
-  const { data: categories = [] } = useQuery({
+  const { data: fetchedCategories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
+    enabled: !sharedCategories,
   });
 
-  const { data: teamMembers = [] } = useQuery({
+  const { data: fetchedTeamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    enabled: !sharedTeamMembers,
   });
+
+  // Use shared data if available, otherwise use fetched data
+  const allTasks = sharedTasks || fetchedTasks;
+  const statuses = sharedStatuses || fetchedStatuses;
+  const categories = sharedCategories || fetchedCategories;
+  const teamMembers = sharedTeamMembers || fetchedTeamMembers;
 
   // Filter only completed tasks
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
