@@ -442,16 +442,11 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     }
   };
 
-  // Prevent all event propagation to parent elements
+  // Only close when clicking the backdrop itself
   const handleBackdropClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClose();
-  };
-
-  const handleContentClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
   };
 
   const modalContent = (
@@ -463,30 +458,24 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       aria-labelledby="create-inline-modal-title"
       aria-describedby={undefined}
       onClick={handleBackdropClick}
-      onMouseDown={handleContentClick}
-      onPointerDown={handleContentClick}
-      onTouchStart={handleContentClick}
     >
       <div 
         className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={handleContentClick}
-        onMouseDown={handleContentClick}
-        onPointerDown={handleContentClick}
-        onTouchStart={handleContentClick}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-red-900/30">
           <h3 id="create-inline-modal-title" className="text-white font-semibold">{getTitle()}</h3>
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }} 
+            onClick={onClose} 
             className="text-gray-400 hover:text-white"
           >
             <X className="w-4 h-4" />
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4" onClick={handleContentClick}>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
           {renderForm()}
         </form>
 
@@ -494,7 +483,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
           <Button
             type="button"
             variant="outline"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
+            onClick={onClose}
             className="flex-1 border-gray-700 text-white"
             disabled={creating}
           >
@@ -502,7 +491,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
           </Button>
           <Button
             type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSubmit(e); }}
+            onClick={handleSubmit}
             disabled={!isValid() || creating}
             className="flex-1 bg-red-600 hover:bg-red-700 gap-2"
           >
