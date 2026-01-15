@@ -441,9 +441,23 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     }
   };
 
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+    <div 
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+      onClick={stopPropagation}
+      onMouseDown={stopPropagation}
+      onPointerDown={stopPropagation}
+    >
+      <div 
+        className="bg-gray-900 border border-red-900/30 rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={stopPropagation}
+        onMouseDown={stopPropagation}
+        onPointerDown={stopPropagation}
+      >
         <div className="flex items-center justify-between p-4 border-b border-red-900/30">
           <h3 className="text-white font-semibold">{getTitle()}</h3>
           <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
@@ -451,7 +465,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4" onClick={stopPropagation}>
           {renderForm()}
         </form>
 
