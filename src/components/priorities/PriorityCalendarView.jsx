@@ -441,9 +441,9 @@ export default function PriorityCalendarView({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Calendar className={`w-4 h-4 ${isCurrentWeek ? 'text-red-500' : 'text-gray-400'}`} />
-                    <CardTitle className={`text-sm font-semibold ${isCurrentWeek ? 'text-red-400' : 'text-white'}`}>
+                    <CardTitle className={`text-base font-bold uppercase ${isCurrentWeek ? 'text-red-400' : 'text-white'}`}>
                       {range.label}
-                      {isCurrentWeek && <span className="ml-2 text-xs font-normal">(This Week)</span>}
+                      {isCurrentWeek && <span className="ml-2 text-xs font-normal">(THIS WEEK)</span>}
                     </CardTitle>
                   </div>
                   <Badge 
