@@ -247,7 +247,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="col-span-2 space-y-2">
                 <Label className="text-gray-400">Part Name *</Label>
                 <Input
                   required
@@ -264,6 +264,16 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   onChange={(e) => setFormData({ ...formData, vendor_part_number: e.target.value })}
                   className="bg-gray-800 border-gray-700 text-white"
                   placeholder="e.g., 99610511302"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-400">Order URL</Label>
+                <Input
+                  type="url"
+                  value={formData.order_url}
+                  onChange={(e) => setFormData({ ...formData, order_url: e.target.value })}
+                  className="bg-gray-800 border-gray-700 text-white"
+                  placeholder="https://..."
                 />
               </div>
             </div>
