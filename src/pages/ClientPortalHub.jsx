@@ -392,7 +392,15 @@ export default function ClientPortalHub() {
                               to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
                               className="block p-3 bg-gray-900/50 rounded-lg border border-gray-700 hover:bg-gray-800/80 transition-colors"
                             >
-                              <h4 className="text-white font-medium text-sm truncate">{request.title}</h4>
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-white font-medium text-sm truncate flex-1">{request.title}</h4>
+                                {request.hasClientComments && (
+                                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 ml-2 flex items-center gap-1">
+                                    <MessageSquareText className="w-3 h-3" />
+                                    {request.clientCommentCount}
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="flex items-center justify-between mt-2">
                                 <div className="flex items-center gap-2 text-xs text-gray-400">
                                   {request.due_date && (
