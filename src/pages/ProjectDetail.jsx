@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -49,6 +49,71 @@ export default function ProjectDetail() {
     select: (data) => data[0],
     enabled: !!projectId
   });
+
+  // Centralized data fetching to avoid rate limiting
+  const { data: statuses = [] } = useQuery({
+    queryKey: ['statuses'],
+    queryFn: () => base44.entities.StatusList.list(),
+  });
+
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ['projectTypes'],
+    queryFn: () => base44.entities.ProjectType.list(),
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['taskCategories'],
+    queryFn: () => base44.entities.TaskCategory.list(),
+  });
+
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
+  });
+
+  const { data: projectTasks = [] } = useQuery({
+    queryKey: ['projectTasks', projectId],
+    queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+
+  const { data: projectBuckets = [] } = useQuery({
+    queryKey: ['projectBuckets', projectId],
+    queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+
+  const { data: allTaskComments = [] } = useQuery({
+    queryKey: ['allTaskComments'],
+    queryFn: () => base44.entities.TaskComment.list(),
+  });
+
+  const { data: journalEntries = [] } = useQuery({
+    queryKey: ['journalEntries', projectId],
+    queryFn: () => base44.entities.JournalEntry.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+
+  // Memoized comment count map
+  const commentCountByTaskId = useMemo(() => {
+    const map = {};
+    allTaskComments.forEach(comment => {
+      map[comment.task_id] = (map[comment.task_id] || 0) + 1;
+    });
+    return map;
+  }, [allTaskComments]);
+
+  // Shared data object to pass to child components
+  const sharedData = {
+    statuses,
+    projectTypes,
+    categories,
+    teamMembers,
+    projectTasks,
+    projectBuckets,
+    journalEntries,
+    commentCountByTaskId,
+  };
 
   if (!projectId) {
     return (
@@ -183,11 +248,11 @@ export default function ProjectDetail() {
           </div>
 
           <TabsContent value="overview" className="mt-6">
-            <ProjectOverview project={project} projectId={projectId} />
+            <ProjectOverview project={project} projectId={projectId} sharedData={sharedData} />
           </TabsContent>
 
           <TabsContent value="tasks" className="mt-6">
-            <ProjectTasks projectId={projectId} />
+            <ProjectTasks projectId={projectId} sharedData={sharedData} />
           </TabsContent>
 
           <TabsContent value="parts" className="mt-6">
