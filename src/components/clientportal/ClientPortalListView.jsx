@@ -1,0 +1,129 @@
+import React from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { 
+  ChevronRight, 
+  FolderKanban, 
+  Mail, 
+  MessageSquareText,
+  Send,
+  Loader2,
+  Clock,
+  AlertTriangle,
+  CheckCircle2
+} from "lucide-react";
+import { format } from "date-fns";
+
+const getTypeColor = (type) => {
+  switch (type) {
+    case 'question': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+    case 'feedback_needed': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50';
+    case 'design_review': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
+    case 'client_need': return 'bg-amber-500/20 text-amber-400 border-amber-500/50';
+    case 'todo_list': return 'bg-teal-500/20 text-teal-400 border-teal-500/50';
+    default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
+  }
+};
+
+const getTypeLabel = (type) => {
+  switch (type) {
+    case 'question': return 'Question';
+    case 'feedback_needed': return 'Feedback';
+    case 'design_review': return 'Design';
+    case 'client_need': return 'Client Need';
+    case 'todo_list': return 'To-Do';
+    default: return 'General';
+  }
+};
+
+export default function ClientPortalListView({ 
+  groupedData, 
+  emptyMessage, 
+  tabName, 
+  showEmailButton = false,
+  onSendBulkEmail,
+  sendingEmailForProject
+}) {
+  if (groupedData.length === 0) {
+    return (
+      <div className="bg-black/40 backdrop-blur-xl border border-gray-700 rounded-lg p-8 text-center">
+        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-800 mx-auto mb-3">
+          {tabName === 'awaiting' && <Clock className="w-6 h-6 text-gray-500" />}
+          {tabName === 'changes' && <AlertTriangle className="w-6 h-6 text-gray-500" />}
+          {tabName === 'approved' && <CheckCircle2 className="w-6 h-6 text-gray-500" />}
+        </div>
+        <p className="text-gray-400">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  // Flatten all requests with project info for the list
+  const allRequests = groupedData.flatMap(({ project, requests }) => 
+    requests.map(request => ({ ...request, project }))
+  );
+
+  // Sort by most recent first
+  allRequests.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+
+  return (
+    <div className="bg-black/40 backdrop-blur-xl border border-gray-700 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-800/50 border-b border-gray-700 text-xs font-medium text-gray-400 uppercase tracking-wide">
+        <div className="col-span-4 md:col-span-5">Request</div>
+        <div className="col-span-3 md:col-span-2">Type</div>
+        <div className="col-span-3 md:col-span-3">Project</div>
+        <div className="col-span-2 hidden md:block">Due</div>
+      </div>
+      
+      {/* Rows */}
+      <div className="divide-y divide-gray-800">
+        {allRequests.map(request => (
+          <Link
+            key={request.id}
+            to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
+            className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-gray-800/50 transition-colors items-center group"
+          >
+            {/* Title + Comment indicator */}
+            <div className="col-span-4 md:col-span-5 flex items-center gap-2 min-w-0">
+              <span className="text-white font-medium truncate text-sm">{request.title}</span>
+              {request.hasClientComments && (
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/50 shrink-0 flex items-center gap-1 text-xs px-1.5">
+                  <MessageSquareText className="w-3 h-3" />
+                  {request.clientCommentCount}
+                </Badge>
+              )}
+            </div>
+            
+            {/* Type */}
+            <div className="col-span-3 md:col-span-2">
+              <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
+                {getTypeLabel(request.request_type)}
+              </Badge>
+            </div>
+            
+            {/* Project */}
+            <div className="col-span-3 md:col-span-3 flex items-center gap-1.5 min-w-0">
+              <FolderKanban className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+              <span className="text-gray-300 text-sm truncate">{request.project?.name || 'Unknown'}</span>
+            </div>
+            
+            {/* Due Date */}
+            <div className="col-span-2 hidden md:flex items-center justify-between">
+              <span className="text-gray-400 text-sm">
+                {request.due_date ? format(new Date(request.due_date), 'MMM d') : '—'}
+              </span>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
+            </div>
+          </Link>
+        ))}
+      </div>
+      
+      {/* Footer with count */}
+      <div className="px-4 py-2 bg-gray-800/30 border-t border-gray-700 text-xs text-gray-500">
+        {allRequests.length} {allRequests.length === 1 ? 'request' : 'requests'}
+      </div>
+    </div>
+  );
+}
