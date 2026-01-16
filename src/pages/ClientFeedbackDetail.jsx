@@ -327,12 +327,31 @@ export default function ClientFeedbackDetail() {
 
 
 
-  if (!request || !user || isLoadingDetail) {
+  // Show loading state while user or detail data is being fetched
+  if (isLoadingUser || isLoadingDetail) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
-      </div>);
+      </div>
+    );
+  }
 
+  // Handle missing request or user after loading completes
+  if (!request || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">{!user ? 'Please log in to view this page' : 'Request not found'}</p>
+          <Button 
+            variant="outline" 
+            className="mt-4 border-gray-700 text-white"
+            onClick={() => navigate(createPageUrl("ClientPortalHub"))}
+          >
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
