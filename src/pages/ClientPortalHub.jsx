@@ -441,7 +441,7 @@ export default function ClientPortalHub() {
                                   {request.client_last_viewed_at && (
                                     <span className="flex items-center gap-1 text-cyan-500">
                                       <Eye className="w-3 h-3" />
-                                      {format(new Date(request.client_last_viewed_at), 'MMM d, h:mm a')}
+                                      Viewed: {format(new Date(request.client_last_viewed_at), 'MMM d, h:mm a')}
                                     </span>
                                   )}
                                 </div>
