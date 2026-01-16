@@ -16,7 +16,9 @@ import {
   Mail,
   Send,
   Menu,
-  MessageSquareText
+  MessageSquareText,
+  LayoutGrid,
+  List
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,6 +31,7 @@ import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
+import ClientPortalListView from "@/components/clientportal/ClientPortalListView";
 
 // Helper to determine request state
 const getRequestState = (request, decisions, attachments) => {
