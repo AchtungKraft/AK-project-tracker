@@ -324,9 +324,17 @@ export default function ClientPortalHub() {
                           {project?.name || 'Unknown Project'}
                         </CardTitle>
                       )}
-                      {project?.client_name && (
-                        <p className="text-sm text-gray-400">{project.client_name}</p>
-                      )}
+                      <div className="flex items-center gap-3 text-sm">
+                        {project?.client_name && (
+                          <span className="text-gray-400">{project.client_name}</span>
+                        )}
+                        {project?.client_last_viewed_at && (
+                          <span className="text-gray-500 flex items-center gap-1 text-xs">
+                            <Eye className="w-3 h-3" />
+                            Portal: {format(new Date(project.client_last_viewed_at), 'MMM d, h:mma')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
