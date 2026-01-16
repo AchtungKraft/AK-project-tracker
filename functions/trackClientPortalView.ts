@@ -38,22 +38,29 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
 
     // Update project's client_last_viewed_at
-    await base44.asServiceRole.entities.Project.update(projectId, {
+    console.log('Updating project:', projectId, 'with timestamp:', now);
+    const projectResult = await base44.asServiceRole.entities.Project.update(projectId, {
       client_last_viewed_at: now
     });
+    console.log('Project update result:', JSON.stringify(projectResult));
 
     // If requestId provided, also update the request's client_last_viewed_at
+    let requestResult = null;
     if (requestId) {
-      await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+      console.log('Updating request:', requestId, 'with timestamp:', now);
+      requestResult = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
         client_last_viewed_at: now
       });
+      console.log('Request update result:', JSON.stringify(requestResult));
     }
 
     return Response.json({ 
       success: true, 
       viewed_at: now,
       project_updated: true,
-      request_updated: !!requestId
+      request_updated: !!requestId,
+      projectResult,
+      requestResult
     });
 
   } catch (error) {
