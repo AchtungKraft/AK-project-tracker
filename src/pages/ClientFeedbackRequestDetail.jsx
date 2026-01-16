@@ -58,6 +58,16 @@ export default function ClientFeedbackRequestDetail() {
       .then(response => {
         if (response.data.success) {
           setClientAccess(response.data.access);
+          // Track request view (also updates project view)
+          const projectId = response.data.request?.project_id;
+          if (projectId) {
+            base44.functions.invoke('trackClientPortalView', { 
+              projectId, 
+              requestId, 
+              token, 
+              slug 
+            }).catch(err => console.error('Failed to track view:', err));
+          }
         }
       })
       .catch(error => {
