@@ -82,8 +82,16 @@ export default function ClientPortalHub() {
   const urlParams = new URLSearchParams(window.location.search);
   const initialTab = urlParams.get('tab') || 'awaiting';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('clientPortalHub_viewMode') || 'cards';
+  });
 
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('clientPortalHub_viewMode', mode);
+  };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
