@@ -38,6 +38,20 @@ const getTypeLabel = (type) => {
   }
 };
 
+// Get last activity date for a request (latest comment or decision)
+const getLastActivityDate = (requestId, comments, decisions) => {
+  const requestComments = comments.filter(c => c.request_id === requestId);
+  const requestDecisions = decisions.filter(d => d.request_id === requestId);
+  
+  const dates = [
+    ...requestComments.map(c => new Date(c.posted_at || c.created_date)),
+    ...requestDecisions.map(d => new Date(d.decided_at || d.created_date))
+  ].filter(d => !isNaN(d.getTime()));
+  
+  if (dates.length === 0) return null;
+  return new Date(Math.max(...dates));
+};
+
 export default function ClientPortalListView({ 
   groupedData, 
   emptyMessage, 
