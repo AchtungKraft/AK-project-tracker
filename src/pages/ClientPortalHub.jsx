@@ -634,6 +634,8 @@ export default function ClientPortalHub() {
                         showEmailButton={true}
                         onSendBulkEmail={handleSendBulkEmail}
                         sendingEmailForProject={sendingEmailForProject}
+                        comments={comments}
+                        decisions={decisions}
                       />
                     </div>
                   )}
