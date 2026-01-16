@@ -494,28 +494,40 @@ export default function ClientFeedbackDetail() {
                 </div>
               }
 
-              {linkedTaskDetails.length > 0 &&
               <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Linked Tasks</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-400">Linked Tasks</h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowCreateLinkedTaskModal(true)}
+                    className="border-gray-600 text-gray-200 hover:bg-gray-700 h-7 text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Task
+                  </Button>
+                </div>
+                {linkedTaskDetails.length > 0 ? (
                   <div className="space-y-2">
                     {linkedTaskDetails.map(({ task }) =>
-                  <div key={task.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
+                      <div key={task.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
                         <span className="text-white text-sm">{task.name}</span>
                         <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks");
-                      }}
-                      className="text-blue-400 hover:text-blue-300">
-
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks");
+                          }}
+                          className="text-blue-400 hover:text-blue-300">
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </div>
-                  )}
+                    )}
                   </div>
-                </div>
-              }
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No linked tasks yet</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
