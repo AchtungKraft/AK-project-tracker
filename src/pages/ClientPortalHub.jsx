@@ -18,7 +18,8 @@ import {
   Menu,
   MessageSquareText,
   LayoutGrid,
-  List
+  List,
+  Eye
 } from "lucide-react";
 import {
   DropdownMenu,
