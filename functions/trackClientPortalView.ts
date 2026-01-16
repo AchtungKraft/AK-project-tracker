@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
         access = sessions[0];
       }
     } else if (slug) {
-      const contacts = await base44.asServiceRole.entities.ClientContact.filter({ slug });
+      const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug });
       console.log('Contacts found for slug:', contacts.length);
       if (contacts.length > 0) {
         access = { client_contact_id: contacts[0].id };
