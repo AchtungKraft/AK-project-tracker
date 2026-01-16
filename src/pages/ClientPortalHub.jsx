@@ -707,6 +707,8 @@ export default function ClientPortalHub() {
               groupedData={groupByProject(categorizedRequests.approved)} 
               emptyMessage="No approved items yet" 
               tabName="approved"
+              comments={comments}
+              decisions={decisions}
             />
           ) : (
             renderRequestList(
