@@ -153,10 +153,18 @@ export default function ClientPortalListView({
                   </div>
                   
                   {/* Last Activity */}
-                  <div className="col-span-3 hidden md:flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">
-                      {lastActivity ? format(lastActivity, 'MMM d, h:mma').toLowerCase() : '—'}
-                    </span>
+                  <div className="col-span-3 hidden md:flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-400 text-sm">
+                        {lastActivity ? format(lastActivity, 'MMM d, h:mma').toLowerCase() : '—'}
+                      </span>
+                      {request.client_last_viewed_at && (
+                        <span className="text-cyan-500 text-xs flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          {format(new Date(request.client_last_viewed_at), 'MMM d')}
+                        </span>
+                      )}
+                    </div>
                     <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
                   </div>
                 </Link>
