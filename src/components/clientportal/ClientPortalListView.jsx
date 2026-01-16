@@ -161,7 +161,7 @@ export default function ClientPortalListView({
                       {request.client_last_viewed_at && (
                         <span className="text-cyan-500 text-xs flex items-center gap-1">
                           <Eye className="w-3 h-3" />
-                          {format(new Date(request.client_last_viewed_at), 'MMM d')}
+                          {format(new Date(request.client_last_viewed_at), 'MMM d, h:mma')}
                         </span>
                       )}
                     </div>
