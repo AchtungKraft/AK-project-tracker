@@ -58,6 +58,12 @@ export default function ClientProjectPortal() {
       .then(response => {
         if (response.data.success) {
           setClientAccess(response.data.access);
+          // Track project view
+          base44.functions.invoke('trackClientPortalView', { 
+            projectId, 
+            token, 
+            slug 
+          }).catch(err => console.error('Failed to track view:', err));
         }
       })
       .catch(error => {
