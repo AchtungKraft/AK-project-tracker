@@ -3,16 +3,25 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { projectId, requestId, token, slug } = await req.json();
+    let { projectId, requestId, token, slug } = await req.json();
 
-    if (!projectId) {
-      return Response.json({ success: false, error: 'projectId is required' }, { status: 400 });
+    console.log('Tracking view - projectId:', projectId, 'requestId:', requestId, 'token:', !!token, 'slug:', slug);
+
+    // If we have requestId but no projectId, get projectId from the request
+    if (requestId && !projectId) {
+      const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
+      if (requests.length > 0) {
+        projectId = requests[0].project_id;
+        console.log('Got projectId from request:', projectId);
+      }
+    }
+
+    if (!projectId && !requestId) {
+      return Response.json({ success: false, error: 'projectId or requestId is required' }, { status: 400 });
     }
 
     // Validate access via token or slug
     let access = null;
-    
-    console.log('Tracking view - projectId:', projectId, 'requestId:', requestId, 'token:', !!token, 'slug:', slug);
     
     if (token) {
       const sessions = await base44.asServiceRole.entities.ClientPortalSession.filter({ session_token: token });
@@ -40,15 +49,17 @@ Deno.serve(async (req) => {
     let requestUpdated = false;
 
     // Update project's client_last_viewed_at
-    try {
-      console.log('Updating project:', projectId, 'with timestamp:', now);
-      await base44.asServiceRole.entities.Project.update(projectId, {
-        client_last_viewed_at: now
-      });
-      console.log('Project updated successfully');
-      projectUpdated = true;
-    } catch (projectError) {
-      console.error('Failed to update project:', projectError.message);
+    if (projectId) {
+      try {
+        console.log('Updating project:', projectId, 'with timestamp:', now);
+        await base44.asServiceRole.entities.Project.update(projectId, {
+          client_last_viewed_at: now
+        });
+        console.log('Project updated successfully');
+        projectUpdated = true;
+      } catch (projectError) {
+        console.error('Failed to update project:', projectError.message);
+      }
     }
 
     // If requestId provided, also update the request's client_last_viewed_at
