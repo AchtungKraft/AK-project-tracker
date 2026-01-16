@@ -593,7 +593,50 @@ export default function ClientPortalHub() {
             const requestsWithoutComments = categorizedRequests.awaiting.filter(r => !r.hasClientComments);
 
             if (requestsWithComments.length === 0 && requestsWithoutComments.length === 0) {
-              return renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
+              return viewMode === 'list' 
+                ? <ClientPortalListView groupedData={[]} emptyMessage="No items awaiting client review" tabName="awaiting" />
+                : renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
+            }
+
+            if (viewMode === 'list') {
+              return (
+                <div className="space-y-6">
+                  {requestsWithComments.length > 0 && (
+                    <div className="space-y-3">
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <MessageSquareText className="w-5 h-5 text-green-400" />
+                        With Client Comments
+                        <Badge className="bg-green-500/20 text-green-400 ml-2">{requestsWithComments.length}</Badge>
+                      </h2>
+                      <ClientPortalListView 
+                        groupedData={groupByProject(requestsWithComments)} 
+                        emptyMessage="No items with client comments" 
+                        tabName="awaiting"
+                        showEmailButton={true}
+                        onSendBulkEmail={handleSendBulkEmail}
+                        sendingEmailForProject={sendingEmailForProject}
+                      />
+                    </div>
+                  )}
+                  {requestsWithoutComments.length > 0 && (
+                    <div className="space-y-3">
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-amber-400" />
+                        Awaiting Review
+                        <Badge className="bg-amber-500/20 text-amber-400 ml-2">{requestsWithoutComments.length}</Badge>
+                      </h2>
+                      <ClientPortalListView 
+                        groupedData={groupByProject(requestsWithoutComments)} 
+                        emptyMessage="No items awaiting review" 
+                        tabName="awaiting"
+                        showEmailButton={true}
+                        onSendBulkEmail={handleSendBulkEmail}
+                        sendingEmailForProject={sendingEmailForProject}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
             }
 
             return (
@@ -636,20 +679,36 @@ export default function ClientPortalHub() {
         </TabsContent>
 
         <TabsContent value="changes" className="mt-6">
-          {renderRequestList(
-            groupByProject(categorizedRequests.changesRequested),
-            "No items with change requests",
-            "bg-orange-500/20 text-orange-400 border-orange-500/50",
-            "changes"
+          {viewMode === 'list' ? (
+            <ClientPortalListView 
+              groupedData={groupByProject(categorizedRequests.changesRequested)} 
+              emptyMessage="No items with change requests" 
+              tabName="changes"
+            />
+          ) : (
+            renderRequestList(
+              groupByProject(categorizedRequests.changesRequested),
+              "No items with change requests",
+              "bg-orange-500/20 text-orange-400 border-orange-500/50",
+              "changes"
+            )
           )}
         </TabsContent>
 
         <TabsContent value="approved" className="mt-6">
-          {renderRequestList(
-            groupByProject(categorizedRequests.approved),
-            "No approved items yet",
-            "bg-green-500/20 text-green-400 border-green-500/50",
-            "approved"
+          {viewMode === 'list' ? (
+            <ClientPortalListView 
+              groupedData={groupByProject(categorizedRequests.approved)} 
+              emptyMessage="No approved items yet" 
+              tabName="approved"
+            />
+          ) : (
+            renderRequestList(
+              groupByProject(categorizedRequests.approved),
+              "No approved items yet",
+              "bg-green-500/20 text-green-400 border-green-500/50",
+              "approved"
+            )
           )}
         </TabsContent>
 
