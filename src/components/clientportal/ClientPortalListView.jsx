@@ -113,44 +113,47 @@ export default function ClientPortalListView({
           <div className="grid grid-cols-12 gap-2 px-4 py-1.5 bg-gray-800/30 border-b border-gray-800 text-xs font-medium text-gray-500 uppercase tracking-wide">
             <div className="col-span-6 md:col-span-7">Request</div>
             <div className="col-span-3 md:col-span-2">Type</div>
-            <div className="col-span-3 hidden md:block">Due</div>
+            <div className="col-span-3 hidden md:block">Last Activity</div>
           </div>
           
           {/* Rows */}
           <div className="divide-y divide-gray-800/50">
-            {requests.map(request => (
-              <Link
-                key={request.id}
-                to={createPageUrl("ClientFeedbackDetail") + `?id=${request.project_id}&projectId=${request.project_id}&from=hub&tab=${tabName}`.replace(`id=${request.project_id}`, `id=${request.id}`)}
-                className="grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-gray-800/50 transition-colors items-center group"
-              >
-                {/* Title + Comment indicator */}
-                <div className="col-span-6 md:col-span-7 flex items-center gap-2 min-w-0">
-                  <span className="text-white font-medium truncate text-sm">{request.title}</span>
-                  {request.hasClientComments && (
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/50 shrink-0 flex items-center gap-1 text-xs px-1.5">
-                      <MessageSquareText className="w-3 h-3" />
-                      {request.clientCommentCount}
+            {requests.map(request => {
+              const lastActivity = getLastActivityDate(request.id, comments, decisions);
+              return (
+                <Link
+                  key={request.id}
+                  to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
+                  className="grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-gray-800/50 transition-colors items-center group"
+                >
+                  {/* Title + Comment indicator */}
+                  <div className="col-span-6 md:col-span-7 flex items-center gap-2 min-w-0">
+                    <span className="text-white font-medium truncate text-sm">{request.title}</span>
+                    {request.hasClientComments && (
+                      <Badge className="bg-green-500/20 text-green-400 border-green-500/50 shrink-0 flex items-center gap-1 text-xs px-1.5">
+                        <MessageSquareText className="w-3 h-3" />
+                        {request.clientCommentCount}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* Type */}
+                  <div className="col-span-3 md:col-span-2">
+                    <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
+                      {getTypeLabel(request.request_type)}
                     </Badge>
-                  )}
-                </div>
-                
-                {/* Type */}
-                <div className="col-span-3 md:col-span-2">
-                  <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
-                    {getTypeLabel(request.request_type)}
-                  </Badge>
-                </div>
-                
-                {/* Due Date */}
-                <div className="col-span-3 hidden md:flex items-center justify-between">
-                  <span className="text-gray-400 text-sm">
-                    {request.due_date ? format(new Date(request.due_date), 'MMM d') : '—'}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
-                </div>
-              </Link>
-            ))}
+                  </div>
+                  
+                  {/* Last Activity */}
+                  <div className="col-span-3 hidden md:flex items-center justify-between">
+                    <span className="text-gray-400 text-sm">
+                      {lastActivity ? format(lastActivity, 'MMM d, h:mma').toLowerCase() : '—'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
       ))}
