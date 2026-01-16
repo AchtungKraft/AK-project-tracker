@@ -36,31 +36,40 @@ Deno.serve(async (req) => {
     console.log('Access validated, updating timestamps...');
 
     const now = new Date().toISOString();
+    let projectUpdated = false;
+    let requestUpdated = false;
 
     // Update project's client_last_viewed_at
-    console.log('Updating project:', projectId, 'with timestamp:', now);
-    const projectResult = await base44.asServiceRole.entities.Project.update(projectId, {
-      client_last_viewed_at: now
-    });
-    console.log('Project update result:', JSON.stringify(projectResult));
-
-    // If requestId provided, also update the request's client_last_viewed_at
-    let requestResult = null;
-    if (requestId) {
-      console.log('Updating request:', requestId, 'with timestamp:', now);
-      requestResult = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+    try {
+      console.log('Updating project:', projectId, 'with timestamp:', now);
+      await base44.asServiceRole.entities.Project.update(projectId, {
         client_last_viewed_at: now
       });
-      console.log('Request update result:', JSON.stringify(requestResult));
+      console.log('Project updated successfully');
+      projectUpdated = true;
+    } catch (projectError) {
+      console.error('Failed to update project:', projectError.message);
+    }
+
+    // If requestId provided, also update the request's client_last_viewed_at
+    if (requestId) {
+      try {
+        console.log('Updating request:', requestId, 'with timestamp:', now);
+        await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+          client_last_viewed_at: now
+        });
+        console.log('Request updated successfully');
+        requestUpdated = true;
+      } catch (requestError) {
+        console.error('Failed to update request:', requestError.message);
+      }
     }
 
     return Response.json({ 
       success: true, 
       viewed_at: now,
-      project_updated: true,
-      request_updated: !!requestId,
-      projectResult,
-      requestResult
+      project_updated: projectUpdated,
+      request_updated: requestUpdated
     });
 
   } catch (error) {
