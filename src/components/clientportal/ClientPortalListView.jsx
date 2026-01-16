@@ -44,7 +44,9 @@ export default function ClientPortalListView({
   tabName, 
   showEmailButton = false,
   onSendBulkEmail,
-  sendingEmailForProject
+  sendingEmailForProject,
+  comments = [],
+  decisions = []
 }) {
   if (groupedData.length === 0) {
     return (
