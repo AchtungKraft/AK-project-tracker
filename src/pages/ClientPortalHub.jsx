@@ -449,14 +449,36 @@ export default function ClientPortalHub() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
-          <Users className="w-8 h-8 text-red-500" />
-          Client Portal
-        </h1>
-        <p className="text-gray-400 mt-1">
-          Manage client feedback requests and access
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+            <Users className="w-8 h-8 text-red-500" />
+            Client Portal
+          </h1>
+          <p className="text-gray-400 mt-1">
+            Manage client feedback requests and access
+          </p>
+        </div>
+        
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
+          <Button
+            size="sm"
+            variant={viewMode === 'cards' ? 'default' : 'ghost'}
+            onClick={() => handleViewModeChange('cards')}
+            className={viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === 'list' ? 'default' : 'ghost'}
+            onClick={() => handleViewModeChange('list')}
+            className={viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+          >
+            <List className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
