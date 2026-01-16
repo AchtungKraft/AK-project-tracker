@@ -428,7 +428,7 @@ export default function ClientPortalHub() {
                                 )}
                               </div>
                               <div className="flex items-center justify-between mt-2">
-                                <div className="flex items-center gap-2 text-xs text-gray-400">
+                                <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
                                   {request.due_date && (
                                     <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
                                   )}
@@ -436,6 +436,12 @@ export default function ClientPortalHub() {
                                     <span className="flex items-center gap-1 text-gray-500">
                                       <Mail className="w-3 h-3" />
                                       {format(new Date(request.last_email_sent_at), 'MMM d')}
+                                    </span>
+                                  )}
+                                  {request.client_last_viewed_at && (
+                                    <span className="flex items-center gap-1 text-cyan-500">
+                                      <Eye className="w-3 h-3" />
+                                      {format(new Date(request.client_last_viewed_at), 'MMM d')}
                                     </span>
                                   )}
                                 </div>
