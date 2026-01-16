@@ -99,11 +99,17 @@ export default function ClientPortalListView({
         <div key={project?.id || 'unknown'} className="bg-black/40 backdrop-blur-xl border border-gray-700 rounded-lg overflow-hidden">
           {/* Project Header */}
           <div className="flex items-center justify-between px-4 py-2 bg-gray-800/70 border-b border-gray-700">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <FolderKanban className="w-4 h-4 text-red-500" />
               <span className="text-white font-semibold text-sm">{project?.name || 'Unknown Project'}</span>
               {project?.client_name && (
                 <span className="text-gray-500 text-xs">• {project.client_name}</span>
+              )}
+              {project?.client_last_viewed_at && (
+                <span className="text-cyan-500 text-xs flex items-center gap-1">
+                  <Eye className="w-3 h-3" />
+                  Portal: {format(new Date(project.client_last_viewed_at), 'MMM d, h:mma')}
+                </span>
               )}
             </div>
             <Badge variant="outline" className="border-gray-600 text-gray-400 text-xs">
