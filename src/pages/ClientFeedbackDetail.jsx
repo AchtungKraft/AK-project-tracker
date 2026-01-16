@@ -18,6 +18,7 @@ import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/u
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
+import CreateLinkedTaskModal from "../components/clientportal/CreateLinkedTaskModal.jsx";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 
