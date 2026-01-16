@@ -915,6 +915,15 @@ export default function ClientFeedbackDetail() {
 
       }
 
+      <CreateLinkedTaskModal
+        open={showCreateLinkedTaskModal}
+        onClose={() => setShowCreateLinkedTaskModal(false)}
+        projectId={projectId}
+        feedbackRequestId={requestId}
+        feedbackRequestTitle={request?.title}
+        userId={user?.id}
+      />
+
       <ImageModal
         isOpen={!!selectedImage}
         onClose={() => setSelectedImage(null)}
