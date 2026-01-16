@@ -331,7 +331,7 @@ export default function ClientPortalHub() {
                         {project?.client_last_viewed_at && (
                           <span className="text-gray-500 flex items-center gap-1 text-xs">
                             <Eye className="w-3 h-3" />
-                            Portal: {format(new Date(project.client_last_viewed_at), 'MMM d, h:mma')}
+                            Viewed: {format(new Date(project.client_last_viewed_at), 'MMM d, h:mm a')}
                           </span>
                         )}
                       </div>
@@ -441,7 +441,7 @@ export default function ClientPortalHub() {
                                   {request.client_last_viewed_at && (
                                     <span className="flex items-center gap-1 text-cyan-500">
                                       <Eye className="w-3 h-3" />
-                                      {format(new Date(request.client_last_viewed_at), 'MMM d')}
+                                      {format(new Date(request.client_last_viewed_at), 'MMM d, h:mm a')}
                                     </span>
                                   )}
                                 </div>
