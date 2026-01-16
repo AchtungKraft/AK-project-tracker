@@ -688,6 +688,8 @@ export default function ClientPortalHub() {
               groupedData={groupByProject(categorizedRequests.changesRequested)} 
               emptyMessage="No items with change requests" 
               tabName="changes"
+              comments={comments}
+              decisions={decisions}
             />
           ) : (
             renderRequestList(
