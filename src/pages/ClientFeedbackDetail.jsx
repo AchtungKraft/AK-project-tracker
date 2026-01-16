@@ -30,7 +30,6 @@ export default function ClientFeedbackDetail() {
   const fromHub = urlParams.get('from') === 'hub';
   const hubTab = urlParams.get('tab') || 'awaiting';
 
-  const [user, setUser] = useState(null);
   const [newComment, setNewComment] = useState('');
   const [visibility, setVisibility] = useState('client_visible');
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
@@ -47,9 +46,12 @@ export default function ClientFeedbackDetail() {
   const [isUploadingReviewImages, setIsUploadingReviewImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
+  // Fetch user with React Query for consistent loading state
+  const { data: user, isLoading: isLoadingUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
   // Single consolidated API call for all feedback detail data
   const { data: feedbackDetail, isLoading: isLoadingDetail } = useQuery({
