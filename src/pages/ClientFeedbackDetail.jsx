@@ -40,6 +40,7 @@ export default function ClientFeedbackDetail() {
   const [newLinks, setNewLinks] = useState(['']);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState(null);
+  const [showCreateLinkedTaskModal, setShowCreateLinkedTaskModal] = useState(false);
   const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
   const [requestDecisionType, setRequestDecisionType] = useState('');
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
