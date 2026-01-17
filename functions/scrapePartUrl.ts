@@ -128,12 +128,18 @@ Deno.serve(async (req) => {
 
 Please extract the following information if available:
 - Product name/title
-- Part number or SKU
+- Part number or SKU  
 - Product description or notes
 - Price (if shown)
-- Image URLs (find the main product images, not icons or logos)
-
-Be thorough in finding image URLs - look for product gallery images, main product images, etc.`,
+- Image URLs - THIS IS CRITICAL: Find ALL product image URLs on the page. Look for:
+  - Main product images
+  - Product gallery images
+  - Thumbnail images that link to larger versions
+  - Images in srcset attributes
+  - CDN URLs (often contain "cdn" or "shopify" in the URL)
+  - URLs ending in .jpg, .jpeg, .png, .webp
+  
+Return the FULL URLs for images, not partial paths.`,
             add_context_from_internet: true,
             response_json_schema: {
                 type: "object",
@@ -157,11 +163,13 @@ Be thorough in finding image URLs - look for product gallery images, main produc
                     image_urls: {
                         type: "array",
                         items: { type: "string" },
-                        description: "Array of product image URLs"
+                        description: "Array of FULL product image URLs (must start with http)"
                     }
                 }
             }
         });
+        
+        console.log('LLM result image_urls:', result.image_urls);
 
         // Combine LLM images with extracted images, preferring extracted ones
         const allImageUrls = [...extractedImageUrls, ...(result.image_urls || [])];
