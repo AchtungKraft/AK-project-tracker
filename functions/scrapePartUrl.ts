@@ -66,9 +66,54 @@ Be thorough in finding image URLs - look for product gallery images, main produc
             }
         });
 
+        // Download and re-upload the first 2 images
+        const uploadedImageUrls = [];
+        const imageUrls = result.image_urls || [];
+        const imagesToProcess = imageUrls.slice(0, 2);
+
+        for (const imageUrl of imagesToProcess) {
+            try {
+                if (!imageUrl || !imageUrl.startsWith('http')) continue;
+                
+                // Fetch the image
+                const imageResponse = await fetch(imageUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                if (!imageResponse.ok) continue;
+                
+                const imageBlob = await imageResponse.blob();
+                
+                // Determine file extension from content type or URL
+                const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+                let ext = 'jpg';
+                if (contentType.includes('png')) ext = 'png';
+                else if (contentType.includes('webp')) ext = 'webp';
+                else if (contentType.includes('gif')) ext = 'gif';
+                
+                // Create a File object
+                const fileName = `part_image_${Date.now()}_${uploadedImageUrls.length}.${ext}`;
+                const file = new File([imageBlob], fileName, { type: contentType });
+                
+                // Upload to Base44
+                const uploadResult = await base44.integrations.Core.UploadFile({ file });
+                
+                if (uploadResult.file_url) {
+                    uploadedImageUrls.push(uploadResult.file_url);
+                }
+            } catch (imgError) {
+                console.error('Error processing image:', imageUrl, imgError);
+            }
+        }
+
         return Response.json({
             success: true,
-            data: result
+            data: {
+                ...result,
+                image_urls: uploadedImageUrls
+            }
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
