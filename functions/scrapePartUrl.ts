@@ -150,6 +150,8 @@ Be thorough in finding image URLs - look for product gallery images, main produc
         // Remove duplicates
         const uniqueImageUrls = [...new Set(allImageUrls)];
 
+        console.log('Total unique images found:', uniqueImageUrls.length, uniqueImageUrls.slice(0, 3));
+        
         // Download and re-upload the first 2 images
         const uploadedImageUrls = [];
         const imagesToProcess = uniqueImageUrls.slice(0, 2);
@@ -158,16 +160,26 @@ Be thorough in finding image URLs - look for product gallery images, main produc
             try {
                 if (!imageUrl || !imageUrl.startsWith('http')) continue;
                 
+                console.log('Attempting to download image:', imageUrl);
+                
                 // Fetch the image
                 const imageResponse = await fetch(imageUrl, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'image/*,*/*',
+                        'Referer': url
                     }
                 });
+                
+                console.log('Image response status:', imageResponse.status);
                 
                 if (!imageResponse.ok) continue;
                 
                 const imageBlob = await imageResponse.blob();
+                console.log('Image blob size:', imageBlob.size);
+                
+                // Skip tiny images (likely tracking pixels)
+                if (imageBlob.size < 1000) continue;
                 
                 // Determine file extension from content type or URL
                 const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
@@ -182,12 +194,13 @@ Be thorough in finding image URLs - look for product gallery images, main produc
                 
                 // Upload to Base44
                 const uploadResult = await base44.integrations.Core.UploadFile({ file });
+                console.log('Upload result:', uploadResult);
                 
                 if (uploadResult.file_url) {
                     uploadedImageUrls.push(uploadResult.file_url);
                 }
             } catch (imgError) {
-                console.error('Error processing image:', imageUrl, imgError);
+                console.error('Error processing image:', imageUrl, imgError.message);
             }
         }
 
