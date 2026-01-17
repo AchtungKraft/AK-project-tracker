@@ -143,8 +143,7 @@ Be thorough in finding image URLs - look for product gallery images, main produc
 
         // Download and re-upload the first 2 images
         const uploadedImageUrls = [];
-        const imageUrls = result.image_urls || [];
-        const imagesToProcess = imageUrls.slice(0, 2);
+        const imagesToProcess = uniqueImageUrls.slice(0, 2);
 
         for (const imageUrl of imagesToProcess) {
             try {
