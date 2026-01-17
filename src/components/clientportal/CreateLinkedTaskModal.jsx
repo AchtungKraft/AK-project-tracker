@@ -105,7 +105,19 @@ export default function CreateLinkedTaskModal({
       is_priority: false,
       due_date: ""
     });
+    setSelectedImageUrls([]);
     onClose();
+  };
+
+  // Get all image attachments from the feedback request
+  const imageAttachments = feedbackAttachments.filter(a => a.attachment_type === 'image' && a.url);
+
+  const toggleImageSelection = (url) => {
+    setSelectedImageUrls(prev => 
+      prev.includes(url) 
+        ? prev.filter(u => u !== url)
+        : [...prev, url]
+    );
   };
 
   const handleSubmit = (e) => {
