@@ -18,6 +18,7 @@ export default function CreateLinkedTaskModal({
   projectId, 
   feedbackRequestId,
   feedbackRequestTitle,
+  feedbackAttachments = [],
   userId 
 }) {
   const queryClient = useQueryClient();
@@ -31,6 +32,7 @@ export default function CreateLinkedTaskModal({
     is_priority: false,
     due_date: ""
   });
+  const [selectedImageUrls, setSelectedImageUrls] = useState([]);
 
   // Fetch categories, team members, and statuses
   const { data: categories = [] } = useQuery({
