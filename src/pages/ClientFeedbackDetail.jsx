@@ -921,6 +921,7 @@ export default function ClientFeedbackDetail() {
         projectId={projectId}
         feedbackRequestId={requestId}
         feedbackRequestTitle={request?.title}
+        feedbackAttachments={attachments}
         userId={user?.id}
       />
 
