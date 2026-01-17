@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Upload, Camera, Trash2, Star } from "lucide-react";
+import { Loader2, Upload, Camera, Trash2, Star, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
