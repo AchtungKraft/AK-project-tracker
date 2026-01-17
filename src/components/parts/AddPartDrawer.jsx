@@ -260,13 +260,29 @@ export default function AddPartDrawer({ onClose }) {
                 </div>
                 <div>
                   <Label className="text-gray-400">Order URL</Label>
-                  <Input
-                    type="url"
-                    value={formData.order_url}
-                    onChange={(e) => setFormData({ ...formData, order_url: e.target.value })}
-                    placeholder="https://..."
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={formData.order_url}
+                      onChange={(e) => setFormData({ ...formData, order_url: e.target.value })}
+                      placeholder="https://..."
+                      className="bg-gray-800 border-gray-700 text-white flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleScrapeUrl}
+                      disabled={scraping || !formData.order_url}
+                      className="border-gray-700 hover:bg-purple-600 hover:border-purple-600"
+                      title="Auto-populate from URL"
+                    >
+                      {scraping ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
