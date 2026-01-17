@@ -16,6 +16,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 export default function AddPartDrawer({ onClose }) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const [scraping, setScraping] = useState(false);
   const [formData, setFormData] = useState({
     part_name: "",
     vendor_part_number: "",
