@@ -248,20 +248,20 @@ export default function CreateLinkedTaskModal({
                   <button
                     key={attachment.id}
                     type="button"
-                    onClick={() => toggleImageSelection(attachment.url)}
+                    onClick={() => toggleImageSelection(attachment.file_url)}
                     className={cn(
                       "relative aspect-square rounded-lg overflow-hidden border-2 transition-all",
-                      selectedImageUrls.includes(attachment.url)
+                      selectedImageUrls.includes(attachment.file_url)
                         ? "border-blue-500 ring-2 ring-blue-500/50"
                         : "border-gray-700 hover:border-gray-500"
                     )}
                   >
                     <img 
-                      src={attachment.url} 
+                      src={attachment.file_url} 
                       alt="" 
                       className="w-full h-full object-cover"
                     />
-                    {selectedImageUrls.includes(attachment.url) && (
+                    {selectedImageUrls.includes(attachment.file_url) && (
                       <div className="absolute inset-0 bg-blue-500/30 flex items-center justify-center">
                         <div className="bg-blue-500 rounded-full p-1">
                           <Check className="w-4 h-4 text-white" />
