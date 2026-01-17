@@ -109,8 +109,8 @@ export default function CreateLinkedTaskModal({
     onClose();
   };
 
-  // Get all image attachments from the feedback request
-  const imageAttachments = feedbackAttachments.filter(a => a.attachment_type === 'image' && a.url);
+  // Get all image attachments from the feedback request (use file_url field)
+  const imageAttachments = feedbackAttachments.filter(a => a.attachment_type === 'image' && a.file_url);
 
   const toggleImageSelection = (url) => {
     setSelectedImageUrls(prev => 
