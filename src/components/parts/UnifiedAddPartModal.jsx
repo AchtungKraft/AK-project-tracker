@@ -15,6 +15,7 @@ import CreateInlineModal from "../common/CreateInlineModal";
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const [scraping, setScraping] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(null);
   
   const [formData, setFormData] = useState({
