@@ -38,58 +38,67 @@ Deno.serve(async (req) => {
             if (pageResponse.ok) {
                 const html = await pageResponse.text();
                 
-                // Extract og:image meta tag
-                const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
+                // Extract og:image meta tag (try both patterns)
+                const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                                     html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
                 if (ogImageMatch && ogImageMatch[1]) {
                     extractedImageUrls.push(ogImageMatch[1]);
                 }
                 
-                // Extract product images from common patterns
-                const imgPatterns = [
-                    /["']([^"']*(?:product|item|gallery|main)[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-                    /<img[^>]*src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["'][^>]*class=["'][^"']*(?:product|main|gallery|featured)[^"']*["']/gi,
-                    /<img[^>]*class=["'][^"']*(?:product|main|gallery|featured)[^"']*["'][^>]*src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-                    /data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-                    /data-zoom-image=["']([^"']+)["']/gi,
-                    /data-large=["']([^"']+)["']/gi,
-                ];
+                // Look for srcset patterns (common in modern sites)
+                const srcsetMatches = html.matchAll(/srcset=["']([^"']+)["']/gi);
+                for (const match of srcsetMatches) {
+                    const srcset = match[1];
+                    const firstUrl = srcset.split(',')[0].trim().split(' ')[0];
+                    if (firstUrl && firstUrl.includes('http')) {
+                        extractedImageUrls.push(firstUrl);
+                    }
+                }
                 
-                for (const pattern of imgPatterns) {
-                    let match;
-                    while ((match = pattern.exec(html)) !== null) {
-                        let imgUrl = match[1];
-                        // Make relative URLs absolute
-                        if (imgUrl.startsWith('//')) {
-                            imgUrl = 'https:' + imgUrl;
-                        } else if (imgUrl.startsWith('/')) {
-                            const urlObj = new URL(url);
-                            imgUrl = urlObj.origin + imgUrl;
-                        }
-                        if (imgUrl.startsWith('http') && !extractedImageUrls.includes(imgUrl)) {
-                            extractedImageUrls.push(imgUrl);
-                        }
+                // Look for any img src that looks like a product image
+                const imgSrcMatches = html.matchAll(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi);
+                for (const match of imgSrcMatches) {
+                    let imgUrl = match[1];
+                    // Filter out tiny images, icons, logos
+                    if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1') || imgUrl.includes('pixel')) continue;
+                    // Make relative URLs absolute
+                    if (imgUrl.startsWith('//')) {
+                        imgUrl = 'https:' + imgUrl;
+                    } else if (imgUrl.startsWith('/')) {
+                        const urlObj = new URL(url);
+                        imgUrl = urlObj.origin + imgUrl;
+                    }
+                    if (imgUrl.startsWith('http') && !extractedImageUrls.includes(imgUrl)) {
+                        extractedImageUrls.push(imgUrl);
                     }
                 }
                 
                 // Also look for JSON-LD product data
-                const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-                if (jsonLdMatch) {
-                    for (const jsonScript of jsonLdMatch) {
-                        try {
-                            const jsonContent = jsonScript.replace(/<script[^>]*>|<\/script>/gi, '');
-                            const jsonData = JSON.parse(jsonContent);
-                            if (jsonData.image) {
-                                const images = Array.isArray(jsonData.image) ? jsonData.image : [jsonData.image];
+                const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+                for (const jsonMatch of jsonLdMatches) {
+                    try {
+                        const jsonContent = jsonMatch[1];
+                        const jsonData = JSON.parse(jsonContent);
+                        const findImages = (obj) => {
+                            if (!obj) return;
+                            if (obj.image) {
+                                const images = Array.isArray(obj.image) ? obj.image : [obj.image];
                                 for (const img of images) {
                                     const imgUrl = typeof img === 'string' ? img : img.url;
                                     if (imgUrl && !extractedImageUrls.includes(imgUrl)) {
-                                        extractedImageUrls.push(imgUrl);
+                                        extractedImageUrls.unshift(imgUrl); // Prioritize JSON-LD images
                                     }
                                 }
                             }
-                        } catch (e) {}
-                    }
+                            if (obj['@graph']) {
+                                for (const item of obj['@graph']) findImages(item);
+                            }
+                        };
+                        findImages(jsonData);
+                    } catch (e) {}
                 }
+                
+                console.log('Extracted image URLs:', extractedImageUrls.slice(0, 5));
             }
         } catch (fetchError) {
             console.error('Error fetching page HTML:', fetchError);
