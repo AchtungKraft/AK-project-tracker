@@ -153,6 +153,51 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     });
   };
 
+  const handleScrapeUrl = async () => {
+    if (!formData.order_url) {
+      toast.error('Please enter a URL first');
+      return;
+    }
+    
+    setScraping(true);
+    try {
+      const response = await base44.functions.invoke('scrapePartUrl', { url: formData.order_url });
+      const data = response.data?.data;
+      
+      if (data) {
+        setFormData(prev => ({
+          ...prev,
+          part_name: data.part_name || prev.part_name,
+          vendor_part_number: data.part_number || prev.vendor_part_number,
+          notes: data.notes || prev.notes,
+          cost: data.price || prev.cost,
+        }));
+        
+        // Handle images if found
+        if (data.image_urls && data.image_urls.length > 0) {
+          const validImages = data.image_urls.filter(url => url && url.startsWith('http'));
+          if (validImages.length > 0) {
+            setFormData(prev => ({
+              ...prev,
+              photos: [...prev.photos, ...validImages],
+              featured_photo: prev.featured_photo || validImages[0]
+            }));
+            toast.success(`Found ${validImages.length} image(s)`);
+          }
+        }
+        
+        toast.success('Product info populated from URL');
+      } else {
+        toast.error('Could not extract product info from URL');
+      }
+    } catch (error) {
+      console.error('Scrape error:', error);
+      toast.error('Failed to scrape URL');
+    } finally {
+      setScraping(false);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     
