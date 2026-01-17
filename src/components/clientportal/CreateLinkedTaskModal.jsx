@@ -237,6 +237,43 @@ export default function CreateLinkedTaskModal({
             </Label>
           </div>
 
+          {imageAttachments.length > 0 && (
+            <div>
+              <Label className="text-gray-300 flex items-center gap-2 mb-2">
+                <ImageIcon className="w-4 h-4" />
+                Attach Images from Feedback Request ({selectedImageUrls.length} selected)
+              </Label>
+              <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                {imageAttachments.map((attachment) => (
+                  <button
+                    key={attachment.id}
+                    type="button"
+                    onClick={() => toggleImageSelection(attachment.url)}
+                    className={cn(
+                      "relative aspect-square rounded-lg overflow-hidden border-2 transition-all",
+                      selectedImageUrls.includes(attachment.url)
+                        ? "border-blue-500 ring-2 ring-blue-500/50"
+                        : "border-gray-700 hover:border-gray-500"
+                    )}
+                  >
+                    <img 
+                      src={attachment.url} 
+                      alt="" 
+                      className="w-full h-full object-cover"
+                    />
+                    {selectedImageUrls.includes(attachment.url) && (
+                      <div className="absolute inset-0 bg-blue-500/30 flex items-center justify-center">
+                        <div className="bg-blue-500 rounded-full p-1">
+                          <Check className="w-4 h-4 text-white" />
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
