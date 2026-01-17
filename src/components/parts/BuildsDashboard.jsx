@@ -55,11 +55,7 @@ export default function BuildsDashboard({ onPartClick }) {
     }).filter((item) => item.part);
   };
 
-  const getGlobalParts = () => {
-    return parts.filter((p) => p.global_all_builds);
-  };
 
-  const globalParts = getGlobalParts();
 
   return (
     <div className="space-y-4">
