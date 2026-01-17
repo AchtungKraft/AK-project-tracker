@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
 
         // First, try to fetch the page HTML directly to extract images
         let extractedImageUrls = [];
+        console.log('Fetching page HTML from:', url);
         try {
             const pageResponse = await fetch(url, {
                 headers: {
@@ -35,47 +36,58 @@ Deno.serve(async (req) => {
                 }
             });
             
+            console.log('Page response status:', pageResponse.status);
+            
             if (pageResponse.ok) {
                 const html = await pageResponse.text();
+                console.log('HTML length:', html.length);
                 
-                // Extract og:image meta tag (try both patterns)
-                const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
-                                     html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-                if (ogImageMatch && ogImageMatch[1]) {
-                    extractedImageUrls.push(ogImageMatch[1]);
-                }
-                
-                // Look for srcset patterns (common in modern sites)
-                const srcsetMatches = html.matchAll(/srcset=["']([^"']+)["']/gi);
-                for (const match of srcsetMatches) {
-                    const srcset = match[1];
-                    const firstUrl = srcset.split(',')[0].trim().split(' ')[0];
-                    if (firstUrl && firstUrl.includes('http')) {
-                        extractedImageUrls.push(firstUrl);
+                // Extract og:image meta tag (try multiple patterns)
+                const ogPatterns = [
+                    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i,
+                    /<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i,
+                    /og:image["']\s*content=["']([^"']+)["']/i
+                ];
+                for (const pattern of ogPatterns) {
+                    const match = html.match(pattern);
+                    if (match && match[1]) {
+                        console.log('Found og:image:', match[1]);
+                        extractedImageUrls.push(match[1]);
+                        break;
                     }
                 }
                 
-                // Look for any img src that looks like a product image
-                const imgSrcMatches = html.matchAll(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi);
-                for (const match of imgSrcMatches) {
-                    let imgUrl = match[1];
-                    // Filter out tiny images, icons, logos
-                    if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1') || imgUrl.includes('pixel')) continue;
-                    // Make relative URLs absolute
-                    if (imgUrl.startsWith('//')) {
-                        imgUrl = 'https:' + imgUrl;
-                    } else if (imgUrl.startsWith('/')) {
-                        const urlObj = new URL(url);
-                        imgUrl = urlObj.origin + imgUrl;
+                // Look for CDN image URLs common in e-commerce (Shopify, etc)
+                const cdnPattern = /["'](https?:\/\/cdn[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+                let cdnMatch;
+                while ((cdnMatch = cdnPattern.exec(html)) !== null) {
+                    if (!extractedImageUrls.includes(cdnMatch[1])) {
+                        extractedImageUrls.push(cdnMatch[1]);
                     }
-                    if (imgUrl.startsWith('http') && !extractedImageUrls.includes(imgUrl)) {
-                        extractedImageUrls.push(imgUrl);
+                }
+                
+                // Look for common e-commerce image patterns
+                const ecomPatterns = [
+                    /["'](https?:\/\/[^"']*\/products\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*\/images\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*shopify[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
+                ];
+                
+                for (const pattern of ecomPatterns) {
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let imgUrl = match[1];
+                        if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1')) continue;
+                        if (!extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
                     }
                 }
                 
                 // Also look for JSON-LD product data
-                const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-                for (const jsonMatch of jsonLdMatches) {
+                const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+                let jsonMatch;
+                while ((jsonMatch = jsonLdPattern.exec(html)) !== null) {
                     try {
                         const jsonContent = jsonMatch[1];
                         const jsonData = JSON.parse(jsonContent);
@@ -84,24 +96,30 @@ Deno.serve(async (req) => {
                             if (obj.image) {
                                 const images = Array.isArray(obj.image) ? obj.image : [obj.image];
                                 for (const img of images) {
-                                    const imgUrl = typeof img === 'string' ? img : img.url;
+                                    const imgUrl = typeof img === 'string' ? img : (img.url || img.contentUrl);
                                     if (imgUrl && !extractedImageUrls.includes(imgUrl)) {
-                                        extractedImageUrls.unshift(imgUrl); // Prioritize JSON-LD images
+                                        console.log('Found JSON-LD image:', imgUrl);
+                                        extractedImageUrls.unshift(imgUrl);
                                     }
                                 }
                             }
-                            if (obj['@graph']) {
+                            if (obj['@graph'] && Array.isArray(obj['@graph'])) {
                                 for (const item of obj['@graph']) findImages(item);
                             }
                         };
                         findImages(jsonData);
-                    } catch (e) {}
+                    } catch (e) {
+                        console.log('JSON-LD parse error:', e.message);
+                    }
                 }
                 
-                console.log('Extracted image URLs:', extractedImageUrls.slice(0, 5));
+                console.log('Total extracted image URLs:', extractedImageUrls.length);
+                if (extractedImageUrls.length > 0) {
+                    console.log('First 3 images:', extractedImageUrls.slice(0, 3));
+                }
             }
         } catch (fetchError) {
-            console.error('Error fetching page HTML:', fetchError);
+            console.error('Error fetching page HTML:', fetchError.message);
         }
 
         // Use InvokeLLM with add_context_from_internet to scrape and parse product data
