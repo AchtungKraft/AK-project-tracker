@@ -25,6 +25,76 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'URL is required' }, { status: 400 });
         }
 
+        // First, try to fetch the page HTML directly to extract images
+        let extractedImageUrls = [];
+        try {
+            const pageResponse = await fetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                }
+            });
+            
+            if (pageResponse.ok) {
+                const html = await pageResponse.text();
+                
+                // Extract og:image meta tag
+                const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
+                if (ogImageMatch && ogImageMatch[1]) {
+                    extractedImageUrls.push(ogImageMatch[1]);
+                }
+                
+                // Extract product images from common patterns
+                const imgPatterns = [
+                    /["']([^"']*(?:product|item|gallery|main)[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /<img[^>]*src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["'][^>]*class=["'][^"']*(?:product|main|gallery|featured)[^"']*["']/gi,
+                    /<img[^>]*class=["'][^"']*(?:product|main|gallery|featured)[^"']*["'][^>]*src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /data-zoom-image=["']([^"']+)["']/gi,
+                    /data-large=["']([^"']+)["']/gi,
+                ];
+                
+                for (const pattern of imgPatterns) {
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let imgUrl = match[1];
+                        // Make relative URLs absolute
+                        if (imgUrl.startsWith('//')) {
+                            imgUrl = 'https:' + imgUrl;
+                        } else if (imgUrl.startsWith('/')) {
+                            const urlObj = new URL(url);
+                            imgUrl = urlObj.origin + imgUrl;
+                        }
+                        if (imgUrl.startsWith('http') && !extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
+                    }
+                }
+                
+                // Also look for JSON-LD product data
+                const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+                if (jsonLdMatch) {
+                    for (const jsonScript of jsonLdMatch) {
+                        try {
+                            const jsonContent = jsonScript.replace(/<script[^>]*>|<\/script>/gi, '');
+                            const jsonData = JSON.parse(jsonContent);
+                            if (jsonData.image) {
+                                const images = Array.isArray(jsonData.image) ? jsonData.image : [jsonData.image];
+                                for (const img of images) {
+                                    const imgUrl = typeof img === 'string' ? img : img.url;
+                                    if (imgUrl && !extractedImageUrls.includes(imgUrl)) {
+                                        extractedImageUrls.push(imgUrl);
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+            }
+        } catch (fetchError) {
+            console.error('Error fetching page HTML:', fetchError);
+        }
+
         // Use InvokeLLM with add_context_from_internet to scrape and parse product data
         const result = await base44.integrations.Core.InvokeLLM({
             prompt: `Extract product information from this URL: ${url}
@@ -65,6 +135,11 @@ Be thorough in finding image URLs - look for product gallery images, main produc
                 }
             }
         });
+
+        // Combine LLM images with extracted images, preferring extracted ones
+        const allImageUrls = [...extractedImageUrls, ...(result.image_urls || [])];
+        // Remove duplicates
+        const uniqueImageUrls = [...new Set(allImageUrls)];
 
         // Download and re-upload the first 2 images
         const uploadedImageUrls = [];
