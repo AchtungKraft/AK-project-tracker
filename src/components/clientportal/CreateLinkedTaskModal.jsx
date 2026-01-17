@@ -55,10 +55,16 @@ export default function CreateLinkedTaskModal({
 
   const createTaskMutation = useMutation({
     mutationFn: async () => {
+      // Build description with selected images
+      let description = taskData.description || `Linked from feedback request: ${feedbackRequestTitle}`;
+      if (selectedImageUrls.length > 0) {
+        description += `\n\nReference Images:\n${selectedImageUrls.join('\n')}`;
+      }
+
       // Create the task
       const newTask = await base44.entities.Task.create({
         name: taskData.name,
-        description: taskData.description || `Linked from feedback request: ${feedbackRequestTitle}`,
+        description,
         project_id: projectId,
         category_id: taskData.category_id || undefined,
         assigned_team_member_id: taskData.assigned_team_member_id || undefined,
