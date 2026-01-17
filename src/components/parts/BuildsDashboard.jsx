@@ -34,11 +34,18 @@ export default function BuildsDashboard({ onPartClick }) {
 
   const projectStatuses = statuses.filter((s) => s.scope === 'Project');
 
-  const filteredProjects = projects.filter((p) =>
-  p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  p.vin?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Get project IDs that have parts assigned
+  const projectIdsWithParts = new Set(partAssignments.map(a => a.project_id));
+
+  const filteredProjects = projects.filter((p) => {
+    // Only show projects that have parts assigned
+    if (!projectIdsWithParts.has(p.id)) return false;
+    
+    // Apply search filter
+    return p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.vin?.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const getProjectAssignedParts = (projectId) => {
     const assignments = partAssignments.filter((a) => a.project_id === projectId);
