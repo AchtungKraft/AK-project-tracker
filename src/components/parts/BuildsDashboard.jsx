@@ -84,52 +84,7 @@ export default function BuildsDashboard({ onPartClick }) {
         </CardHeader>
       </Card>
 
-      {/* Global Parts Section */}
-      {globalParts.length > 0 &&
-      <Card className="bg-black/40 backdrop-blur-xl border border-green-900/30">
-          <CardHeader className="border-b border-green-900/30 p-4">
-            <CardTitle className="text-white text-base flex items-center gap-2">
-              <Package className="w-4 h-4 text-green-400" />
-              Global Parts (Available for All Builds)
-              <Badge variant="outline" className="border-green-500 text-green-400 ml-2">
-                {globalParts.length}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {globalParts.map((part) =>
-            <div
-              key={part.id}
-              onClick={() => onPartClick(part)}
-              className="p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-green-900/50 transition-colors cursor-pointer">
 
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h4 className="text-white text-sm font-medium">{part.part_name}</h4>
-                    <Badge
-                  variant="outline"
-                  className={`text-xs shrink-0 ${
-                  part.status === 'On-Hand' ? 'border-green-500 text-green-400' :
-                  part.status === 'Need to Buy' ? 'border-red-500 text-red-400' :
-                  'border-yellow-500 text-yellow-400'}`
-                  }>
-
-                      {part.status}
-                    </Badge>
-                  </div>
-                  {part.vendor_part_number &&
-              <p className="text-xs text-gray-400 font-mono mb-2">{part.vendor_part_number}</p>
-              }
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">Qty:</span>
-                    <span className="text-white font-semibold">{part.quantity_on_hand || 0}</span>
-                  </div>
-                </div>
-            )}
-            </div>
-          </CardContent>
-        </Card>
-      }
 
       {/* Projects/Builds Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
