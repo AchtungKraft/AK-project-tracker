@@ -314,13 +314,29 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
               <div className="space-y-2">
                 <Label className="text-gray-400">Order URL</Label>
-                <Input
-                  type="url"
-                  value={formData.order_url}
-                  onChange={(e) => setFormData({ ...formData, order_url: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                  placeholder="https://..."
-                />
+                <div className="flex gap-2">
+                  <Input
+                    type="url"
+                    value={formData.order_url}
+                    onChange={(e) => setFormData({ ...formData, order_url: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white flex-1"
+                    placeholder="https://..."
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleScrapeUrl}
+                    disabled={scraping || !formData.order_url}
+                    className="border-gray-700 hover:bg-purple-600 hover:border-purple-600"
+                    title="Auto-populate from URL"
+                  >
+                    {scraping ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 
