@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Package, Box, Image as ImageIcon } from "lucide-react";
 import ImageGallery from "./ImageGallery";
+import PartActionsDropdown from "./PartActionsDropdown";
 
 /**
  * PartsGrid - Displays parts in a card/grid format
@@ -15,6 +16,8 @@ export default function PartsGrid({
   categories,
   selectedCategoryId,
   onPartClick,
+  onAddInventory,
+  onOrderPart,
 }) {
   const [galleryState, setGalleryState] = useState({
     open: false,
@@ -184,16 +187,24 @@ export default function PartsGrid({
                     </div>
                   </div>
 
-                  {/* Vendor */}
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {vendor && (
+                  {/* Vendor and Actions */}
+                  <div className="flex items-center justify-between text-xs">
+                    {vendor ? (
                       <div className="flex items-center gap-1 text-gray-400">
                         <Box className="w-3 h-3" />
-                        <span className="truncate max-w-[100px]">
+                        <span className="truncate max-w-[80px]">
                           {vendor.vendor_name}
                         </span>
                       </div>
+                    ) : (
+                      <div />
                     )}
+                    <PartActionsDropdown
+                      part={part}
+                      onAddInventory={onAddInventory}
+                      onOrderPart={onOrderPart}
+                      onViewDetails={onPartClick}
+                    />
                   </div>
                 </div>
               </div>

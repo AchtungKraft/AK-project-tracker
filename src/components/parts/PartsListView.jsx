@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Package, MapPin, Box, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
+import PartActionsDropdown from "./PartActionsDropdown";
 
 /**
  * PartsListView - Displays parts in a list format
@@ -16,7 +17,9 @@ export default function PartsListView({
   categories,
   selectedCategoryId,
   onPartClick,
-  showGrouping
+  showGrouping,
+  onAddInventory,
+  onOrderPart,
 }) {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [galleryState, setGalleryState] = useState({
@@ -263,6 +266,16 @@ export default function PartsListView({
               {stats.available}
             </div>
           </div>
+        </div>
+
+        {/* Actions Dropdown */}
+        <div className="hidden md:block ml-2">
+          <PartActionsDropdown
+            part={part}
+            onAddInventory={onAddInventory}
+            onOrderPart={onOrderPart}
+            onViewDetails={onPartClick}
+          />
         </div>
       </div>
     );
