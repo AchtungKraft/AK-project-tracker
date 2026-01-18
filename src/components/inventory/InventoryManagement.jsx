@@ -7,13 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Package, MapPin, AlertTriangle } from "lucide-react";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Search, Plus, Package, MapPin, AlertTriangle, MoreVertical, ShoppingCart, Eye } from "lucide-react";
 import AddInventoryModal from "./AddInventoryModal";
+import OrderPartModal from "../parts/OrderPartModal";
 
 export default function InventoryManagement({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addInventoryPartId, setAddInventoryPartId] = useState(null);
+  const [orderPart, setOrderPart] = useState(null);
 
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ['inventoryItems'],
@@ -177,6 +186,7 @@ export default function InventoryManagement({ onPartClick }) {
                   <TableHead className="text-gray-400 text-xs text-right">Reserved</TableHead>
                   <TableHead className="text-gray-400 text-xs text-right">Available</TableHead>
                   <TableHead className="text-gray-400 text-xs text-right">Unit Cost</TableHead>
+                  <TableHead className="text-gray-400 text-xs w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,6 +231,51 @@ export default function InventoryManagement({ onPartClick }) {
                           {item.purchase_cost ? `$${item.purchase_cost.toFixed(2)}` : '-'}
                         </span>
                       </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-gray-400 hover:text-white"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                part && onPartClick?.(part);
+                              }}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAddInventoryPartId(item.part_id);
+                              }}
+                              className="text-green-400"
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add More Inventory
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                part && setOrderPart(part);
+                              }}
+                              className="text-blue-400"
+                            >
+                              <ShoppingCart className="w-4 h-4 mr-2" />
+                              Order Part
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -232,6 +287,20 @@ export default function InventoryManagement({ onPartClick }) {
 
       {showAddModal && (
         <AddInventoryModal onClose={() => setShowAddModal(false)} />
+      )}
+
+      {addInventoryPartId && (
+        <AddInventoryModal 
+          onClose={() => setAddInventoryPartId(null)} 
+          preselectedPartId={addInventoryPartId}
+        />
+      )}
+
+      {orderPart && (
+        <OrderPartModal 
+          part={orderPart}
+          onClose={() => setOrderPart(null)} 
+        />
       )}
     </div>
   );
