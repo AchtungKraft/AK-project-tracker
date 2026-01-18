@@ -575,13 +575,13 @@ export default function EditPartDrawer({ partId, onClose }) {
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      id="global"
-                      checked={editedPart.global_all_builds || false}
-                      onChange={(e) => setEditedPart({ ...editedPart, global_all_builds: e.target.checked })}
+                      id="active"
+                      checked={editedPart.is_active !== false}
+                      onChange={(e) => setEditedPart({ ...editedPart, is_active: e.target.checked })}
                       className="rounded border-gray-700"
                     />
-                    <Label htmlFor="global" className="text-gray-400 text-xs cursor-pointer">
-                      Make available for all builds (global)
+                    <Label htmlFor="active" className="text-gray-400 text-xs cursor-pointer">
+                      Active in catalog
                     </Label>
                   </div>
                 </div>
@@ -666,10 +666,10 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <p className="text-white whitespace-pre-wrap">{part.notes}</p>
                     </div>
                   )}
-                  {part?.global_all_builds && (
-                    <div className="flex items-center gap-2 p-2 bg-blue-900/20 rounded border border-blue-800/30">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                      <p className="text-xs text-blue-400">Available for all builds (global)</p>
+                  {part?.is_active === false && (
+                    <div className="flex items-center gap-2 p-2 bg-red-900/20 rounded border border-red-800/30">
+                      <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                      <p className="text-xs text-red-400">Inactive - not visible in catalog</p>
                     </div>
                   )}
                 </div>
