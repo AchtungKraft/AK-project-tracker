@@ -6,10 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, ChevronLeft, ChevronRight, Image as ImageIcon, Package, MapPin } from "lucide-react";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Search, ChevronLeft, ChevronRight, Image as ImageIcon, Package, MapPin, MoreVertical, Plus, ShoppingCart, Eye } from "lucide-react";
 import LocationTree from "../inventory/LocationTree";
 import InventoryBreadcrumb from "../inventory/InventoryBreadcrumb";
 import ImageGallery from "./ImageGallery";
+import AddInventoryModal from "../inventory/AddInventoryModal";
+import OrderPartModal from "./OrderPartModal";
 
 const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
@@ -27,6 +35,8 @@ export default function InventoryLocations({ onPartClick }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [addInventoryPartId, setAddInventoryPartId] = useState(null);
+  const [orderPart, setOrderPart] = useState(null);
 
   // Load state from localStorage
   useEffect(() => {
@@ -309,6 +319,7 @@ export default function InventoryLocations({ onPartClick }) {
                       <TableHead className="text-gray-400 text-xs text-right">On Hand</TableHead>
                       <TableHead className="text-gray-400 text-xs text-right">Reserved</TableHead>
                       <TableHead className="text-gray-400 text-xs text-right">Available</TableHead>
+                      <TableHead className="text-gray-400 text-xs w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -347,6 +358,51 @@ export default function InventoryLocations({ onPartClick }) {
                               {available}
                             </span>
                           </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-gray-400 hover:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    part && onPartClick?.(part);
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddInventoryPartId(item.part_id);
+                                  }}
+                                  className="text-green-400"
+                                >
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Add Inventory
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    part && setOrderPart(part);
+                                  }}
+                                  className="text-blue-400"
+                                >
+                                  <ShoppingCart className="w-4 h-4 mr-2" />
+                                  Order Part
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -365,6 +421,20 @@ export default function InventoryLocations({ onPartClick }) {
         onClose={() => setGalleryOpen(false)}
         onNavigate={handleNavigateGallery}
       />
+
+      {addInventoryPartId && (
+        <AddInventoryModal 
+          onClose={() => setAddInventoryPartId(null)} 
+          preselectedPartId={addInventoryPartId}
+        />
+      )}
+
+      {orderPart && (
+        <OrderPartModal 
+          part={orderPart}
+          onClose={() => setOrderPart(null)} 
+        />
+      )}
     </>
   );
 }
