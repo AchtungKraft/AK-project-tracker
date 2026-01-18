@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import AddRequirementModal from "./AddRequirementModal";
 import AllocatePartModal from "./AllocatePartModal";
 import InstallPartModal from "./InstallPartModal";
+import OrderPartModal from "../parts/OrderPartModal";
 import EditPartDrawer from "../parts/EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 
@@ -57,6 +58,7 @@ export default function ProjectParts({ projectId }) {
   const [installingRequirement, setInstallingRequirement] = useState(null);
   const [selectedPart, setSelectedPart] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [orderPart, setOrderPart] = useState(null);
 
   // Fetch requirements using new entity
   const { data: requirements = [], isLoading } = useQuery({
@@ -155,6 +157,36 @@ export default function ProjectParts({ projectId }) {
     const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // Group requirements by status category for better organization
+  const groupedRequirements = useMemo(() => {
+    const groups = {
+      needed: [],      // Status: Needed, Partially Allocated
+      allocated: [],   // Status: Allocated, Ordered, Partially Received, Ready
+      installed: [],   // Status: Partially Installed, Installed
+      toOrder: [],     // Derived: qty_needed - qty_allocated - qty_ordered > 0
+    };
+
+    filteredRequirements.forEach(req => {
+      const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
+      
+      // Add to "to order" if it needs ordering
+      if (toOrder > 0) {
+        groups.toOrder.push({ ...req, _toOrderQty: toOrder });
+      }
+
+      // Categorize by status
+      if (req.status === 'Installed' || req.status === 'Partially Installed') {
+        groups.installed.push(req);
+      } else if (['Allocated', 'Ordered', 'Partially Received', 'Ready'].includes(req.status)) {
+        groups.allocated.push(req);
+      } else {
+        groups.needed.push(req);
+      }
+    });
+
+    return groups;
+  }, [filteredRequirements]);
 
   const handleRemove = (requirement) => {
     const allocatedUninstalled = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
@@ -332,6 +364,11 @@ export default function ProjectParts({ projectId }) {
                                 <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
                               </DropdownMenuItem>
                             )}
+                            {toOrder > 0 && (
+                              <DropdownMenuItem onClick={() => setOrderPart(part)}>
+                                <ShoppingCart className="w-4 h-4 mr-2" /> Order Part
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => setSelectedPart(part.id)}>
                               View Part Details
                             </DropdownMenuItem>
@@ -378,6 +415,14 @@ export default function ProjectParts({ projectId }) {
 
       {selectedImage && (
         <ImageModal isOpen={!!selectedImage} imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+      )}
+
+      {orderPart && (
+        <OrderPartModal 
+          part={orderPart}
+          onClose={() => setOrderPart(null)}
+          onPartClick={(partId) => setSelectedPart(partId)}
+        />
       )}
     </div>
   );

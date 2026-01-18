@@ -300,7 +300,11 @@ export default function NeedToBuy({ onPartClick }) {
       {orderModalPart && (
         <OrderPartModal 
           part={orderModalPart}
-          onClose={() => setOrderModalPart(null)} 
+          onClose={() => setOrderModalPart(null)}
+          onPartClick={(partId) => {
+            const part = parts.find(p => p.id === partId);
+            if (part) onPartClick(part);
+          }}
         />
       )}
     </div>
