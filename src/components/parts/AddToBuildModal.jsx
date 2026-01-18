@@ -5,8 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
 
@@ -24,10 +25,24 @@ export default function AddToBuildModal({ part, onClose }) {
     priority: 'Normal',
     notes: '',
   });
+  
+  const [allocateImmediately, setAllocateImmediately] = useState(false);
+  const [flagNeedToOrder, setFlagNeedToOrder] = useState(false);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
+  });
+  
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ['projectTypes'],
+    queryFn: () => base44.entities.ProjectType.list(),
+  });
+  
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems', 'forPart', part?.id],
+    queryFn: () => base44.entities.InventoryItem.filter({ part_id: part?.id }),
+    enabled: !!part?.id && allocateImmediately,
   });
 
   // Check for existing requirement
@@ -52,22 +67,66 @@ export default function AddToBuildModal({ part, onClose }) {
         throw new Error('This part is already added to this build. Update the existing requirement instead.');
       }
 
-      // Create the requirement with intent only - no allocation or ordering
+      const qtyNeeded = Number(formData.qty_needed) || 1;
+      let qtyAllocated = 0;
+      
+      // If allocateImmediately is checked, attempt allocation from inventory
+      if (allocateImmediately && inventoryItems.length > 0) {
+        let remainingToAllocate = qtyNeeded;
+        
+        for (const item of inventoryItems) {
+          if (remainingToAllocate <= 0) break;
+          
+          const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
+          if (available <= 0) continue;
+          
+          const toAllocate = Math.min(available, remainingToAllocate);
+          
+          // Update inventory item - increase reserved
+          await base44.entities.InventoryItem.update(item.id, {
+            quantity_reserved: (item.quantity_reserved || 0) + toAllocate
+          });
+          
+          qtyAllocated += toAllocate;
+          remainingToAllocate -= toAllocate;
+        }
+      }
+
+      // Determine status based on allocation and need-to-order flag
+      let status = 'Needed';
+      if (qtyAllocated >= qtyNeeded) {
+        status = 'Allocated';
+      } else if (qtyAllocated > 0) {
+        status = 'Partially Allocated';
+      }
+
+      // Create the requirement
       await base44.entities.PartProjectRequirement.create({
         part_id: part.id,
         project_id: formData.project_id,
-        qty_needed: Number(formData.qty_needed) || 1,
-        qty_allocated: 0,
+        qty_needed: qtyNeeded,
+        qty_allocated: qtyAllocated,
         qty_ordered: 0,
         qty_installed: 0,
-        status: 'Needed',
-        priority: formData.priority,
+        status: status,
+        priority: flagNeedToOrder ? 'High' : formData.priority,
         notes: formData.notes || null,
       });
+      
+      return { qtyAllocated };
     },
-    onSuccess: () => {
+    onSuccess: ({ qtyAllocated }) => {
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      toast.success('Part added to build');
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      
+      let message = 'Part added to build';
+      if (qtyAllocated > 0) {
+        message += ` (${qtyAllocated} allocated from inventory)`;
+      }
+      if (flagNeedToOrder) {
+        message += ' - flagged for ordering';
+      }
+      toast.success(message);
       onClose();
     },
     onError: (error) => {
@@ -85,6 +144,32 @@ export default function AddToBuildModal({ part, onClose }) {
 
   // Get projects that already have this part
   const projectsWithPart = existingRequirements.map(r => r.project_id);
+  
+  // Get project type name
+  const getTypeName = (typeId) => {
+    const type = projectTypes.find(t => t.id === typeId);
+    return type?.name || 'Uncategorized';
+  };
+  
+  // Group projects by type
+  const projectsByType = activeProjects.reduce((acc, project) => {
+    const typeName = getTypeName(project.project_type_id);
+    if (!acc[typeName]) acc[typeName] = [];
+    acc[typeName].push(project);
+    return acc;
+  }, {});
+  
+  // Sort type names alphabetically, but put "Uncategorized" last
+  const sortedTypeNames = Object.keys(projectsByType).sort((a, b) => {
+    if (a === 'Uncategorized') return 1;
+    if (b === 'Uncategorized') return -1;
+    return a.localeCompare(b);
+  });
+  
+  // Calculate available inventory
+  const availableInventory = inventoryItems.reduce((sum, item) => {
+    return sum + Math.max(0, (item.quantity_on_hand || 0) - (item.quantity_reserved || 0));
+  }, 0);
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -105,7 +190,7 @@ export default function AddToBuildModal({ part, onClose }) {
             )}
           </div>
 
-          {/* Project Selection */}
+          {/* Project Selection - Grouped by Type */}
           <div>
             <Label className="text-gray-400 text-xs">Project / Build *</Label>
             <Select
@@ -115,27 +200,37 @@ export default function AddToBuildModal({ part, onClose }) {
               <SelectTrigger className="bg-gray-800 border-gray-700">
                 <SelectValue placeholder="Select project..." />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-64">
                 {activeProjects.length === 0 ? (
                   <div className="p-2 text-sm text-gray-400 text-center">
                     No active projects
                   </div>
                 ) : (
-                  activeProjects.map(project => {
-                    const alreadyAdded = projectsWithPart.includes(project.id);
-                    return (
-                      <SelectItem 
-                        key={project.id} 
-                        value={project.id}
-                        disabled={alreadyAdded}
-                      >
-                        <span className={alreadyAdded ? 'text-gray-500' : ''}>
-                          {project.name}
-                          {alreadyAdded && ' (already added)'}
-                        </span>
-                      </SelectItem>
-                    );
-                  })
+                  sortedTypeNames.map(typeName => (
+                    <SelectGroup key={typeName}>
+                      <SelectLabel className="text-xs text-gray-500 font-semibold px-2 py-1.5 bg-gray-800/50">
+                        {typeName}
+                      </SelectLabel>
+                      {projectsByType[typeName]
+                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                        .map(project => {
+                          const alreadyAdded = projectsWithPart.includes(project.id);
+                          return (
+                            <SelectItem 
+                              key={project.id} 
+                              value={project.id}
+                              disabled={alreadyAdded}
+                            >
+                              <span className={alreadyAdded ? 'text-gray-500' : ''}>
+                                {project.name}
+                                {alreadyAdded && ' (already added)'}
+                              </span>
+                            </SelectItem>
+                          );
+                        })
+                      }
+                    </SelectGroup>
+                  ))
                 )}
               </SelectContent>
             </Select>
@@ -183,9 +278,50 @@ export default function AddToBuildModal({ part, onClose }) {
             />
           </div>
 
+          {/* Optional Actions */}
+          <div className="space-y-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
+            <Label className="text-gray-400 text-xs block mb-2">Optional Actions</Label>
+            
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="allocateImmediately"
+                checked={allocateImmediately}
+                onCheckedChange={setAllocateImmediately}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <Label htmlFor="allocateImmediately" className="text-gray-300 cursor-pointer text-sm">
+                  Allocate from inventory immediately (if available)
+                </Label>
+                {allocateImmediately && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Available: {availableInventory} unit(s)
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="flagNeedToOrder"
+                checked={flagNeedToOrder}
+                onCheckedChange={setFlagNeedToOrder}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <Label htmlFor="flagNeedToOrder" className="text-gray-300 cursor-pointer text-sm">
+                  Flag as "Need to Order"
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Part will appear in the Need to Buy list
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Info about what this does */}
           <div className="p-2 bg-orange-950/30 border border-orange-900/30 rounded text-xs text-orange-300">
-            This adds a part requirement to the build. Inventory allocation and ordering are done separately.
+            This adds a part requirement to the build. Ordering is done separately.
           </div>
 
           {/* Actions */}

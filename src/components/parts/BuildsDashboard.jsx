@@ -203,7 +203,7 @@ export default function BuildsDashboard({ onPartClick }) {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <Link to={createPageUrl(`ProjectDetail?id=${project.id}`)} className="flex-1">
+                    <Link to={createPageUrl(`ProjectDetail?id=${project.id}&tab=parts`)} className="flex-1">
                       <Button size="sm" className="w-full bg-red-600 hover:bg-red-700 gap-1">
                         <Eye className="w-3 h-3" /> View Build
                       </Button>

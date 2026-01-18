@@ -9,14 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, ShoppingCart } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, ExternalLink } from "lucide-react";
 
 /**
  * OrderPartModal - Create or add to an order for a specific part
  * Creates PartPurchaseLineItem linked to an Order
  * Optionally links to PartProjectRequirements and updates qty_ordered
  */
-export default function OrderPartModal({ part, onClose }) {
+export default function OrderPartModal({ part, onClose, onPartClick }) {
   const queryClient = useQueryClient();
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   
@@ -175,7 +175,19 @@ export default function OrderPartModal({ part, onClose }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Part Info */}
           <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-            <p className="text-sm font-medium text-white">{part?.part_name}</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (onPartClick) {
+                  onPartClick(part?.id);
+                  onClose();
+                }
+              }}
+              className="text-sm font-medium text-white hover:text-red-400 transition-colors flex items-center gap-1.5 group"
+            >
+              {part?.part_name}
+              {onPartClick && <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}
+            </button>
             {part?.vendor_part_number && (
               <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
             )}
