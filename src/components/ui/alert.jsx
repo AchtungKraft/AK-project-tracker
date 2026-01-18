@@ -1,16 +1,17 @@
+
 import * as React from "react"
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>svg~*]:pl-7",
+  "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-gray-300 [&>svg~*]:pl-7",
   {
     variants: {
       variant: {
-        default: "bg-background text-foreground",
+        default: "bg-gray-800 border-gray-700 text-gray-100",
         destructive:
-          "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+          "border-red-700/50 text-red-400 bg-red-950/30 [&>svg]:text-red-400",
       },
     },
     defaultVariants: {
@@ -31,7 +32,7 @@ Alert.displayName = "Alert"
 const AlertTitle = React.forwardRef(({ className, ...props }, ref) => (
   <h5
     ref={ref}
-    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    className={cn("mb-1 font-medium leading-none tracking-tight text-white", className)}
     {...props} />
 ))
 AlertTitle.displayName = "AlertTitle"
@@ -39,7 +40,7 @@ AlertTitle.displayName = "AlertTitle"
 const AlertDescription = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-sm [&_p]:leading-relaxed", className)}
+    className={cn("text-sm text-gray-300 [&_p]:leading-relaxed", className)}
     {...props} />
 ))
 AlertDescription.displayName = "AlertDescription"
