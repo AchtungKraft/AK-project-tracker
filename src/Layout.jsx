@@ -212,10 +212,88 @@ export default function Layout({ children, currentPageName }) {
           :root {
             --background: 0 0% 7%;
             --foreground: 0 0% 98%;
+            --card: 0 0% 10%;
+            --card-foreground: 0 0% 98%;
+            --popover: 0 0% 10%;
+            --popover-foreground: 0 0% 98%;
             --primary: 0 84% 60%;
-            --primary-foreground: 0 0% 98%;
-            --muted: 0 0% 15%;
-            --accent: 0 84% 60%;
+            --primary-foreground: 0 0% 100%;
+            --secondary: 0 0% 20%;
+            --secondary-foreground: 0 0% 98%;
+            --muted: 0 0% 18%;
+            --muted-foreground: 0 0% 65%;
+            --accent: 0 0% 20%;
+            --accent-foreground: 0 0% 98%;
+            --destructive: 0 84% 60%;
+            --destructive-foreground: 0 0% 100%;
+            --border: 0 0% 20%;
+            --input: 0 0% 20%;
+            --ring: 0 84% 60%;
+          }
+          
+          /* Global dark theme contrast fixes */
+          body {
+            color: hsl(var(--foreground));
+            background: hsl(var(--background));
+          }
+          
+          /* Links - ensure visibility */
+          a:not([class]) {
+            color: #60a5fa;
+          }
+          a:not([class]):hover {
+            color: #93c5fd;
+          }
+          
+          /* Ensure text readability */
+          .text-muted-foreground {
+            color: hsl(0 0% 65%) !important;
+          }
+          
+          /* Ghost button visibility fix */
+          [data-variant="ghost"], .ghost {
+            color: hsl(0 0% 85%);
+          }
+          [data-variant="ghost"]:hover, .ghost:hover {
+            background: hsl(0 0% 20%);
+            color: hsl(0 0% 98%);
+          }
+          
+          /* Outline button visibility fix */
+          [data-variant="outline"] {
+            border-color: hsl(0 0% 30%);
+            color: hsl(0 0% 90%);
+          }
+          [data-variant="outline"]:hover {
+            background: hsl(0 0% 20%);
+            color: hsl(0 0% 100%);
+          }
+          
+          /* Disabled state - still readable */
+          button:disabled, [disabled] {
+            opacity: 0.5;
+            color: hsl(0 0% 60%);
+          }
+          
+          /* Focus rings */
+          *:focus-visible {
+            outline: 2px solid hsl(0 84% 60%);
+            outline-offset: 2px;
+          }
+          
+          /* Table headers */
+          th {
+            color: hsl(0 0% 70%);
+          }
+          
+          /* Dropdown/Select items */
+          [role="option"], [role="menuitem"] {
+            color: hsl(0 0% 90%);
+          }
+          [role="option"]:hover, [role="menuitem"]:hover,
+          [role="option"]:focus, [role="menuitem"]:focus {
+            background: hsl(0 0% 25%);
+            color: hsl(0 0% 100%);
           }
         `}</style>
         
@@ -251,13 +329,87 @@ export default function Layout({ children, currentPageName }) {
         :root {
           --background: 0 0% 7%;
           --foreground: 0 0% 98%;
+          --card: 0 0% 10%;
+          --card-foreground: 0 0% 98%;
+          --popover: 0 0% 10%;
+          --popover-foreground: 0 0% 98%;
           --primary: 0 84% 60%;
-          --primary-foreground: 0 0% 98%;
-          --muted: 0 0% 15%;
-            --accent: 0 84% 60%;
+          --primary-foreground: 0 0% 100%;
+          --secondary: 0 0% 20%;
+          --secondary-foreground: 0 0% 98%;
+          --muted: 0 0% 18%;
+          --muted-foreground: 0 0% 65%;
+          --accent: 0 0% 20%;
+          --accent-foreground: 0 0% 98%;
+          --destructive: 0 84% 60%;
+          --destructive-foreground: 0 0% 100%;
+          --border: 0 0% 20%;
+          --input: 0 0% 20%;
+          --ring: 0 84% 60%;
         }
+        
         body {
           background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+          color: hsl(var(--foreground));
+        }
+        
+        /* Links - ensure visibility */
+        a:not([class]) {
+          color: #60a5fa;
+        }
+        a:not([class]):hover {
+          color: #93c5fd;
+        }
+        
+        /* Ensure text readability */
+        .text-muted-foreground {
+          color: hsl(0 0% 65%) !important;
+        }
+        
+        /* Ghost button visibility fix */
+        [data-variant="ghost"], .ghost {
+          color: hsl(0 0% 85%);
+        }
+        [data-variant="ghost"]:hover, .ghost:hover {
+          background: hsl(0 0% 20%);
+          color: hsl(0 0% 98%);
+        }
+        
+        /* Outline button visibility fix */
+        [data-variant="outline"] {
+          border-color: hsl(0 0% 30%);
+          color: hsl(0 0% 90%);
+        }
+        [data-variant="outline"]:hover {
+          background: hsl(0 0% 20%);
+          color: hsl(0 0% 100%);
+        }
+        
+        /* Disabled state - still readable */
+        button:disabled, [disabled] {
+          opacity: 0.5;
+          color: hsl(0 0% 60%);
+        }
+        
+        /* Focus rings */
+        *:focus-visible {
+          outline: 2px solid hsl(0 84% 60%);
+          outline-offset: 2px;
+        }
+        
+        /* Table headers */
+        th {
+          color: hsl(0 0% 70%);
+        }
+        
+        /* Dropdown/Select items */
+        [role="option"], [role="menuitem"] {
+          color: hsl(0 0% 90%);
+        }
+        [role="option"]:hover, [role="menuitem"]:hover,
+        [role="option"]:focus, [role="menuitem"]:focus {
+          background: hsl(0 0% 25%);
+          color: hsl(0 0% 100%);
         }
       `}</style>
       
