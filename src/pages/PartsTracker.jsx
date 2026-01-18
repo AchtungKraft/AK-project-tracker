@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse, RefreshCw, Package, DollarSign } from "lucide-react";
+import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse, RefreshCw, Package, DollarSign, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import PartsMasterList from "../components/parts/PartsMasterList";
@@ -62,10 +62,15 @@ export default function PartsTracker() {
                   <span className="hidden sm:inline">INVENTORY</span>
                   <span className="sm:hidden">INV</span>
                 </TabsTrigger>
-                <TabsTrigger value="purchasing" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="hidden sm:inline">PURCHASING</span>
+                <TabsTrigger value="need-to-buy" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                  <ShoppingCart className="w-4 h-4" />
+                  <span className="hidden sm:inline">NEED TO BUY</span>
                   <span className="sm:hidden">BUY</span>
+                </TabsTrigger>
+                <TabsTrigger value="on-order" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                  <Truck className="w-4 h-4" />
+                  <span className="hidden sm:inline">ON ORDER</span>
+                  <span className="sm:hidden">ORDER</span>
                 </TabsTrigger>
                 <TabsTrigger value="builds" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
                   <FolderTree className="w-4 h-4" />
@@ -86,8 +91,12 @@ export default function PartsTracker() {
               <InventoryManagement onPartClick={handlePartClick} />
             </TabsContent>
 
-            <TabsContent value="purchasing" className="mt-4">
-              <PurchasingDashboard />
+            <TabsContent value="need-to-buy" className="mt-4">
+              <NeedToBuy onPartClick={handlePartClick} />
+            </TabsContent>
+
+            <TabsContent value="on-order" className="mt-4">
+              <OnOrder onPartClick={handlePartClick} />
             </TabsContent>
 
             <TabsContent value="builds" className="mt-4">
