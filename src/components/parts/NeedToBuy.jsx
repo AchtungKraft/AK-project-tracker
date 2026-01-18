@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, CheckCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { ShoppingCart, Search, Filter, CheckCircle, ChevronDown, ChevronUp, ExternalLink, Plus } from "lucide-react";
+import OrderPartModal from "./OrderPartModal";
 
 /**
  * NeedToBuy - Shows parts that need to be ordered based on PartProjectRequirement
@@ -17,6 +19,7 @@ export default function NeedToBuy({ onPartClick }) {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
   const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [orderModalPart, setOrderModalPart] = useState(null);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -276,12 +279,30 @@ export default function NeedToBuy({ onPartClick }) {
                       </a>
                     )}
                   </div>
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOrderModalPart(item.part);
+                    }}
+                    size="sm"
+                    className="w-full mt-3 bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Order
+                  </Button>
                 </CardContent>
               </Card>
             );
           })
         )}
       </div>
+
+      {orderModalPart && (
+        <OrderPartModal 
+          part={orderModalPart}
+          onClose={() => setOrderModalPart(null)} 
+        />
+      )}
     </div>
   );
 }
