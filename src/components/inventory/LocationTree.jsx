@@ -2,17 +2,22 @@ import React from "react";
 import { ChevronRight, ChevronDown, MapPin, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * LocationTree - Tree view for browsing locations
+ * Now uses inventoryItems prop for counting (not Part.location_id)
+ */
 export default function LocationTree({
   locations,
   parts,
+  inventoryItems = [], // NEW: use inventory items for counting
   selectedLocation,
   expandedLocations,
   onLocationSelect,
   onToggleExpand,
   searchTerm,
 }) {
-  // Calculate part count for a location and its descendants
-  const getLocationPartCount = (locationId) => {
+  // Calculate inventory count for a location and its descendants
+  const getLocationInventoryCount = (locationId) => {
     const getDescendants = (locId) => {
       const descendants = [locId];
       locations
@@ -24,7 +29,8 @@ export default function LocationTree({
     };
 
     const locationIds = getDescendants(locationId);
-    return parts.filter(p => p.location_id && locationIds.includes(p.location_id)).length;
+    // Count from InventoryItem, not Part.location_id
+    return inventoryItems.filter(i => i.location_id && locationIds.includes(i.location_id)).length;
   };
 
   // Filter locations based on search
@@ -40,7 +46,7 @@ export default function LocationTree({
     const hasChildren = children.length > 0;
     const isExpanded = expandedLocations.has(location.id);
     const isSelected = selectedLocation === location.id;
-    const partCount = getLocationPartCount(location.id);
+    const itemCount = getLocationInventoryCount(location.id);
     const showNode = matchesSearch(location) || searchTerm === '';
 
     if (!showNode && !hasChildren) return null;
@@ -115,10 +121,10 @@ export default function LocationTree({
             <span 
               className={cn(
                 "text-xs font-medium px-2 py-0.5 rounded-full",
-                partCount > 0 ? "bg-red-900/50 text-red-300" : "bg-gray-800 text-gray-500"
+                itemCount > 0 ? "bg-red-900/50 text-red-300" : "bg-gray-800 text-gray-500"
               )}
             >
-              {partCount}
+              {itemCount}
             </span>
           </div>
         </div>
@@ -139,12 +145,12 @@ export default function LocationTree({
     .filter(loc => !loc.parent_id && loc.active)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-  // Show unassigned parts as a special node
-  const unassignedCount = parts.filter(p => !p.location_id).length;
+  // Show unassigned inventory as a special node
+  const unassignedCount = inventoryItems.filter(i => !i.location_id).length;
 
   return (
     <div className="space-y-1">
-      {/* Unassigned Parts Node */}
+      {/* Unassigned Inventory Node */}
       {unassignedCount > 0 && (
         <div
           className={cn(
