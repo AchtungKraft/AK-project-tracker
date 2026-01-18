@@ -82,24 +82,20 @@ export default function PartsTracker() {
               <PartsMasterList onPartClick={handlePartClick} />
             </TabsContent>
 
-            <TabsContent value="need-to-buy" className="mt-4">
-              <NeedToBuy onPartClick={handlePartClick} />
-            </TabsContent>
-
-            <TabsContent value="on-order" className="mt-4">
-              <OnOrder onPartClick={handlePartClick} />
-            </TabsContent>
-
             <TabsContent value="inventory" className="mt-4">
-              <InventoryLocations onPartClick={handlePartClick} />
+              <InventoryManagement onPartClick={handlePartClick} />
+            </TabsContent>
+
+            <TabsContent value="purchasing" className="mt-4">
+              <PurchasingDashboard />
             </TabsContent>
 
             <TabsContent value="builds" className="mt-4">
               <BuildsDashboard onPartClick={handlePartClick} />
             </TabsContent>
 
-            <TabsContent value="inventory-explorer" className="mt-4">
-              <InventoryExplorerLayout onPartClick={handlePartClick} />
+            <TabsContent value="locations" className="mt-4">
+              <InventoryLocations onPartClick={handlePartClick} />
             </TabsContent>
           </Tabs>
         </div>
