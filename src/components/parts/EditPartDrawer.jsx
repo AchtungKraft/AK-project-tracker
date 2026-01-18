@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartJournalSection from "./PartJournalSection";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import OrderPartModal from "./OrderPartModal";
+import AddToBuildModal from "./AddToBuildModal";
 
 export default function EditPartDrawer({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -24,6 +25,7 @@ export default function EditPartDrawer({ partId, onClose }) {
   const [editing, setEditing] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showBuildModal, setShowBuildModal] = useState(false);
 
   const { data: part, isLoading } = useQuery({
     queryKey: ['part', partId],
@@ -283,7 +285,7 @@ export default function EditPartDrawer({ partId, onClose }) {
 
           <div className="py-6 space-y-6">
             {/* Quick Actions */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 onClick={() => setShowInventoryModal(true)}
                 variant="outline"
@@ -299,6 +301,14 @@ export default function EditPartDrawer({ partId, onClose }) {
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
                 Order Part
+              </Button>
+              <Button
+                onClick={() => setShowBuildModal(true)}
+                variant="outline"
+                className="flex-1 border-orange-700 text-orange-400 hover:bg-orange-900/30"
+              >
+                <Wrench className="w-4 h-4 mr-2" />
+                Add to Build
               </Button>
             </div>
 
@@ -872,6 +882,13 @@ export default function EditPartDrawer({ partId, onClose }) {
         <OrderPartModal
           part={part}
           onClose={() => setShowOrderModal(false)}
+        />
+      )}
+
+      {showBuildModal && part && (
+        <AddToBuildModal
+          part={part}
+          onClose={() => setShowBuildModal(false)}
         />
       )}
     </>
