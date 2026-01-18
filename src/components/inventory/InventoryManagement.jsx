@@ -13,16 +13,19 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Search, Plus, Package, MapPin, AlertTriangle, MoreVertical, ShoppingCart, Eye } from "lucide-react";
+import { Search, Plus, Package, MapPin, AlertTriangle, MoreVertical, ShoppingCart, Eye, Wrench } from "lucide-react";
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
+import AddToBuildModal from "../parts/AddToBuildModal";
 
 export default function InventoryManagement({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addInventoryPartId, setAddInventoryPartId] = useState(null);
   const [orderPart, setOrderPart] = useState(null);
+  const [buildPart, setBuildPart] = useState(null);
 
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ['inventoryItems'],
@@ -37,6 +40,11 @@ export default function InventoryManagement({ onPartClick }) {
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['partCategories'],
+    queryFn: () => base44.entities.PartCategory.list()
   });
 
   const getPartName = (partId) => {
@@ -55,12 +63,36 @@ export default function InventoryManagement({ onPartClick }) {
     return location.location_area;
   };
 
+  // Helper to get all descendant category IDs
+  const getAllDescendantCategoryIds = (categoryId) => {
+    const descendants = new Set([categoryId]);
+    const queue = [categoryId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      categories.forEach(cat => {
+        if (cat.parent_id === current && !descendants.has(cat.id)) {
+          descendants.add(cat.id);
+          queue.push(cat.id);
+        }
+      });
+    }
+    return Array.from(descendants);
+  };
+
   const filteredItems = inventoryItems.filter(item => {
     const part = parts.find(p => p.id === item.part_id);
     const matchesSearch = part?.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          part?.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLocation = locationFilter === 'all' || item.location_id === locationFilter;
-    return matchesSearch && matchesLocation;
+    
+    // Category filter - include descendants
+    let matchesCategory = categoryFilter === 'all';
+    if (!matchesCategory && part?.part_category_id) {
+      const relevantCategoryIds = getAllDescendantCategoryIds(categoryFilter);
+      matchesCategory = relevantCategoryIds.includes(part.part_category_id);
+    }
+    
+    return matchesSearch && matchesLocation && matchesCategory;
   });
 
   // Aggregate inventory by part
@@ -79,6 +111,7 @@ export default function InventoryManagement({ onPartClick }) {
   });
 
   const parentLocations = locations.filter(l => !l.parent_id && l.active);
+  const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
   return (
     <div className="space-y-4">
@@ -100,7 +133,7 @@ export default function InventoryManagement({ onPartClick }) {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
               <Input
@@ -127,6 +160,31 @@ export default function InventoryManagement({ onPartClick }) {
                         <SelectItem key={child.id} value={child.id}>
                           <span className="ml-4" style={{ color: child.color }}>
                             → {child.location_area}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {parentCategories.map(parent => {
+                  const children = categories.filter(c => c.parent_id === parent.id && c.active);
+                  return (
+                    <React.Fragment key={parent.id}>
+                      <SelectItem value={parent.id}>
+                        <span style={{ color: parent.color }}>{parent.name}</span>
+                      </SelectItem>
+                      {children.map(child => (
+                        <SelectItem key={child.id} value={child.id}>
+                          <span className="ml-4" style={{ color: child.color }}>
+                            → {child.name}
                           </span>
                         </SelectItem>
                       ))}
@@ -273,6 +331,16 @@ export default function InventoryManagement({ onPartClick }) {
                               <ShoppingCart className="w-4 h-4 mr-2" />
                               Order Part
                             </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                part && setBuildPart(part);
+                              }}
+                              className="text-orange-400"
+                            >
+                              <Wrench className="w-4 h-4 mr-2" />
+                              Add to Build
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -300,6 +368,13 @@ export default function InventoryManagement({ onPartClick }) {
         <OrderPartModal 
           part={orderPart}
           onClose={() => setOrderPart(null)} 
+        />
+      )}
+
+      {buildPart && (
+        <AddToBuildModal 
+          part={buildPart}
+          onClose={() => setBuildPart(null)} 
         />
       )}
     </div>

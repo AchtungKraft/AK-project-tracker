@@ -12,12 +12,13 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Search, ChevronLeft, ChevronRight, Image as ImageIcon, Package, MapPin, MoreVertical, Plus, ShoppingCart, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Image as ImageIcon, Package, MapPin, MoreVertical, Plus, ShoppingCart, Eye, Wrench } from "lucide-react";
 import LocationTree from "../inventory/LocationTree";
 import InventoryBreadcrumb from "../inventory/InventoryBreadcrumb";
 import ImageGallery from "./ImageGallery";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import OrderPartModal from "./OrderPartModal";
+import AddToBuildModal from "./AddToBuildModal";
 
 const LOCATIONS_STATE_KEY = 'achtung_locations_explorer_state';
 
@@ -37,6 +38,7 @@ export default function InventoryLocations({ onPartClick }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [addInventoryPartId, setAddInventoryPartId] = useState(null);
   const [orderPart, setOrderPart] = useState(null);
+  const [buildPart, setBuildPart] = useState(null);
 
   // Load state from localStorage
   useEffect(() => {
@@ -400,6 +402,16 @@ export default function InventoryLocations({ onPartClick }) {
                                   <ShoppingCart className="w-4 h-4 mr-2" />
                                   Order Part
                                 </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    part && setBuildPart(part);
+                                  }}
+                                  className="text-orange-400"
+                                >
+                                  <Wrench className="w-4 h-4 mr-2" />
+                                  Add to Build
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -433,6 +445,13 @@ export default function InventoryLocations({ onPartClick }) {
         <OrderPartModal 
           part={orderPart}
           onClose={() => setOrderPart(null)} 
+        />
+      )}
+
+      {buildPart && (
+        <AddToBuildModal 
+          part={buildPart}
+          onClose={() => setBuildPart(null)} 
         />
       )}
     </>
