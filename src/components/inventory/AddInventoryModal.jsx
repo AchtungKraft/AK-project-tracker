@@ -11,6 +11,17 @@ import { toast } from "sonner";
 
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
+  // Get default cost from part if preselected
+  const { data: preselectedPart } = useQuery({
+    queryKey: ['part', preselectedPartId],
+    queryFn: async () => {
+      if (!preselectedPartId) return null;
+      const allParts = await base44.entities.Part.list();
+      return allParts.find(p => p.id === preselectedPartId);
+    },
+    enabled: !!preselectedPartId,
+  });
+
   const [formData, setFormData] = useState({
     part_id: preselectedPartId || '',
     location_id: '',
@@ -19,6 +30,16 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
     lot_number: '',
     notes: ''
   });
+
+  // Update default cost when part data loads
+  React.useEffect(() => {
+    if (preselectedPart?.default_cost && !formData.purchase_cost) {
+      setFormData(prev => ({
+        ...prev,
+        purchase_cost: preselectedPart.default_cost.toString()
+      }));
+    }
+  }, [preselectedPart]);
 
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
@@ -69,22 +90,31 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label className="text-gray-300">Part *</Label>
-            <Select 
-              value={formData.part_id} 
-              onValueChange={(v) => setFormData({...formData, part_id: v})}
-            >
-              <SelectTrigger className="bg-gray-800 border-gray-700">
-                <SelectValue placeholder="Select part..." />
-              </SelectTrigger>
-              <SelectContent>
-                {parts.map(part => (
-                  <SelectItem key={part.id} value={part.id}>
-                    {part.part_name}
-                    {part.vendor_part_number && ` (${part.vendor_part_number})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {preselectedPartId ? (
+              <div className="p-2 bg-gray-800 border border-gray-700 rounded-md">
+                <p className="text-white text-sm">{preselectedPart?.part_name || 'Loading...'}</p>
+                {preselectedPart?.vendor_part_number && (
+                  <p className="text-xs text-gray-400 font-mono">{preselectedPart.vendor_part_number}</p>
+                )}
+              </div>
+            ) : (
+              <Select 
+                value={formData.part_id} 
+                onValueChange={(v) => setFormData({...formData, part_id: v})}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700">
+                  <SelectValue placeholder="Select part..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {parts.map(part => (
+                    <SelectItem key={part.id} value={part.id}>
+                      {part.part_name}
+                      {part.vendor_part_number && ` (${part.vendor_part_number})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div>
