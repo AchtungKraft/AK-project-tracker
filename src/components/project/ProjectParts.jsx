@@ -92,10 +92,35 @@ export default function ProjectParts({ projectId }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.PartProjectRequirement.delete(id),
+    mutationFn: async (requirement) => {
+      // Release any reserved inventory before deleting
+      const allocatedQty = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
+      
+      if (allocatedQty > 0) {
+        // Find inventory items for this part and release reserved quantities
+        const partInventory = inventoryItems.filter(i => i.part_id === requirement.part_id);
+        let remainingToRelease = allocatedQty;
+        
+        for (const item of partInventory) {
+          if (remainingToRelease <= 0) break;
+          
+          const reservedHere = Math.min(item.quantity_reserved || 0, remainingToRelease);
+          if (reservedHere > 0) {
+            await base44.entities.InventoryItem.update(item.id, {
+              quantity_reserved: Math.max(0, (item.quantity_reserved || 0) - reservedHere)
+            });
+            remainingToRelease -= reservedHere;
+          }
+        }
+      }
+      
+      // Now delete the requirement
+      await base44.entities.PartProjectRequirement.delete(requirement.id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      toast.success('Requirement removed');
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      toast.success('Requirement removed and reserved inventory released');
     },
   });
 
@@ -131,9 +156,14 @@ export default function ProjectParts({ projectId }) {
     return matchesSearch && matchesStatus;
   });
 
-  const handleRemove = (reqId) => {
-    if (confirm('Remove this part requirement?')) {
-      deleteMutation.mutate(reqId);
+  const handleRemove = (requirement) => {
+    const allocatedUninstalled = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
+    const message = allocatedUninstalled > 0 
+      ? `Remove this requirement? ${allocatedUninstalled} allocated unit(s) will be released back to inventory.`
+      : 'Remove this part requirement?';
+    
+    if (confirm(message)) {
+      deleteMutation.mutate(requirement);
     }
   };
 
@@ -306,7 +336,7 @@ export default function ProjectParts({ projectId }) {
                               View Part Details
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => handleRemove(req.id)}
+                              onClick={() => handleRemove(req)}
                               className="text-red-400"
                             >
                               <Trash2 className="w-4 h-4 mr-2" /> Remove
