@@ -26,16 +26,14 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     car_model_id: "",
     car_year_id: "",
     part_category_id: "",
-    location_id: "",
-    cost: "",
-    retail: "",
-    quantity_on_hand: 0,
-    vendor_id: "",
-    status: "On-Hand",
+    default_vendor_id: "",
+    default_cost: "",
+    default_retail: "",
+    reorder_point: 0,
+    is_active: true,
     notes: "",
     photos: [],
-    featured_photo: "",
-    global_all_builds: false
+    featured_photo: ""
   });
 
   const { data: categories = [] } = useQuery({
@@ -91,20 +89,23 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     onSuccess: async (newPart) => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       
-      // If projectId is provided, also create a build assignment
+      // If projectId is provided, create a PartProjectRequirement (NOT PartBuildAssignment)
       if (projectId) {
         try {
-          await base44.entities.PartBuildAssignment.create({
+          await base44.entities.PartProjectRequirement.create({
             part_id: newPart.id,
             project_id: projectId,
-            needed_status: newPart.status,
             qty_needed: 1,
-            qty_reserved: 0,
+            qty_allocated: 0,
+            qty_ordered: 0,
+            qty_installed: 0,
+            status: 'Needed',
+            priority: 'Normal',
             notes: ""
           });
-          queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
+          queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
         } catch (error) {
-          console.error('Failed to create build assignment:', error);
+          console.error('Failed to create project requirement:', error);
         }
       }
       
@@ -203,9 +204,9 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     
     const partData = {
       ...formData,
-      cost: formData.cost ? parseFloat(formData.cost) : undefined,
-      retail: formData.retail ? parseFloat(formData.retail) : undefined,
-      quantity_on_hand: parseInt(formData.quantity_on_hand) || 0,
+      default_cost: formData.default_cost ? parseFloat(formData.default_cost) : undefined,
+      default_retail: formData.default_retail ? parseFloat(formData.default_retail) : undefined,
+      reorder_point: parseInt(formData.reorder_point) || 0,
     };
 
     // Remove empty IDs
@@ -213,8 +214,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     if (!partData.car_model_id) delete partData.car_model_id;
     if (!partData.car_year_id) delete partData.car_year_id;
     if (!partData.part_category_id) delete partData.part_category_id;
-    if (!partData.location_id) delete partData.location_id;
-    if (!partData.vendor_id) delete partData.vendor_id;
+    if (!partData.default_vendor_id) delete partData.default_vendor_id;
 
     createPartMutation.mutate(partData);
   };
@@ -270,8 +270,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       await queryClient.invalidateQueries({ queryKey: [queryKey] });
       
       if (entityType === 'PartCategory') setFormData({ ...formData, part_category_id: newItem.id });
-      else if (entityType === 'Vendor') setFormData({ ...formData, vendor_id: newItem.id });
-      else if (entityType === 'Location') setFormData({ ...formData, location_id: newItem.id });
+      else if (entityType === 'Vendor') setFormData({ ...formData, default_vendor_id: newItem.id });
       else if (entityType === 'CarMake') setFormData({ ...formData, car_make_id: newItem.id });
       else if (entityType === 'CarModel') setFormData({ ...formData, car_model_id: newItem.id });
       else if (entityType === 'CarYear') setFormData({ ...formData, car_year_id: newItem.id });
@@ -443,12 +442,12 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
               <div className="space-y-2">
                 <Label className="text-gray-400 flex items-center justify-between">
-                  Vendor
+                  Default Vendor
                   <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
                 </Label>
                 <Select
-                  value={formData.vendor_id || 'none'}
-                  onValueChange={(value) => setFormData({ ...formData, vendor_id: value === 'none' ? '' : value })}
+                  value={formData.default_vendor_id || 'none'}
+                  onValueChange={(value) => setFormData({ ...formData, default_vendor_id: value === 'none' ? '' : value })}
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                     <SelectValue placeholder="Select..." />
@@ -473,90 +472,41 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-gray-400 flex items-center justify-between">
-                  Location
-                  <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
-                </Label>
-                <Select
-                  value={formData.location_id || 'none'}
-                  onValueChange={(value) => setFormData({ ...formData, location_id: value === 'none' ? '' : value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {parentLocations.map(parent => {
-                      const children = activeLocations.filter(l => l.parent_id === parent.id);
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color }}>{parent.location_area}</span>
-                          </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="ml-4" style={{ color: child.color }}>→ {child.location_area}</span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="text-gray-400">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="On-Hand">On-Hand</SelectItem>
-                    <SelectItem value="Need to Buy">Need to Buy</SelectItem>
-                    <SelectItem value="On-Order">On-Order</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-gray-400">Cost</Label>
+                <Label className="text-gray-400">Default Cost</Label>
                 <Input
                   type="number"
                   step="0.01"
-                  value={formData.cost}
-                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                  value={formData.default_cost}
+                  onChange={(e) => setFormData({ ...formData, default_cost: e.target.value })}
                   className="bg-gray-800 border-gray-700 text-white"
                   placeholder="0.00"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label className="text-gray-400">Retail</Label>
+                <Label className="text-gray-400">Default Retail</Label>
                 <Input
                   type="number"
                   step="0.01"
-                  value={formData.retail}
-                  onChange={(e) => setFormData({ ...formData, retail: e.target.value })}
+                  value={formData.default_retail}
+                  onChange={(e) => setFormData({ ...formData, default_retail: e.target.value })}
                   className="bg-gray-800 border-gray-700 text-white"
                   placeholder="0.00"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label className="text-gray-400">Qty on Hand</Label>
+                <Label className="text-gray-400">Reorder Point</Label>
                 <Input
                   type="number"
-                  value={formData.quantity_on_hand}
-                  onChange={(e) => setFormData({ ...formData, quantity_on_hand: e.target.value })}
+                  value={formData.reorder_point}
+                  onChange={(e) => setFormData({ ...formData, reorder_point: e.target.value })}
                   className="bg-gray-800 border-gray-700 text-white"
+                  placeholder="Min stock alert"
                 />
               </div>
             </div>
@@ -575,10 +525,10 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
               <div className="flex items-center gap-2">
                 <Switch
-                  checked={formData.global_all_builds}
-                  onCheckedChange={(checked) => setFormData({ ...formData, global_all_builds: checked })}
+                  checked={formData.is_active !== false}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                 />
-                <Label className="text-gray-400 text-sm">Global/All Builds</Label>
+                <Label className="text-gray-400 text-sm">Active in Catalog</Label>
               </div>
             </div>
 
