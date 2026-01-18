@@ -1,16 +1,15 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box, Image as ImageIcon } from "lucide-react";
+import { Package, Box, Image as ImageIcon } from "lucide-react";
 import ImageGallery from "./ImageGallery";
 
-const statusColors = {
-  'On-Hand': '#10B981',
-  'Need to Buy': '#EF4444',
-  'On-Order': '#F59E0B'
-};
-
+/**
+ * PartsGrid - Displays parts in a card/grid format
+ * Uses InventoryItem for stock/available calculations
+ * NO LONGER uses Part.quantity_on_hand, Part.status, or PartBuildAssignment
+ */
 export default function PartsGrid({ 
   parts, 
   categories,
@@ -22,14 +21,10 @@ export default function PartsGrid({
     images: [],
     currentIndex: 0,
   });
+
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
   });
 
   const { data: makes = [] } = useQuery({
@@ -47,20 +42,17 @@ export default function PartsGrid({
     queryFn: () => base44.entities.CarYear.list(),
   });
 
-  const { data: allAssignments = [] } = useQuery({
-    queryKey: ['partBuildAssignments'],
-    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  // Use InventoryItem for stock calculations
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: () => base44.entities.InventoryItem.list(),
   });
 
-  const getPartReserved = (partId) => {
-    return allAssignments
-      .filter(a => a.part_id === partId)
-      .reduce((sum, a) => sum + (a.qty_needed || 0), 0);
-  };
-
-  const getPartAvailable = (part) => {
-    const reserved = getPartReserved(part.id);
-    return (part.quantity_on_hand || 0) - reserved;
+  const getInventoryStats = (partId) => {
+    const items = inventoryItems.filter(i => i.part_id === partId);
+    const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+    const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+    return { onHand, reserved, available: onHand - reserved };
   };
 
   const openGallery = (images, index = 0) => {
@@ -104,15 +96,13 @@ export default function PartsGrid({
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
           {parts.map(part => {
-            const vendor = vendors.find(v => v.id === part.vendor_id);
-            const location = locations.find(l => l.id === part.location_id);
+            const vendor = vendors.find(v => v.id === part.default_vendor_id);
             const make = makes.find(m => m.id === part.car_make_id);
             const model = models.find(m => m.id === part.car_model_id);
             const year = years.find(y => y.id === part.car_year_id);
             const images = part.photos || [];
             const featuredPhoto = part.featured_photo || images[0];
-            const available = getPartAvailable(part);
-            const reserved = getPartReserved(part.id);
+            const stats = getInventoryStats(part.id);
             const hasMultipleImages = images.length > 1;
 
             return (
@@ -155,12 +145,11 @@ export default function PartsGrid({
                     <h4 className="text-white text-sm font-semibold line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
                       {part.part_name}
                     </h4>
-                    <Badge 
-                      style={{ backgroundColor: statusColors[part.status] }}
-                      className="text-white text-xs shrink-0"
-                    >
-                      {part.status}
-                    </Badge>
+                    {part.is_active === false && (
+                      <Badge variant="outline" className="border-red-500 text-red-400 text-xs shrink-0">
+                        Inactive
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Part Number */}
@@ -181,30 +170,22 @@ export default function PartsGrid({
                   <div className="grid grid-cols-3 gap-2 mb-2 pt-2 border-t border-gray-800">
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Stock</p>
-                      <p className="text-sm text-white font-semibold">{part.quantity_on_hand || 0}</p>
+                      <p className="text-sm text-white font-semibold">{stats.onHand}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Reserved</p>
-                      <p className="text-sm text-yellow-400 font-semibold">{reserved}</p>
+                      <p className="text-sm text-yellow-400 font-semibold">{stats.reserved}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Available</p>
-                      <p className={`text-sm font-semibold ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {available}
+                      <p className={`text-sm font-semibold ${stats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {stats.available}
                       </p>
                     </div>
                   </div>
 
-                  {/* Location & Vendor */}
+                  {/* Vendor */}
                   <div className="flex flex-wrap gap-2 text-xs">
-                    {location && (
-                      <div className="flex items-center gap-1 text-gray-400">
-                        <MapPin className="w-3 h-3" />
-                        <span className="truncate max-w-[120px]">
-                          {location.bin_description || location.location_area}
-                        </span>
-                      </div>
-                    )}
                     {vendor && (
                       <div className="flex items-center gap-1 text-gray-400">
                         <Box className="w-3 h-3" />
@@ -214,15 +195,6 @@ export default function PartsGrid({
                       </div>
                     )}
                   </div>
-
-                  {/* Global Badge */}
-                  {part.global_all_builds && (
-                    <div className="mt-2 pt-2 border-t border-gray-800">
-                      <Badge variant="outline" className="border-green-500 text-green-400 text-xs">
-                        Global
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               </div>
             );

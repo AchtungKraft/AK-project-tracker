@@ -2,16 +2,15 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box, Image as ImageIcon, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, MapPin, Box, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 
-const statusColors = {
-  'On-Hand': '#10B981',
-  'Need to Buy': '#EF4444',
-  'On-Order': '#F59E0B'
-};
-
+/**
+ * PartsListView - Displays parts in a list format
+ * Uses InventoryItem for stock/available calculations
+ * NO LONGER uses Part.quantity_on_hand, Part.status, or PartBuildAssignment
+ */
 export default function PartsListView({ 
   parts, 
   categories,
@@ -51,20 +50,17 @@ export default function PartsListView({
     queryFn: () => base44.entities.CarYear.list(),
   });
 
-  const { data: allAssignments = [] } = useQuery({
-    queryKey: ['partBuildAssignments'],
-    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  // Use InventoryItem for stock calculations
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: () => base44.entities.InventoryItem.list(),
   });
 
-  const getPartReserved = (partId) => {
-    return allAssignments
-      .filter(a => a.part_id === partId)
-      .reduce((sum, a) => sum + (a.qty_needed || 0), 0);
-  };
-
-  const getPartAvailable = (part) => {
-    const reserved = getPartReserved(part.id);
-    return (part.quantity_on_hand || 0) - reserved;
+  const getInventoryStats = (partId) => {
+    const items = inventoryItems.filter(i => i.part_id === partId);
+    const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+    const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+    return { onHand, reserved, available: onHand - reserved };
   };
 
   const getCategoryPath = (categoryId) => {
@@ -167,11 +163,9 @@ export default function PartsListView({
   const PartRow = ({ part }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
-    const available = getPartAvailable(part);
-    const reserved = getPartReserved(part.id);
+    const stats = getInventoryStats(part.id);
     const hasMultipleImages = images.length > 1;
-    const location = locations.find(l => l.id === part.location_id);
-    const vendor = vendors.find(v => v.id === part.vendor_id);
+    const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const make = makes.find(m => m.id === part.car_make_id);
     const model = models.find(m => m.id === part.car_model_id);
     const year = years.find(y => y.id === part.car_year_id);
@@ -217,12 +211,11 @@ export default function PartsListView({
               <h4 className="text-white text-sm font-medium line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
                 {part.part_name}
               </h4>
-              <Badge 
-                style={{ backgroundColor: statusColors[part.status] }}
-                className="text-white text-xs shrink-0"
-              >
-                {part.status}
-              </Badge>
+              {part.is_active === false && (
+                <Badge variant="outline" className="border-red-500 text-red-400 text-xs shrink-0">
+                  Inactive
+                </Badge>
+              )}
             </div>
             
             {/* Part Number */}
@@ -239,14 +232,8 @@ export default function PartsListView({
               </div>
             )}
 
-            {/* Location and Vendor - Mobile stacked */}
+            {/* Vendor */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1 sm:gap-x-3 text-xs text-gray-400">
-              {location && (
-                <span className="flex items-center gap-1 truncate">
-                  <MapPin className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">{location.bin_description || location.location_area}</span>
-                </span>
-              )}
               {vendor && (
                 <span className="flex items-center gap-1 truncate">
                   <Box className="w-3 h-3 flex-shrink-0" />
@@ -261,19 +248,19 @@ export default function PartsListView({
         <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
           <div className="text-center min-w-[60px]">
             <div className="text-gray-500 mb-0.5">Stock</div>
-            <div className="text-white font-semibold">{part.quantity_on_hand || 0}</div>
+            <div className="text-white font-semibold">{stats.onHand}</div>
           </div>
           <div className="text-center min-w-[60px]">
             <div className="text-gray-500 mb-0.5">Reserved</div>
-            <div className="text-yellow-400 font-semibold">{reserved}</div>
+            <div className="text-yellow-400 font-semibold">{stats.reserved}</div>
           </div>
           <div className="text-center min-w-[60px]">
             <div className="text-gray-500 mb-0.5">Available</div>
             <div className={cn(
               "font-semibold",
-              available > 0 ? "text-green-400" : "text-red-400"
+              stats.available > 0 ? "text-green-400" : "text-red-400"
             )}>
-              {available}
+              {stats.available}
             </div>
           </div>
         </div>
