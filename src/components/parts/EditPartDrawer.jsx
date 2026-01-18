@@ -882,6 +882,7 @@ export default function EditPartDrawer({ partId, onClose }) {
         <OrderPartModal
           part={part}
           onClose={() => setShowOrderModal(false)}
+          onPartClick={null}
         />
       )}
 
