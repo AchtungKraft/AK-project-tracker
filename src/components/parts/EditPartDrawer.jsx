@@ -456,14 +456,14 @@ export default function EditPartDrawer({ partId, onClose }) {
 
                     <div>
                       <Label className="text-gray-400 text-xs flex items-center justify-between">
-                        Vendor
+                        Default Vendor
                         <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
                           + New
                         </button>
                       </Label>
                       <Select
-                        value={editedPart.vendor_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, vendor_id: value === 'none' ? '' : value })}
+                        value={editedPart.default_vendor_id || 'none'}
+                        onValueChange={(value) => setEditedPart({ ...editedPart, default_vendor_id: value === 'none' ? '' : value })}
                       >
                         <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                           <SelectValue placeholder="Select..." />
@@ -480,41 +480,6 @@ export default function EditPartDrawer({ partId, onClose }) {
                                 <SelectItem key={child.id} value={child.id}>
                                   <span className="ml-4" style={{ color: child.color }}>
                                     → {child.vendor_name}
-                                  </span>
-                                </SelectItem>
-                              ))
-                            ];
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label className="text-gray-400 text-xs flex items-center justify-between">
-                        Location
-                        <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">
-                          + New
-                        </button>
-                      </Label>
-                      <Select
-                        value={editedPart.location_id || 'none'}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, location_id: value === 'none' ? '' : value })}
-                      >
-                        <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                          <SelectValue placeholder="Select..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {locations.filter(l => l.active && !l.parent_id).map(parent => {
-                            const children = locations.filter(l => l.parent_id === parent.id && l.active);
-                            return [
-                              <SelectItem key={parent.id} value={parent.id}>
-                                <span style={{ color: parent.color }}>{parent.location_area}</span>
-                              </SelectItem>,
-                              ...children.map(child => (
-                                <SelectItem key={child.id} value={child.id}>
-                                  <span className="ml-4" style={{ color: child.color }}>
-                                    → {child.location_area}
                                   </span>
                                 </SelectItem>
                               ))
@@ -625,17 +590,8 @@ export default function EditPartDrawer({ partId, onClose }) {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Vendor</p>
-                      <p className="text-white">{vendors.find(v => v.id === part?.vendor_id)?.vendor_name || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Location</p>
-                      <p className="text-white">
-                        {(() => {
-                          const location = locations.find(l => l.id === part?.location_id);
-                          return location ? (location.bin_description || location.location_area) : '-';
-                        })()}
-                      </p>
+                      <p className="text-xs text-gray-500 mb-1">Default Vendor</p>
+                      <p className="text-white">{vendors.find(v => v.id === part?.default_vendor_id)?.vendor_name || '-'}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4">

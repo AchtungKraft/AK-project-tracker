@@ -406,7 +406,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-gray-400 flex items-center justify-between">
                   Category
