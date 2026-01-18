@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse, RefreshCw } from "lucide-react";
+import { ShoppingCart, Truck, MapPin, List, FolderTree, Warehouse, RefreshCw, Package, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import PartsMasterList from "../components/parts/PartsMasterList";
@@ -9,6 +9,8 @@ import OnOrder from "../components/parts/OnOrder";
 import InventoryLocations from "../components/parts/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
 import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
+import InventoryManagement from "../components/inventory/InventoryManagement";
+import PurchasingDashboard from "../components/purchasing/PurchasingDashboard";
 import EditPartDrawer from "../components/parts/EditPartDrawer";
 
 export default function PartsTracker() {
