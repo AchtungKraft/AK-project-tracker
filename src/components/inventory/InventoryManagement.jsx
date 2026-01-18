@@ -367,7 +367,11 @@ export default function InventoryManagement({ onPartClick }) {
       {orderPart && (
         <OrderPartModal 
           part={orderPart}
-          onClose={() => setOrderPart(null)} 
+          onClose={() => setOrderPart(null)}
+          onPartClick={(partId) => {
+            const part = parts.find(p => p.id === partId);
+            if (part) onPartClick?.(part);
+          }}
         />
       )}
 
