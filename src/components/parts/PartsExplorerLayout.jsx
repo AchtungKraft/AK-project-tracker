@@ -11,6 +11,8 @@ import PartsViewToolbar from "./PartsViewToolbar";
 import PartsBreadcrumb from "./PartsBreadcrumb";
 import UnifiedAddPartModal from "./UnifiedAddPartModal";
 import EditPartDrawer from "./EditPartDrawer";
+import AddInventoryModal from "../inventory/AddInventoryModal";
+import OrderPartModal from "./OrderPartModal";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -25,6 +27,10 @@ export default function PartsExplorerLayout({ onPartClick }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
+  
+  // New modals for inventory and ordering
+  const [inventoryModalPart, setInventoryModalPart] = useState(null);
+  const [orderModalPart, setOrderModalPart] = useState(null);
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -238,6 +244,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
                     categories={categories}
                     selectedCategoryId={selectedCategoryId}
                     onPartClick={onPartClick}
+                    onAddInventory={(part) => setInventoryModalPart(part)}
+                    onOrderPart={(part) => setOrderModalPart(part)}
                   />
                 ) : (
                   <PartsListView
@@ -246,6 +254,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
                     selectedCategoryId={selectedCategoryId}
                     onPartClick={onPartClick}
                     showGrouping={showGrouping}
+                    onAddInventory={(part) => setInventoryModalPart(part)}
+                    onOrderPart={(part) => setOrderModalPart(part)}
                   />
                 )}
               </div>
@@ -288,6 +298,20 @@ export default function PartsExplorerLayout({ onPartClick }) {
 
       {showAddModal && (
         <UnifiedAddPartModal onClose={() => setShowAddModal(false)} />
+      )}
+
+      {inventoryModalPart && (
+        <AddInventoryModal 
+          onClose={() => setInventoryModalPart(null)} 
+          preselectedPartId={inventoryModalPart.id}
+        />
+      )}
+
+      {orderModalPart && (
+        <OrderPartModal 
+          part={orderModalPart}
+          onClose={() => setOrderModalPart(null)} 
+        />
       )}
     </>
   );
