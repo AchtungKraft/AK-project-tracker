@@ -525,54 +525,40 @@ export default function EditPartDrawer({ partId, onClose }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <Label className="text-gray-400 text-xs">Cost</Label>
+                      <Label className="text-gray-400 text-xs">Default Cost</Label>
                       <Input
                         type="number"
                         step="0.01"
-                        value={editedPart.cost || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
+                        value={editedPart.default_cost || ''}
+                        onChange={(e) => setEditedPart({ ...editedPart, default_cost: parseFloat(e.target.value) || 0 })}
                         className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Reference price"
                       />
                     </div>
                     
                     <div>
-                      <Label className="text-gray-400 text-xs">Retail</Label>
+                      <Label className="text-gray-400 text-xs">Default Retail</Label>
                       <Input
                         type="number"
                         step="0.01"
-                        value={editedPart.retail || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, retail: parseFloat(e.target.value) || 0 })}
+                        value={editedPart.default_retail || ''}
+                        onChange={(e) => setEditedPart({ ...editedPart, default_retail: parseFloat(e.target.value) || 0 })}
                         className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Sell price"
                       />
                     </div>
 
                     <div>
-                      <Label className="text-gray-400 text-xs">Qty on Hand</Label>
+                      <Label className="text-gray-400 text-xs">Reorder Point</Label>
                       <Input
                         type="number"
-                        value={editedPart.quantity_on_hand || 0}
-                        onChange={(e) => setEditedPart({ ...editedPart, quantity_on_hand: parseInt(e.target.value) || 0 })}
+                        value={editedPart.reorder_point || 0}
+                        onChange={(e) => setEditedPart({ ...editedPart, reorder_point: parseInt(e.target.value) || 0 })}
                         className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Min inventory alert"
                       />
-                    </div>
-
-                    <div>
-                      <Label className="text-gray-400 text-xs">Status</Label>
-                      <Select
-                        value={editedPart.status}
-                        onValueChange={(value) => setEditedPart({ ...editedPart, status: value })}
-                      >
-                        <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="On-Hand">On-Hand</SelectItem>
-                          <SelectItem value="Need to Buy">Need to Buy</SelectItem>
-                          <SelectItem value="On-Order">On-Order</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
 
@@ -654,16 +640,16 @@ export default function EditPartDrawer({ partId, onClose }) {
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Cost</p>
-                      <p className="text-white">${part?.cost || '0.00'}</p>
+                      <p className="text-xs text-gray-500 mb-1">Default Cost</p>
+                      <p className="text-white">${part?.default_cost || '0.00'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Retail</p>
-                      <p className="text-white">${part?.retail || '0.00'}</p>
+                      <p className="text-xs text-gray-500 mb-1">Default Retail</p>
+                      <p className="text-white">${part?.default_retail || '0.00'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Quantity on Hand</p>
-                      <p className="text-white font-semibold">{part?.quantity_on_hand || 0}</p>
+                      <p className="text-xs text-gray-500 mb-1">Reorder Point</p>
+                      <p className="text-white font-semibold">{part?.reorder_point || 0}</p>
                     </div>
                   </div>
                   {part?.order_url && (
