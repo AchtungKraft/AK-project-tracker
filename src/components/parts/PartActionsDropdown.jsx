@@ -7,19 +7,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Package, ShoppingCart, Eye, ExternalLink } from "lucide-react";
+import { MoreVertical, Package, ShoppingCart, Eye, ExternalLink, Wrench } from "lucide-react";
 
 /**
  * PartActionsDropdown - Quick actions for a part
  * - Add Inventory
  * - Order Part
+ * - Add to Build
  * - View Details
  * - Open Order URL
  */
 export default function PartActionsDropdown({ 
   part, 
   onAddInventory, 
-  onOrderPart, 
+  onOrderPart,
+  onAddToBuild,
   onViewDetails,
   triggerClassName = "",
 }) {
@@ -69,6 +71,17 @@ export default function PartActionsDropdown({
         >
           <ShoppingCart className="w-4 h-4 mr-2" />
           Order Part
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem 
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddToBuild?.(part);
+          }}
+          className="cursor-pointer text-orange-400 focus:text-orange-400"
+        >
+          <Wrench className="w-4 h-4 mr-2" />
+          Add to Build
         </DropdownMenuItem>
         
         {part.order_url && (
