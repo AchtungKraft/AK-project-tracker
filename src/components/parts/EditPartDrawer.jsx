@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartJournalSection from "./PartJournalSection";
+import AddInventoryModal from "../inventory/AddInventoryModal";
+import OrderPartModal from "./OrderPartModal";
 
 export default function EditPartDrawer({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -20,6 +22,8 @@ export default function EditPartDrawer({ partId, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [showOrderModal, setShowOrderModal] = useState(false);
 
   const { data: part, isLoading } = useQuery({
     queryKey: ['part', partId],
@@ -228,6 +232,22 @@ export default function EditPartDrawer({ partId, onClose }) {
     [years, editedPart?.car_model_id]
   );
 
+  // Fetch inventory for this part
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems', 'forPart', partId],
+    queryFn: async () => {
+      const all = await base44.entities.InventoryItem.list();
+      return all.filter(i => i.part_id === partId);
+    },
+    enabled: !!partId,
+  });
+
+  const inventoryStats = useMemo(() => {
+    const onHand = inventoryItems.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+    const reserved = inventoryItems.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+    return { onHand, reserved, available: onHand - reserved };
+  }, [inventoryItems]);
+
   if (isLoading || !editedPart) {
     return (
       <Sheet open onOpenChange={onClose}>
@@ -262,6 +282,75 @@ export default function EditPartDrawer({ partId, onClose }) {
           </SheetHeader>
 
           <div className="py-6 space-y-6">
+            {/* Quick Actions */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowInventoryModal(true)}
+                variant="outline"
+                className="flex-1 border-green-700 text-green-400 hover:bg-green-900/30"
+              >
+                <Package className="w-4 h-4 mr-2" />
+                Add Inventory
+              </Button>
+              <Button
+                onClick={() => setShowOrderModal(true)}
+                variant="outline"
+                className="flex-1 border-blue-700 text-blue-400 hover:bg-blue-900/30"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Order Part
+              </Button>
+            </div>
+
+            {/* Inventory Summary */}
+            <div className="grid grid-cols-3 gap-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="text-center">
+                <p className="text-xs text-gray-500">On Hand</p>
+                <p className="text-lg font-bold text-white">{inventoryStats.onHand}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500">Reserved</p>
+                <p className="text-lg font-bold text-yellow-400">{inventoryStats.reserved}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500">Available</p>
+                <p className={`text-lg font-bold ${inventoryStats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {inventoryStats.available}
+                </p>
+              </div>
+            </div>
+
+            {/* Inventory Locations */}
+            {inventoryItems.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-400">Inventory Locations</h4>
+                <div className="space-y-1">
+                  {inventoryItems.map(item => {
+                    const loc = locations.find(l => l.id === item.location_id);
+                    return (
+                      <div key={item.id} className="flex items-center justify-between p-2 bg-gray-800/30 rounded text-sm">
+                        <div className="flex items-center gap-2">
+                          <Box className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-300">{loc?.location_area || 'No location'}</span>
+                          {loc?.bin_description && (
+                            <span className="text-gray-500">({loc.bin_description})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="text-white">{item.quantity_on_hand} on hand</span>
+                          {item.quantity_reserved > 0 && (
+                            <span className="text-yellow-400">{item.quantity_reserved} reserved</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <Separator className="bg-gray-700" />
+
             {/* Part Details Section */}
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -769,6 +858,20 @@ export default function EditPartDrawer({ partId, onClose }) {
             car_make_id: editedPart.car_make_id,
             car_model_id: editedPart.car_model_id
           }}
+        />
+      )}
+
+      {showInventoryModal && (
+        <AddInventoryModal
+          onClose={() => setShowInventoryModal(false)}
+          preselectedPartId={partId}
+        />
+      )}
+
+      {showOrderModal && part && (
+        <OrderPartModal
+          part={part}
+          onClose={() => setShowOrderModal(false)}
         />
       )}
     </>
