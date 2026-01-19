@@ -82,33 +82,56 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
           }
         </div>
 
-        {/* Content Section */}
-        <CardContent className="p-4 space-y-3">
-          {/* Project Name & Type */}
-          <div>
-            <h3 className="text-base font-bold text-white mb-0.5 line-clamp-1">
-              {project.name}
-            </h3>
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              {projectType && <span>{projectType.name}</span>}
-              {project.vin &&
-              <>
-                  <span>•</span>
-                  <span className="font-mono">{project.vin}</span>
-                </>
-              }
+        {/* Content Section - Tighter padding on mobile */}
+        <CardContent className="p-3 md:p-4 space-y-2 md:space-y-3">
+          {/* Project Name & Status Row */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm md:text-base font-bold text-white mb-0.5 line-clamp-1">
+                {project.name}
+              </h3>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                {projectType && <span className="hidden md:inline">{projectType.name}</span>}
+                {project.vin &&
+                <>
+                    {projectType && <span className="hidden md:inline">•</span>}
+                    <span className="font-mono truncate">{project.vin}</span>
+                  </>
+                }
+              </div>
+            </div>
+            {/* Status badge visible on mobile in header area */}
+            <div className="md:hidden shrink-0">
+              {status && (
+                <Badge
+                  style={{ backgroundColor: status.color }}
+                  className="text-white text-xs px-1.5 py-0.5"
+                >
+                  {status.label}
+                </Badge>
+              )}
             </div>
           </div>
 
-          {/* Client Info */}
+          {/* Attention indicator on mobile */}
+          {needsAttention && attentionMessage && (
+            <div className="md:hidden flex items-center gap-1.5 text-amber-400 text-xs">
+              <AlertCircle className="w-3 h-3 shrink-0" />
+              <span className="truncate">{attentionMessage}</span>
+            </div>
+          )}
+
+          {/* Client Info - Condensed on mobile */}
           {project.client_name &&
-          <div className="text-sm">
+          <div className="text-sm hidden md:block">
               <p className="text-gray-500 text-xs">Client</p>
               <p className="text-white font-medium">{project.client_name}</p>
             </div>
           }
-
-
+          {/* Mobile: inline client name */}
+          {project.client_name && (
+            <p className="md:hidden text-xs text-gray-400 truncate">{project.client_name}</p>
+          )}
 
           {/* Due Date & Team */}
           <div className="flex items-center justify-between text-xs">
@@ -118,22 +141,23 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
                 <span>Due {format(new Date(project.target_completion), 'MMM d')}</span>
               </div> :
 
-            <div className="text-gray-600">No due date</div>
+            <div className="text-gray-600 hidden md:block">No due date</div>
             }
             
             {teamNames.length > 0 &&
             <div className="flex items-center gap-1 text-gray-400">
                 <Users className="w-3 h-3" />
-                <span>{teamNames.join(', ')}</span>
+                <span className="hidden md:inline">{teamNames.join(', ')}</span>
+                <span className="md:hidden">{teamNames.length}</span>
                 {project.assigned_team?.length > 3 &&
-              <span>+{project.assigned_team.length - 3}</span>
+              <span className="hidden md:inline">+{project.assigned_team.length - 3}</span>
               }
               </div>
             }
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 pt-2 border-t border-gray-800">
+          {/* Action Buttons - Hidden on mobile (whole card is tappable) */}
+          <div className="hidden md:flex gap-2 pt-2 border-t border-gray-800">
             <Link to={createPageUrl("ProjectDetail") + `?id=${project.id}`} className="flex-1">
               <Button
                 variant="outline"
