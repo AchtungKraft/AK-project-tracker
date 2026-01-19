@@ -25,8 +25,9 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'URL is required' }, { status: 400 });
         }
 
-        // First, try to fetch the page HTML directly to extract images
+        // First, try to fetch the page HTML directly to extract images and price
         let extractedImageUrls = [];
+        let extractedPrice = null;
         console.log('Fetching page HTML from:', url);
         try {
             const pageResponse = await fetch(url, {
@@ -42,57 +43,30 @@ Deno.serve(async (req) => {
                 const html = await pageResponse.text();
                 console.log('HTML length:', html.length);
                 
-                // Extract og:image meta tag (try multiple patterns)
-                const ogPatterns = [
-                    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i,
-                    /<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i,
-                    /og:image["']\s*content=["']([^"']+)["']/i
-                ];
-                for (const pattern of ogPatterns) {
-                    const match = html.match(pattern);
-                    if (match && match[1]) {
-                        console.log('Found og:image:', match[1]);
-                        extractedImageUrls.push(match[1]);
-                        break;
-                    }
-                }
-                
-                // Look for CDN image URLs common in e-commerce (Shopify, etc)
-                const cdnPattern = /["'](https?:\/\/cdn[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
-                let cdnMatch;
-                while ((cdnMatch = cdnPattern.exec(html)) !== null) {
-                    if (!extractedImageUrls.includes(cdnMatch[1])) {
-                        extractedImageUrls.push(cdnMatch[1]);
-                    }
-                }
-                
-                // Look for common e-commerce image patterns
-                const ecomPatterns = [
-                    /["'](https?:\/\/[^"']*\/products\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-                    /["'](https?:\/\/[^"']*\/images\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-                    /["'](https?:\/\/[^"']*shopify[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
-                ];
-                
-                for (const pattern of ecomPatterns) {
-                    let match;
-                    while ((match = pattern.exec(html)) !== null) {
-                        let imgUrl = match[1];
-                        if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1')) continue;
-                        if (!extractedImageUrls.includes(imgUrl)) {
-                            extractedImageUrls.push(imgUrl);
-                        }
-                    }
-                }
-                
-                // Also look for JSON-LD product data
+                // === PRICE EXTRACTION ===
+                // Try JSON-LD first (most reliable for structured data)
                 const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
                 let jsonMatch;
                 while ((jsonMatch = jsonLdPattern.exec(html)) !== null) {
                     try {
                         const jsonContent = jsonMatch[1];
                         const jsonData = JSON.parse(jsonContent);
-                        const findImages = (obj) => {
+                        
+                        const findProductData = (obj) => {
                             if (!obj) return;
+                            
+                            // Extract price from offers
+                            if (obj.offers) {
+                                const offers = Array.isArray(obj.offers) ? obj.offers : [obj.offers];
+                                for (const offer of offers) {
+                                    if (offer.price && !extractedPrice) {
+                                        extractedPrice = parseFloat(offer.price);
+                                        console.log('Found JSON-LD price:', extractedPrice);
+                                    }
+                                }
+                            }
+                            
+                            // Extract images
                             if (obj.image) {
                                 const images = Array.isArray(obj.image) ? obj.image : [obj.image];
                                 for (const img of images) {
@@ -103,19 +77,171 @@ Deno.serve(async (req) => {
                                     }
                                 }
                             }
+                            
                             if (obj['@graph'] && Array.isArray(obj['@graph'])) {
-                                for (const item of obj['@graph']) findImages(item);
+                                for (const item of obj['@graph']) findProductData(item);
                             }
                         };
-                        findImages(jsonData);
+                        findProductData(jsonData);
                     } catch (e) {
                         console.log('JSON-LD parse error:', e.message);
                     }
                 }
                 
+                // Try meta tags for price
+                if (!extractedPrice) {
+                    const priceMetaPatterns = [
+                        /<meta[^>]*property=["']product:price:amount["'][^>]*content=["']([^"']+)["']/i,
+                        /<meta[^>]*content=["']([^"']+)["'][^>]*property=["']product:price:amount["']/i,
+                        /<meta[^>]*property=["']og:price:amount["'][^>]*content=["']([^"']+)["']/i,
+                        /<meta[^>]*name=["']price["'][^>]*content=["']([^"']+)["']/i,
+                    ];
+                    for (const pattern of priceMetaPatterns) {
+                        const match = html.match(pattern);
+                        if (match && match[1]) {
+                            extractedPrice = parseFloat(match[1].replace(/[^0-9.]/g, ''));
+                            if (!isNaN(extractedPrice)) {
+                                console.log('Found meta price:', extractedPrice);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Try common price patterns in HTML
+                if (!extractedPrice) {
+                    const pricePatterns = [
+                        // Shopify patterns
+                        /data-product-price=["'](\d+)["']/i,
+                        /"price":\s*(\d+(?:\.\d{2})?)/,
+                        /"price":\s*"(\d+(?:\.\d{2})?)"/,
+                        // Common class patterns
+                        /class=["'][^"']*price[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
+                        /class=["'][^"']*product-price[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
+                        // Inline price patterns
+                        /\$\s*([\d,]+\.\d{2})/,
+                        /USD\s*([\d,]+\.\d{2})/i,
+                        // Data attribute patterns
+                        /data-price=["'](\d+(?:\.\d{2})?)["']/i,
+                    ];
+                    for (const pattern of pricePatterns) {
+                        const match = html.match(pattern);
+                        if (match && match[1]) {
+                            let priceStr = match[1].replace(/,/g, '');
+                            // Shopify stores price in cents
+                            if (pattern.source.includes('data-product-price') && priceStr.length > 2) {
+                                extractedPrice = parseFloat(priceStr) / 100;
+                            } else {
+                                extractedPrice = parseFloat(priceStr);
+                            }
+                            if (!isNaN(extractedPrice) && extractedPrice > 0) {
+                                console.log('Found HTML price:', extractedPrice);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // === IMAGE EXTRACTION ===
+                // Extract og:image meta tag (try multiple patterns)
+                const ogPatterns = [
+                    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i,
+                    /<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i,
+                    /og:image["']\s*content=["']([^"']+)["']/i
+                ];
+                for (const pattern of ogPatterns) {
+                    const match = html.match(pattern);
+                    if (match && match[1]) {
+                        console.log('Found og:image:', match[1]);
+                        if (!extractedImageUrls.includes(match[1])) {
+                            extractedImageUrls.push(match[1]);
+                        }
+                        break;
+                    }
+                }
+                
+                // Look for srcset images (often higher resolution)
+                const srcsetPattern = /srcset=["']([^"']+)["']/gi;
+                let srcsetMatch;
+                while ((srcsetMatch = srcsetPattern.exec(html)) !== null) {
+                    const srcset = srcsetMatch[1];
+                    const srcsetUrls = srcset.split(',').map(s => s.trim().split(' ')[0]);
+                    for (const imgUrl of srcsetUrls) {
+                        if (imgUrl.startsWith('http') && 
+                            !imgUrl.includes('icon') && 
+                            !imgUrl.includes('logo') && 
+                            !imgUrl.includes('1x1') &&
+                            !extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
+                    }
+                }
+                
+                // Look for data-src attributes (lazy loaded images)
+                const dataSrcPatterns = [
+                    /data-src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /data-zoom-image=["'](https?:\/\/[^"']+)["']/gi,
+                    /data-large=["'](https?:\/\/[^"']+)["']/gi,
+                    /data-image=["'](https?:\/\/[^"']+)["']/gi,
+                ];
+                for (const pattern of dataSrcPatterns) {
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let imgUrl = match[1];
+                        if (!imgUrl.includes('icon') && !imgUrl.includes('logo') && !extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
+                    }
+                }
+                
+                // Look for CDN image URLs common in e-commerce (Shopify, etc)
+                const cdnPattern = /["'](https?:\/\/cdn[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+                let cdnMatch;
+                while ((cdnMatch = cdnPattern.exec(html)) !== null) {
+                    let imgUrl = cdnMatch[1];
+                    if (!imgUrl.includes('icon') && !imgUrl.includes('logo') && !extractedImageUrls.includes(imgUrl)) {
+                        extractedImageUrls.push(imgUrl);
+                    }
+                }
+                
+                // Look for common e-commerce image patterns
+                const ecomPatterns = [
+                    /["'](https?:\/\/[^"']*\/products\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*\/images\/[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*shopify[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*cloudinary[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*imgix[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*amazonaws[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/i\d*\.wp\.com[^"']+)["']/gi,
+                ];
+                
+                for (const pattern of ecomPatterns) {
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let imgUrl = match[1];
+                        if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1') || imgUrl.includes('placeholder')) continue;
+                        if (!extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
+                    }
+                }
+                
+                // Look for standard img src tags with product-like URLs
+                const imgSrcPattern = /<img[^>]*src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+                let imgMatch;
+                while ((imgMatch = imgSrcPattern.exec(html)) !== null) {
+                    let imgUrl = imgMatch[1];
+                    if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('1x1') || imgUrl.includes('placeholder')) continue;
+                    // Prioritize product-like URLs
+                    if ((imgUrl.includes('product') || imgUrl.includes('item') || imgUrl.includes('media')) && !extractedImageUrls.includes(imgUrl)) {
+                        extractedImageUrls.push(imgUrl);
+                    }
+                }
+                
+                console.log('Extracted price:', extractedPrice);
                 console.log('Total extracted image URLs:', extractedImageUrls.length);
                 if (extractedImageUrls.length > 0) {
-                    console.log('First 3 images:', extractedImageUrls.slice(0, 3));
+                    console.log('First 5 images:', extractedImageUrls.slice(0, 5));
                 }
             }
         } catch (fetchError) {
