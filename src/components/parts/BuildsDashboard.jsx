@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Search, Package, CheckCircle2, AlertTriangle, Wrench, Eye, 
-  ChevronDown, ChevronUp, ShoppingCart, Truck
+  ChevronDown, ChevronUp, ShoppingCart, Truck, Download
 } from "lucide-react";
+import InstallPartModal from "../project/InstallPartModal";
 
 /**
  * BuildsDashboard - Shows projects with their part requirements
@@ -20,6 +21,7 @@ import {
 export default function BuildsDashboard({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProject, setExpandedProject] = useState(null);
+  const [installRequirement, setInstallRequirement] = useState(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
@@ -137,7 +139,12 @@ export default function BuildsDashboard({ onPartClick }) {
     setExpandedProject(prev => prev === projectId ? null : projectId);
   };
 
-  const renderPartRow = (item, showStatus = true) => (
+  const canInstall = (item) => {
+    const allocatedNotInstalled = (item.qty_allocated || 0) - (item.qty_installed || 0);
+    return allocatedNotInstalled > 0;
+  };
+
+  const renderPartRow = (item, showStatus = true, showInstallAction = false) => (
     <div 
       key={item.requirement.id + item.status}
       className="flex items-center gap-3 p-2 hover:bg-gray-800/30 rounded cursor-pointer"
@@ -166,6 +173,20 @@ export default function BuildsDashboard({ onPartClick }) {
         <span className="text-gray-400 w-24 text-right">
           {item.qty_installed}/{item.qty_allocated}/{item.qty_needed}
         </span>
+        {showInstallAction && canInstall(item) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
+            onClick={(e) => {
+              e.stopPropagation();
+              setInstallRequirement(item.requirement);
+            }}
+          >
+            <Download className="w-3 h-3 mr-1" />
+            Install
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -323,15 +344,16 @@ export default function BuildsDashboard({ onPartClick }) {
                         </div>
                       )}
 
-                      {/* Allocated Section */}
+                      {/* Allocated Section - With Install Action */}
                       {data.sections.allocated.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <Package className="w-4 h-4 text-blue-400" />
                             <span className="text-sm font-medium text-blue-400">Reserved / Allocated ({data.sections.allocated.length})</span>
+                            <span className="text-xs text-gray-500 ml-auto">Ready to install</span>
                           </div>
                           <div className="bg-blue-900/10 border border-blue-900/20 rounded-lg p-2 space-y-1">
-                            {data.sections.allocated.map(item => renderPartRow(item, false))}
+                            {data.sections.allocated.map(item => renderPartRow(item, false, true))}
                           </div>
                         </div>
                       )}
@@ -396,6 +418,13 @@ export default function BuildsDashboard({ onPartClick }) {
             );
           })}
         </div>
+      )}
+
+      {installRequirement && (
+        <InstallPartModal
+          requirement={installRequirement}
+          onClose={() => setInstallRequirement(null)}
+        />
       )}
     </div>
   );

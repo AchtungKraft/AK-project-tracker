@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartJournalSection from "./PartJournalSection";
+import PartStatusSummary from "./PartStatusSummary";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
@@ -312,28 +313,13 @@ export default function EditPartDrawer({ partId, onClose }) {
               </Button>
             </div>
 
-            {/* Inventory Summary */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="text-center">
-                <p className="text-xs text-gray-500">On Hand</p>
-                <p className="text-lg font-bold text-white">{inventoryStats.onHand}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-500">Reserved</p>
-                <p className="text-lg font-bold text-yellow-400">{inventoryStats.reserved}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-500">Available</p>
-                <p className={`text-lg font-bold ${inventoryStats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {inventoryStats.available}
-                </p>
-              </div>
-            </div>
+            {/* Complete Status Summary */}
+            <PartStatusSummary partId={partId} />
 
-            {/* Inventory Locations */}
+            {/* Inventory Locations Detail */}
             {inventoryItems.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-400">Inventory Locations</h4>
+                <h4 className="text-sm font-medium text-gray-400">Storage Locations</h4>
                 <div className="space-y-1">
                   {inventoryItems.map(item => {
                     const loc = locations.find(l => l.id === item.location_id);
