@@ -44,43 +44,55 @@ export default function SavedViewsSelector({
   const [viewToRename, setViewToRename] = useState(null);
   const [renameValue, setRenameValue] = useState('');
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!newViewName.trim()) {
       toast.error('Please enter a view name');
       return;
     }
     
-    const success = onSaveView(newViewName, currentSelectedTypes, currentStatusFilter);
-    if (success) {
-      toast.success(`View "${newViewName}" saved`);
-      setShowSaveDialog(false);
-      setNewViewName('');
-    } else {
+    try {
+      const success = await onSaveView(newViewName, currentSelectedTypes, currentStatusFilter);
+      if (success) {
+        toast.success(`View "${newViewName}" saved for all users`);
+        setShowSaveDialog(false);
+        setNewViewName('');
+      } else {
+        toast.error('Failed to save view');
+      }
+    } catch (e) {
       toast.error('Failed to save view');
     }
   };
 
-  const handleRename = () => {
+  const handleRename = async () => {
     if (!renameValue.trim()) {
       toast.error('Please enter a new name');
       return;
     }
     
-    const success = onRenameView(viewToRename, renameValue);
-    if (success) {
-      toast.success(`View renamed to "${renameValue}"`);
-      setShowRenameDialog(false);
-      setViewToRename(null);
-      setRenameValue('');
-    } else {
+    try {
+      const success = await onRenameView(viewToRename, renameValue);
+      if (success) {
+        toast.success(`View renamed to "${renameValue}"`);
+        setShowRenameDialog(false);
+        setViewToRename(null);
+        setRenameValue('');
+      } else {
+        toast.error('Failed to rename view');
+      }
+    } catch (e) {
       toast.error('Failed to rename view');
     }
   };
 
-  const handleDelete = (viewName) => {
-    const success = onDeleteView(viewName);
-    if (success) {
-      toast.success(`View "${viewName}" deleted`);
+  const handleDelete = async (viewName) => {
+    try {
+      const success = await onDeleteView(viewName);
+      if (success) {
+        toast.success(`View "${viewName}" deleted`);
+      }
+    } catch (e) {
+      toast.error('Failed to delete view');
     }
   };
 
