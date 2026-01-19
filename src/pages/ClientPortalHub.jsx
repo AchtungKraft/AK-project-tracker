@@ -28,11 +28,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ClientPortalListView from "@/components/clientportal/ClientPortalListView";
+import NeedsAttentionSection, { getAttentionType, AttentionBadge, getAttentionPriority } from "@/components/clientportal/NeedsAttentionSection";
 
 // Helper to determine request state
 const getRequestState = (request, decisions, attachments) => {
