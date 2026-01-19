@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import ProjectCard from "../components/dashboard/ProjectCard";
 import ProjectListView from "../components/dashboard/ProjectListView";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
+import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -37,6 +39,33 @@ export default function Dashboard() {
   const [groupBy, setGroupBy] = useState(() => localStorage.getItem('dashboard_groupBy') || 'projectType');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('dashboard_viewMode') || 'list');
+
+  // Saved views hook
+  const {
+    savedViews,
+    activeViewName,
+    activeView,
+    saveView,
+    deleteView,
+    renameView,
+    selectView,
+  } = useSavedProjectViews();
+
+  // Apply filters when a saved view is selected
+  useEffect(() => {
+    if (activeView) {
+      setSelectedTypes(activeView.selectedTypes || []);
+      setStatusFilter(activeView.statusFilter || 'all');
+    }
+  }, [activeViewName]);
+
+  const handleSelectView = (name) => {
+    const view = selectView(name);
+    if (view) {
+      setSelectedTypes(view.selectedTypes || []);
+      setStatusFilter(view.statusFilter || 'all');
+    }
+  };
 
   // Persist filter changes
   const handleStatusFilterChange = (value) => {
@@ -67,6 +96,7 @@ export default function Dashboard() {
     localStorage.removeItem('dashboard_statusFilter');
     localStorage.removeItem('dashboard_selectedTypes');
     localStorage.removeItem('dashboard_groupBy');
+    selectView('All Projects');
   };
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -171,6 +201,18 @@ export default function Dashboard() {
 
         {/* Filters */}
         <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <SavedViewsSelector
+              savedViews={savedViews}
+              activeViewName={activeViewName}
+              onSelectView={handleSelectView}
+              onSaveView={saveView}
+              onDeleteView={deleteView}
+              onRenameView={renameView}
+              currentSelectedTypes={selectedTypes}
+              currentStatusFilter={statusFilter}
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {/* Search */}
             <div className="md:col-span-4 lg:col-span-1">
