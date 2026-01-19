@@ -449,7 +449,102 @@ export default function NeedToBuy({ onPartClick }) {
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
           <CardContent className="p-8 text-center">
             <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
-            <p className="text-gray-400">All caught up! No parts need to be ordered.</p>
+            <p className="text-gray-400">
+              {activeTab === 'client' 
+                ? 'All caught up! No client parts need to be ordered.'
+                : 'All stock levels are good! No parts below reorder point.'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : activeTab === 'lowstock' ? (
+        // Low Stock View - Simple list grouped by vendor
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardContent className="p-0 divide-y divide-red-900/20">
+            {filteredItems.map(item => {
+              const categoryPath = getCategoryPath(item.part.part_category_id);
+              return (
+                <div 
+                  key={item.id}
+                  className="p-3 flex items-center gap-3 hover:bg-red-950/20 transition-colors"
+                >
+                  {item.part.featured_photo && (
+                    <div 
+                      className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden cursor-pointer"
+                      onClick={() => onPartClick(item.part)}
+                    >
+                      <img 
+                        src={item.part.featured_photo} 
+                        alt="" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  )}
+                  
+                  <div 
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => onPartClick(item.part)}
+                  >
+                    <p className="text-white text-sm font-medium truncate hover:text-red-400 transition-colors">
+                      {item.part.part_name}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      {item.part.vendor_part_number && (
+                        <span className="font-mono">{item.part.vendor_part_number}</span>
+                      )}
+                      {item.vendor && <span>· {item.vendor.vendor_name}</span>}
+                      {categoryPath && <span>· {categoryPath}</span>}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 flex-shrink-0">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Current</p>
+                      <p className={`font-medium ${item.netAvailable < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {item.netAvailable}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Min</p>
+                      <p className="text-gray-300 font-medium">{item.reorderPoint}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Order</p>
+                      <p className="text-white font-bold">×{item.qty_to_order}</p>
+                    </div>
+                    
+                    {item.estimated_cost > 0 && (
+                      <div className="text-right w-20">
+                        <p className="text-xs text-yellow-400">${item.estimated_cost.toFixed(2)}</p>
+                      </div>
+                    )}
+                    
+                    {item.part.order_url && (
+                      <a 
+                        href={item.part.order_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOrderModalPart(item.part);
+                      }}
+                      className="border-gray-700 text-gray-300 hover:text-white h-7"
+                    >
+                      Order
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       ) : (
