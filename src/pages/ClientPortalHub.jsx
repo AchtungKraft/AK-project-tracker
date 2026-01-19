@@ -151,7 +151,7 @@ export default function ClientPortalHub() {
     queryFn: () => base44.entities.Project.list(),
   });
 
-  // Categorize requests
+  // Categorize requests with attention indicators
   const categorizedRequests = useMemo(() => {
     const awaiting = [];
     const changesRequested = [];
@@ -173,16 +173,48 @@ export default function ClientPortalHub() {
       const clientCommentCount = newClientComments.length;
       const hasClientComments = clientCommentCount > 0;
       
+      // Get attention type for internal indicators
+      const attentionType = getAttentionType(request, comments, decisions, attachments);
+      
+      // Get last client comment for activity context
+      const allClientComments = comments.filter(c => 
+        c.request_id === request.id && c.author_type === 'client_contact'
+      ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      const lastClientComment = allClientComments[0];
+      const totalCommentCount = allClientComments.length;
+      
+      const enrichedRequest = { 
+        ...request, 
+        state, 
+        hasClientComments, 
+        clientCommentCount,
+        attentionType,
+        lastClientComment,
+        totalCommentCount
+      };
+      
       if (state === 'approved') {
-        approved.push({ ...request, state });
+        approved.push(enrichedRequest);
       } else if (state === 'changes_requested') {
-        changesRequested.push({ ...request, state });
+        changesRequested.push(enrichedRequest);
       } else if (state === 'awaiting_review') {
-        awaiting.push({ ...request, state, hasClientComments, clientCommentCount });
+        awaiting.push(enrichedRequest);
       }
     });
 
-    return { awaiting, changesRequested, approved };
+    // Sort each category: items with attention float to top
+    const sortByAttention = (a, b) => {
+      const aPriority = a.attentionType ? getAttentionPriority(a.attentionType) : 99;
+      const bPriority = b.attentionType ? getAttentionPriority(b.attentionType) : 99;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
+    };
+
+    return { 
+      awaiting: awaiting.sort(sortByAttention), 
+      changesRequested: changesRequested.sort(sortByAttention), 
+      approved: approved.sort(sortByAttention) 
+    };
   }, [allRequests, decisions, attachments, comments]);
 
   // Group requests by project
