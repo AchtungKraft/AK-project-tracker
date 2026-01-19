@@ -30,6 +30,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     default_cost: "",
     default_retail: "",
     reorder_point: 0,
+    reorder_quantity: 1,
     is_active: true,
     notes: "",
     photos: [],
@@ -208,7 +209,8 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       default_cost: formData.default_cost ? parseFloat(formData.default_cost) : undefined,
       default_retail: formData.default_retail ? parseFloat(formData.default_retail) : undefined,
       reorder_point: parseInt(formData.reorder_point) || 0,
-    };
+      reorder_quantity: parseInt(formData.reorder_quantity) || 1,
+      };
 
     // Remove empty IDs
     if (!partData.car_make_id) delete partData.car_make_id;
@@ -475,7 +477,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-gray-400">Default Cost</Label>
                 <Input
@@ -499,7 +501,9 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   placeholder="0.00"
                 />
               </div>
-              
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-gray-400">Reorder Point</Label>
                 <Input
@@ -508,6 +512,17 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   onChange={(e) => setFormData({ ...formData, reorder_point: e.target.value })}
                   className="bg-gray-800 border-gray-700 text-white"
                   placeholder="Min stock alert"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-gray-400">Reorder Quantity</Label>
+                <Input
+                  type="number"
+                  value={formData.reorder_quantity}
+                  onChange={(e) => setFormData({ ...formData, reorder_quantity: e.target.value })}
+                  className="bg-gray-800 border-gray-700 text-white"
+                  placeholder="Qty to order"
                 />
               </div>
             </div>

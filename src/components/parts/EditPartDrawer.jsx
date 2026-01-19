@@ -575,7 +575,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-gray-400 text-xs">Default Cost</Label>
                       <Input
@@ -599,7 +599,9 @@ export default function EditPartDrawer({ partId, onClose }) {
                         placeholder="Sell price"
                       />
                     </div>
+                  </div>
 
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-gray-400 text-xs">Reorder Point</Label>
                       <Input
@@ -608,6 +610,17 @@ export default function EditPartDrawer({ partId, onClose }) {
                         onChange={(e) => setEditedPart({ ...editedPart, reorder_point: parseInt(e.target.value) || 0 })}
                         className="bg-gray-800 border-gray-700 text-white"
                         placeholder="Min inventory alert"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="text-gray-400 text-xs">Reorder Quantity</Label>
+                      <Input
+                        type="number"
+                        value={editedPart.reorder_quantity || 1}
+                        onChange={(e) => setEditedPart({ ...editedPart, reorder_quantity: parseInt(e.target.value) || 1 })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Qty to order"
                       />
                     </div>
                   </div>
@@ -679,7 +692,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <p className="text-white">{vendors.find(v => v.id === part?.default_vendor_id)?.vendor_name || '-'}</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Default Cost</p>
                       <p className="text-white">${part?.default_cost || '0.00'}</p>
@@ -691,6 +704,10 @@ export default function EditPartDrawer({ partId, onClose }) {
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Reorder Point</p>
                       <p className="text-white font-semibold">{part?.reorder_point || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Reorder Qty</p>
+                      <p className="text-white font-semibold">{part?.reorder_quantity || 1}</p>
                     </div>
                   </div>
                   {part?.order_url && (
