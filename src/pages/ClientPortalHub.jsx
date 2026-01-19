@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +34,8 @@ import { createPageUrl } from "@/utils";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ClientPortalListView from "@/components/clientportal/ClientPortalListView";
 import NeedsAttentionSection, { getAttentionType, AttentionBadge, getAttentionPriority } from "@/components/clientportal/NeedsAttentionSection";
+import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
+import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 
 // Helper to determine request state
 const getRequestState = (request, decisions, attachments) => {
@@ -87,8 +89,37 @@ export default function ClientPortalHub() {
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('clientPortalHub_viewMode') || 'cards';
   });
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
+
+  // Saved views hook
+  const {
+    savedViews,
+    activeViewName,
+    activeView,
+    saveView,
+    deleteView,
+    renameView,
+    selectView,
+  } = useSavedProjectViews();
+
+  // Apply filters when a saved view is selected
+  useEffect(() => {
+    if (activeView) {
+      setSelectedTypes(activeView.selectedTypes || []);
+      setStatusFilter(activeView.statusFilter || 'all');
+    }
+  }, [activeViewName]);
+
+  const handleSelectView = (name) => {
+    const view = selectView(name);
+    if (view) {
+      setSelectedTypes(view.selectedTypes || []);
+      setStatusFilter(view.statusFilter || 'all');
+    }
+  };
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -151,6 +182,18 @@ export default function ClientPortalHub() {
     queryFn: () => base44.entities.Project.list(),
   });
 
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ["projectTypes"],
+    queryFn: () => base44.entities.ProjectType.list(),
+  });
+
+  const { data: statuses = [] } = useQuery({
+    queryKey: ["statuses"],
+    queryFn: () => base44.entities.StatusList.list(),
+  });
+
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+
   // Categorize requests with attention indicators
   const categorizedRequests = useMemo(() => {
     const awaiting = [];
@@ -159,6 +202,11 @@ export default function ClientPortalHub() {
 
     allRequests.forEach(request => {
       if (request.status === 'draft' || request.status === 'archived') return;
+      
+      // Filter by project type and status from saved views
+      const project = projects.find(p => p.id === request.project_id);
+      if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return;
+      if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return;
       
       const state = getRequestState(request, decisions, attachments);
       
@@ -215,7 +263,7 @@ export default function ClientPortalHub() {
       changesRequested: changesRequested.sort(sortByAttention), 
       approved: approved.sort(sortByAttention) 
     };
-  }, [allRequests, decisions, attachments, comments]);
+  }, [allRequests, decisions, attachments, comments, projects, selectedTypes, statusFilter]);
 
   // Group requests by project
   const groupByProject = (requestList) => {
@@ -532,29 +580,46 @@ export default function ClientPortalHub() {
         </div>
         
         {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
-          <Button
-            size="sm"
-            variant={viewMode === 'cards' ? 'default' : 'ghost'}
-            onClick={() => handleViewModeChange('cards')}
-            className={viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant={viewMode === 'list' ? 'default' : 'ghost'}
-            onClick={() => handleViewModeChange('list')}
-            className={viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
-          >
-            <List className="w-4 h-4" />
-          </Button>
+        <div className="flex items-center gap-3">
+          <SavedViewsSelector
+            savedViews={savedViews}
+            activeViewName={activeViewName}
+            onSelectView={handleSelectView}
+            onSaveView={saveView}
+            onDeleteView={deleteView}
+            onRenameView={renameView}
+            currentSelectedTypes={selectedTypes}
+            currentStatusFilter={statusFilter}
+          />
+          <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
+            <Button
+              size="sm"
+              variant={viewMode === 'cards' ? 'default' : 'ghost'}
+              onClick={() => handleViewModeChange('cards')}
+              className={viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              onClick={() => handleViewModeChange('list')}
+              className={viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Needs Attention Section - Always visible at top */}
+      {/* Needs Attention Section - Always visible at top, filtered by saved view */}
       <NeedsAttentionSection
-        requests={allRequests}
+        requests={allRequests.filter(request => {
+          const project = projects.find(p => p.id === request.project_id);
+          if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
+          if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
+          return true;
+        })}
         projects={projects}
         comments={comments}
         decisions={decisions}
