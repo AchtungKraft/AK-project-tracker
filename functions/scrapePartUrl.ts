@@ -238,6 +238,55 @@ Deno.serve(async (req) => {
                     }
                 }
                 
+                // Pelican Parts specific: look for slideshow data-thumb attributes
+                const dataThumbPattern = /data-thumb=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+                let thumbMatch;
+                while ((thumbMatch = dataThumbPattern.exec(html)) !== null) {
+                    let imgUrl = thumbMatch[1];
+                    if (!extractedImageUrls.includes(imgUrl)) {
+                        console.log('Found data-thumb image:', imgUrl);
+                        extractedImageUrls.push(imgUrl);
+                    }
+                }
+                
+                // Look for background-image URLs in style attributes (common for slideshows)
+                const bgImagePattern = /background-image:\s*url\(['"]?(https?:\/\/[^'")\s]+\.(?:jpg|jpeg|png|webp)[^'")\s]*)['"]?\)/gi;
+                let bgMatch;
+                while ((bgMatch = bgImagePattern.exec(html)) !== null) {
+                    let imgUrl = bgMatch[1];
+                    if (!imgUrl.includes('icon') && !imgUrl.includes('logo') && !extractedImageUrls.includes(imgUrl)) {
+                        console.log('Found background-image:', imgUrl);
+                        extractedImageUrls.push(imgUrl);
+                    }
+                }
+                
+                // Look for catalog/images patterns (Pelican Parts, etc)
+                const catalogPattern = /["'](https?:\/\/[^"']*\/catalog\/images\/[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+                let catalogMatch;
+                while ((catalogMatch = catalogPattern.exec(html)) !== null) {
+                    let imgUrl = catalogMatch[1];
+                    if (!extractedImageUrls.includes(imgUrl)) {
+                        console.log('Found catalog image:', imgUrl);
+                        extractedImageUrls.push(imgUrl);
+                    }
+                }
+                
+                // Generic CDN patterns for various auto parts sites
+                const autoCdnPatterns = [
+                    /["'](https?:\/\/cdn\d*\.[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                    /["'](https?:\/\/[^"']*\.com\/[^"']*images[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+                ];
+                for (const pattern of autoCdnPatterns) {
+                    let match;
+                    while ((match = pattern.exec(html)) !== null) {
+                        let imgUrl = match[1];
+                        if (imgUrl.includes('icon') || imgUrl.includes('logo') || imgUrl.includes('spinner') || imgUrl.includes('loading')) continue;
+                        if (!extractedImageUrls.includes(imgUrl)) {
+                            extractedImageUrls.push(imgUrl);
+                        }
+                    }
+                }
+                
                 console.log('Extracted price:', extractedPrice);
                 console.log('Total extracted image URLs:', extractedImageUrls.length);
                 if (extractedImageUrls.length > 0) {
