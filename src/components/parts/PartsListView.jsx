@@ -67,6 +67,12 @@ export default function PartsListView({
     queryFn: () => base44.entities.PartPurchaseLineItem.list(),
   });
 
+  // Use PartProjectRequirement for need-to-buy calculations
+  const { data: requirements = [] } = useQuery({
+    queryKey: ['partProjectRequirements'],
+    queryFn: () => base44.entities.PartProjectRequirement.list(),
+  });
+
   const getInventoryStats = (partId) => {
     const items = inventoryItems.filter(i => i.part_id === partId);
     const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
@@ -77,7 +83,14 @@ export default function PartsListView({
     const onOrder = partLineItems.reduce((sum, li) => 
       sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
     
-    return { onHand, reserved, available: onHand - reserved, onOrder };
+    // Need = sum of (qty_needed - qty_installed - qty_allocated) for all requirements
+    const partReqs = requirements.filter(r => r.part_id === partId);
+    const need = partReqs.reduce((sum, r) => {
+      const stillNeeded = (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0);
+      return sum + Math.max(0, stillNeeded);
+    }, 0);
+    
+    return { onHand, available: onHand - reserved, need, onOrder };
   };
 
   const getCategoryPath = (categoryId) => {
@@ -268,16 +281,21 @@ export default function PartsListView({
             <div className="text-white font-semibold">{stats.onHand}</div>
           </div>
           <div className="text-center min-w-[50px]">
-            <div className="text-gray-500 mb-0.5">Reserved</div>
-            <div className="text-yellow-400 font-semibold">{stats.reserved}</div>
-          </div>
-          <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Available</div>
             <div className={cn(
               "font-semibold",
               stats.available > 0 ? "text-green-400" : "text-red-400"
             )}>
               {stats.available}
+            </div>
+          </div>
+          <div className="text-center min-w-[50px]">
+            <div className="text-gray-500 mb-0.5">Need</div>
+            <div className={cn(
+              "font-semibold",
+              stats.need > 0 ? "text-red-400" : "text-gray-500"
+            )}>
+              {stats.need}
             </div>
           </div>
           <div className="text-center min-w-[50px]">
