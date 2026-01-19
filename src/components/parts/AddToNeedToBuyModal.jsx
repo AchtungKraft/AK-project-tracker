@@ -43,7 +43,7 @@ export default function AddToNeedToBuyModal({ part, onClose }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      toast.success(`Added ${quantity} × ${part.part_name} to Need To Buy`);
+      toast.success(`Added ${quantity} × ${part.part_name} to AK Stock List`);
       onClose();
     },
     onError: (error) => {
@@ -67,8 +67,8 @@ export default function AddToNeedToBuyModal({ part, onClose }) {
       <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
-            <ShoppingCart className="w-5 h-5 text-red-400" />
-            Add to Need To Buy
+            <ShoppingCart className="w-5 h-5 text-yellow-400" />
+            Add to AK Stock List
           </DialogTitle>
         </DialogHeader>
 
@@ -102,10 +102,10 @@ export default function AddToNeedToBuyModal({ part, onClose }) {
           {/* Destination Info */}
           <div className="p-3 bg-yellow-900/20 border border-yellow-900/30 rounded-lg">
             <p className="text-sm text-yellow-400">
-              This will add to <strong>General / AK Stock</strong> in Need To Buy
+              This will add to <strong>General / AK Stock</strong> in Need To Buy → Client Parts
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Not tied to any specific project
+              Not tied to any specific client project - for general shop stock
             </p>
           </div>
 
@@ -177,7 +177,7 @@ export default function AddToNeedToBuyModal({ part, onClose }) {
             ) : (
               <ShoppingCart className="w-4 h-4 mr-2" />
             )}
-            Add to Need To Buy
+            Add to AK Stock List
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -90,10 +90,10 @@ export default function PartActionsDropdown({
             e.stopPropagation();
             onAddToNeedToBuy?.(part);
           }}
-          className="cursor-pointer text-red-400 focus:text-red-400"
+          className="cursor-pointer text-yellow-400 focus:text-yellow-400"
         >
           <ListPlus className="w-4 h-4 mr-2" />
-          Add to Need To Buy
+          Add to AK Stock List
         </DropdownMenuItem>
         
         {part.order_url && (
