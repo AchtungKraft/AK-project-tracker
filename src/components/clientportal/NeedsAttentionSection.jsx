@@ -184,13 +184,13 @@ export default function NeedsAttentionSection({
     <Link
       key={request.id}
       to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
-      className={`block p-3 rounded-lg border transition-all group ${
+      className={`block p-2 md:p-3 rounded-lg border transition-all group min-h-[44px] ${
         isDeemphasized 
           ? 'bg-black/20 border-gray-800 hover:border-green-500/30 hover:bg-gray-900/50 opacity-80' 
           : 'bg-black/40 border-gray-700 hover:border-red-500/50 hover:bg-gray-900/80'
       }`}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
         <AttentionBadge type={request.attentionType} size="md" />
         {request.commentCount > 0 && (
           <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
@@ -200,7 +200,7 @@ export default function NeedsAttentionSection({
         )}
       </div>
       
-      <h4 className={`font-medium text-sm mb-1 line-clamp-2 transition-colors ${
+      <h4 className={`font-medium text-sm mb-1 line-clamp-1 md:line-clamp-2 transition-colors ${
         isDeemphasized 
           ? 'text-gray-300 group-hover:text-green-400' 
           : 'text-white group-hover:text-red-400'
@@ -208,30 +208,30 @@ export default function NeedsAttentionSection({
         {request.title}
       </h4>
       
-      <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-        <FolderKanban className="w-3 h-3" />
+      <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 md:mb-2">
+        <FolderKanban className="w-3 h-3 shrink-0" />
         <span className="truncate">{request.project?.name || 'Unknown Project'}</span>
       </div>
 
       <div className="flex items-center justify-between text-xs">
         <div className="flex flex-col gap-0.5">
           {request.attentionType === 'client_approved' && (
-            <span className="text-green-400/70 italic">
+            <span className="text-green-400/70 italic hidden md:block">
               Awaiting AK confirmation
             </span>
           )}
           {request.lastClientComment && request.attentionType !== 'client_approved' && (
-            <span className="text-yellow-400">
-              Client replied {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
+            <span className="text-yellow-400 truncate">
+              <span className="hidden md:inline">Client replied </span>{formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
             </span>
           )}
-          {request.last_viewed_by_internal_at && (
-            <span className="text-gray-500">
-              AK reviewed {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
-            </span>
-          )}
+          <span className="hidden md:block text-gray-500">
+            {request.last_viewed_by_internal_at && (
+              <>AK reviewed {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}</>
+            )}
+          </span>
         </div>
-        <ChevronRight className={`w-4 h-4 transition-colors ${
+        <ChevronRight className={`w-4 h-4 transition-colors shrink-0 ${
           isDeemphasized 
             ? 'text-gray-600 group-hover:text-green-400' 
             : 'text-gray-500 group-hover:text-red-400'
