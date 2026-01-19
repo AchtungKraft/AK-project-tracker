@@ -449,34 +449,57 @@ export default function ClientPortalHub() {
                             <Link
                               key={request.id}
                               to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
-                              className="block p-3 bg-gray-900/50 rounded-lg border border-gray-700 hover:bg-gray-800/80 transition-colors"
+                              className={`block p-3 bg-gray-900/50 rounded-lg border hover:bg-gray-800/80 transition-colors ${
+                                request.attentionType ? 'border-l-4' : 'border-gray-700'
+                              }`}
+                              style={request.attentionType ? {
+                                borderLeftColor: request.attentionType === 'changes_requested' ? '#ef4444' :
+                                  request.attentionType === 'client_replied' ? '#eab308' :
+                                  request.attentionType === 'new_activity' ? '#3b82f6' :
+                                  request.attentionType === 'client_approved' ? '#22c55e' : '#6b7280',
+                                borderColor: '#374151'
+                              } : {}}
                             >
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-2">
                                 <h4 className="text-white font-medium text-sm truncate flex-1">{request.title}</h4>
-                                {request.hasClientComments && (
-                                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 ml-2 flex items-center gap-1">
-                                    <MessageSquareText className="w-3 h-3" />
-                                    {request.clientCommentCount}
-                                  </Badge>
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {request.attentionType && (
+                                    <AttentionBadge type={request.attentionType} size="sm" />
+                                  )}
+                                  {request.totalCommentCount > 0 && (
+                                    <Badge variant="outline" className="text-xs border-gray-600 text-gray-400 flex items-center gap-1">
+                                      <MessageSquareText className="w-3 h-3" />
+                                      {request.totalCommentCount}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                               <div className="flex items-center justify-between mt-2">
-                                <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
-                                  {request.due_date && (
-                                    <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
-                                  )}
-                                  {showEmailButton && request.last_email_sent_at && (
-                                    <span className="flex items-center gap-1 text-gray-500">
-                                      <Mail className="w-3 h-3" />
-                                      {format(new Date(request.last_email_sent_at), 'MMM d')}
-                                    </span>
-                                  )}
-                                  {request.client_last_viewed_at && (
-                                    <span className="flex items-center gap-1 text-cyan-500">
-                                      <Eye className="w-3 h-3" />
-                                      Viewed: {format(new Date(request.client_last_viewed_at), 'MMM d, h:mm a')}
-                                    </span>
-                                  )}
+                                <div className="flex flex-col gap-0.5 text-xs">
+                                  <div className="flex items-center gap-2 text-gray-400 flex-wrap">
+                                    {request.due_date && (
+                                      <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
+                                    )}
+                                    {showEmailButton && request.last_email_sent_at && (
+                                      <span className="flex items-center gap-1 text-gray-500">
+                                        <Mail className="w-3 h-3" />
+                                        {format(new Date(request.last_email_sent_at), 'MMM d')}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Activity context */}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {request.lastClientComment && (
+                                      <span className="text-yellow-400">
+                                        Client {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
+                                      </span>
+                                    )}
+                                    {request.last_viewed_by_internal_at && (
+                                      <span className="text-gray-500">
+                                        AK {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <ChevronRight className="w-4 h-4 text-gray-500" />
                               </div>
