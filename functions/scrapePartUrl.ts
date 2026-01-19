@@ -295,18 +295,32 @@ Return the FULL URLs for images, not partial paths.`,
             }
         });
         
-        console.log('LLM result image_urls:', result.image_urls);
+        console.log('LLM result:', { price: result.price, image_urls: result.image_urls });
+
+        // Use extracted price if available, otherwise fall back to LLM result
+        const finalPrice = extractedPrice || result.price || null;
+        console.log('Final price:', finalPrice);
 
         // Combine LLM images with extracted images, preferring extracted ones
         const allImageUrls = [...extractedImageUrls, ...(result.image_urls || [])];
-        // Remove duplicates
-        const uniqueImageUrls = [...new Set(allImageUrls)];
-
-        console.log('Total unique images found:', uniqueImageUrls.length, uniqueImageUrls.slice(0, 3));
         
-        // Download and re-upload the first 2 images
+        // Remove duplicates and filter out invalid URLs
+        const uniqueImageUrls = [...new Set(allImageUrls)].filter(url => 
+            url && 
+            url.startsWith('http') && 
+            !url.includes('icon') && 
+            !url.includes('logo') && 
+            !url.includes('1x1') &&
+            !url.includes('placeholder') &&
+            !url.includes('tracking') &&
+            !url.includes('pixel')
+        );
+
+        console.log('Total unique images found:', uniqueImageUrls.length, uniqueImageUrls.slice(0, 5));
+        
+        // Download and re-upload up to 5 images
         const uploadedImageUrls = [];
-        const imagesToProcess = uniqueImageUrls.slice(0, 2);
+        const imagesToProcess = uniqueImageUrls.slice(0, 5);
 
         for (const imageUrl of imagesToProcess) {
             try {
