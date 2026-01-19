@@ -171,9 +171,11 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onEdit(project)} className="bg-neutral-700 text-white px-3 text-xs font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:text-accent-foreground h-8 flex-1 border-gray-700 hover:bg-red-950/30 hover:border-red-700 gap-2">
-
-
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(project);
+              }} 
+              className="bg-neutral-700 text-white px-3 text-xs font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:text-accent-foreground h-8 flex-1 border-gray-700 hover:bg-red-950/30 hover:border-red-700 gap-2">
               <Edit2 className="w-3 h-3" />
               Edit
             </Button>
