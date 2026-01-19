@@ -368,16 +368,18 @@ Return the FULL URLs for images, not partial paths.`,
         const allImageUrls = [...extractedImageUrls, ...(result.image_urls || [])];
         
         // Remove duplicates and filter out invalid URLs
-        const uniqueImageUrls = [...new Set(allImageUrls)].filter(url => 
-            url && 
-            url.startsWith('http') && 
-            !url.includes('icon') && 
-            !url.includes('logo') && 
-            !url.includes('1x1') &&
-            !url.includes('placeholder') &&
-            !url.includes('tracking') &&
-            !url.includes('pixel')
-        );
+        const uniqueImageUrls = [...new Set(allImageUrls)].filter(url => {
+            if (!url || !url.startsWith('http')) return false;
+            const lowerUrl = url.toLowerCase();
+            // Exclude common non-product images
+            const excludePatterns = [
+                'icon', 'logo', '1x1', 'placeholder', 'tracking', 'pixel',
+                'spinner', 'loading', 'header', 'footer', 'banner', 'nav',
+                'button', 'arrow', 'triangle', 'warning', 'prop65',
+                'manufacturer_logos', 'redesign', 'assets/img'
+            ];
+            return !excludePatterns.some(pattern => lowerUrl.includes(pattern));
+        });
 
         console.log('Total unique images found:', uniqueImageUrls.length, uniqueImageUrls.slice(0, 5));
         
