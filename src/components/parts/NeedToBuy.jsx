@@ -413,29 +413,31 @@ export default function NeedToBuy({ onPartClick }) {
               />
             </div>
             
-            <div className="flex items-center gap-3">
-              <Tabs value={groupMode} onValueChange={setGroupMode}>
-                <TabsList className="bg-gray-900/50 border border-gray-700">
-                  <TabsTrigger value="project" className="data-[state=active]:bg-red-900/30 gap-1.5">
-                    <FolderKanban className="w-3.5 h-3.5" />
-                    By Project
-                  </TabsTrigger>
-                  <TabsTrigger value="vendor" className="data-[state=active]:bg-red-900/30 gap-1.5">
-                    <Building2 className="w-3.5 h-3.5" />
-                    By Vendor
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAll}
-                className="border-gray-700 text-gray-300"
-              >
-                {selectedItems.size === filteredItems.length ? 'Deselect All' : 'Select All'}
-              </Button>
-            </div>
+            {activeTab === 'client' && (
+              <div className="flex items-center gap-3">
+                <Tabs value={groupMode} onValueChange={setGroupMode}>
+                  <TabsList className="bg-gray-900/50 border border-gray-700">
+                    <TabsTrigger value="project" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                      <FolderKanban className="w-3.5 h-3.5" />
+                      By Project
+                    </TabsTrigger>
+                    <TabsTrigger value="vendor" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                      <Building2 className="w-3.5 h-3.5" />
+                      By Vendor
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAll}
+                  className="border-gray-700 text-gray-300"
+                >
+                  {selectedItems.size === filteredItems.length ? 'Deselect All' : 'Select All'}
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
