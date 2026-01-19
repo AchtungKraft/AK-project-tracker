@@ -27,8 +27,10 @@ import MoveRequirementModal from "./MoveRequirementModal";
 /**
  * NeedToBuy - Shows parts that need to be ordered
  * Supports grouping by Project or General AK, with multi-select for batch ordering
+ * Has tabs for Client Parts vs Low AK Stock items
  */
 export default function NeedToBuy({ onPartClick }) {
+  const [activeTab, setActiveTab] = useState('client'); // 'client' or 'lowstock'
   const [searchTerm, setSearchTerm] = useState('');
   const [groupMode, setGroupMode] = useState('project'); // 'project' or 'vendor'
   const [subGroupMode, setSubGroupMode] = useState('vendor'); // sub-group: 'vendor' or 'project'
