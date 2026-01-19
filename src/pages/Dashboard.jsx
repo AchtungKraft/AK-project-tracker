@@ -341,11 +341,19 @@ export default function Dashboard() {
           </span>
         </div>
 
+        {/* Mobile Context Header */}
+        <div className="md:hidden bg-black/40 border border-gray-700 rounded-lg px-3 py-2">
+          <p className="text-sm text-gray-300">
+            {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+            {statusFilter !== 'all' && ` • ${projectStatuses.find(s => s.id === statusFilter)?.label || 'Filtered'}`}
+          </p>
+        </div>
+
         {/* Projects Content */}
         {projectsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {Array(6).fill(0).map((_, i) => (
-              <Skeleton key={i} className="h-96 bg-gray-800" />
+              <Skeleton key={i} className="h-48 md:h-96 bg-gray-800" />
             ))}
           </div>
         ) : filteredProjects.length === 0 ? (
