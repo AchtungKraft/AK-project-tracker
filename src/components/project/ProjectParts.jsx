@@ -107,14 +107,12 @@ export default function ProjectParts({ projectId }) {
     queryFn: () => base44.entities.Order.list(),
   });
 
-  const { data: project } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: async () => {
-      const projects = await base44.entities.Project.list();
-      return projects.find(p => p.id === projectId);
-    },
-    enabled: !!projectId,
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
   });
+  
+  const project = projects.find(p => p.id === projectId);
 
   // Calculate on-order quantity for each part (from open PO line items)
   const partOnOrder = useMemo(() => {
