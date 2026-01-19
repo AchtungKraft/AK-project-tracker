@@ -31,7 +31,9 @@ import MoveRequirementModal from "./MoveRequirementModal";
 export default function NeedToBuy({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [groupMode, setGroupMode] = useState('project'); // 'project' or 'vendor'
+  const [subGroupMode, setSubGroupMode] = useState('vendor'); // sub-group: 'vendor' or 'project'
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
+  const [expandedSubGroups, setExpandedSubGroups] = useState(new Set(['all']));
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
@@ -163,7 +165,7 @@ export default function NeedToBuy({ onPartClick }) {
     );
   }, [partsToOrder, searchTerm]);
 
-  // Group items by project or vendor
+  // Group items by project or vendor, with sub-grouping
   const groupedItems = useMemo(() => {
     const groups = {};
     
@@ -177,10 +179,24 @@ export default function NeedToBuy({ onPartClick }) {
             id: key, 
             label, 
             isGeneral: !item.project,
-            items: [] 
+            items: [],
+            subGroups: {}
           };
         }
         groups[key].items.push(item);
+        
+        // Sub-group by vendor
+        const subKey = item.vendor?.id || 'unassigned';
+        const subLabel = item.vendor?.vendor_name || 'No Vendor Assigned';
+        if (!groups[key].subGroups[subKey]) {
+          groups[key].subGroups[subKey] = {
+            id: subKey,
+            label: subLabel,
+            isUnassigned: !item.vendor,
+            items: []
+          };
+        }
+        groups[key].subGroups[subKey].items.push(item);
       });
     } else {
       // Group by vendor
@@ -192,12 +208,35 @@ export default function NeedToBuy({ onPartClick }) {
             id: key, 
             label, 
             isUnassigned: !item.vendor,
-            items: [] 
+            items: [],
+            subGroups: {}
           };
         }
         groups[key].items.push(item);
+        
+        // Sub-group by project
+        const subKey = item.project?.id || 'general';
+        const subLabel = item.project?.name || 'General / AK Stock';
+        if (!groups[key].subGroups[subKey]) {
+          groups[key].subGroups[subKey] = {
+            id: subKey,
+            label: subLabel,
+            isGeneral: !item.project,
+            items: []
+          };
+        }
+        groups[key].subGroups[subKey].items.push(item);
       });
     }
+    
+    // Convert subGroups to arrays and sort
+    Object.values(groups).forEach(group => {
+      group.subGroupsArray = Object.values(group.subGroups).sort((a, b) => {
+        if (a.isGeneral || a.isUnassigned) return 1;
+        if (b.isGeneral || b.isUnassigned) return -1;
+        return a.label.localeCompare(b.label);
+      });
+    });
     
     // Sort: General/Unassigned last, then alphabetically
     return Object.values(groups).sort((a, b) => {
@@ -215,6 +254,15 @@ export default function NeedToBuy({ onPartClick }) {
       const next = new Set(prev);
       if (next.has(groupId)) next.delete(groupId);
       else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleSubGroup = (subGroupId) => {
+    setExpandedSubGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(subGroupId)) next.delete(subGroupId);
+      else next.add(subGroupId);
       return next;
     });
   };
@@ -392,136 +440,166 @@ export default function NeedToBuy({ onPartClick }) {
                 
                 {isExpanded && (
                   <CardContent className="p-0 border-t border-red-900/20">
-                    <div className="divide-y divide-red-900/10">
-                      {group.items.map(item => {
-                        const isSelected = selectedItems.has(item.id);
-                        const categoryPath = getCategoryPath(item.part.part_category_id);
-                        
-                        return (
+                    {group.subGroupsArray.map(subGroup => {
+                      const subGroupKey = `${group.id}-${subGroup.id}`;
+                      const isSubExpanded = expandedSubGroups.has(subGroupKey) || expandedSubGroups.has('all');
+                      const subGroupSelectedCount = subGroup.items.filter(i => selectedItems.has(i.id)).length;
+                      const subGroupTotal = subGroup.items.reduce((sum, i) => sum + i.estimated_cost, 0);
+                      
+                      return (
+                        <div key={subGroupKey} className="border-b border-red-900/10 last:border-b-0">
+                          {/* Sub-group header */}
                           <div 
-                            key={item.id}
-                            className={`p-3 flex items-center gap-3 hover:bg-red-950/20 transition-colors ${isSelected ? 'bg-red-950/30' : ''}`}
+                            className="px-4 py-2 bg-gray-800/30 flex items-center justify-between cursor-pointer hover:bg-gray-800/50 transition-colors"
+                            onClick={() => toggleSubGroup(subGroupKey)}
                           >
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => toggleItemSelection(item.id)}
-                            />
-                            
-                            {item.part.featured_photo && (
-                              <div 
-                                className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden cursor-pointer"
-                                onClick={() => onPartClick(item.part)}
-                              >
-                                <img 
-                                  src={item.part.featured_photo} 
-                                  alt="" 
-                                  className="w-full h-full object-contain"
-                                />
-                              </div>
-                            )}
-                            
-                            <div 
-                              className="flex-1 min-w-0 cursor-pointer"
-                              onClick={() => onPartClick(item.part)}
-                            >
-                              <p className="text-white text-sm font-medium truncate hover:text-red-400 transition-colors">
-                                {item.part.part_name}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                {item.part.vendor_part_number && (
-                                  <span className="font-mono">{item.part.vendor_part_number}</span>
-                                )}
-                                {groupMode === 'project' && item.vendor && (
-                                  <span>· {item.vendor.vendor_name}</span>
-                                )}
-                                {groupMode === 'vendor' && item.project && (
-                                  <span>· {item.project.name}</span>
-                                )}
-                                {categoryPath && <span>· {categoryPath}</span>}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-4 flex-shrink-0">
-                              <Badge 
-                                className={
-                                  item.requirement.priority === 'Critical' ? 'bg-red-600' :
-                                  item.requirement.priority === 'High' ? 'bg-orange-600' :
-                                  item.requirement.priority === 'Low' ? 'bg-gray-600' : 'bg-blue-600'
-                                }
-                              >
-                                {item.requirement.priority || 'Normal'}
-                              </Badge>
-                              
-                              <div className="text-right w-20">
-                                <p className="text-white font-medium">×{item.qty_to_order}</p>
-                                {item.estimated_cost > 0 && (
-                                  <p className="text-xs text-yellow-400">${item.estimated_cost.toFixed(2)}</p>
-                                )}
-                              </div>
-                              
-                              {item.part.order_url && (
-                                <a 
-                                  href={item.part.order_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-blue-400 hover:text-blue-300"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </a>
+                            <div className="flex items-center gap-2">
+                              {isSubExpanded ? <ChevronUp className="w-3 h-3 text-gray-500" /> : <ChevronDown className="w-3 h-3 text-gray-500" />}
+                              {groupMode === 'project' ? (
+                                <Building2 className="w-3.5 h-3.5 text-gray-500" />
+                              ) : (
+                                <FolderKanban className="w-3.5 h-3.5 text-gray-500" />
                               )}
-                              
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOrderModalPart(item.part);
-                                }}
-                                className="border-gray-700 text-gray-300 hover:text-white h-7"
-                              >
-                                Order
-                              </Button>
-                              
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-gray-400 hover:text-white"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <MoreVertical className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setMoveItem(item);
-                                    }}
-                                  >
-                                    <ArrowRight className="w-4 h-4 mr-2" />
-                                    Move to Project
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="bg-gray-700" />
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveRequirement(item);
-                                    }}
-                                    className="text-red-400"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Remove from Project
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <span className={`text-sm ${subGroup.isGeneral || subGroup.isUnassigned ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                {subGroup.label}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                ({subGroup.items.length}) · ${subGroupTotal.toFixed(2)}
+                                {subGroupSelectedCount > 0 && ` · ${subGroupSelectedCount} selected`}
+                              </span>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          
+                          {/* Sub-group items */}
+                          {isSubExpanded && (
+                            <div className="divide-y divide-red-900/10">
+                              {subGroup.items.map(item => {
+                                const isSelected = selectedItems.has(item.id);
+                                const categoryPath = getCategoryPath(item.part.part_category_id);
+                                
+                                return (
+                                  <div 
+                                    key={item.id}
+                                    className={`p-3 pl-8 flex items-center gap-3 hover:bg-red-950/20 transition-colors ${isSelected ? 'bg-red-950/30' : ''}`}
+                                  >
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => toggleItemSelection(item.id)}
+                                    />
+                                    
+                                    {item.part.featured_photo && (
+                                      <div 
+                                        className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden cursor-pointer"
+                                        onClick={() => onPartClick(item.part)}
+                                      >
+                                        <img 
+                                          src={item.part.featured_photo} 
+                                          alt="" 
+                                          className="w-full h-full object-contain"
+                                        />
+                                      </div>
+                                    )}
+                                    
+                                    <div 
+                                      className="flex-1 min-w-0 cursor-pointer"
+                                      onClick={() => onPartClick(item.part)}
+                                    >
+                                      <p className="text-white text-sm font-medium truncate hover:text-red-400 transition-colors">
+                                        {item.part.part_name}
+                                      </p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        {item.part.vendor_part_number && (
+                                          <span className="font-mono">{item.part.vendor_part_number}</span>
+                                        )}
+                                        {categoryPath && <span>· {categoryPath}</span>}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4 flex-shrink-0">
+                                      <Badge 
+                                        className={
+                                          item.requirement.priority === 'Critical' ? 'bg-red-600' :
+                                          item.requirement.priority === 'High' ? 'bg-orange-600' :
+                                          item.requirement.priority === 'Low' ? 'bg-gray-600' : 'bg-blue-600'
+                                        }
+                                      >
+                                        {item.requirement.priority || 'Normal'}
+                                      </Badge>
+                                      
+                                      <div className="text-right w-20">
+                                        <p className="text-white font-medium">×{item.qty_to_order}</p>
+                                        {item.estimated_cost > 0 && (
+                                          <p className="text-xs text-yellow-400">${item.estimated_cost.toFixed(2)}</p>
+                                        )}
+                                      </div>
+                                      
+                                      {item.part.order_url && (
+                                        <a 
+                                          href={item.part.order_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="text-blue-400 hover:text-blue-300"
+                                        >
+                                          <ExternalLink className="w-4 h-4" />
+                                        </a>
+                                      )}
+                                      
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOrderModalPart(item.part);
+                                        }}
+                                        className="border-gray-700 text-gray-300 hover:text-white h-7"
+                                      >
+                                        Order
+                                      </Button>
+                                      
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-gray-400 hover:text-white"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreVertical className="w-4 h-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                                          <DropdownMenuItem
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setMoveItem(item);
+                                            }}
+                                          >
+                                            <ArrowRight className="w-4 h-4 mr-2" />
+                                            Move to Project
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator className="bg-gray-700" />
+                                          <DropdownMenuItem
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRemoveRequirement(item);
+                                            }}
+                                            className="text-red-400"
+                                          >
+                                            <Trash2 className="w-4 h-4 mr-2" />
+                                            Remove from Project
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </CardContent>
                 )}
               </Card>
