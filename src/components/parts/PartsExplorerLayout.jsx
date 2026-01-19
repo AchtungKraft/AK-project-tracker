@@ -14,6 +14,7 @@ import EditPartDrawer from "./EditPartDrawer";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
+import AddToNeedToBuyModal from "./AddToNeedToBuyModal";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -29,10 +30,11 @@ export default function PartsExplorerLayout({ onPartClick }) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
   
-  // New modals for inventory, ordering, and builds
+  // New modals for inventory, ordering, builds, and need to buy
   const [inventoryModalPart, setInventoryModalPart] = useState(null);
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [buildModalPart, setBuildModalPart] = useState(null);
+  const [needToBuyModalPart, setNeedToBuyModalPart] = useState(null);
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -249,6 +251,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
                     onAddInventory={(part) => setInventoryModalPart(part)}
                     onOrderPart={(part) => setOrderModalPart(part)}
                     onAddToBuild={(part) => setBuildModalPart(part)}
+                    onAddToNeedToBuy={(part) => setNeedToBuyModalPart(part)}
                   />
                 ) : (
                   <PartsListView
@@ -260,6 +263,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
                     onAddInventory={(part) => setInventoryModalPart(part)}
                     onOrderPart={(part) => setOrderModalPart(part)}
                     onAddToBuild={(part) => setBuildModalPart(part)}
+                    onAddToNeedToBuy={(part) => setNeedToBuyModalPart(part)}
                   />
                 )}
               </div>
@@ -322,6 +326,13 @@ export default function PartsExplorerLayout({ onPartClick }) {
         <AddToBuildModal 
           part={buildModalPart}
           onClose={() => setBuildModalPart(null)} 
+        />
+      )}
+
+      {needToBuyModalPart && (
+        <AddToNeedToBuyModal 
+          part={needToBuyModalPart}
+          onClose={() => setNeedToBuyModalPart(null)} 
         />
       )}
     </>
