@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   Eye
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+import { AttentionBadge, getAttentionPriority } from "./NeedsAttentionSection";
 
 const getTypeColor = (type) => {
   switch (type) {
