@@ -24,7 +24,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
   const [expandedCategories, setExpandedCategories] = useState({});
   const [showLeftPane, setShowLeftPane] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('list'); // Default to list view
   const [showGrouping, setShowGrouping] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -248,6 +248,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
                     categories={categories}
                     selectedCategoryId={selectedCategoryId}
                     onPartClick={onPartClick}
+                    showGrouping={showGrouping}
                     onAddInventory={(part) => setInventoryModalPart(part)}
                     onOrderPart={(part) => setOrderModalPart(part)}
                     onAddToBuild={(part) => setBuildModalPart(part)}

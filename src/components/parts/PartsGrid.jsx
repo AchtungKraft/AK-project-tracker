@@ -16,6 +16,7 @@ export default function PartsGrid({
   categories,
   selectedCategoryId,
   onPartClick,
+  showGrouping = true,
   onAddInventory,
   onOrderPart,
   onAddToBuild,
@@ -85,6 +86,31 @@ export default function PartsGrid({
     return { onHand, available: onHand - reserved, need, onOrder };
   };
 
+  // Get category name with parent path
+  const getCategoryPath = (categoryId) => {
+    if (!categoryId) return 'Uncategorized';
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return 'Uncategorized';
+    
+    if (category.parent_id) {
+      const parent = categories.find(c => c.id === category.parent_id);
+      if (parent) {
+        return `${parent.name} > ${category.name}`;
+      }
+    }
+    return category.name;
+  };
+
+  // Group parts by category
+  const groupedParts = showGrouping ? parts.reduce((acc, part) => {
+    const categoryName = getCategoryPath(part.part_category_id);
+    if (!acc[categoryName]) {
+      acc[categoryName] = [];
+    }
+    acc[categoryName].push(part);
+    return acc;
+  }, {}) : { 'All Parts': parts };
+
   const openGallery = (images, index = 0) => {
     setGalleryState({
       open: true,
@@ -124,8 +150,19 @@ export default function PartsGrid({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-          {parts.map(part => {
+        <div className="space-y-6">
+          {Object.entries(groupedParts).sort(([a], [b]) => a.localeCompare(b)).map(([categoryName, categoryParts]) => (
+            <div key={categoryName}>
+              {showGrouping && (
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-700">
+                  <h3 className="text-sm font-semibold text-gray-300">{categoryName}</h3>
+                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
+                    {categoryParts.length}
+                  </Badge>
+                </div>
+              )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+                {categoryParts.map(part => {
             const vendor = vendors.find(v => v.id === part.default_vendor_id);
             const make = makes.find(m => m.id === part.car_make_id);
             const model = models.find(m => m.id === part.car_model_id);
@@ -247,6 +284,9 @@ export default function PartsGrid({
               </div>
             );
           })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
