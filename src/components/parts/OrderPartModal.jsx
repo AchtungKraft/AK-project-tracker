@@ -93,9 +93,10 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
         const newOrder = await base44.entities.Order.create({
           vendor_id: formData.new_order_vendor_id,
           po_number: formData.new_order_po_number || `PO-${Date.now()}`,
-          order_date: new Date().toISOString().split('T')[0],
+          order_date: formData.new_order_date || new Date().toISOString().split('T')[0],
           eta_date: formData.new_order_eta_date || null,
-          status: 'Draft',
+          status: 'Ordered',
+          notes: formData.new_order_notes || null,
         });
         orderId = newOrder.id;
       }
@@ -247,11 +248,32 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
                     />
                   </div>
                   <div>
+                    <Label className="text-gray-400 text-xs">Order Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.new_order_date || new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setFormData({ ...formData, new_order_date: e.target.value })}
+                      className="bg-gray-800 border-gray-700"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
                     <Label className="text-gray-400 text-xs">ETA Date</Label>
                     <Input
                       type="date"
                       value={formData.new_order_eta_date}
                       onChange={(e) => setFormData({ ...formData, new_order_eta_date: e.target.value })}
+                      className="bg-gray-800 border-gray-700"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-400 text-xs">Reference URL</Label>
+                    <Input
+                      type="url"
+                      value={formData.new_order_notes || ''}
+                      onChange={(e) => setFormData({ ...formData, new_order_notes: e.target.value })}
+                      placeholder="https://..."
                       className="bg-gray-800 border-gray-700"
                     />
                   </div>
