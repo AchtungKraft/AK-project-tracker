@@ -140,36 +140,59 @@ export default function ClientPortalListView({
                 <Link
                   key={request.id}
                   to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
-                  className="grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-gray-800/50 transition-colors items-center group"
+                  className={`grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-gray-800/50 transition-colors items-center group ${
+                    request.attentionType ? 'border-l-4' : ''
+                  }`}
+                  style={request.attentionType ? {
+                    borderLeftColor: request.attentionType === 'changes_requested' ? '#ef4444' :
+                      request.attentionType === 'client_replied' ? '#eab308' :
+                      request.attentionType === 'new_activity' ? '#3b82f6' :
+                      request.attentionType === 'client_approved' ? '#22c55e' : 'transparent'
+                  } : {}}
                 >
                   {/* Title + Comment indicator */}
-                  <div className="col-span-6 md:col-span-7 flex items-center gap-2 min-w-0">
+                  <div className="col-span-5 md:col-span-5 flex items-center gap-2 min-w-0">
                     <span className="text-white font-medium truncate text-sm">{request.title}</span>
-                    {request.hasClientComments && (
-                      <Badge className="bg-green-500/20 text-green-400 border-green-500/50 shrink-0 flex items-center gap-1 text-xs px-1.5">
+                    {request.totalCommentCount > 0 && (
+                      <Badge variant="outline" className="border-gray-600 text-gray-400 shrink-0 flex items-center gap-1 text-xs px-1.5">
                         <MessageSquareText className="w-3 h-3" />
-                        {request.clientCommentCount}
+                        {request.totalCommentCount}
                       </Badge>
                     )}
                   </div>
                   
+                  {/* Attention Status */}
+                  <div className="col-span-2 md:col-span-2">
+                    {request.attentionType ? (
+                      <AttentionBadge type={request.attentionType} size="sm" />
+                    ) : (
+                      <span className="text-gray-500 text-xs">—</span>
+                    )}
+                  </div>
+                  
                   {/* Type */}
-                  <div className="col-span-3 md:col-span-2">
+                  <div className="col-span-2 md:col-span-2">
                     <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
                       {getTypeLabel(request.request_type)}
                     </Badge>
                   </div>
                   
-                  {/* Last Activity */}
+                  {/* Activity Context */}
                   <div className="col-span-3 hidden md:flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-400 text-sm">
-                        {lastActivity ? format(lastActivity, 'MMM d, h:mma').toLowerCase() : '—'}
-                      </span>
-                      {request.client_last_viewed_at && (
-                        <span className="text-cyan-500 text-xs flex items-center gap-1">
-                          <Eye className="w-3 h-3" />
-                          {format(new Date(request.client_last_viewed_at), 'MMM d, h:mma')}
+                    <div className="flex flex-col gap-0.5 text-xs">
+                      {request.lastClientComment && (
+                        <span className="text-yellow-400">
+                          Client {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
+                        </span>
+                      )}
+                      {request.last_viewed_by_internal_at && (
+                        <span className="text-gray-500">
+                          AK {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
+                        </span>
+                      )}
+                      {!request.lastClientComment && !request.last_viewed_by_internal_at && lastActivity && (
+                        <span className="text-gray-400">
+                          {format(lastActivity, 'MMM d')}
                         </span>
                       )}
                     </div>
