@@ -371,12 +371,24 @@ Return the FULL URLs for images, not partial paths.`,
         const uniqueImageUrls = [...new Set(allImageUrls)].filter(url => {
             if (!url || !url.startsWith('http')) return false;
             const lowerUrl = url.toLowerCase();
+            // Must be an image file (not PDF or other docs)
+            if (!lowerUrl.match(/\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i) && 
+                !lowerUrl.includes('/images/') && 
+                !lowerUrl.includes('/catalog/')) {
+                // Check if URL doesn't have extension but is from known image CDN
+                if (!lowerUrl.includes('cdn') && !lowerUrl.includes('shopify')) {
+                    return false;
+                }
+            }
+            // Explicitly reject PDFs
+            if (lowerUrl.endsWith('.pdf')) return false;
             // Exclude common non-product images
             const excludePatterns = [
                 'icon', 'logo', '1x1', 'placeholder', 'tracking', 'pixel',
                 'spinner', 'loading', 'header', 'footer', 'banner', 'nav',
                 'button', 'arrow', 'triangle', 'warning', 'prop65',
-                'manufacturer_logos', 'redesign', 'assets/img'
+                'manufacturer_logos', 'redesign', 'assets/img', '/graphics/',
+                'pelican_parts_2022', 'pelican_parts_header'
             ];
             return !excludePatterns.some(pattern => lowerUrl.includes(pattern));
         });
