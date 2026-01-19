@@ -23,6 +23,11 @@ import { toast } from "sonner";
 import OrderPartModal from "./OrderPartModal";
 import CreateBatchOrderModal from "./CreateBatchOrderModal";
 import MoveRequirementModal from "./MoveRequirementModal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
 
 /**
  * NeedToBuy - Shows parts that need to be ordered
@@ -40,6 +45,7 @@ export default function NeedToBuy({ onPartClick }) {
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [moveItem, setMoveItem] = useState(null);
+  const [addToClientPart, setAddToClientPart] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: requirements = [], isLoading } = useQuery({
@@ -543,6 +549,19 @@ export default function NeedToBuy({ onPartClick }) {
                     >
                       Order
                     </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAddToClientPart(item);
+                      }}
+                      className="border-yellow-700 text-yellow-400 hover:text-yellow-300 h-7"
+                      title="Add to Client Parts list for batch ordering"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               );
@@ -785,6 +804,154 @@ export default function NeedToBuy({ onPartClick }) {
           onClose={() => setMoveItem(null)}
         />
       )}
+
+      {addToClientPart && (
+        <AddLowStockToClientModal
+          item={addToClientPart}
+          onClose={() => setAddToClientPart(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// Modal to add low stock item to Client Parts list
+function AddLowStockToClientModal({ item, onClose }) {
+  const queryClient = useQueryClient();
+  const [quantity, setQuantity] = useState(item.qty_to_order || 1);
+  const [priority, setPriority] = useState('Normal');
+  const [notes, setNotes] = useState('');
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await base44.entities.PartProjectRequirement.create({
+        part_id: item.part.id,
+        project_id: null, // General / AK Stock
+        qty_needed: quantity,
+        qty_allocated: 0,
+        qty_ordered: 0,
+        qty_installed: 0,
+        status: 'Needed',
+        priority,
+        notes: notes || `Stock replenishment for ${item.part.part_name}`,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      toast.success(`Added to Client Parts - General / AK Stock`);
+      onClose();
+    },
+    onError: (error) => {
+      toast.error('Failed to add: ' + error.message);
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <ArrowRight className="w-5 h-5 text-yellow-400" />
+            Add to Client Parts
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Part Info */}
+          <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+            <div className="flex items-center gap-3">
+              {item.part.featured_photo ? (
+                <img 
+                  src={item.part.featured_photo} 
+                  alt="" 
+                  className="w-12 h-12 rounded object-contain bg-gray-800"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded bg-gray-800 flex items-center justify-center">
+                  <Package className="w-6 h-6 text-gray-600" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium truncate">{item.part.part_name}</p>
+                {item.part.vendor_part_number && (
+                  <p className="text-xs text-gray-400 font-mono">{item.part.vendor_part_number}</p>
+                )}
+                <p className="text-xs text-gray-500">
+                  Current: {item.netAvailable} · Min: {item.reorderPoint}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="p-3 bg-yellow-900/20 border border-yellow-900/30 rounded-lg">
+            <p className="text-sm text-yellow-400">
+              This will add to <strong>General / AK Stock</strong> in Client Parts
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              You can then batch order with other parts from the same vendor
+            </p>
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <Label className="text-gray-300">Quantity to Order</Label>
+            <Input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              className="bg-gray-800 border-gray-700 text-white"
+            />
+          </div>
+
+          {/* Priority */}
+          <div>
+            <Label className="text-gray-300">Priority</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Low">Low</SelectItem>
+                <SelectItem value="Normal">Normal</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <Label className="text-gray-300">Notes (optional)</Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Reason for ordering..."
+              className="bg-gray-800 border-gray-700 text-white"
+              rows={2}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} className="border-gray-700">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending}
+            className="bg-yellow-600 hover:bg-yellow-700"
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <ArrowRight className="w-4 h-4 mr-2" />
+            )}
+            Add to Client Parts
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
