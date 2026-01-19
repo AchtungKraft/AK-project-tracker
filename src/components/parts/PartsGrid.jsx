@@ -53,11 +53,23 @@ export default function PartsGrid({
     queryFn: () => base44.entities.InventoryItem.list(),
   });
 
+  // Use PartPurchaseLineItem for on-order calculations
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ['partPurchaseLineItems'],
+    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
+  });
+
   const getInventoryStats = (partId) => {
     const items = inventoryItems.filter(i => i.part_id === partId);
     const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
     const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
-    return { onHand, reserved, available: onHand - reserved };
+    
+    // On Order = qty_ordered - qty_received from open PO lines
+    const partLineItems = lineItems.filter(li => li.part_id === partId);
+    const onOrder = partLineItems.reduce((sum, li) => 
+      sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
+    
+    return { onHand, reserved, available: onHand - reserved, onOrder };
   };
 
   const openGallery = (images, index = 0) => {
@@ -172,7 +184,7 @@ export default function PartsGrid({
                   )}
 
                   {/* Inventory Grid */}
-                  <div className="grid grid-cols-3 gap-2 mb-2 pt-2 border-t border-gray-800">
+                  <div className="grid grid-cols-4 gap-1 mb-2 pt-2 border-t border-gray-800">
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Stock</p>
                       <p className="text-sm text-white font-semibold">{stats.onHand}</p>
@@ -185,6 +197,12 @@ export default function PartsGrid({
                       <p className="text-xs text-gray-500">Available</p>
                       <p className={`text-sm font-semibold ${stats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {stats.available}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">On Order</p>
+                      <p className={`text-sm font-semibold ${stats.onOrder > 0 ? 'text-orange-400' : 'text-gray-500'}`}>
+                        {stats.onOrder}
                       </p>
                     </div>
                   </div>
