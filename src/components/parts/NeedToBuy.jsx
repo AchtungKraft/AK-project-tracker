@@ -1,25 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, CheckCircle, ChevronDown, ChevronUp, ExternalLink, Plus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  ShoppingCart, Search, CheckCircle, ChevronDown, ChevronUp, 
+  ExternalLink, Plus, Package, Building2, FolderKanban 
+} from "lucide-react";
 import OrderPartModal from "./OrderPartModal";
+import CreateBatchOrderModal from "./CreateBatchOrderModal";
 
 /**
- * NeedToBuy - Shows parts that need to be ordered based on PartProjectRequirement
- * Calculated as: qty_needed - qty_allocated - qty_ordered > 0
- * NO LONGER uses Part.status or Part.quantity_on_hand
+ * NeedToBuy - Shows parts that need to be ordered
+ * Supports grouping by Project or General AK, with multi-select for batch ordering
  */
 export default function NeedToBuy({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [projectFilter, setProjectFilter] = useState('all');
-  const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [groupMode, setGroupMode] = useState('project'); // 'project' or 'vendor'
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
+  const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
+  const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -47,42 +52,134 @@ export default function NeedToBuy({ onPartClick }) {
   });
 
   // Calculate parts that need ordering from requirements
-  const partsToOrder = requirements
-    .map(req => {
-      const toOrder = (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
-      if (toOrder <= 0) return null;
-      
-      const part = parts.find(p => p.id === req.part_id);
-      if (!part) return null;
-      
-      const project = projects.find(p => p.id === req.project_id);
-      const vendor = vendors.find(v => v.id === part.default_vendor_id);
-      
-      return {
-        requirement: req,
-        part,
-        project,
-        vendor,
-        qty_to_order: toOrder,
-        estimated_cost: toOrder * (part.default_cost || 0)
-      };
-    })
-    .filter(Boolean);
+  const partsToOrder = useMemo(() => {
+    return requirements
+      .map(req => {
+        const toOrder = (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
+        if (toOrder <= 0) return null;
+        
+        const part = parts.find(p => p.id === req.part_id);
+        if (!part) return null;
+        
+        const project = projects.find(p => p.id === req.project_id);
+        const vendor = vendors.find(v => v.id === part.default_vendor_id);
+        
+        return {
+          id: req.id,
+          requirement: req,
+          part,
+          project,
+          vendor,
+          qty_to_order: toOrder,
+          estimated_cost: toOrder * (part.default_cost || 0)
+        };
+      })
+      .filter(Boolean);
+  }, [requirements, parts, projects, vendors]);
 
-  const parentCategories = categories.filter(c => !c.parent_id && c.active);
+  // Filter by search
+  const filteredItems = useMemo(() => {
+    if (!searchTerm) return partsToOrder;
+    const term = searchTerm.toLowerCase();
+    return partsToOrder.filter(item => 
+      item.part.part_name?.toLowerCase().includes(term) ||
+      item.part.vendor_part_number?.toLowerCase().includes(term) ||
+      item.project?.name?.toLowerCase().includes(term) ||
+      item.vendor?.vendor_name?.toLowerCase().includes(term)
+    );
+  }, [partsToOrder, searchTerm]);
 
-  const filteredItems = partsToOrder.filter(item => {
-    const matchesSearch = 
-      item.part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Group items by project or vendor
+  const groupedItems = useMemo(() => {
+    const groups = {};
     
-    const matchesCategory = categoryFilter === 'all' || item.part.part_category_id === categoryFilter;
-    const matchesProject = projectFilter === 'all' || item.requirement.project_id === projectFilter;
+    if (groupMode === 'project') {
+      // Group by project, with "General / AK Stock" for items without project
+      filteredItems.forEach(item => {
+        const key = item.project?.id || 'general';
+        const label = item.project?.name || 'General / AK Stock';
+        if (!groups[key]) {
+          groups[key] = { 
+            id: key, 
+            label, 
+            isGeneral: !item.project,
+            items: [] 
+          };
+        }
+        groups[key].items.push(item);
+      });
+    } else {
+      // Group by vendor
+      filteredItems.forEach(item => {
+        const key = item.vendor?.id || 'unassigned';
+        const label = item.vendor?.vendor_name || 'No Vendor Assigned';
+        if (!groups[key]) {
+          groups[key] = { 
+            id: key, 
+            label, 
+            isUnassigned: !item.vendor,
+            items: [] 
+          };
+        }
+        groups[key].items.push(item);
+      });
+    }
     
-    return matchesSearch && matchesCategory && matchesProject;
-  });
+    // Sort: General/Unassigned last, then alphabetically
+    return Object.values(groups).sort((a, b) => {
+      if (a.isGeneral || a.isUnassigned) return 1;
+      if (b.isGeneral || b.isUnassigned) return -1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [filteredItems, groupMode]);
 
   const totalEstimatedCost = filteredItems.reduce((sum, item) => sum + item.estimated_cost, 0);
+  const selectedCount = selectedItems.size;
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleItemSelection = (itemId) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const toggleGroupSelection = (groupItems) => {
+    const groupIds = groupItems.map(i => i.id);
+    const allSelected = groupIds.every(id => selectedItems.has(id));
+    
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id));
+      } else {
+        groupIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedItems.size === filteredItems.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(filteredItems.map(i => i.id)));
+    }
+  };
+
+  const getSelectedItemsData = () => {
+    return filteredItems.filter(item => selectedItems.has(item.id));
+  };
 
   const getCategoryPath = (categoryId) => {
     if (!categoryId) return null;
@@ -100,7 +197,7 @@ export default function NeedToBuy({ onPartClick }) {
       {/* Summary Card */}
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
         <CardHeader className="border-b border-red-900/30 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <ShoppingCart className="w-5 h-5 text-red-400" />
               <CardTitle className="text-white text-base">Need to Order</CardTitle>
@@ -108,194 +205,221 @@ export default function NeedToBuy({ onPartClick }) {
                 {filteredItems.length} items
               </Badge>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-400">Est. Total Cost</p>
-              <p className="text-xl font-bold text-white">${totalEstimatedCost.toFixed(2)}</p>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
-      {/* Filters */}
-      <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-        <CardHeader 
-          className="border-b border-red-900/30 p-4 cursor-pointer md:cursor-default"
-          onClick={() => setFiltersExpanded(!filtersExpanded)}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <CardTitle className="text-white text-base">Filters</CardTitle>
-            </div>
-            <button className="md:hidden text-gray-400">
-              {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
-        </CardHeader>
-        {filtersExpanded && (
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input
-                  placeholder="Search parts..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-gray-900/50 border-gray-700 text-white"
-                />
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs text-gray-400">Est. Total</p>
+                <p className="text-lg font-bold text-white">${totalEstimatedCost.toFixed(2)}</p>
               </div>
-
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {parentCategories.map(parent => {
-                    const children = categories.filter(c => c.parent_id === parent.id && c.active);
-                    return (
-                      <React.Fragment key={parent.id}>
-                        <SelectItem value={parent.id}>
-                          <span style={{ color: parent.color }}>{parent.name}</span>
-                        </SelectItem>
-                        {children.map(child => (
-                          <SelectItem key={child.id} value={child.id}>
-                            <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
-                          </SelectItem>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-
-              <Select value={projectFilter} onValueChange={setProjectFilter}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projects.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {selectedCount > 0 && (
+                <Button
+                  onClick={() => setShowBatchOrderModal(true)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Order ({selectedCount})
+                </Button>
+              )}
             </div>
-          </CardContent>
-        )}
+          </div>
+        </CardHeader>
       </Card>
 
-      {/* Parts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {isLoading ? (
-          <div className="col-span-full text-center py-8 text-gray-500">Loading...</div>
-        ) : filteredItems.length === 0 ? (
-          <div className="col-span-full text-center py-8">
+      {/* Filters & Group Toggle */}
+      <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Input
+                placeholder="Search parts, projects, vendors..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+              />
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Tabs value={groupMode} onValueChange={setGroupMode}>
+                <TabsList className="bg-gray-900/50 border border-gray-700">
+                  <TabsTrigger value="project" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                    <FolderKanban className="w-3.5 h-3.5" />
+                    By Project
+                  </TabsTrigger>
+                  <TabsTrigger value="vendor" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                    <Building2 className="w-3.5 h-3.5" />
+                    By Vendor
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAll}
+                className="border-gray-700 text-gray-300"
+              >
+                {selectedItems.size === filteredItems.length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Grouped Parts List */}
+      {isLoading ? (
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardContent className="p-8 text-center text-gray-500">Loading...</CardContent>
+        </Card>
+      ) : filteredItems.length === 0 ? (
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardContent className="p-8 text-center">
             <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
             <p className="text-gray-400">All caught up! No parts need to be ordered.</p>
-          </div>
-        ) : (
-          filteredItems.map(item => {
-            const categoryPath = getCategoryPath(item.part.part_category_id);
-            const category = categories.find(c => c.id === item.part.part_category_id);
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {groupedItems.map(group => {
+            const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
+            const groupSelectedCount = group.items.filter(i => selectedItems.has(i.id)).length;
+            const allGroupSelected = groupSelectedCount === group.items.length;
+            const groupTotal = group.items.reduce((sum, i) => sum + i.estimated_cost, 0);
             
             return (
-              <Card 
-                key={item.requirement.id}
-                className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-900/50 transition-colors cursor-pointer"
-                onClick={() => onPartClick(item.part)}
-              >
-                <CardHeader className="border-b border-red-900/30 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-white text-base truncate">
-                        {item.part.part_name}
-                      </CardTitle>
-                      {item.part.vendor_part_number && (
-                        <p className="text-xs text-gray-400 font-mono mt-1">
-                          {item.part.vendor_part_number}
+              <Card key={group.id} className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+                <CardHeader 
+                  className="p-3 cursor-pointer hover:bg-red-950/20 transition-colors"
+                  onClick={() => toggleGroup(group.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={allGroupSelected && group.items.length > 0}
+                        onCheckedChange={() => toggleGroupSelection(group.items)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      <div>
+                        <p className={`font-medium ${group.isGeneral || group.isUnassigned ? 'text-yellow-400' : 'text-white'}`}>
+                          {group.isGeneral && <Building2 className="w-4 h-4 inline mr-1.5" />}
+                          {group.label}
                         </p>
-                      )}
+                        <p className="text-xs text-gray-500">
+                          {group.items.length} item{group.items.length !== 1 ? 's' : ''} · ${groupTotal.toFixed(2)}
+                          {groupSelectedCount > 0 && ` · ${groupSelectedCount} selected`}
+                        </p>
+                      </div>
                     </div>
-                    <Badge variant="outline" className="border-red-500 text-red-400 text-xs shrink-0">
-                      Order {item.qty_to_order}
+                    <Badge variant="outline" className="border-gray-600 text-gray-400">
+                      {group.items.length}
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="p-4">
-                  {item.part.featured_photo && (
-                    <div className="w-full h-32 bg-gray-800 rounded mb-3 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={item.part.featured_photo}
-                        alt={item.part.part_name}
-                        className="max-w-full max-h-full object-contain"
-                      />
+                
+                {isExpanded && (
+                  <CardContent className="p-0 border-t border-red-900/20">
+                    <div className="divide-y divide-red-900/10">
+                      {group.items.map(item => {
+                        const isSelected = selectedItems.has(item.id);
+                        const categoryPath = getCategoryPath(item.part.part_category_id);
+                        
+                        return (
+                          <div 
+                            key={item.id}
+                            className={`p-3 flex items-center gap-3 hover:bg-red-950/20 transition-colors ${isSelected ? 'bg-red-950/30' : ''}`}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleItemSelection(item.id)}
+                            />
+                            
+                            {item.part.featured_photo && (
+                              <div 
+                                className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden cursor-pointer"
+                                onClick={() => onPartClick(item.part)}
+                              >
+                                <img 
+                                  src={item.part.featured_photo} 
+                                  alt="" 
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                            )}
+                            
+                            <div 
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => onPartClick(item.part)}
+                            >
+                              <p className="text-white text-sm font-medium truncate hover:text-red-400 transition-colors">
+                                {item.part.part_name}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                {item.part.vendor_part_number && (
+                                  <span className="font-mono">{item.part.vendor_part_number}</span>
+                                )}
+                                {groupMode === 'project' && item.vendor && (
+                                  <span>· {item.vendor.vendor_name}</span>
+                                )}
+                                {groupMode === 'vendor' && item.project && (
+                                  <span>· {item.project.name}</span>
+                                )}
+                                {categoryPath && <span>· {categoryPath}</span>}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4 flex-shrink-0">
+                              <Badge 
+                                className={
+                                  item.requirement.priority === 'Critical' ? 'bg-red-600' :
+                                  item.requirement.priority === 'High' ? 'bg-orange-600' :
+                                  item.requirement.priority === 'Low' ? 'bg-gray-600' : 'bg-blue-600'
+                                }
+                              >
+                                {item.requirement.priority || 'Normal'}
+                              </Badge>
+                              
+                              <div className="text-right w-20">
+                                <p className="text-white font-medium">×{item.qty_to_order}</p>
+                                {item.estimated_cost > 0 && (
+                                  <p className="text-xs text-yellow-400">${item.estimated_cost.toFixed(2)}</p>
+                                )}
+                              </div>
+                              
+                              {item.part.order_url && (
+                                <a 
+                                  href={item.part.order_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-blue-400 hover:text-blue-300"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              )}
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOrderModalPart(item.part);
+                                }}
+                                className="border-gray-700 text-gray-300 hover:text-white h-7"
+                              >
+                                Order
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    {item.project && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Project:</span>
-                        <span className="text-white">{item.project.name}</span>
-                      </div>
-                    )}
-                    {categoryPath && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Category:</span>
-                        <span style={{ color: category?.color || '#fff' }}>{categoryPath}</span>
-                      </div>
-                    )}
-                    {item.part.default_cost > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Est. Cost:</span>
-                        <span className="text-yellow-400 font-semibold">${item.estimated_cost.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {item.vendor && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Vendor:</span>
-                        <span className="text-white">{item.vendor.vendor_name}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Priority:</span>
-                      <Badge className={
-                        item.requirement.priority === 'Critical' ? 'bg-red-600' :
-                        item.requirement.priority === 'High' ? 'bg-orange-600' :
-                        item.requirement.priority === 'Low' ? 'bg-gray-600' : 'bg-blue-600'
-                      }>
-                        {item.requirement.priority || 'Normal'}
-                      </Badge>
-                    </div>
-                    {item.part.order_url && (
-                      <a 
-                        href={item.part.order_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-xs text-blue-400 hover:underline mt-2"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Order Link
-                      </a>
-                    )}
-                  </div>
-                  <Button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOrderModalPart(item.part);
-                    }}
-                    size="sm"
-                    className="w-full mt-3 bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Order
-                  </Button>
-                </CardContent>
+                  </CardContent>
+                )}
               </Card>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
       {orderModalPart && (
         <OrderPartModal 
@@ -305,6 +429,14 @@ export default function NeedToBuy({ onPartClick }) {
             const part = parts.find(p => p.id === partId);
             if (part) onPartClick(part);
           }}
+        />
+      )}
+
+      {showBatchOrderModal && (
+        <CreateBatchOrderModal
+          selectedItems={getSelectedItemsData()}
+          onClose={() => setShowBatchOrderModal(false)}
+          onSuccess={() => setSelectedItems(new Set())}
         />
       )}
     </div>

@@ -1,28 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Truck, Search, Filter, Package, ChevronDown, ChevronUp, CheckCircle, FileText } from "lucide-react";
+import { 
+  Truck, Search, Package, ChevronDown, ChevronUp, CheckCircle, 
+  FileText, Building2, FolderKanban, ExternalLink, Calendar
+} from "lucide-react";
 import { toast } from "sonner";
 
 /**
  * OnOrder - Shows parts that have been ordered but not yet received
- * TWO VIEWS:
- * 1. By Project: PartProjectRequirement.qty_ordered > 0
- * 2. By PO: PartPurchaseLineItem with qty_ordered > qty_received
+ * Grouped by Project/General AK, then by Order/PO within each group
  */
 export default function OnOrder({ onPartClick }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [projectFilter, setProjectFilter] = useState('all');
-  const [filtersExpanded, setFiltersExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState('projects');
+  const [groupMode, setGroupMode] = useState('project'); // 'project' or 'po'
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
+  const [expandedOrders, setExpandedOrders] = useState(new Set());
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -36,22 +35,12 @@ export default function OnOrder({ onPartClick }) {
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list()
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list()
+    queryFn: () => base44.entities.Order.list('-order_date')
   });
 
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
     queryFn: () => base44.entities.Part.list()
-  });
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list()
   });
 
   const { data: vendors = [] } = useQuery({
@@ -64,132 +53,166 @@ export default function OnOrder({ onPartClick }) {
     queryFn: () => base44.entities.Project.list()
   });
 
-  // Filter requirements that have ordered but not fully received items
-  const onOrderItems = requirements
-    .filter(req => (req.qty_ordered || 0) > 0 && req.status !== 'Installed' && req.status !== 'Ready')
-    .map(req => {
-      const part = parts.find(p => p.id === req.part_id);
-      if (!part) return null;
+  const getPartName = (partId) => parts.find(p => p.id === partId)?.part_name || 'Unknown Part';
+  const getPart = (partId) => parts.find(p => p.id === partId);
+  const getVendorName = (vendorId) => vendors.find(v => v.id === vendorId)?.vendor_name || 'Unknown Vendor';
+  const getProjectName = (projectId) => projects.find(p => p.id === projectId)?.name || 'General / AK Stock';
+  const getOrder = (orderId) => orders.find(o => o.id === orderId);
+
+  // Build pending line items with enriched data
+  const pendingLineItems = useMemo(() => {
+    return lineItems
+      .filter(li => (li.qty_ordered || 0) > (li.qty_received || 0))
+      .map(li => {
+        const part = getPart(li.part_id);
+        const order = getOrder(li.order_id);
+        const vendor = order ? vendors.find(v => v.id === order.vendor_id) : null;
+        const requirement = li.requirement_id ? requirements.find(r => r.id === li.requirement_id) : null;
+        const project = requirement?.project_id ? projects.find(p => p.id === requirement.project_id) : null;
+        
+        const qtyPending = (li.qty_ordered || 0) - (li.qty_received || 0);
+        
+        return {
+          lineItem: li,
+          part,
+          order,
+          vendor,
+          requirement,
+          project,
+          qtyPending,
+          qtyOrdered: li.qty_ordered || 0,
+          qtyReceived: li.qty_received || 0,
+          unitPrice: li.unit_price || part?.default_cost || 0,
+          value: qtyPending * (li.unit_price || part?.default_cost || 0),
+          status: li.qty_received > 0 ? 'Partially Received' : 'Ordered',
+        };
+      })
+      .filter(item => item.part);
+  }, [lineItems, parts, orders, vendors, requirements, projects]);
+
+  // Filter by search
+  const filteredItems = useMemo(() => {
+    if (!searchTerm) return pendingLineItems;
+    const term = searchTerm.toLowerCase();
+    return pendingLineItems.filter(item =>
+      item.part?.part_name?.toLowerCase().includes(term) ||
+      item.part?.vendor_part_number?.toLowerCase().includes(term) ||
+      item.order?.po_number?.toLowerCase().includes(term) ||
+      item.vendor?.vendor_name?.toLowerCase().includes(term) ||
+      item.project?.name?.toLowerCase().includes(term)
+    );
+  }, [pendingLineItems, searchTerm]);
+
+  // Group items
+  const groupedData = useMemo(() => {
+    if (groupMode === 'project') {
+      // Group by Project, then by Order within each project
+      const projectGroups = {};
       
-      const project = projects.find(p => p.id === req.project_id);
-      const vendor = vendors.find(v => v.id === part.default_vendor_id);
+      filteredItems.forEach(item => {
+        const projectKey = item.project?.id || 'general';
+        const projectLabel = item.project?.name || 'General / AK Stock';
+        
+        if (!projectGroups[projectKey]) {
+          projectGroups[projectKey] = {
+            id: projectKey,
+            label: projectLabel,
+            isGeneral: !item.project,
+            orders: {},
+            totalValue: 0,
+            totalItems: 0,
+          };
+        }
+        
+        const orderKey = item.order?.id || 'no-order';
+        if (!projectGroups[projectKey].orders[orderKey]) {
+          projectGroups[projectKey].orders[orderKey] = {
+            order: item.order,
+            vendor: item.vendor,
+            items: [],
+            totalValue: 0,
+          };
+        }
+        
+        projectGroups[projectKey].orders[orderKey].items.push(item);
+        projectGroups[projectKey].orders[orderKey].totalValue += item.value;
+        projectGroups[projectKey].totalValue += item.value;
+        projectGroups[projectKey].totalItems += 1;
+      });
       
-      return {
-        requirement: req,
-        part,
-        project,
-        vendor,
-        qty_ordered: req.qty_ordered || 0,
-        estimated_value: (req.qty_ordered || 0) * (part.default_cost || 0)
-      };
-    })
-    .filter(Boolean);
-
-  const parentCategories = categories.filter(c => !c.parent_id && c.active);
-
-  const filteredItems = onOrderItems.filter(item => {
-    const matchesSearch = 
-      item.part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = categoryFilter === 'all' || item.part.part_category_id === categoryFilter;
-    const matchesProject = projectFilter === 'all' || item.requirement.project_id === projectFilter;
-    
-    return matchesSearch && matchesCategory && matchesProject;
-  });
-
-  const totalEstimatedValue = filteredItems.reduce((sum, item) => sum + item.estimated_value, 0);
-
-  const getCategoryPath = (categoryId) => {
-    if (!categoryId) return null;
-    const category = categories.find(c => c.id === categoryId);
-    if (!category) return null;
-    if (category.parent_id) {
-      const parent = categories.find(c => c.id === category.parent_id);
-      return parent ? `${parent.name} > ${category.name}` : category.name;
-    }
-    return category.name;
-  };
-
-  // Mark as received - creates inventory and updates requirement
-  const markReceivedMutation = useMutation({
-    mutationFn: async ({ requirement, part, qtyReceived }) => {
-      // Create inventory item
-      await base44.entities.InventoryItem.create({
-        part_id: requirement.part_id,
-        quantity_on_hand: qtyReceived,
-        quantity_reserved: 0,
-        purchase_cost: part.default_cost || 0,
-        received_date: new Date().toISOString().split('T')[0],
-        notes: `Received for project requirement`
+      // Convert to array and sort
+      return Object.values(projectGroups)
+        .map(g => ({
+          ...g,
+          orders: Object.values(g.orders).sort((a, b) => 
+            (b.order?.order_date || '').localeCompare(a.order?.order_date || '')
+          ),
+        }))
+        .sort((a, b) => {
+          if (a.isGeneral) return 1;
+          if (b.isGeneral) return -1;
+          return a.label.localeCompare(b.label);
+        });
+    } else {
+      // Group by PO/Order only
+      const orderGroups = {};
+      
+      filteredItems.forEach(item => {
+        const orderKey = item.order?.id || 'no-order';
+        
+        if (!orderGroups[orderKey]) {
+          orderGroups[orderKey] = {
+            id: orderKey,
+            order: item.order,
+            vendor: item.vendor,
+            items: [],
+            totalValue: 0,
+          };
+        }
+        
+        orderGroups[orderKey].items.push(item);
+        orderGroups[orderKey].totalValue += item.value;
       });
-
-      // Update requirement - reduce ordered, increase allocated
-      const newOrdered = Math.max(0, (requirement.qty_ordered || 0) - qtyReceived);
-      const newAllocated = (requirement.qty_allocated || 0) + qtyReceived;
-      const newStatus = newAllocated >= requirement.qty_needed ? 'Allocated' : 
-                       newAllocated > 0 ? 'Partially Allocated' : 'Needed';
-
-      await base44.entities.PartProjectRequirement.update(requirement.id, {
-        qty_ordered: newOrdered,
-        qty_allocated: newAllocated,
-        status: newStatus
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      toast.success('Parts received and added to inventory');
-    },
-    onError: (error) => {
-      toast.error('Failed to mark as received: ' + error.message);
+      
+      return Object.values(orderGroups).sort((a, b) => 
+        (b.order?.order_date || '').localeCompare(a.order?.order_date || '')
+      );
     }
-  });
+  }, [filteredItems, groupMode]);
 
-  const handleMarkReceived = (item) => {
-    markReceivedMutation.mutate({
-      requirement: item.requirement,
-      part: item.part,
-      qtyReceived: item.qty_ordered
+  const totalValue = filteredItems.reduce((sum, item) => sum + item.value, 0);
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
     });
   };
 
-  // PO Line Items that are not fully received
-  const pendingLineItems = lineItems
-    .filter(li => (li.qty_ordered || 0) > (li.qty_received || 0))
-    .map(li => {
-      const part = parts.find(p => p.id === li.part_id);
-      const order = orders.find(o => o.id === li.order_id);
-      const vendor = order ? vendors.find(v => v.id === order.vendor_id) : null;
-      if (!part) return null;
-      
-      const qtyPending = (li.qty_ordered || 0) - (li.qty_received || 0);
-      return {
-        lineItem: li,
-        part,
-        order,
-        vendor,
-        qtyPending,
-        value: qtyPending * (li.unit_price || part.default_cost || 0)
-      };
-    })
-    .filter(Boolean);
+  const toggleOrder = (orderId) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
 
-  const totalPOValue = pendingLineItems.reduce((sum, item) => sum + item.value, 0);
-
-  // Receive PO line items
+  // Receive line item mutation
   const receiveLineItemMutation = useMutation({
-    mutationFn: async ({ lineItem, part, qtyToReceive, locationId }) => {
+    mutationFn: async ({ lineItem, part, qtyToReceive, unitPrice }) => {
       // Create inventory item
       await base44.entities.InventoryItem.create({
         part_id: lineItem.part_id,
-        location_id: locationId || null,
+        location_id: null,
         quantity_on_hand: qtyToReceive,
         quantity_reserved: 0,
-        purchase_cost: lineItem.unit_price || part.default_cost || 0,
+        purchase_cost: unitPrice,
         purchase_order_id: lineItem.order_id,
         received_date: new Date().toISOString().split('T')[0],
-        notes: `Received from PO`
+        notes: `Received from PO`,
       });
 
       // Update line item
@@ -198,7 +221,7 @@ export default function OnOrder({ onPartClick }) {
       
       await base44.entities.PartPurchaseLineItem.update(lineItem.id, {
         qty_received: newReceived,
-        status: newStatus
+        status: newStatus,
       });
 
       // If line item was linked to a requirement, update it
@@ -210,7 +233,7 @@ export default function OnOrder({ onPartClick }) {
           await base44.entities.PartProjectRequirement.update(req.id, {
             qty_ordered: newOrdered,
             qty_allocated: newAllocated,
-            status: newAllocated >= req.qty_needed ? 'Allocated' : 'Partially Allocated'
+            status: newAllocated >= req.qty_needed ? 'Allocated' : 'Partially Allocated',
           });
         }
       }
@@ -219,296 +242,253 @@ export default function OnOrder({ onPartClick }) {
       queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast.success('Parts received and added to inventory');
     },
     onError: (error) => {
       toast.error('Failed to receive: ' + error.message);
-    }
+    },
   });
+
+  const renderLineItem = (item) => {
+    const part = item.part;
+    
+    return (
+      <div 
+        key={item.lineItem.id}
+        className="p-3 flex items-center gap-3 hover:bg-yellow-950/20 transition-colors border-b border-yellow-900/10 last:border-b-0"
+      >
+        {part?.featured_photo && (
+          <div 
+            className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden cursor-pointer"
+            onClick={() => onPartClick(part)}
+          >
+            <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
+          </div>
+        )}
+        
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onPartClick(part)}>
+          <p className="text-white text-sm font-medium truncate hover:text-yellow-400 transition-colors">
+            {part?.part_name}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
+            {item.project && groupMode === 'po' && <span>· {item.project.name}</span>}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <Badge 
+            variant="outline" 
+            className={item.status === 'Partially Received' ? 'border-orange-500 text-orange-400' : 'border-yellow-500 text-yellow-400'}
+          >
+            {item.status}
+          </Badge>
+          
+          <div className="text-right text-sm w-24">
+            <p className="text-white">
+              <span className="text-green-400">{item.qtyReceived}</span>
+              <span className="text-gray-500"> / </span>
+              <span>{item.qtyOrdered}</span>
+            </p>
+            <p className="text-xs text-gray-500">${item.value.toFixed(2)}</p>
+          </div>
+          
+          <Button
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              receiveLineItemMutation.mutate({
+                lineItem: item.lineItem,
+                part: item.part,
+                qtyToReceive: item.qtyPending,
+                unitPrice: item.unitPrice,
+              });
+            }}
+            disabled={receiveLineItemMutation.isPending}
+            className="bg-green-600 hover:bg-green-700 h-7"
+          >
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Receive {item.qtyPending}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderOrderGroup = (orderData, showProjectInfo = false) => {
+    const order = orderData.order;
+    const isExpanded = expandedOrders.has(order?.id) || !order;
+    
+    return (
+      <div key={order?.id || 'no-order'} className="border border-yellow-900/20 rounded-lg overflow-hidden mb-2 last:mb-0">
+        {order && (
+          <div 
+            className="p-2 bg-gray-800/30 flex items-center justify-between cursor-pointer"
+            onClick={() => toggleOrder(order.id)}
+          >
+            <div className="flex items-center gap-2">
+              {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+              <FileText className="w-4 h-4 text-blue-400" />
+              <div>
+                <p className="text-sm font-medium text-white">
+                  {order.po_number || `Order ${order.id.slice(0, 8)}`}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>{orderData.vendor?.vendor_name}</span>
+                  {order.order_date && (
+                    <>
+                      <span>·</span>
+                      <Calendar className="w-3 h-3" />
+                      <span>{order.order_date}</span>
+                    </>
+                  )}
+                  {order.eta_date && <span>· ETA: {order.eta_date}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {order.notes && (
+                <a 
+                  href={order.notes.startsWith('http') ? order.notes : undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={order.notes.startsWith('http') ? 'text-blue-400 hover:text-blue-300' : 'hidden'}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+              <Badge variant="outline" className="border-gray-600 text-gray-400">
+                {orderData.items.length} item{orderData.items.length !== 1 ? 's' : ''}
+              </Badge>
+              <span className="text-sm text-yellow-400 font-medium">
+                ${orderData.totalValue.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {(isExpanded || !order) && (
+          <div className="divide-y divide-yellow-900/10">
+            {orderData.items.map(item => renderLineItem(item))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
       {/* Summary Card */}
       <Card className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
         <CardHeader className="border-b border-yellow-900/30 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <Truck className="w-5 h-5 text-yellow-400" />
               <CardTitle className="text-white text-base">On Order</CardTitle>
+              <Badge variant="outline" className="border-yellow-500 text-yellow-400">
+                {filteredItems.length} items
+              </Badge>
             </div>
-            <div className="flex gap-4 text-right">
-              <div>
-                <p className="text-xs text-gray-400">Project Orders</p>
-                <p className="text-lg font-bold text-white">${totalEstimatedValue.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">PO Orders</p>
-                <p className="text-lg font-bold text-white">${totalPOValue.toFixed(2)}</p>
-              </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Total Pending Value</p>
+              <p className="text-lg font-bold text-white">${totalValue.toFixed(2)}</p>
             </div>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Tabs for different views */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-gray-900/50 border border-gray-700">
-          <TabsTrigger value="projects" className="data-[state=active]:bg-yellow-900/30">
-            By Project ({filteredItems.length})
-          </TabsTrigger>
-          <TabsTrigger value="po" className="data-[state=active]:bg-yellow-900/30">
-            <FileText className="w-4 h-4 mr-2" />
-            By PO ({pendingLineItems.length})
-          </TabsTrigger>
-        </TabsList>
-
-
-
-        {/* Projects Tab */}
-        <TabsContent value="projects" className="mt-4">
-          {/* Filters */}
-          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30 mb-4">
-            <CardHeader 
-              className="border-b border-red-900/30 p-4 cursor-pointer md:cursor-default"
-              onClick={() => setFiltersExpanded(!filtersExpanded)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-gray-400" />
-                  <CardTitle className="text-white text-base">Filters</CardTitle>
-                </div>
-                <button className="md:hidden text-gray-400">
-                  {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
-            </CardHeader>
-            {filtersExpanded && (
-              <CardContent className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                    <Input
-                      placeholder="Search parts..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 bg-gray-900/50 border-gray-700 text-white"
-                    />
-                  </div>
-
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {parentCategories.map(parent => {
-                        const children = categories.filter(c => c.parent_id === parent.id && c.active);
-                        return (
-                          <React.Fragment key={parent.id}>
-                            <SelectItem value={parent.id}>
-                              <span style={{ color: parent.color }}>{parent.name}</span>
-                            </SelectItem>
-                            {children.map(child => (
-                              <SelectItem key={child.id} value={child.id}>
-                                <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
-                              </SelectItem>
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={projectFilter} onValueChange={setProjectFilter}>
-                    <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                      <SelectValue placeholder="All Projects" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Projects</SelectItem>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
-          {/* Parts Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isLoading ? (
-              <div className="col-span-full text-center py-8 text-gray-500">Loading...</div>
-            ) : filteredItems.length === 0 ? (
-              <div className="col-span-full text-center py-8">
-                <Package className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-400">No parts currently on order for projects.</p>
-              </div>
-            ) : (
-              filteredItems.map(item => {
-                const categoryPath = getCategoryPath(item.part.part_category_id);
-                const category = categories.find(c => c.id === item.part.part_category_id);
-                
-                return (
-                  <Card 
-                    key={item.requirement.id}
-                    className="bg-black/40 backdrop-blur-xl border border-yellow-900/30 hover:border-yellow-900/50 transition-colors cursor-pointer"
-                    onClick={() => onPartClick(item.part)}
-                  >
-                    <CardHeader className="border-b border-yellow-900/30 p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-white text-base truncate">
-                            {item.part.part_name}
-                          </CardTitle>
-                          {item.part.vendor_part_number && (
-                            <p className="text-xs text-gray-400 font-mono mt-1">
-                              {item.part.vendor_part_number}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="border-yellow-500 text-yellow-400 text-xs shrink-0">
-                          {item.qty_ordered} ordered
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-4">
-                      {item.part.featured_photo && (
-                        <div className="w-full h-32 bg-gray-800 rounded mb-3 flex items-center justify-center overflow-hidden">
-                          <img
-                            src={item.part.featured_photo}
-                            alt={item.part.part_name}
-                            className="max-w-full max-h-full object-contain"
-                          />
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        {item.project && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Project:</span>
-                            <span className="text-white">{item.project.name}</span>
-                          </div>
-                        )}
-                        {categoryPath && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Category:</span>
-                            <span style={{ color: category?.color || '#fff' }}>{categoryPath}</span>
-                          </div>
-                        )}
-                        {item.estimated_value > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Value:</span>
-                            <span className="text-white font-semibold">${item.estimated_value.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {item.vendor && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">Vendor:</span>
-                            <span className="text-white">{item.vendor.vendor_name}</span>
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMarkReceived(item);
-                        }}
-                        size="sm"
-                        className="w-full mt-3 bg-green-600 hover:bg-green-700"
-                        disabled={markReceivedMutation.isPending}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Mark as Received
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
+      {/* Filters & Group Toggle */}
+      <Card className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Input
+                placeholder="Search parts, orders, vendors..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+              />
+            </div>
+            
+            <Tabs value={groupMode} onValueChange={setGroupMode}>
+              <TabsList className="bg-gray-900/50 border border-gray-700">
+                <TabsTrigger value="project" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  By Project
+                </TabsTrigger>
+                <TabsTrigger value="po" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
+                  <FileText className="w-3.5 h-3.5" />
+                  By PO
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-        </TabsContent>
+        </CardContent>
+      </Card>
 
-        {/* PO Tab */}
-        <TabsContent value="po" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pendingLineItems.length === 0 ? (
-              <div className="col-span-full text-center py-8">
-                <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-400">No pending PO line items.</p>
-              </div>
-            ) : (
-              pendingLineItems.map(item => (
-                <Card 
-                  key={item.lineItem.id}
-                  className="bg-black/40 backdrop-blur-xl border border-blue-900/30 hover:border-blue-900/50 transition-colors cursor-pointer"
-                  onClick={() => onPartClick(item.part)}
+      {/* Grouped Orders */}
+      {isLoading ? (
+        <Card className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+          <CardContent className="p-8 text-center text-gray-500">Loading...</CardContent>
+        </Card>
+      ) : filteredItems.length === 0 ? (
+        <Card className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+          <CardContent className="p-8 text-center">
+            <Package className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400">No parts currently on order.</p>
+          </CardContent>
+        </Card>
+      ) : groupMode === 'project' ? (
+        <div className="space-y-3">
+          {groupedData.map(group => {
+            const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
+            
+            return (
+              <Card key={group.id} className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+                <CardHeader 
+                  className="p-3 cursor-pointer hover:bg-yellow-950/20 transition-colors"
+                  onClick={() => toggleGroup(group.id)}
                 >
-                  <CardHeader className="border-b border-blue-900/30 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-white text-base truncate">
-                          {item.part.part_name}
-                        </CardTitle>
-                        {item.order?.po_number && (
-                          <p className="text-xs text-blue-400 mt-1">
-                            PO: {item.order.po_number}
-                          </p>
-                        )}
-                      </div>
-                      <Badge variant="outline" className="border-blue-500 text-blue-400 text-xs shrink-0">
-                        {item.qtyPending} pending
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      {item.vendor && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Vendor:</span>
-                          <span className="text-white">{item.vendor.vendor_name}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Ordered:</span>
-                        <span className="text-white">{item.lineItem.qty_ordered}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Received:</span>
-                        <span className="text-green-400">{item.lineItem.qty_received || 0}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Unit Price:</span>
-                        <span className="text-white">${(item.lineItem.unit_price || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Pending Value:</span>
-                        <span className="text-white font-semibold">${item.value.toFixed(2)}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      <div>
+                        <p className={`font-medium ${group.isGeneral ? 'text-yellow-400' : 'text-white'}`}>
+                          {group.isGeneral && <Building2 className="w-4 h-4 inline mr-1.5" />}
+                          {group.label}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {group.orders.length} order{group.orders.length !== 1 ? 's' : ''} · {group.totalItems} item{group.totalItems !== 1 ? 's' : ''}
+                        </p>
                       </div>
                     </div>
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        receiveLineItemMutation.mutate({
-                          lineItem: item.lineItem,
-                          part: item.part,
-                          qtyToReceive: item.qtyPending,
-                          locationId: null
-                        });
-                      }}
-                      size="sm"
-                      className="w-full mt-3 bg-green-600 hover:bg-green-700"
-                      disabled={receiveLineItemMutation.isPending}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Receive All ({item.qtyPending})
-                    </Button>
+                    <span className="text-sm text-yellow-400 font-medium">
+                      ${group.totalValue.toFixed(2)}
+                    </span>
+                  </div>
+                </CardHeader>
+                
+                {isExpanded && (
+                  <CardContent className="p-3 pt-0 border-t border-yellow-900/20">
+                    {group.orders.map(orderData => renderOrderGroup(orderData))}
                   </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {groupedData.map(orderData => (
+            <Card key={orderData.id} className="bg-black/40 backdrop-blur-xl border border-yellow-900/30 overflow-hidden">
+              {renderOrderGroup(orderData, true)}
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
