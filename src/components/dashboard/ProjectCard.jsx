@@ -1,16 +1,17 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Eye, Edit2, Calendar, Users } from "lucide-react";
+import { Eye, Edit2, Calendar, Users, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import ImageModal from "../ui/ImageModal";
 
-export default function ProjectCard({ project, status, projectType, teamMembers, onEdit }) {
+export default function ProjectCard({ project, status, projectType, teamMembers, onEdit, needsAttention = false, attentionMessage = '' }) {
   const [selectedImage, setSelectedImage] = useState(null);
+  const navigate = useNavigate();
 
   const displayImage = project.featured_image_url || project.images && project.images[0];
   const isOverdue = project.target_completion &&
@@ -27,13 +28,31 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
 
   const teamNames = getTeamNames(project.assigned_team);
 
+  // Mobile tap handler - make entire card tappable on mobile
+  const handleMobileCardTap = (e) => {
+    // Only trigger on mobile (check if it's a touch device and no buttons were clicked)
+    if (window.innerWidth < 768 && !e.target.closest('button')) {
+      navigate(createPageUrl("ProjectDetail") + `?id=${project.id}`);
+    }
+  };
+
   return (
     <>
-      <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-300 overflow-hidden group">
-        {/* Image Section */}
+      <Card 
+        className={`bg-black/40 backdrop-blur-xl border hover:border-red-700/50 transition-all duration-300 overflow-hidden group md:cursor-default cursor-pointer ${
+          needsAttention ? 'border-l-4 border-l-amber-500 border-red-900/30' : 'border-red-900/30'
+        }`}
+        onClick={handleMobileCardTap}
+      >
+        {/* Image Section - Tighter on mobile */}
         <div
-          className="relative h-40 bg-gray-900/50 cursor-pointer overflow-hidden"
-          onClick={() => displayImage && setSelectedImage(displayImage)}>
+          className="relative h-28 md:h-40 bg-gray-900/50 md:cursor-pointer overflow-hidden"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.innerWidth >= 768 && displayImage) {
+              setSelectedImage(displayImage);
+            }
+          }}>
 
           {displayImage ?
           <img
