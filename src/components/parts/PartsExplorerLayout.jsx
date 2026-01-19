@@ -79,6 +79,26 @@ export default function PartsExplorerLayout({ onPartClick }) {
     queryFn: () => base44.entities.Part.list('-created_date'),
   });
 
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => base44.entities.Vendor.list(),
+  });
+
+  const { data: carMakes = [] } = useQuery({
+    queryKey: ['carMakes'],
+    queryFn: () => base44.entities.CarMake.list(),
+  });
+
+  const { data: carModels = [] } = useQuery({
+    queryKey: ['carModels'],
+    queryFn: () => base44.entities.CarModel.list(),
+  });
+
+  const { data: carYears = [] } = useQuery({
+    queryKey: ['carYears'],
+    queryFn: () => base44.entities.CarYear.list(),
+  });
+
   // Build category path
   useEffect(() => {
     if (selectedCategoryId && categories.length > 0) {
