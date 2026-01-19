@@ -374,6 +374,7 @@ Return the FULL URLs for images, not partial paths.`,
             success: true,
             data: {
                 ...result,
+                price: finalPrice,
                 image_urls: uploadedImageUrls
             }
         }, {
