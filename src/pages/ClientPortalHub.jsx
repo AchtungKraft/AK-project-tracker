@@ -552,6 +552,15 @@ export default function ClientPortalHub() {
         </div>
       </div>
 
+      {/* Needs Attention Section - Always visible at top */}
+      <NeedsAttentionSection
+        requests={allRequests}
+        projects={projects}
+        comments={comments}
+        decisions={decisions}
+        attachments={attachments}
+      />
+
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         {/* Desktop Tabs */}
         <TabsList className="hidden md:flex bg-black/40 border border-gray-700 p-1 h-auto">
