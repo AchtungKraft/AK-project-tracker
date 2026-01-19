@@ -9,10 +9,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   ShoppingCart, Search, CheckCircle, ChevronDown, ChevronUp, 
-  ExternalLink, Plus, Package, Building2, FolderKanban 
+  ExternalLink, Plus, Package, Building2, FolderKanban, MoreVertical, Trash2, ArrowRight
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import OrderPartModal from "./OrderPartModal";
 import CreateBatchOrderModal from "./CreateBatchOrderModal";
+import MoveRequirementModal from "./MoveRequirementModal";
 
 /**
  * NeedToBuy - Shows parts that need to be ordered
@@ -25,6 +35,8 @@ export default function NeedToBuy({ onPartClick }) {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
+  const [moveItem, setMoveItem] = useState(null);
+  const queryClient = useQueryClient();
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -50,6 +62,66 @@ export default function NeedToBuy({ onPartClick }) {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list()
   });
+
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: () => base44.entities.InventoryItem.list()
+  });
+
+  // Remove requirement mutation
+  const removeRequirementMutation = useMutation({
+    mutationFn: async (item) => {
+      const req = item.requirement;
+      const allocatedNotInstalled = (req.qty_allocated || 0) - (req.qty_installed || 0);
+      
+      // Release reserved inventory if any
+      if (allocatedNotInstalled > 0) {
+        const partInventory = inventoryItems.filter(i => i.part_id === req.part_id);
+        let remaining = allocatedNotInstalled;
+        
+        for (const invItem of partInventory) {
+          if (remaining <= 0) break;
+          const toRelease = Math.min(invItem.quantity_reserved || 0, remaining);
+          if (toRelease > 0) {
+            await base44.entities.InventoryItem.update(invItem.id, {
+              quantity_reserved: Math.max(0, (invItem.quantity_reserved || 0) - toRelease)
+            });
+            remaining -= toRelease;
+          }
+        }
+      }
+      
+      // Delete the requirement
+      await base44.entities.PartProjectRequirement.delete(req.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      toast.success('Requirement removed from project');
+    },
+    onError: (error) => {
+      toast.error('Failed to remove: ' + error.message);
+    },
+  });
+
+  const handleRemoveRequirement = (item) => {
+    const req = item.requirement;
+    const hasInstalled = (req.qty_installed || 0) > 0;
+    
+    if (hasInstalled) {
+      toast.error('Cannot remove: parts have already been installed');
+      return;
+    }
+    
+    const allocatedNotInstalled = (req.qty_allocated || 0) - (req.qty_installed || 0);
+    const message = allocatedNotInstalled > 0
+      ? `Remove this requirement? ${allocatedNotInstalled} allocated unit(s) will be released back to inventory.`
+      : 'Remove this part requirement from the project?';
+    
+    if (confirm(message)) {
+      removeRequirementMutation.mutate(item);
+    }
+  };
 
   // Calculate parts that need ordering from requirements
   const partsToOrder = useMemo(() => {
@@ -408,6 +480,41 @@ export default function NeedToBuy({ onPartClick }) {
                               >
                                 Order
                               </Button>
+                              
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-gray-400 hover:text-white"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMoveItem(item);
+                                    }}
+                                  >
+                                    <ArrowRight className="w-4 h-4 mr-2" />
+                                    Move to Project
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className="bg-gray-700" />
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveRequirement(item);
+                                    }}
+                                    className="text-red-400"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Remove from Project
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         );
@@ -437,6 +544,15 @@ export default function NeedToBuy({ onPartClick }) {
           selectedItems={getSelectedItemsData()}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => setSelectedItems(new Set())}
+        />
+      )}
+
+      {moveItem && (
+        <MoveRequirementModal
+          requirement={moveItem.requirement}
+          part={moveItem.part}
+          currentProject={moveItem.project}
+          onClose={() => setMoveItem(null)}
         />
       )}
     </div>
