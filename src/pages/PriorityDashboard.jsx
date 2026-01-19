@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
+import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
+import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -22,6 +24,35 @@ export default function PriorityDashboard() {
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('calendar-view');
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Saved views hook
+  const {
+    savedViews,
+    activeViewName,
+    activeView,
+    saveView,
+    deleteView,
+    renameView,
+    selectView,
+  } = useSavedProjectViews();
+
+  // Apply filters when a saved view is selected
+  useEffect(() => {
+    if (activeView) {
+      setSelectedTypes(activeView.selectedTypes || []);
+      setStatusFilter(activeView.statusFilter || 'all');
+    }
+  }, [activeViewName]);
+
+  const handleSelectView = (name) => {
+    const view = selectView(name);
+    if (view) {
+      setSelectedTypes(view.selectedTypes || []);
+      setStatusFilter(view.statusFilter || 'all');
+    }
+  };
 
   const { data: priorityTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
@@ -45,6 +76,13 @@ export default function PriorityDashboard() {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
   });
+
+  const { data: projectTypes = [] } = useQuery({
+    queryKey: ['projectTypes'],
+    queryFn: () => base44.entities.ProjectType.list(),
+  });
+
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
@@ -76,7 +114,7 @@ export default function PriorityDashboard() {
     return map;
   }, [allTaskComments]);
 
-  // Filter out completed tasks
+  // Filter out completed tasks and apply project filters from saved views
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const completedStatus = taskStatuses.find(s => {
     const label = s.label.toLowerCase();
@@ -85,6 +123,12 @@ export default function PriorityDashboard() {
   const activePriorityTasks = priorityTasks.filter(t => {
     if (t.status_id === completedStatus?.id) return false;
     if (assignedToFilter !== 'all' && t.assigned_team_member_id !== assignedToFilter) return false;
+    
+    // Filter by project type and status from saved views
+    const project = projects.find(p => p.id === t.project_id);
+    if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
+    if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
+    
     return true;
   });
 
@@ -238,6 +282,20 @@ export default function PriorityDashboard() {
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
+          </div>
+
+          {/* Saved Views Selector */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <SavedViewsSelector
+              savedViews={savedViews}
+              activeViewName={activeViewName}
+              onSelectView={handleSelectView}
+              onSaveView={saveView}
+              onDeleteView={deleteView}
+              onRenameView={renameView}
+              currentSelectedTypes={selectedTypes}
+              currentStatusFilter={statusFilter}
+            />
           </div>
 
           {/* Tabs */}
