@@ -48,36 +48,76 @@ export function useSavedProjectViews(viewType = 'projects') {
   // Get the active view's filter state
   const activeView = savedViews.find(v => v.name === activeViewName) || DEFAULT_VIEW;
 
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async ({ name, selectedTypes, statusFilter }) => {
+      return base44.entities.SavedView.create({
+        view_name: name,
+        view_type: viewType,
+        selected_types: selectedTypes,
+        status_filter: statusFilter,
+        is_shared: true,
+        sort_order: dbViews.length
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['savedViews', viewType] });
+    }
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      return base44.entities.SavedView.update(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['savedViews', viewType] });
+    }
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      return base44.entities.SavedView.delete(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['savedViews', viewType] });
+    }
+  });
+
   // Save a new view
-  const saveView = useCallback((name, selectedTypes, statusFilter) => {
+  const saveView = useCallback(async (name, selectedTypes, statusFilter) => {
     if (!name || name.trim() === '') return false;
     
     const trimmedName = name.trim();
     
     // Check if view with this name already exists (and isn't default)
-    const existingIndex = savedViews.findIndex(v => v.name === trimmedName && !v.isDefault);
+    const existing = dbViews.find(v => v.name === trimmedName);
     
-    if (existingIndex >= 0) {
+    if (existing) {
       // Update existing view
-      setSavedViews(prev => prev.map((v, i) => 
-        i === existingIndex ? { ...v, selectedTypes, statusFilter } : v
-      ));
+      await updateMutation.mutateAsync({
+        id: existing.id,
+        data: { selected_types: selectedTypes, status_filter: statusFilter }
+      });
     } else {
       // Add new view
-      setSavedViews(prev => [...prev, { name: trimmedName, selectedTypes, statusFilter }]);
+      await createMutation.mutateAsync({ name: trimmedName, selectedTypes, statusFilter });
     }
     
     setActiveViewName(trimmedName);
     return true;
-  }, [savedViews]);
+  }, [dbViews, createMutation, updateMutation]);
 
   // Delete a view
-  const deleteView = useCallback((name) => {
+  const deleteView = useCallback(async (name) => {
     // Cannot delete default view
     const view = savedViews.find(v => v.name === name);
     if (view?.isDefault) return false;
     
-    setSavedViews(prev => prev.filter(v => v.name !== name));
+    if (view?.id) {
+      await deleteMutation.mutateAsync(view.id);
+    }
     
     // If deleting active view, switch to default
     if (activeViewName === name) {
@@ -85,30 +125,31 @@ export function useSavedProjectViews(viewType = 'projects') {
     }
     
     return true;
-  }, [savedViews, activeViewName]);
+  }, [savedViews, activeViewName, deleteMutation]);
 
   // Rename a view
-  const renameView = useCallback((oldName, newName) => {
+  const renameView = useCallback(async (oldName, newName) => {
     if (!newName || newName.trim() === '') return false;
     
     const view = savedViews.find(v => v.name === oldName);
-    if (view?.isDefault) return false;
+    if (view?.isDefault || !view?.id) return false;
     
     const trimmedName = newName.trim();
     
     // Check if new name already exists
     if (savedViews.some(v => v.name === trimmedName)) return false;
     
-    setSavedViews(prev => prev.map(v => 
-      v.name === oldName ? { ...v, name: trimmedName } : v
-    ));
+    await updateMutation.mutateAsync({
+      id: view.id,
+      data: { view_name: trimmedName }
+    });
     
     if (activeViewName === oldName) {
       setActiveViewName(trimmedName);
     }
     
     return true;
-  }, [savedViews, activeViewName]);
+  }, [savedViews, activeViewName, updateMutation]);
 
   // Select a view
   const selectView = useCallback((name) => {
