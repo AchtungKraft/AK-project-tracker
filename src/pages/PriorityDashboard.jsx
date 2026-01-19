@@ -82,8 +82,6 @@ export default function PriorityDashboard() {
     queryFn: () => base44.entities.ProjectType.list(),
   });
 
-  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
-
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
