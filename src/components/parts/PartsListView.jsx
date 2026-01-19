@@ -21,6 +21,7 @@ export default function PartsListView({
   onAddInventory,
   onOrderPart,
   onAddToBuild,
+  onAddToNeedToBuy,
 }) {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [galleryState, setGalleryState] = useState({
@@ -276,6 +277,7 @@ export default function PartsListView({
             onAddInventory={onAddInventory}
             onOrderPart={onOrderPart}
             onAddToBuild={onAddToBuild}
+            onAddToNeedToBuy={onAddToNeedToBuy}
             onViewDetails={onPartClick}
           />
         </div>

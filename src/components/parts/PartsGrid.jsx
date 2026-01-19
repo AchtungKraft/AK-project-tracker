@@ -19,6 +19,7 @@ export default function PartsGrid({
   onAddInventory,
   onOrderPart,
   onAddToBuild,
+  onAddToNeedToBuy,
 }) {
   const [galleryState, setGalleryState] = useState({
     open: false,
@@ -205,6 +206,7 @@ export default function PartsGrid({
                       onAddInventory={onAddInventory}
                       onOrderPart={onOrderPart}
                       onAddToBuild={onAddToBuild}
+                      onAddToNeedToBuy={onAddToNeedToBuy}
                       onViewDetails={onPartClick}
                     />
                   </div>
