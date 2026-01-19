@@ -266,14 +266,14 @@ export default function NeedsAttentionSection({
         {/* Action Required Section */}
         {actionRequired.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-2 md:mb-3">
               <div className="h-px flex-1 bg-red-500/30" />
               <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">
                 Action Required ({actionRequired.length})
               </span>
               <div className="h-px flex-1 bg-red-500/30" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {actionRequired.slice(0, 6).map(request => (
                 <RequestCard key={request.id} request={request} />
               ))}
@@ -289,14 +289,14 @@ export default function NeedsAttentionSection({
         {/* Pending Closure Section */}
         {pendingClosure.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-2 md:mb-3">
               <div className="h-px flex-1 bg-green-500/20" />
               <span className="text-xs font-semibold text-green-400/70 uppercase tracking-wider">
                 Pending Closure ({pendingClosure.length})
               </span>
               <div className="h-px flex-1 bg-green-500/20" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {pendingClosure.slice(0, 3).map(request => (
                 <RequestCard key={request.id} request={request} isDeemphasized />
               ))}
