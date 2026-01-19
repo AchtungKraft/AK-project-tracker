@@ -81,6 +81,32 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
     );
   };
 
+  // Helper to generate next PO number
+  const generatePONumber = async () => {
+    const currentYear = new Date().getFullYear();
+    
+    // Get or create the sequence record for this year
+    const sequences = await base44.entities.POSequence.list();
+    let yearSequence = sequences.find(s => s.year === currentYear);
+    
+    let nextSequence;
+    if (yearSequence) {
+      nextSequence = (yearSequence.last_sequence || 0) + 1;
+      await base44.entities.POSequence.update(yearSequence.id, {
+        last_sequence: nextSequence,
+      });
+    } else {
+      nextSequence = 1;
+      await base44.entities.POSequence.create({
+        year: currentYear,
+        last_sequence: nextSequence,
+      });
+    }
+    
+    // Format: PO-YYYY-NNNN (zero-padded to 4 digits)
+    return `PO-${currentYear}-${String(nextSequence).padStart(4, '0')}`;
+  };
+
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       let orderId = formData.order_id;
@@ -90,9 +116,13 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
         if (!formData.new_order_vendor_id) {
           throw new Error('Please select a vendor for the new order');
         }
+        
+        // Auto-generate PO number if left blank
+        const poNumber = formData.new_order_po_number || await generatePONumber();
+        
         const newOrder = await base44.entities.Order.create({
           vendor_id: formData.new_order_vendor_id,
-          po_number: formData.new_order_po_number || `PO-${Date.now()}`,
+          po_number: poNumber,
           order_date: formData.new_order_date || new Date().toISOString().split('T')[0],
           eta_date: formData.new_order_eta_date || null,
           status: 'Ordered',
