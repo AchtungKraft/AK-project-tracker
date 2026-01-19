@@ -393,7 +393,7 @@ export default function Dashboard() {
                       {groupLabel} ({groupProjects.length})
                     </h2>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     {groupProjects.map(project => {
                       const status = statuses.find(s => s.id === project.status_id);
                       const projectType = projectTypes.find(t => t.id === project.project_type_id);
