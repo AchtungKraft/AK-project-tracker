@@ -126,9 +126,10 @@ export default function ClientPortalListView({
           
           {/* Table Header */}
           <div className="grid grid-cols-12 gap-2 px-4 py-1.5 bg-gray-800/30 border-b border-gray-800 text-xs font-medium text-gray-500 uppercase tracking-wide">
-            <div className="col-span-6 md:col-span-7">Request</div>
-            <div className="col-span-3 md:col-span-2">Type</div>
-            <div className="col-span-3 hidden md:block">Last Activity</div>
+            <div className="col-span-5 md:col-span-5">Request</div>
+            <div className="col-span-2 md:col-span-2">Status</div>
+            <div className="col-span-2 md:col-span-2">Type</div>
+            <div className="col-span-3 hidden md:block">Activity</div>
           </div>
           
           {/* Rows */}
