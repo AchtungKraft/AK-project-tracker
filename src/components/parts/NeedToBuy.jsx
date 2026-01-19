@@ -127,7 +127,7 @@ export default function NeedToBuy({ onPartClick }) {
     }
   };
 
-  // Calculate parts that need ordering from requirements
+  // Calculate parts that need ordering from requirements (Client Parts tab)
   // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
   // (installed parts are done, allocated reduces demand, ordered is in pipeline)
   const partsToOrder = useMemo(() => {
@@ -154,6 +154,42 @@ export default function NeedToBuy({ onPartClick }) {
       })
       .filter(Boolean);
   }, [requirements, parts, projects, vendors]);
+
+  // Calculate low stock parts (Low AK Stock tab)
+  // Parts where reorder_point > 0 and current inventory (net available) is below reorder_point
+  const lowStockParts = useMemo(() => {
+    return parts
+      .filter(part => {
+        if (!part.reorder_point || part.reorder_point <= 0) return false;
+        
+        // Calculate net available inventory for this part
+        const partInventory = inventoryItems.filter(i => i.part_id === part.id);
+        const totalOnHand = partInventory.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+        const totalReserved = partInventory.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+        const netAvailable = totalOnHand - totalReserved;
+        
+        return netAvailable < part.reorder_point;
+      })
+      .map(part => {
+        const partInventory = inventoryItems.filter(i => i.part_id === part.id);
+        const totalOnHand = partInventory.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+        const totalReserved = partInventory.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+        const netAvailable = totalOnHand - totalReserved;
+        const vendor = vendors.find(v => v.id === part.default_vendor_id);
+        const qtyToOrder = Math.max(1, part.reorder_point - netAvailable);
+        
+        return {
+          id: `lowstock-${part.id}`,
+          part,
+          vendor,
+          netAvailable,
+          reorderPoint: part.reorder_point,
+          qty_to_order: qtyToOrder,
+          estimated_cost: qtyToOrder * (part.default_cost || 0),
+          isLowStock: true
+        };
+      });
+  }, [parts, inventoryItems, vendors]);
 
   // Filter by search
   const filteredItems = useMemo(() => {
