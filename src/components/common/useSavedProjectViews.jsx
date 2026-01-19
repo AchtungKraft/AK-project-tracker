@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-const STORAGE_KEY = 'saved_project_views';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // Default view that shows all projects
 const DEFAULT_VIEW = {
@@ -12,36 +12,35 @@ const DEFAULT_VIEW = {
 
 /**
  * Hook for managing saved project views across Dashboard, PriorityDashboard, and ClientPortalHub
- * Views are stored in localStorage and persist per-user
+ * Views are stored in database and shared with all Achtung Kraft users
  */
-export function useSavedProjectViews() {
-  const [savedViews, setSavedViews] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Ensure default view always exists
-        if (!parsed.find(v => v.isDefault)) {
-          return [DEFAULT_VIEW, ...parsed];
-        }
-        return parsed;
-      }
-    } catch (e) {
-      console.error('Error loading saved views:', e);
-    }
-    return [DEFAULT_VIEW];
-  });
-
+export function useSavedProjectViews(viewType = 'projects') {
+  const queryClient = useQueryClient();
+  
   const [activeViewName, setActiveViewName] = useState(() => {
     return localStorage.getItem('active_project_view') || 'All Projects';
   });
 
-  // Persist views to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedViews));
-  }, [savedViews]);
+  // Fetch shared views from database
+  const { data: dbViews = [] } = useQuery({
+    queryKey: ['savedViews', viewType],
+    queryFn: async () => {
+      const views = await base44.entities.SavedView.filter({ view_type: viewType });
+      return views.map(v => ({
+        id: v.id,
+        name: v.view_name,
+        selectedTypes: v.selected_types || [],
+        statusFilter: v.status_filter || 'all',
+        isShared: v.is_shared,
+        sortOrder: v.sort_order || 0
+      }));
+    }
+  });
 
-  // Persist active view name
+  // Combine default view with database views
+  const savedViews = [DEFAULT_VIEW, ...dbViews.sort((a, b) => a.sortOrder - b.sortOrder)];
+
+  // Persist active view name to localStorage (per-user preference)
   useEffect(() => {
     localStorage.setItem('active_project_view', activeViewName);
   }, [activeViewName]);
