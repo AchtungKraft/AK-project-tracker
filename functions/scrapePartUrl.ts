@@ -115,14 +115,19 @@ Deno.serve(async (req) => {
                         /data-product-price=["'](\d+)["']/i,
                         /"price":\s*(\d+(?:\.\d{2})?)/,
                         /"price":\s*"(\d+(?:\.\d{2})?)"/,
-                        // Common class patterns
-                        /class=["'][^"']*price[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
-                        /class=["'][^"']*product-price[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
-                        // Inline price patterns
-                        /\$\s*([\d,]+\.\d{2})/,
-                        /USD\s*([\d,]+\.\d{2})/i,
+                        // Common class patterns - look for price in span/div content
+                        /class=["'][^"']*(?:price|part-price|product-price)[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
+                        /class=["'][^"']*mi-price[^"']*["'][^>]*>\s*\$?([\d,]+(?:\.\d{2})?)/i,
+                        // Pelican Parts specific patterns
+                        /itemprop=["']price["'][^>]*content=["']([^"']+)["']/i,
+                        /class=["']p-product-price["'][^>]*>.*?\$?([\d,]+\.\d{2})/is,
+                        // Inline price patterns - be more specific to avoid false matches
+                        /(?:price|cost|total)[:\s]*\$\s*([\d,]+\.\d{2})/i,
                         // Data attribute patterns
-                        /data-price=["'](\d+(?:\.\d{2})?)["']/i,
+                        /data-price=["']([^"']+)["']/i,
+                        /data-product-price=["']([^"']+)["']/i,
+                        // Schema.org price in content
+                        /itemprop=["']price["']\s*content=["']([^"']+)["']/i,
                     ];
                     for (const pattern of pricePatterns) {
                         const match = html.match(pattern);
