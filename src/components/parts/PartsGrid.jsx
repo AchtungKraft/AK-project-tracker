@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, Box, Image as ImageIcon } from "lucide-react";
+import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight } from "lucide-react";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 
@@ -27,6 +27,7 @@ export default function PartsGrid({
     images: [],
     currentIndex: 0,
   });
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
@@ -86,30 +87,68 @@ export default function PartsGrid({
     return { onHand, available: onHand - reserved, need, onOrder };
   };
 
-  // Get category name with parent path
-  const getCategoryPath = (categoryId) => {
-    if (!categoryId) return 'Uncategorized';
-    const category = categories.find(c => c.id === categoryId);
-    if (!category) return 'Uncategorized';
-    
-    if (category.parent_id) {
-      const parent = categories.find(c => c.id === category.parent_id);
-      if (parent) {
-        return `${parent.name} > ${category.name}`;
-      }
-    }
-    return category.name;
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
-  // Group parts by category
-  const groupedParts = showGrouping ? parts.reduce((acc, part) => {
-    const categoryName = getCategoryPath(part.part_category_id);
-    if (!acc[categoryName]) {
-      acc[categoryName] = [];
+  // Build hierarchical groups matching list view
+  const buildHierarchicalGroups = () => {
+    if (!showGrouping) {
+      return [{ label: 'All Parts', parts, color: '#6B7280', children: [] }];
     }
-    acc[categoryName].push(part);
-    return acc;
-  }, {}) : { 'All Parts': parts };
+
+    const parentCategories = categories
+      .filter(c => !c.parent_id && c.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    const groups = [];
+
+    // Group for parts with no category
+    const noCategoryParts = parts.filter(p => !p.part_category_id);
+    if (noCategoryParts.length > 0) {
+      groups.push({
+        label: 'No Category',
+        parts: noCategoryParts,
+        color: '#6B7280',
+        children: []
+      });
+    }
+
+    // Build hierarchy for each parent category
+    parentCategories.forEach(parent => {
+      const childCategories = categories
+        .filter(c => c.parent_id === parent.id && c.active)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      const parentParts = parts.filter(p => p.part_category_id === parent.id);
+      const children = [];
+
+      childCategories.forEach(child => {
+        const childParts = parts.filter(p => p.part_category_id === child.id);
+        if (childParts.length > 0) {
+          children.push({
+            label: child.name,
+            parts: childParts,
+            color: child.color || parent.color || '#6B7280',
+            children: []
+          });
+        }
+      });
+
+      if (parentParts.length > 0 || children.length > 0) {
+        groups.push({
+          label: parent.name,
+          parts: parentParts,
+          color: parent.color || '#6B7280',
+          children
+        });
+      }
+    });
+
+    return groups;
+  };
+
+  const hierarchicalGroups = buildHierarchicalGroups();
 
   const openGallery = (images, index = 0) => {
     setGalleryState({
@@ -150,19 +189,56 @@ export default function PartsGrid({
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.entries(groupedParts).sort(([a], [b]) => a.localeCompare(b)).map(([categoryName, categoryParts]) => (
-            <div key={categoryName}>
-              {showGrouping && (
-                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-700">
-                  <h3 className="text-sm font-semibold text-gray-300">{categoryName}</h3>
-                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
-                    {categoryParts.length}
-                  </Badge>
-                </div>
-              )}
+        <div className="space-y-3">
+          {hierarchicalGroups.map(group => renderGroup(group))}
+        </div>
+      )}
+
+      <ImageGallery
+        isOpen={galleryState.open}
+        images={galleryState.images}
+        currentIndex={galleryState.currentIndex}
+        onClose={closeGallery}
+        onNavigate={navigateGallery}
+      />
+    </div>
+  );
+
+  function renderGroup(group, level = 0) {
+    const groupKey = `${level}-${group.label}`;
+    const isExpanded = expandedGroups[groupKey] !== false;
+    const totalParts = group.parts.length + group.children.reduce((sum, child) => sum + child.parts.length, 0);
+
+    return (
+      <div key={groupKey} className={level > 0 ? 'ml-4' : ''}>
+        {showGrouping && (
+          <button
+            onClick={() => toggleGroup(groupKey)}
+            className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            )}
+            <div 
+              className="w-3 h-3 rounded"
+              style={{ backgroundColor: group.color }}
+            />
+            <span className="text-sm font-medium text-white flex-1 text-left">
+              {group.label}
+            </span>
+            <span className="text-xs text-gray-400">
+              {totalParts} part{totalParts !== 1 ? 's' : ''}
+            </span>
+          </button>
+        )}
+
+        {isExpanded && (
+          <div className="space-y-3 mb-3">
+            {group.parts.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-                {categoryParts.map(part => {
+                {group.parts.map(part => {
             const vendor = vendors.find(v => v.id === part.default_vendor_id);
             const make = makes.find(m => m.id === part.car_make_id);
             const model = models.find(m => m.id === part.car_model_id);
@@ -285,18 +361,11 @@ export default function PartsGrid({
             );
           })}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ImageGallery
-        isOpen={galleryState.open}
-        images={galleryState.images}
-        currentIndex={galleryState.currentIndex}
-        onClose={closeGallery}
-        onNavigate={navigateGallery}
-      />
-    </div>
-  );
+            )}
+            {group.children.map(child => renderGroup(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
 }
