@@ -355,23 +355,37 @@ export default function NeedToBuy({ onPartClick }) {
 
   return (
     <div className="space-y-4">
-      {/* Summary Card */}
+      {/* Summary Card with Tabs */}
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
         <CardHeader className="border-b border-red-900/30 p-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <ShoppingCart className="w-5 h-5 text-red-400" />
-              <CardTitle className="text-white text-base">Need to Order</CardTitle>
-              <Badge variant="outline" className="border-red-500 text-red-400">
-                {filteredItems.length} items
-              </Badge>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="bg-gray-900/50 border border-gray-700">
+                  <TabsTrigger value="client" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                    <FolderKanban className="w-3.5 h-3.5" />
+                    Client Parts
+                    <Badge variant="outline" className="ml-1 border-gray-600 text-gray-400 text-xs px-1.5">
+                      {partsToOrder.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="lowstock" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                    <Package className="w-3.5 h-3.5" />
+                    Low AK Stock
+                    <Badge variant="outline" className="ml-1 border-yellow-600 text-yellow-400 text-xs px-1.5">
+                      {lowStockParts.length}
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-xs text-gray-400">Est. Total</p>
                 <p className="text-lg font-bold text-white">${totalEstimatedCost.toFixed(2)}</p>
               </div>
-              {selectedCount > 0 && (
+              {selectedCount > 0 && activeTab === 'client' && (
                 <Button
                   onClick={() => setShowBatchOrderModal(true)}
                   className="bg-red-600 hover:bg-red-700"
