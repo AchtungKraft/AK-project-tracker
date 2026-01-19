@@ -166,28 +166,29 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       const data = response.data?.data;
       
       if (data) {
+        // Handle images if found
+        const validImages = (data.image_urls || []).filter(url => url && url.startsWith('http'));
+        
         setFormData(prev => ({
           ...prev,
           part_name: data.part_name || prev.part_name,
           vendor_part_number: data.part_number || prev.vendor_part_number,
           notes: data.notes || prev.notes,
-          cost: data.price || prev.cost,
+          default_cost: data.price ? String(data.price) : prev.default_cost,
+          photos: validImages.length > 0 ? [...prev.photos, ...validImages] : prev.photos,
+          featured_photo: prev.featured_photo || (validImages.length > 0 ? validImages[0] : prev.featured_photo)
         }));
         
-        // Handle images if found
-        if (data.image_urls && data.image_urls.length > 0) {
-          const validImages = data.image_urls.filter(url => url && url.startsWith('http'));
-          if (validImages.length > 0) {
-            setFormData(prev => ({
-              ...prev,
-              photos: [...prev.photos, ...validImages],
-              featured_photo: prev.featured_photo || validImages[0]
-            }));
-            toast.success(`Found ${validImages.length} image(s)`);
-          }
-        }
+        const messages = [];
+        if (data.part_name) messages.push('name');
+        if (data.price) messages.push(`price ($${data.price})`);
+        if (validImages.length > 0) messages.push(`${validImages.length} image(s)`);
         
-        toast.success('Product info populated from URL');
+        if (messages.length > 0) {
+          toast.success(`Found: ${messages.join(', ')}`);
+        } else {
+          toast.warning('URL scraped but limited data found');
+        }
       } else {
         toast.error('Could not extract product info from URL');
       }
