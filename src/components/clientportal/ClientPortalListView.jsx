@@ -81,10 +81,16 @@ export default function ClientPortalListView({
   // Sort type order for consistency
   const typeOrder = ['design_review', 'feedback_needed', 'question', 'client_need', 'todo_list', 'general'];
   
-  // Sort requests within each project by type
+  // Sort requests within each project: attention items first, then by type
   const sortedGroupedData = groupedData.map(({ project, requests }) => ({
     project,
     requests: [...requests].sort((a, b) => {
+      // First by attention priority (items with attention float to top)
+      const aPriority = a.attentionType ? getAttentionPriority(a.attentionType) : 99;
+      const bPriority = b.attentionType ? getAttentionPriority(b.attentionType) : 99;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      
+      // Then by type
       const typeA = typeOrder.indexOf(a.request_type || 'general');
       const typeB = typeOrder.indexOf(b.request_type || 'general');
       return typeA - typeB;
