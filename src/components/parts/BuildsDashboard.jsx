@@ -103,7 +103,8 @@ export default function BuildsDashboard({ onPartClick }) {
         onOrder.push({ ...item, status: 'On Order' });
       }
       
-      const stillNeedToOrder = item.qty_needed - item.qty_allocated - item.qty_ordered;
+      // stillNeedToOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
+      const stillNeedToOrder = item.qty_needed - item.qty_installed - item.qty_allocated - item.qty_ordered;
       if (stillNeedToOrder > 0) {
         needToOrder.push({ ...item, status: 'Need To Order', qty_to_order: stillNeedToOrder });
       }
@@ -114,8 +115,9 @@ export default function BuildsDashboard({ onPartClick }) {
     const totalAllocated = projectReqs.reduce((sum, r) => sum + (r.qty_allocated || 0), 0);
     const totalOnOrder = projectReqs.reduce((sum, r) => sum + (r.qty_ordered || 0), 0);
     const totalInstalled = projectReqs.reduce((sum, r) => sum + (r.qty_installed || 0), 0);
+    // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
     const toOrder = projectReqs.reduce((sum, r) => 
-      sum + Math.max(0, (r.qty_needed || 0) - (r.qty_allocated || 0) - (r.qty_ordered || 0)), 0);
+      sum + Math.max(0, (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0) - (r.qty_ordered || 0)), 0);
     const partsCost = projectInstalled.reduce((sum, ip) => sum + (ip.extended_cost || 0), 0);
 
     return {

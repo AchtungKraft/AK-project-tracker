@@ -32,7 +32,8 @@ import MoveRequirementModal from "../parts/MoveRequirementModal";
  */
 const deriveStatus = (req, onOrder) => {
   const { qty_needed = 0, qty_allocated = 0, qty_installed = 0 } = req;
-  const toOrder = Math.max(0, qty_needed - qty_allocated - (req.qty_ordered || 0));
+  // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
+  const toOrder = Math.max(0, qty_needed - qty_installed - qty_allocated - (req.qty_ordered || 0));
   
   if (qty_installed >= qty_needed && qty_needed > 0) {
     return { key: 'Installed', color: '#059669', icon: CheckCircle2, label: 'Installed' };
@@ -171,7 +172,8 @@ export default function ProjectParts({ projectId }) {
       needed += r.qty_needed || 0;
       allocated += r.qty_allocated || 0;
       installed += r.qty_installed || 0;
-      toOrder += Math.max(0, (r.qty_needed || 0) - (r.qty_allocated || 0) - (r.qty_ordered || 0));
+      // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
+      toOrder += Math.max(0, (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0) - (r.qty_ordered || 0));
       onOrder += partOnOrder[r.part_id] || 0; // Sum open PO lines for this part
     });
     
@@ -184,7 +186,8 @@ export default function ProjectParts({ projectId }) {
   const enrichedRequirements = useMemo(() => {
     return requirements.map(req => {
       const onOrder = partOnOrder[req.part_id] || 0;
-      const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
+      // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
+      const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_installed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
       const available = getInventoryAvailable(req.part_id);
       const status = deriveStatus(req, onOrder);
       

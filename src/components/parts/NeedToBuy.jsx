@@ -124,10 +124,12 @@ export default function NeedToBuy({ onPartClick }) {
   };
 
   // Calculate parts that need ordering from requirements
+  // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
+  // (installed parts are done, allocated reduces demand, ordered is in pipeline)
   const partsToOrder = useMemo(() => {
     return requirements
       .map(req => {
-        const toOrder = (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
+        const toOrder = (req.qty_needed || 0) - (req.qty_installed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
         if (toOrder <= 0) return null;
         
         const part = parts.find(p => p.id === req.part_id);

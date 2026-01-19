@@ -131,9 +131,10 @@ export default function InventoryManagement({ onPartClick }) {
       });
     });
 
-    // Calculate demand from requirements (qty_needed - qty_installed)
+    // Calculate demand from requirements: qty_needed - qty_installed - qty_allocated
+    // Allocated inventory already represents committed supply and must reduce demand
     requirements.forEach(req => {
-      const stillNeeded = Math.max(0, (req.qty_needed || 0) - (req.qty_installed || 0));
+      const stillNeeded = Math.max(0, (req.qty_needed || 0) - (req.qty_installed || 0) - (req.qty_allocated || 0));
       if (stillNeeded > 0) {
         if (!aggregates[req.part_id]) {
           aggregates[req.part_id] = {
@@ -148,7 +149,22 @@ export default function InventoryManagement({ onPartClick }) {
           };
         }
         aggregates[req.part_id].needed += stillNeeded;
+      }
+      // Always track project requirements for drill-down, even if fully covered
+      if ((req.qty_needed || 0) > (req.qty_installed || 0)) {
         const project = projects.find(p => p.id === req.project_id);
+        if (!aggregates[req.part_id]) {
+          aggregates[req.part_id] = {
+            partId: req.part_id,
+            onHand: 0,
+            reserved: 0,
+            needed: 0,
+            onOrder: 0,
+            locations: [],
+            requirementsByProject: [],
+            orderLineItems: []
+          };
+        }
         aggregates[req.part_id].requirementsByProject.push({
           projectId: req.project_id,
           projectName: project?.name || 'Unknown Project',

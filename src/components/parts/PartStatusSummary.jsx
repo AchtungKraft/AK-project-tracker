@@ -55,8 +55,9 @@ export default function PartStatusSummary({ partId }) {
   const available = onHand - reserved;
 
   // Calculate demand and pipeline
+  // Needed = qty_needed - qty_installed - qty_allocated (allocated reduces demand)
   const totalNeeded = partRequirements.reduce((sum, r) => 
-    sum + Math.max(0, (r.qty_needed || 0) - (r.qty_installed || 0)), 0);
+    sum + Math.max(0, (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0)), 0);
   const totalOnOrder = partLineItems.reduce((sum, li) => 
     sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
   const netPosition = available + totalOnOrder - totalNeeded;
