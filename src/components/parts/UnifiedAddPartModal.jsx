@@ -48,7 +48,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     queryKey: ['vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      return list.sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
     },
   });
 

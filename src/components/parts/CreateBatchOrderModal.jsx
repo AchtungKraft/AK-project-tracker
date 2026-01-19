@@ -348,7 +348,21 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                     {group.items.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 bg-gray-800/30 rounded">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white truncate">{item.part?.part_name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-sm text-white truncate">{item.part?.part_name}</p>
+                            {item.part?.order_url && (
+                              <a
+                                href={item.part.order_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-400 hover:text-blue-300 shrink-0"
+                                title="Open product URL"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">
                             {getProjectName(item.requirement?.project_id)}
                           </p>
