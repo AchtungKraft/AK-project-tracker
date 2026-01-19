@@ -153,15 +153,28 @@ export default function PartsExplorerLayout({ onPartClick }) {
   const filteredParts = parts.filter(part => {
     const searchLower = debouncedSearchTerm?.toLowerCase() || '';
     
-    // Get category name for this part
+    // Get related data for comprehensive search
     const partCategory = categories.find(c => c.id === part.part_category_id);
     const categoryName = partCategory?.name?.toLowerCase() || '';
+    const vendor = vendors.find(v => v.id === part.default_vendor_id);
+    const vendorName = vendor?.vendor_name?.toLowerCase() || '';
+    const carMake = carMakes.find(m => m.id === part.car_make_id);
+    const makeName = carMake?.name?.toLowerCase() || '';
+    const carModel = carModels.find(m => m.id === part.car_model_id);
+    const modelName = carModel?.name?.toLowerCase() || '';
+    const carYear = carYears.find(y => y.id === part.car_year_id);
+    const yearName = carYear?.year?.toLowerCase() || '';
     
     const matchesSearch = debouncedSearchTerm ? (
       part.part_name?.toLowerCase().includes(searchLower) ||
       part.vendor_part_number?.toLowerCase().includes(searchLower) ||
       part.notes?.toLowerCase().includes(searchLower) ||
-      categoryName.includes(searchLower)
+      part.order_url?.toLowerCase().includes(searchLower) ||
+      categoryName.includes(searchLower) ||
+      vendorName.includes(searchLower) ||
+      makeName.includes(searchLower) ||
+      modelName.includes(searchLower) ||
+      yearName.includes(searchLower)
     ) : true;
     
     if (!selectedCategoryId) {
