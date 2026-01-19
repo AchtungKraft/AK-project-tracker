@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Truck, Search, Package, ChevronDown, ChevronUp, CheckCircle, 
-  FileText, Building2, FolderKanban, ExternalLink, Calendar
+  FileText, Building2, FolderKanban, ExternalLink, Calendar, Pencil
 } from "lucide-react";
 import { toast } from "sonner";
+import EditOrderModal from "./EditOrderModal";
 
 /**
  * OnOrder - Shows parts that have been ordered but not yet received
@@ -22,6 +23,7 @@ export default function OnOrder({ onPartClick }) {
   const [groupMode, setGroupMode] = useState('project'); // 'project' or 'po'
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [expandedOrders, setExpandedOrders] = useState(new Set());
+  const [editingOrder, setEditingOrder] = useState(null);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -348,17 +350,30 @@ export default function OnOrder({ onPartClick }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {order.notes && (
+              {order.notes && order.notes.startsWith('http') && (
                 <a 
-                  href={order.notes.startsWith('http') ? order.notes : undefined}
+                  href={order.notes}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className={order.notes.startsWith('http') ? 'text-blue-400 hover:text-blue-300' : 'hidden'}
+                  className="text-blue-400 hover:text-blue-300"
+                  title="Open reference link"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingOrder(order);
+                }}
+                className="h-7 w-7 text-gray-400 hover:text-yellow-400"
+                title="Edit order details"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
               <Badge variant="outline" className="border-gray-600 text-gray-400">
                 {orderData.items.length} item{orderData.items.length !== 1 ? 's' : ''}
               </Badge>
@@ -488,6 +503,13 @@ export default function OnOrder({ onPartClick }) {
             </Card>
           ))}
         </div>
+      )}
+
+      {editingOrder && (
+        <EditOrderModal
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+        />
       )}
     </div>
   );
