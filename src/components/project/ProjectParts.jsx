@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
-  Search, Filter, Plus, Package, Trash2, LayoutGrid, List, 
-  CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal 
+  Search, Plus, Package, Trash2, 
+  CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal, Download, ExternalLink
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -24,43 +25,51 @@ import InstallPartModal from "./InstallPartModal";
 import OrderPartModal from "../parts/OrderPartModal";
 import EditPartDrawer from "../parts/EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
+import MoveRequirementModal from "../parts/MoveRequirementModal";
 
-const STATUS_CONFIG = {
-  'Needed': { color: '#EF4444', icon: AlertTriangle, label: 'Needed' },
-  'Partially Allocated': { color: '#F59E0B', icon: Package, label: 'Partial Alloc' },
-  'Allocated': { color: '#3B82F6', icon: Package, label: 'Allocated' },
-  'Ordered': { color: '#8B5CF6', icon: ShoppingCart, label: 'Ordered' },
-  'Partially Received': { color: '#F59E0B', icon: Truck, label: 'Partial Recv' },
-  'Ready': { color: '#10B981', icon: CheckCircle2, label: 'Ready' },
-  'Partially Installed': { color: '#F59E0B', icon: Wrench, label: 'Partial Install' },
-  'Installed': { color: '#059669', icon: CheckCircle2, label: 'Installed' },
-};
-
-const getCategoryPath = (categoryId, categories) => {
-  if (!categoryId) return null;
-  const category = categories.find(c => c.id === categoryId);
-  if (!category) return null;
+/**
+ * Derives status badge from quantities (canonical logic)
+ */
+const deriveStatus = (req, onOrder) => {
+  const { qty_needed = 0, qty_allocated = 0, qty_installed = 0 } = req;
+  const toOrder = Math.max(0, qty_needed - qty_allocated - (req.qty_ordered || 0));
   
-  if (category.parent_id) {
-    const parent = categories.find(c => c.id === category.parent_id);
-    if (parent) return `${parent.name} > ${category.name}`;
+  if (qty_installed >= qty_needed && qty_needed > 0) {
+    return { key: 'Installed', color: '#059669', icon: CheckCircle2, label: 'Installed' };
   }
-  return category.name;
+  if (qty_installed > 0 && qty_installed < qty_needed) {
+    return { key: 'Partially Installed', color: '#F59E0B', icon: Wrench, label: 'Partial Install' };
+  }
+  if (onOrder > 0 && qty_allocated > qty_installed) {
+    return { key: 'Allocated + On Order', color: '#8B5CF6', icon: Truck, label: 'Alloc + Order' };
+  }
+  if (onOrder > 0) {
+    return { key: 'On Order', color: '#8B5CF6', icon: Truck, label: 'On Order' };
+  }
+  if (qty_allocated >= qty_needed && qty_needed > 0) {
+    return { key: 'Allocated', color: '#3B82F6', icon: Package, label: 'Allocated' };
+  }
+  if (qty_allocated > 0) {
+    return { key: 'Partially Allocated', color: '#F59E0B', icon: Package, label: 'Partial Alloc' };
+  }
+  if (toOrder > 0) {
+    return { key: 'Need To Order', color: '#EF4444', icon: ShoppingCart, label: 'Need To Order' };
+  }
+  return { key: 'Needed', color: '#EF4444', icon: AlertTriangle, label: 'Needed' };
 };
 
 export default function ProjectParts({ projectId }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState('card');
   const [showAddModal, setShowAddModal] = useState(false);
   const [allocatingRequirement, setAllocatingRequirement] = useState(null);
   const [installingRequirement, setInstallingRequirement] = useState(null);
   const [selectedPart, setSelectedPart] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [orderPart, setOrderPart] = useState(null);
+  const [moveRequirement, setMoveRequirement] = useState(null);
 
-  // Fetch requirements using new entity
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements', projectId],
     queryFn: () => base44.entities.PartProjectRequirement.filter({ project_id: projectId }),
@@ -77,11 +86,6 @@ export default function ProjectParts({ projectId }) {
     queryFn: () => base44.entities.PartCategory.list(),
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
-  });
-
   const { data: installedParts = [] } = useQuery({
     queryKey: ['installedParts', projectId],
     queryFn: () => base44.entities.InstalledPart.filter({ project_id: projectId }),
@@ -93,19 +97,48 @@ export default function ProjectParts({ projectId }) {
     queryFn: () => base44.entities.InventoryItem.list(),
   });
 
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ['partPurchaseLineItems'],
+    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
+  });
+
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => base44.entities.Order.list(),
+  });
+
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const projects = await base44.entities.Project.list();
+      return projects.find(p => p.id === projectId);
+    },
+    enabled: !!projectId,
+  });
+
+  // Calculate on-order quantity for each part (from open PO line items)
+  const partOnOrder = useMemo(() => {
+    const map = {};
+    lineItems.forEach(li => {
+      const pending = Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0));
+      if (pending > 0) {
+        if (!map[li.part_id]) map[li.part_id] = 0;
+        map[li.part_id] += pending;
+      }
+    });
+    return map;
+  }, [lineItems]);
+
   const deleteMutation = useMutation({
     mutationFn: async (requirement) => {
-      // Release any reserved inventory before deleting
       const allocatedQty = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
       
       if (allocatedQty > 0) {
-        // Find inventory items for this part and release reserved quantities
         const partInventory = inventoryItems.filter(i => i.part_id === requirement.part_id);
         let remainingToRelease = allocatedQty;
         
         for (const item of partInventory) {
           if (remainingToRelease <= 0) break;
-          
           const reservedHere = Math.min(item.quantity_reserved || 0, remainingToRelease);
           if (reservedHere > 0) {
             await base44.entities.InventoryItem.update(item.id, {
@@ -116,79 +149,70 @@ export default function ProjectParts({ projectId }) {
         }
       }
       
-      // Now delete the requirement
       await base44.entities.PartProjectRequirement.delete(requirement.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      toast.success('Requirement removed and reserved inventory released');
+      toast.success('Requirement removed');
     },
   });
 
   const getPartInfo = (partId) => parts.find(p => p.id === partId) || {};
 
-  // Calculate inventory availability for a part
   const getInventoryAvailable = (partId) => {
     const items = inventoryItems.filter(i => i.part_id === partId);
     return items.reduce((sum, i) => sum + ((i.quantity_on_hand || 0) - (i.quantity_reserved || 0)), 0);
   };
 
-  // Calculate project totals
-  const totals = {
-    needed: requirements.reduce((sum, r) => sum + (r.qty_needed || 0), 0),
-    allocated: requirements.reduce((sum, r) => sum + (r.qty_allocated || 0), 0),
-    installed: requirements.reduce((sum, r) => sum + (r.qty_installed || 0), 0),
-    toOrder: requirements.reduce((sum, r) => {
-      const needed = r.qty_needed || 0;
-      const allocated = r.qty_allocated || 0;
-      const ordered = r.qty_ordered || 0;
-      return sum + Math.max(0, needed - allocated - ordered);
-    }, 0)
-  };
+  // Calculate project totals using canonical definitions
+  const totals = useMemo(() => {
+    let needed = 0, allocated = 0, installed = 0, toOrder = 0, onOrder = 0;
+    
+    requirements.forEach(r => {
+      needed += r.qty_needed || 0;
+      allocated += r.qty_allocated || 0;
+      installed += r.qty_installed || 0;
+      toOrder += Math.max(0, (r.qty_needed || 0) - (r.qty_allocated || 0) - (r.qty_ordered || 0));
+      onOrder += partOnOrder[r.part_id] || 0; // Sum open PO lines for this part
+    });
+    
+    return { needed, allocated, installed, toOrder, onOrder };
+  }, [requirements, partOnOrder]);
 
-  // Calculate project cost from installed parts
   const projectCost = installedParts.reduce((sum, ip) => sum + (ip.extended_cost || 0), 0);
 
-  const filteredRequirements = requirements.filter(req => {
+  // Enrich requirements with computed fields
+  const enrichedRequirements = useMemo(() => {
+    return requirements.map(req => {
+      const onOrder = partOnOrder[req.part_id] || 0;
+      const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
+      const available = getInventoryAvailable(req.part_id);
+      const status = deriveStatus(req, onOrder);
+      
+      return {
+        ...req,
+        _onOrder: onOrder,
+        _toOrder: toOrder,
+        _available: available,
+        _status: status,
+      };
+    });
+  }, [requirements, partOnOrder, inventoryItems]);
+
+  const filteredRequirements = enrichedRequirements.filter(req => {
     const part = getPartInfo(req.part_id);
     const matchesSearch = part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || req._status.key === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Group requirements by status category for better organization
-  const groupedRequirements = useMemo(() => {
-    const groups = {
-      needed: [],      // Status: Needed, Partially Allocated
-      allocated: [],   // Status: Allocated, Ordered, Partially Received, Ready
-      installed: [],   // Status: Partially Installed, Installed
-      toOrder: [],     // Derived: qty_needed - qty_allocated - qty_ordered > 0
-    };
-
-    filteredRequirements.forEach(req => {
-      const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
-      
-      // Add to "to order" if it needs ordering
-      if (toOrder > 0) {
-        groups.toOrder.push({ ...req, _toOrderQty: toOrder });
-      }
-
-      // Categorize by status
-      if (req.status === 'Installed' || req.status === 'Partially Installed') {
-        groups.installed.push(req);
-      } else if (['Allocated', 'Ordered', 'Partially Received', 'Ready'].includes(req.status)) {
-        groups.allocated.push(req);
-      } else {
-        groups.needed.push(req);
-      }
-    });
-
-    return groups;
-  }, [filteredRequirements]);
-
   const handleRemove = (requirement) => {
+    if ((requirement.qty_installed || 0) > 0) {
+      toast.error('Cannot remove: parts have been installed');
+      return;
+    }
     const allocatedUninstalled = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
     const message = allocatedUninstalled > 0 
       ? `Remove this requirement? ${allocatedUninstalled} allocated unit(s) will be released back to inventory.`
@@ -199,6 +223,17 @@ export default function ProjectParts({ projectId }) {
     }
   };
 
+  const statusOptions = [
+    { key: 'Installed', label: 'Installed' },
+    { key: 'Partially Installed', label: 'Partial Install' },
+    { key: 'Allocated', label: 'Allocated' },
+    { key: 'Partially Allocated', label: 'Partial Alloc' },
+    { key: 'On Order', label: 'On Order' },
+    { key: 'Allocated + On Order', label: 'Alloc + Order' },
+    { key: 'Need To Order', label: 'Need To Order' },
+    { key: 'Needed', label: 'Needed' },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Summary Card */}
@@ -208,6 +243,9 @@ export default function ProjectParts({ projectId }) {
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-gray-400" />
               <CardTitle className="text-white text-base">Project Parts</CardTitle>
+              <Badge variant="outline" className="border-gray-600 text-gray-400">
+                {requirements.length} items
+              </Badge>
             </div>
             <Button
               onClick={() => setShowAddModal(true)}
@@ -220,27 +258,31 @@ export default function ProjectParts({ projectId }) {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          {/* Summary Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-              <p className="text-xs text-gray-400">Total Needed</p>
-              <p className="text-xl font-bold text-white">{totals.needed}</p>
+          {/* Summary Stats - Canonical definitions */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-gray-800">
+              <p className="text-xs text-gray-400">Needed</p>
+              <p className="text-lg font-bold text-white">{totals.needed}</p>
             </div>
-            <div className="p-3 bg-gray-900/50 rounded-lg border border-blue-900/30">
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-blue-900/30">
               <p className="text-xs text-gray-400">Allocated</p>
-              <p className="text-xl font-bold text-blue-400">{totals.allocated}</p>
+              <p className="text-lg font-bold text-blue-400">{totals.allocated}</p>
             </div>
-            <div className="p-3 bg-gray-900/50 rounded-lg border border-red-900/30">
-              <p className="text-xs text-gray-400">To Order</p>
-              <p className="text-xl font-bold text-red-400">{totals.toOrder}</p>
-            </div>
-            <div className="p-3 bg-gray-900/50 rounded-lg border border-green-900/30">
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-green-900/30">
               <p className="text-xs text-gray-400">Installed</p>
-              <p className="text-xl font-bold text-green-400">{totals.installed}</p>
+              <p className="text-lg font-bold text-green-400">{totals.installed}</p>
             </div>
-            <div className="p-3 bg-gray-900/50 rounded-lg border border-yellow-900/30">
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-yellow-900/30">
+              <p className="text-xs text-gray-400">On Order</p>
+              <p className="text-lg font-bold text-orange-400">{totals.onOrder}</p>
+            </div>
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-red-900/30">
+              <p className="text-xs text-gray-400">To Order</p>
+              <p className="text-lg font-bold text-red-400">{totals.toOrder}</p>
+            </div>
+            <div className="p-2 bg-gray-900/50 rounded-lg border border-yellow-900/30">
               <p className="text-xs text-gray-400">Parts Cost</p>
-              <p className="text-xl font-bold text-yellow-400">${projectCost.toFixed(2)}</p>
+              <p className="text-lg font-bold text-yellow-400">${projectCost.toFixed(2)}</p>
             </div>
           </div>
 
@@ -261,8 +303,8 @@ export default function ProjectParts({ projectId }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                {statusOptions.map(opt => (
+                  <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -291,7 +333,7 @@ export default function ProjectParts({ projectId }) {
         </Card>
       ) : (
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-red-900/20 hover:bg-transparent">
@@ -300,6 +342,7 @@ export default function ProjectParts({ projectId }) {
                   <TableHead className="text-gray-400 text-xs text-center">Needed</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Allocated</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Installed</TableHead>
+                  <TableHead className="text-gray-400 text-xs text-center">On Order</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Available</TableHead>
                   <TableHead className="text-gray-400 text-xs">Actions</TableHead>
                 </TableRow>
@@ -307,12 +350,11 @@ export default function ProjectParts({ projectId }) {
               <TableBody>
                 {filteredRequirements.map(req => {
                   const part = getPartInfo(req.part_id);
-                  const statusConfig = STATUS_CONFIG[req.status] || STATUS_CONFIG['Needed'];
-                  const StatusIcon = statusConfig.icon;
-                  const available = getInventoryAvailable(req.part_id);
-                  const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
-                  const canAllocate = available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
+                  const status = req._status;
+                  const StatusIcon = status.icon;
+                  const canAllocate = req._available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
                   const canInstall = (req.qty_allocated || 0) > (req.qty_installed || 0);
+                  const hasInstalledParts = (req.qty_installed || 0) > 0;
 
                   return (
                     <TableRow key={req.id} className="border-b border-red-900/10 hover:bg-red-950/20">
@@ -327,7 +369,7 @@ export default function ProjectParts({ projectId }) {
                             </div>
                           )}
                           <div>
-                            <p className="text-white text-sm font-medium">{part.part_name}</p>
+                            <p className="text-white text-sm font-medium hover:text-red-400 transition-colors">{part.part_name}</p>
                             {part.vendor_part_number && (
                               <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>
                             )}
@@ -335,51 +377,81 @@ export default function ProjectParts({ projectId }) {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge style={{ backgroundColor: statusConfig.color }} className="text-white text-xs gap-1">
+                        <Badge style={{ backgroundColor: status.color }} className="text-white text-xs gap-1">
                           <StatusIcon className="w-3 h-3" />
-                          {statusConfig.label}
+                          {status.label}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center text-white font-medium">{req.qty_needed || 0}</TableCell>
                       <TableCell className="text-center text-blue-400">{req.qty_allocated || 0}</TableCell>
                       <TableCell className="text-center text-green-400">{req.qty_installed || 0}</TableCell>
                       <TableCell className="text-center">
-                        <span className={available > 0 ? 'text-green-400' : 'text-gray-500'}>{available}</span>
+                        <span className={req._onOrder > 0 ? 'text-orange-400' : 'text-gray-500'}>{req._onOrder}</span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={req._available > 0 ? 'text-green-400' : 'text-gray-500'}>{req._available}</span>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canAllocate && (
-                              <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
-                                <Package className="w-4 h-4 mr-2" /> Allocate from Inventory
-                              </DropdownMenuItem>
-                            )}
-                            {canInstall && (
-                              <DropdownMenuItem onClick={() => setInstallingRequirement(req)}>
-                                <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
-                              </DropdownMenuItem>
-                            )}
-                            {toOrder > 0 && (
-                              <DropdownMenuItem onClick={() => setOrderPart(part)}>
-                                <ShoppingCart className="w-4 h-4 mr-2" /> Order Part
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => setSelectedPart(part.id)}>
-                              View Part Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleRemove(req)}
-                              className="text-red-400"
+                        <div className="flex items-center gap-1">
+                          {/* Quick Install button when installable */}
+                          {canInstall && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
+                              onClick={() => setInstallingRequirement(req)}
                             >
-                              <Trash2 className="w-4 h-4 mr-2" /> Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <Download className="w-3 h-3 mr-1" />
+                              Install
+                            </Button>
+                          )}
+                          
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                              {canAllocate && (
+                                <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
+                                  <Package className="w-4 h-4 mr-2" /> Allocate from Inventory
+                                </DropdownMenuItem>
+                              )}
+                              {canInstall && (
+                                <DropdownMenuItem onClick={() => setInstallingRequirement(req)}>
+                                  <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
+                                </DropdownMenuItem>
+                              )}
+                              {req._toOrder > 0 && (
+                                <DropdownMenuItem onClick={() => setOrderPart(part)}>
+                                  <ShoppingCart className="w-4 h-4 mr-2" /> Order Part ({req._toOrder})
+                                </DropdownMenuItem>
+                              )}
+                              {req._onOrder > 0 && (
+                                <DropdownMenuItem onClick={() => {/* Could link to On Order view */}}>
+                                  <Truck className="w-4 h-4 mr-2" /> View On Order ({req._onOrder})
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => setSelectedPart(part.id)}>
+                                <ExternalLink className="w-4 h-4 mr-2" /> View Part Details
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-gray-700" />
+                              {!hasInstalledParts && (
+                                <DropdownMenuItem onClick={() => setMoveRequirement(req)}>
+                                  Move to Project
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem 
+                                onClick={() => handleRemove(req)}
+                                className="text-red-400"
+                                disabled={hasInstalledParts}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Remove
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -422,6 +494,15 @@ export default function ProjectParts({ projectId }) {
           part={orderPart}
           onClose={() => setOrderPart(null)}
           onPartClick={(partId) => setSelectedPart(partId)}
+        />
+      )}
+
+      {moveRequirement && (
+        <MoveRequirementModal
+          requirement={moveRequirement}
+          part={getPartInfo(moveRequirement.part_id)}
+          currentProject={project}
+          onClose={() => setMoveRequirement(null)}
         />
       )}
     </div>
