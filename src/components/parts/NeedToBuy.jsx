@@ -191,17 +191,18 @@ export default function NeedToBuy({ onPartClick }) {
       });
   }, [parts, inventoryItems, vendors]);
 
-  // Filter by search
+  // Filter by search based on active tab
   const filteredItems = useMemo(() => {
-    if (!searchTerm) return partsToOrder;
+    const sourceItems = activeTab === 'client' ? partsToOrder : lowStockParts;
+    if (!searchTerm) return sourceItems;
     const term = searchTerm.toLowerCase();
-    return partsToOrder.filter(item => 
+    return sourceItems.filter(item => 
       item.part.part_name?.toLowerCase().includes(term) ||
       item.part.vendor_part_number?.toLowerCase().includes(term) ||
       item.project?.name?.toLowerCase().includes(term) ||
       item.vendor?.vendor_name?.toLowerCase().includes(term)
     );
-  }, [partsToOrder, searchTerm]);
+  }, [activeTab, partsToOrder, lowStockParts, searchTerm]);
 
   // Group items by project or vendor, with sub-grouping
   const groupedItems = useMemo(() => {
