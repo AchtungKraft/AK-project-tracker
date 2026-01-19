@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Truck, Search, Package, ChevronDown, ChevronUp, CheckCircle, 
-  FileText, Building2, FolderKanban, ExternalLink, Calendar, Pencil
+  FileText, Building2, FolderKanban, ExternalLink, Calendar, Pencil, Undo2
 } from "lucide-react";
 import { toast } from "sonner";
 import EditOrderModal from "./EditOrderModal";
@@ -202,6 +202,56 @@ export default function OnOrder({ onPartClick }) {
     });
   };
 
+  // Move back to Need To Buy mutation
+  const moveToNeedToBuyMutation = useMutation({
+    mutationFn: async ({ lineItem, part, qtyToMove }) => {
+      // If linked to a requirement, update it
+      if (lineItem.requirement_id) {
+        const req = requirements.find(r => r.id === lineItem.requirement_id);
+        if (req) {
+          const newOrdered = Math.max(0, (req.qty_ordered || 0) - qtyToMove);
+          await base44.entities.PartProjectRequirement.update(req.id, {
+            qty_ordered: newOrdered,
+            status: newOrdered > 0 ? 'Ordered' : 'Needed',
+          });
+        }
+      } else {
+        // Create a new general requirement for the moved quantity
+        await base44.entities.PartProjectRequirement.create({
+          part_id: lineItem.part_id,
+          project_id: null,
+          qty_needed: qtyToMove,
+          qty_allocated: 0,
+          qty_ordered: 0,
+          qty_installed: 0,
+          status: 'Needed',
+          priority: 'Normal',
+          notes: `Moved back from order`,
+        });
+      }
+
+      // Update or delete the line item
+      const newOrdered = (lineItem.qty_ordered || 0) - qtyToMove;
+      if (newOrdered <= (lineItem.qty_received || 0)) {
+        // Delete line item if nothing left to receive
+        await base44.entities.PartPurchaseLineItem.delete(lineItem.id);
+      } else {
+        await base44.entities.PartPurchaseLineItem.update(lineItem.id, {
+          qty_ordered: newOrdered,
+          line_total: newOrdered * (lineItem.unit_price || 0),
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
+      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      toast.success('Moved back to Need To Buy');
+    },
+    onError: (error) => {
+      toast.error('Failed to move: ' + error.message);
+    },
+  });
+
   // Receive line item mutation
   const receiveLineItemMutation = useMutation({
     mutationFn: async ({ lineItem, part, qtyToReceive, unitPrice }) => {
@@ -295,6 +345,24 @@ export default function OnOrder({ onPartClick }) {
             </p>
             <p className="text-xs text-gray-500">${item.value.toFixed(2)}</p>
           </div>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              moveToNeedToBuyMutation.mutate({
+                lineItem: item.lineItem,
+                part: item.part,
+                qtyToMove: item.qtyPending,
+              });
+            }}
+            disabled={moveToNeedToBuyMutation.isPending}
+            className="border-yellow-600 text-yellow-400 hover:bg-yellow-950 h-7"
+            title="Move back to Need To Buy"
+          >
+            <Undo2 className="w-3 h-3" />
+          </Button>
           
           <Button
             size="sm"
