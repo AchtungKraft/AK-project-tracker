@@ -34,6 +34,7 @@ export default function InventoryManagement({ onPartClick }) {
   const [expandedParts, setExpandedParts] = useState(new Set());
   const [showDemandDetail, setShowDemandDetail] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
+  const [metricFilter, setMetricFilter] = useState(null); // 'onHand', 'reserved', 'available', 'needed', 'onOrder', 'netNegative'
 
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ['inventoryItems'],
@@ -254,8 +255,20 @@ export default function InventoryManagement({ onPartClick }) {
           filteredLocations
         };
       })
-      .filter(Boolean);
-  }, [partAggregates, parts, searchTerm, categoryFilter, locationFilter]);
+      .filter(Boolean)
+      .filter(item => {
+        if (!metricFilter) return true;
+        switch (metricFilter) {
+          case 'onHand': return item.onHand > 0;
+          case 'reserved': return item.reserved > 0;
+          case 'available': return item.available > 0;
+          case 'needed': return item.needed > 0;
+          case 'onOrder': return item.onOrder > 0;
+          case 'netNegative': return item.netPosition < 0;
+          default: return true;
+        }
+      });
+  }, [partAggregates, parts, searchTerm, categoryFilter, locationFilter, metricFilter]);
 
   // Sort filtered parts
   const sortedParts = useMemo(() => {
@@ -445,70 +458,125 @@ export default function InventoryManagement({ onPartClick }) {
               </Select>
             </div>
 
-            {/* Summary Cards - Global aggregation */}
+            {/* Summary Cards - Global aggregation - Clickable filters */}
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="p-2 bg-gray-900/50 rounded-lg border border-gray-800 cursor-help">
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'onHand' 
+                        ? 'bg-white/10 border-white ring-2 ring-white/30' 
+                        : 'bg-gray-900/50 border-gray-800 hover:border-gray-600'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'onHand' ? null : 'onHand')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">On Hand <HelpCircle className="w-3 h-3" /></p>
                     <p className="text-lg font-bold text-white">{globalTotals.onHand}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Total physical inventory across all locations</TooltipContent>
+                <TooltipContent>Click to filter: parts with inventory on hand</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="p-2 bg-gray-900/50 rounded-lg border border-gray-800 cursor-help">
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'reserved' 
+                        ? 'bg-yellow-900/30 border-yellow-500 ring-2 ring-yellow-500/30' 
+                        : 'bg-gray-900/50 border-gray-800 hover:border-gray-600'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'reserved' ? null : 'reserved')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">Reserved <HelpCircle className="w-3 h-3" /></p>
                     <p className="text-lg font-bold text-yellow-400">{globalTotals.reserved}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Inventory allocated to projects (not yet installed)</TooltipContent>
+                <TooltipContent>Click to filter: parts with reserved inventory</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="p-2 bg-gray-900/50 rounded-lg border border-gray-800 cursor-help">
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'available' 
+                        ? 'bg-blue-900/30 border-blue-500 ring-2 ring-blue-500/30' 
+                        : 'bg-gray-900/50 border-gray-800 hover:border-gray-600'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'available' ? null : 'available')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">Available <HelpCircle className="w-3 h-3" /></p>
                     <p className="text-lg font-bold text-blue-400">{globalTotals.available}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>On Hand − Reserved = Available for new allocations</TooltipContent>
+                <TooltipContent>Click to filter: parts with available inventory</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="p-2 bg-gray-900/50 rounded-lg border border-red-900/30 cursor-help">
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'needed' 
+                        ? 'bg-red-900/30 border-red-500 ring-2 ring-red-500/30' 
+                        : 'bg-gray-900/50 border-red-900/30 hover:border-red-700'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'needed' ? null : 'needed')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">Needed <HelpCircle className="w-3 h-3" /></p>
                     <p className="text-lg font-bold text-red-400">{globalTotals.needed}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Total project demand (qty_needed − qty_installed)</TooltipContent>
+                <TooltipContent>Click to filter: parts with project demand</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="p-2 bg-gray-900/50 rounded-lg border border-yellow-900/30 cursor-help">
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'onOrder' 
+                        ? 'bg-orange-900/30 border-orange-500 ring-2 ring-orange-500/30' 
+                        : 'bg-gray-900/50 border-yellow-900/30 hover:border-yellow-700'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'onOrder' ? null : 'onOrder')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">On Order <HelpCircle className="w-3 h-3" /></p>
                     <p className="text-lg font-bold text-orange-400">{globalTotals.onOrder}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Open PO quantity (qty_ordered − qty_received)</TooltipContent>
+                <TooltipContent>Click to filter: parts on order</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className={`p-2 rounded-lg border cursor-help ${globalTotals.netPosition >= 0 ? 'bg-green-900/20 border-green-900/30' : 'bg-red-900/20 border-red-900/30'}`}>
+                  <div 
+                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                      metricFilter === 'netNegative' 
+                        ? 'bg-red-900/40 border-red-500 ring-2 ring-red-500/30' 
+                        : globalTotals.netPosition >= 0 
+                          ? 'bg-green-900/20 border-green-900/30 hover:border-green-700' 
+                          : 'bg-red-900/20 border-red-900/30 hover:border-red-700'
+                    }`}
+                    onClick={() => setMetricFilter(metricFilter === 'netNegative' ? null : 'netNegative')}
+                  >
                     <p className="text-xs text-gray-400 flex items-center gap-1">Net Position <HelpCircle className="w-3 h-3" /></p>
                     <p className={`text-lg font-bold ${globalTotals.netPosition > 0 ? 'text-green-400' : globalTotals.netPosition < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                       {globalTotals.netPosition > 0 ? '+' : ''}{globalTotals.netPosition}
                     </p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Available + On Order − Needed</TooltipContent>
+                <TooltipContent>Click to filter: parts with negative net position</TooltipContent>
               </Tooltip>
             </div>
+            
+            {metricFilter && (
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="border-red-500 text-red-400">
+                  Filtered: {metricFilter === 'netNegative' ? 'Negative Net' : metricFilter.charAt(0).toUpperCase() + metricFilter.slice(1)} &gt; 0
+                </Badge>
+                <Button variant="ghost" size="sm" onClick={() => setMetricFilter(null)} className="h-6 text-xs text-gray-400 hover:text-white">
+                  Clear
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
