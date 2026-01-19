@@ -595,17 +595,19 @@ export default function ClientPortalHub() {
         </div>
         
         {/* View Mode Toggle */}
-        <div className="flex items-center gap-3">
-          <SavedViewsSelector
-            savedViews={savedViews}
-            activeViewName={activeViewName}
-            onSelectView={handleSelectView}
-            onSaveView={saveView}
-            onDeleteView={deleteView}
-            onRenameView={renameView}
-            currentSelectedTypes={selectedTypes}
-            currentStatusFilter={statusFilter}
-          />
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="hidden md:block">
+            <SavedViewsSelector
+              savedViews={savedViews}
+              activeViewName={activeViewName}
+              onSelectView={handleSelectView}
+              onSaveView={saveView}
+              onDeleteView={deleteView}
+              onRenameView={renameView}
+              currentSelectedTypes={selectedTypes}
+              currentStatusFilter={statusFilter}
+            />
+          </div>
           <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
             <Button
               size="sm"
@@ -625,6 +627,20 @@ export default function ClientPortalHub() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Mobile Saved Views - Below header */}
+      <div className="md:hidden">
+        <SavedViewsSelector
+          savedViews={savedViews}
+          activeViewName={activeViewName}
+          onSelectView={handleSelectView}
+          onSaveView={saveView}
+          onDeleteView={deleteView}
+          onRenameView={renameView}
+          currentSelectedTypes={selectedTypes}
+          currentStatusFilter={statusFilter}
+        />
       </div>
 
       {/* Needs Attention Section - Always visible at top, filtered by saved view */}
