@@ -172,6 +172,74 @@ export default function NeedsAttentionSection({
 
   if (needsAttention.length === 0) return null;
 
+  // Split into two groups: Action Required vs Pending Closure
+  const actionRequired = needsAttention.filter(r => 
+    r.attentionType === 'changes_requested' || r.attentionType === 'client_replied'
+  );
+  const pendingClosure = needsAttention.filter(r => 
+    r.attentionType === 'client_approved' || r.attentionType === 'new_activity'
+  );
+
+  const RequestCard = ({ request, isDeemphasized = false }) => (
+    <Link
+      key={request.id}
+      to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
+      className={`block p-3 rounded-lg border transition-all group ${
+        isDeemphasized 
+          ? 'bg-black/20 border-gray-800 hover:border-green-500/30 hover:bg-gray-900/50 opacity-80' 
+          : 'bg-black/40 border-gray-700 hover:border-red-500/50 hover:bg-gray-900/80'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <AttentionBadge type={request.attentionType} size="md" />
+        {request.commentCount > 0 && (
+          <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
+            <MessageSquareText className="w-3 h-3 mr-1" />
+            {request.commentCount}
+          </Badge>
+        )}
+      </div>
+      
+      <h4 className={`font-medium text-sm mb-1 line-clamp-2 transition-colors ${
+        isDeemphasized 
+          ? 'text-gray-300 group-hover:text-green-400' 
+          : 'text-white group-hover:text-red-400'
+      }`}>
+        {request.title}
+      </h4>
+      
+      <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+        <FolderKanban className="w-3 h-3" />
+        <span className="truncate">{request.project?.name || 'Unknown Project'}</span>
+      </div>
+
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex flex-col gap-0.5">
+          {request.attentionType === 'client_approved' && (
+            <span className="text-green-400/70 italic">
+              Awaiting AK confirmation
+            </span>
+          )}
+          {request.lastClientComment && request.attentionType !== 'client_approved' && (
+            <span className="text-yellow-400">
+              Client replied {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
+            </span>
+          )}
+          {request.last_viewed_by_internal_at && (
+            <span className="text-gray-500">
+              AK reviewed {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
+            </span>
+          )}
+        </div>
+        <ChevronRight className={`w-4 h-4 transition-colors ${
+          isDeemphasized 
+            ? 'text-gray-600 group-hover:text-green-400' 
+            : 'text-gray-500 group-hover:text-red-400'
+        }`} />
+      </div>
+    </Link>
+  );
+
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
       <CardHeader className="border-b border-red-500/30 p-4">
@@ -185,7 +253,7 @@ export default function NeedsAttentionSection({
                 🚨 Needs Attention
               </CardTitle>
               <p className="text-xs text-gray-400">
-                Requests requiring AK team review or response
+                Items clear once reviewed or archived
               </p>
             </div>
           </div>
@@ -194,57 +262,50 @@ export default function NeedsAttentionSection({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {needsAttention.slice(0, 9).map(request => (
-            <Link
-              key={request.id}
-              to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
-              className="block p-3 bg-black/40 rounded-lg border border-gray-700 hover:border-red-500/50 hover:bg-gray-900/80 transition-all group"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <AttentionBadge type={request.attentionType} size="md" />
-                {request.commentCount > 0 && (
-                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
-                    <MessageSquareText className="w-3 h-3 mr-1" />
-                    {request.commentCount}
-                  </Badge>
-                )}
-              </div>
-              
-              <h4 className="text-white font-medium text-sm mb-1 line-clamp-2 group-hover:text-red-400 transition-colors">
-                {request.title}
-              </h4>
-              
-              <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                <FolderKanban className="w-3 h-3" />
-                <span className="truncate">{request.project?.name || 'Unknown Project'}</span>
-              </div>
+      <CardContent className="p-4 space-y-4">
+        {/* Action Required Section */}
+        {actionRequired.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-px flex-1 bg-red-500/30" />
+              <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">
+                Action Required ({actionRequired.length})
+              </span>
+              <div className="h-px flex-1 bg-red-500/30" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {actionRequired.slice(0, 6).map(request => (
+                <RequestCard key={request.id} request={request} />
+              ))}
+            </div>
+            {actionRequired.length > 6 && (
+              <p className="text-xs text-gray-500 text-center mt-2">
+                +{actionRequired.length - 6} more action items
+              </p>
+            )}
+          </div>
+        )}
 
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex flex-col gap-0.5">
-                  {request.lastClientComment && (
-                    <span className="text-yellow-400">
-                      Client replied {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
-                    </span>
-                  )}
-                  {request.last_viewed_by_internal_at && (
-                    <span className="text-gray-500">
-                      AK reviewed {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
-                    </span>
-                  )}
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-red-400 transition-colors" />
-              </div>
-            </Link>
-          ))}
-        </div>
-        
-        {needsAttention.length > 9 && (
-          <div className="mt-4 text-center">
-            <span className="text-sm text-gray-400">
-              +{needsAttention.length - 9} more items need attention
-            </span>
+        {/* Pending Closure Section */}
+        {pendingClosure.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-px flex-1 bg-green-500/20" />
+              <span className="text-xs font-semibold text-green-400/70 uppercase tracking-wider">
+                Pending Closure ({pendingClosure.length})
+              </span>
+              <div className="h-px flex-1 bg-green-500/20" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pendingClosure.slice(0, 3).map(request => (
+                <RequestCard key={request.id} request={request} isDeemphasized />
+              ))}
+            </div>
+            {pendingClosure.length > 3 && (
+              <p className="text-xs text-gray-500 text-center mt-2">
+                +{pendingClosure.length - 3} more pending closure
+              </p>
+            )}
           </div>
         )}
       </CardContent>
