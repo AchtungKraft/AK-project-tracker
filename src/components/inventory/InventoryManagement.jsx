@@ -16,7 +16,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Search, Plus, Package, MapPin, AlertTriangle, MoreVertical, ShoppingCart, 
-  Eye, Wrench, HelpCircle, ChevronRight, ChevronDown, Truck, FileText
+  Eye, Wrench, HelpCircle, ChevronRight, ChevronDown, Truck, FileText,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from "lucide-react";
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
@@ -32,6 +33,7 @@ export default function InventoryManagement({ onPartClick }) {
   const [buildPart, setBuildPart] = useState(null);
   const [expandedParts, setExpandedParts] = useState(new Set());
   const [showDemandDetail, setShowDemandDetail] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
 
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ['inventoryItems'],
@@ -252,15 +254,90 @@ export default function InventoryManagement({ onPartClick }) {
           filteredLocations
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.part.part_name?.localeCompare(b.part.part_name || ''));
+      .filter(Boolean);
   }, [partAggregates, parts, searchTerm, categoryFilter, locationFilter]);
+
+  // Sort filtered parts
+  const sortedParts = useMemo(() => {
+    const sorted = [...filteredParts];
+    sorted.sort((a, b) => {
+      let aVal, bVal;
+      switch (sortConfig.key) {
+        case 'part_name':
+          aVal = a.part.part_name?.toLowerCase() || '';
+          bVal = b.part.part_name?.toLowerCase() || '';
+          break;
+        case 'onHand':
+          aVal = a.onHand;
+          bVal = b.onHand;
+          break;
+        case 'reserved':
+          aVal = a.reserved;
+          bVal = b.reserved;
+          break;
+        case 'available':
+          aVal = a.available;
+          bVal = b.available;
+          break;
+        case 'needed':
+          aVal = a.needed;
+          bVal = b.needed;
+          break;
+        case 'onOrder':
+          aVal = a.onOrder;
+          bVal = b.onOrder;
+          break;
+        case 'netPosition':
+          aVal = a.netPosition;
+          bVal = b.netPosition;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (typeof aVal === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aVal.localeCompare(bVal) 
+          : bVal.localeCompare(aVal);
+      }
+      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+    return sorted;
+  }, [filteredParts, sortConfig]);
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const SortableHeader = ({ columnKey, children, className = "" }) => {
+    const isActive = sortConfig.key === columnKey;
+    return (
+      <TableHead 
+        className={`text-gray-400 text-xs cursor-pointer hover:text-white transition-colors select-none ${className}`}
+        onClick={() => handleSort(columnKey)}
+      >
+        <div className={`flex items-center gap-1 ${className.includes('text-right') ? 'justify-end' : ''}`}>
+          {children}
+          {isActive ? (
+            sortConfig.direction === 'asc' ? 
+              <ArrowUp className="w-3 h-3 text-red-400" /> : 
+              <ArrowDown className="w-3 h-3 text-red-400" />
+          ) : (
+            <ArrowUpDown className="w-3 h-3 opacity-30" />
+          )}
+        </div>
+      </TableHead>
+    );
+  };
 
   // Calculate global totals from filtered parts
   const globalTotals = useMemo(() => {
     let onHand = 0, reserved = 0, needed = 0, onOrder = 0;
 
-    filteredParts.forEach(item => {
+    sortedParts.forEach(item => {
       onHand += item.onHand;
       reserved += item.reserved;
       needed += item.needed;
@@ -271,7 +348,7 @@ export default function InventoryManagement({ onPartClick }) {
     const netPosition = available + onOrder - needed;
 
     return { onHand, reserved, available, needed, onOrder, netPosition };
-  }, [filteredParts]);
+  }, [sortedParts]);
 
   const toggleExpanded = (partId) => {
     const newExpanded = new Set(expandedParts);
@@ -453,46 +530,46 @@ export default function InventoryManagement({ onPartClick }) {
                 <TableHeader>
                   <TableRow className="border-b border-red-900/20 hover:bg-transparent">
                     <TableHead className="text-gray-400 text-xs w-8"></TableHead>
-                    <TableHead className="text-gray-400 text-xs">Part</TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">On Hand</TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">
+                    <SortableHeader columnKey="part_name">Part</SortableHeader>
+                    <SortableHeader columnKey="onHand" className="text-right">On Hand</SortableHeader>
+                    <SortableHeader columnKey="reserved" className="text-right">
                       <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1 justify-end w-full">
+                        <TooltipTrigger className="flex items-center gap-1">
                           Reserved <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
                         <TooltipContent>Inventory allocated to projects (InventoryItem.quantity_reserved)</TooltipContent>
                       </Tooltip>
-                    </TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">Available</TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">
+                    </SortableHeader>
+                    <SortableHeader columnKey="available" className="text-right">Available</SortableHeader>
+                    <SortableHeader columnKey="needed" className="text-right">
                       <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1 justify-end w-full">
+                        <TooltipTrigger className="flex items-center gap-1">
                           Needed <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
                         <TooltipContent>Project demand (qty_needed − qty_installed)</TooltipContent>
                       </Tooltip>
-                    </TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">
+                    </SortableHeader>
+                    <SortableHeader columnKey="onOrder" className="text-right">
                       <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1 justify-end w-full">
+                        <TooltipTrigger className="flex items-center gap-1">
                           On Order <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
                         <TooltipContent>Open PO lines (qty_ordered − qty_received)</TooltipContent>
                       </Tooltip>
-                    </TableHead>
-                    <TableHead className="text-gray-400 text-xs text-right">
+                    </SortableHeader>
+                    <SortableHeader columnKey="netPosition" className="text-right">
                       <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1 justify-end w-full">
+                        <TooltipTrigger className="flex items-center gap-1">
                           Net <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
                         <TooltipContent>Available + On Order − Needed</TooltipContent>
                       </Tooltip>
-                    </TableHead>
+                    </SortableHeader>
                     <TableHead className="text-gray-400 text-xs w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredParts.map(item => {
+                  {sortedParts.map(item => {
                     const isExpanded = expandedParts.has(item.partId);
                     const hasLocations = item.filteredLocations.length > 0;
                     const hasDemand = item.requirementsByProject.length > 0;
