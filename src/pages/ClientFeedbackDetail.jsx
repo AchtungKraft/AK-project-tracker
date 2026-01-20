@@ -457,7 +457,7 @@ export default function ClientFeedbackDetail() {
                       <RotateCw className="w-4 h-4 mr-1" />
                       Resend
                     </Button>
-                    <Button size="sm" onClick={handleArchive} variant="outline" className="bg-sky-100 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700">
+                    <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-gray-600 hover:text-white h-8 border-gray-600">
                       <Archive className="w-4 h-4 mr-1" />
                       Archive
                     </Button>
