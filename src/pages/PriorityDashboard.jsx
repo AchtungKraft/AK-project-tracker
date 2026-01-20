@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
@@ -24,8 +30,13 @@ export default function PriorityDashboard() {
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('calendar-view');
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedTypes, setSelectedTypes] = useState(() => {
+    const saved = localStorage.getItem('priority_selectedTypes');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [statusFilter, setStatusFilter] = useState(() => 
+    localStorage.getItem('priority_statusFilter') || 'all'
+  );
 
   // Saved views hook
   const {
@@ -51,8 +62,23 @@ export default function PriorityDashboard() {
     if (view) {
       setSelectedTypes(view.selectedTypes || []);
       setStatusFilter(view.statusFilter || 'all');
+      localStorage.setItem('priority_selectedTypes', JSON.stringify(view.selectedTypes || []));
+      localStorage.setItem('priority_statusFilter', view.statusFilter || 'all');
     }
   };
+
+  const handleSelectedTypesChange = (newTypes) => {
+    setSelectedTypes(newTypes);
+    localStorage.setItem('priority_selectedTypes', JSON.stringify(newTypes));
+  };
+
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    localStorage.setItem('priority_statusFilter', value);
+  };
+
+  // Get project statuses for filter
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const { data: priorityTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
@@ -283,18 +309,98 @@ export default function PriorityDashboard() {
             </Button>
           </div>
 
-          {/* Saved Views Selector */}
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <SavedViewsSelector
-              savedViews={savedViews}
-              activeViewName={activeViewName}
-              onSelectView={handleSelectView}
-              onSaveView={saveView}
-              onDeleteView={deleteView}
-              onRenameView={renameView}
-              currentSelectedTypes={selectedTypes}
-              currentStatusFilter={statusFilter}
-            />
+          {/* Filters */}
+          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <SavedViewsSelector
+                savedViews={savedViews}
+                activeViewName={activeViewName}
+                onSelectView={handleSelectView}
+                onSaveView={saveView}
+                onDeleteView={deleteView}
+                onRenameView={renameView}
+                currentSelectedTypes={selectedTypes}
+                currentStatusFilter={statusFilter}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Project Type Multi-Select */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-48 justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800"
+                  >
+                    <span className="truncate">
+                      {selectedTypes.length === 0 
+                        ? 'All Project Types' 
+                        : selectedTypes.length === 1 
+                          ? projectTypes.find(t => t.id === selectedTypes[0])?.name || 'Type'
+                          : `${selectedTypes.length} Types`}
+                    </span>
+                    {selectedTypes.length > 0 && (
+                      <X 
+                        className="w-4 h-4 ml-2 hover:text-red-400" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectedTypesChange([]);
+                        }}
+                      />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
+                  {projectTypes.filter(t => t.active).map(t => (
+                    <DropdownMenuCheckboxItem
+                      key={t.id}
+                      checked={selectedTypes.includes(t.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          handleSelectedTypesChange([...selectedTypes, t.id]);
+                        } else {
+                          handleSelectedTypesChange(selectedTypes.filter(id => id !== t.id));
+                        }
+                      }}
+                    >
+                      <span 
+                        className="w-2 h-2 rounded-full mr-2" 
+                        style={{ backgroundColor: t.color }}
+                      />
+                      {t.name}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Project Status Filter */}
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {projectStatuses.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Clear Filters */}
+              {(selectedTypes.length > 0 || statusFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    handleSelectedTypesChange([]);
+                    handleStatusFilterChange('all');
+                  }}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Tabs */}
@@ -483,6 +589,8 @@ export default function PriorityDashboard() {
                 primaryGroupBy={primaryGroupBy}
                 secondaryGroupBy={secondaryGroupBy}
                 commentCountByTaskId={commentCountByTaskId}
+                selectedTypes={selectedTypes}
+                statusFilter={statusFilter}
               />
             </TabsContent>
           </Tabs>

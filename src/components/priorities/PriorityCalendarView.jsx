@@ -22,6 +22,8 @@ export default function PriorityCalendarView({
   primaryGroupBy,
   secondaryGroupBy,
   commentCountByTaskId = {},
+  selectedTypes = [],
+  statusFilter = 'all',
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [weeksToShow, setWeeksToShow] = useState(4);
@@ -79,6 +81,7 @@ export default function PriorityCalendarView({
   }, [tasksWithDueDate, weekRanges]);
 
   // Get non-priority tasks with due dates or start dates in the visible range
+  // IMPORTANT: Apply Project Type and Status filters to match Dashboard behavior
   const dueButNotPriorityTasks = useMemo(() => {
     if (!allTasks || allTasks.length === 0) return [];
     
@@ -100,6 +103,13 @@ export default function PriorityCalendarView({
       // Skip if completed
       if (task.status_id === completedStatus?.id) return false;
       
+      // Apply Project Type filter (same logic as Dashboard)
+      const project = projects.find(p => p.id === task.project_id);
+      if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
+      
+      // Apply Project Status filter (same logic as Dashboard)
+      if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
+      
       // Check if start_date is in range
       if (task.start_date) {
         const startDate = parseISO(task.start_date);
@@ -118,7 +128,7 @@ export default function PriorityCalendarView({
       
       return false;
     });
-  }, [allTasks, tasks, weekRanges, statuses]);
+  }, [allTasks, tasks, weekRanges, statuses, projects, selectedTypes, statusFilter]);
 
   // Helper to get grouping info
   const getGroupInfo = (task, groupBy) => {
