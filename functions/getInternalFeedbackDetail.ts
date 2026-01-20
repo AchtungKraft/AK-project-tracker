@@ -47,8 +47,8 @@ Deno.serve(async (req) => {
             });
         }
 
-        // SINGLE PARALLEL FETCH: Get all request-specific data AND lookup tables together
-        // This eliminates the sequential phases that were causing slowness
+        // PHASE 1: Fetch request-specific data + commonly needed lists in ONE parallel batch
+        // Trade-off: fetching User.list() and TeamMember.list() is faster than multiple individual fetches
         const [
             requests,
             commentsRaw,
@@ -57,11 +57,7 @@ Deno.serve(async (req) => {
             todoTasksRaw,
             linkedTasks,
             allUsers,
-            allClientContacts,
-            allTasks,
-            projects,
-            projectClientAccesses,
-            teamMembers
+            allTeamMembers,
         ] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
@@ -69,17 +65,8 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
             base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
-            // Fetch all users/contacts/tasks in parallel - faster than sequential ID lookups
             base44.asServiceRole.entities.User.list(),
-            base44.asServiceRole.entities.ClientContact.list(),
-            base44.asServiceRole.entities.Task.list(),
-            projectId 
-                ? base44.asServiceRole.entities.Project.filter({ id: projectId })
-                : Promise.resolve([]),
-            projectId
-                ? base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectId })
-                : Promise.resolve([]),
-            base44.asServiceRole.entities.TeamMember.list().catch(() => [])
+            base44.asServiceRole.entities.TeamMember.list().catch(() => []),
         ]);
 
         const request = requests[0];
@@ -90,93 +77,120 @@ Deno.serve(async (req) => {
             });
         }
 
-        // If projectId wasn't provided, fetch project data now
-        let project = projects[0];
-        let projectAccesses = projectClientAccesses;
-        
-        if (!project && request.project_id) {
-            const [projectResult, accessResult] = await Promise.all([
-                base44.asServiceRole.entities.Project.filter({ id: request.project_id }),
-                base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id })
-            ]);
-            project = projectResult[0];
-            projectAccesses = accessResult;
-        }
+        const projectIdForAccess = request.project_id || projectId;
 
-        // Build lookup maps for O(1) access
-        const userMap = new Map(allUsers.map(u => [u.id, u]));
-        const contactMap = new Map(allClientContacts.map(c => [c.id, c]));
-        const taskMap = new Map(allTasks.map(t => [t.id, t]));
+        // PHASE 2: Fetch project-specific data + contacts (smaller dataset, targeted)
+        const neededContactIds = new Set();
+        const neededTaskIds = new Set();
+
+        // Collect contact IDs from comments/decisions/attachments/todos
+        commentsRaw.forEach(c => {
+            if (c.author_type === 'client_contact' && c.author_id) neededContactIds.add(c.author_id);
+        });
+        decisionsRaw.forEach(d => {
+            if (d.decided_by_type === 'client_contact' && d.decided_by_id) neededContactIds.add(d.decided_by_id);
+        });
+        attachmentsRaw.forEach(a => {
+            if (a.created_by_type === 'client_contact' && a.created_by_id) neededContactIds.add(a.created_by_id);
+        });
+        todoTasksRaw.forEach(t => {
+            if (t.assigned_to_type === 'client_contact' && t.assigned_to_id) neededContactIds.add(t.assigned_to_id);
+        });
+        linkedTasks.forEach(link => {
+            if (link.task_id) neededTaskIds.add(link.task_id);
+        });
+
+        // Fetch project, accesses, and tasks in parallel
+        const [
+            projects,
+            projectClientAccesses,
+            allClientContacts,
+            linkedTasksData,
+        ] = await Promise.all([
+            projectIdForAccess 
+                ? base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess })
+                : Promise.resolve([]),
+            projectIdForAccess
+                ? base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess })
+                : Promise.resolve([]),
+            // Fetch all contacts for this project (usually small list)
+            base44.asServiceRole.entities.ClientContact.list(),
+            // Fetch linked tasks
+            neededTaskIds.size > 0
+                ? Promise.all([...neededTaskIds].map(id => 
+                    base44.asServiceRole.entities.Task.filter({ id }).catch(() => [])
+                  )).then(results => results.flat())
+                : Promise.resolve([]),
+        ]);
 
         // Sort by event timestamps
-        const comments = [...commentsRaw].sort((a, b) => {
-            const timeA = new Date(a.posted_at || a.created_date).getTime();
-            const timeB = new Date(b.posted_at || b.created_date).getTime();
-            return timeB - timeA;
-        });
+        const comments = [...commentsRaw].sort((a, b) => 
+            new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
+        );
+        const decisions = [...decisionsRaw].sort((a, b) => 
+            new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date)
+        );
+        const attachments = [...attachmentsRaw].sort((a, b) => 
+            new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
+        );
 
-        const decisions = [...decisionsRaw].sort((a, b) => {
-            const timeA = new Date(a.decided_at || a.created_date).getTime();
-            const timeB = new Date(b.decided_at || b.created_date).getTime();
-            return timeB - timeA;
-        });
-
-        const attachments = [...attachmentsRaw].sort((a, b) => {
-            const timeA = new Date(a.posted_at || a.created_date).getTime();
-            const timeB = new Date(b.posted_at || b.created_date).getTime();
-            return timeB - timeA;
-        });
+        // Build lookup maps for fast enrichment
+        const userMap = new Map(allUsers.map(u => [u.id, u]));
+        const contactMap = new Map(allClientContacts.map(c => [c.id, c]));
 
         // Enrich request with creator
-        const requestCreator = request.created_by_user_id
-            ? userMap.get(request.created_by_user_id)
-            : null;
-        const enrichedRequest = { ...request, creator: requestCreator };
+        const enrichedRequest = { 
+            ...request, 
+            creator: request.created_by_user_id ? userMap.get(request.created_by_user_id) : null 
+        };
 
-        // Enrich comments with author details
-        const enrichedComments = comments.map(comment => {
-            const author = comment.author_type === 'internal_user'
-                ? userMap.get(comment.author_id)
-                : contactMap.get(comment.author_id);
-            return { ...comment, author };
-        });
+        // Enrich comments
+        const enrichedComments = comments.map(c => ({
+            ...c,
+            author: c.author_type === 'internal_user' 
+                ? userMap.get(c.author_id) 
+                : contactMap.get(c.author_id)
+        }));
 
-        // Enrich decisions with decider details
-        const enrichedDecisions = decisions.map(decision => {
-            const decider = decision.decided_by_type === 'internal_user'
-                ? userMap.get(decision.decided_by_id)
-                : contactMap.get(decision.decided_by_id);
-            return { ...decision, decider };
-        });
+        // Enrich decisions
+        const enrichedDecisions = decisions.map(d => ({
+            ...d,
+            decider: d.decided_by_type === 'internal_user' 
+                ? userMap.get(d.decided_by_id) 
+                : contactMap.get(d.decided_by_id)
+        }));
 
-        // Enrich attachments with creator details
-        const enrichedAttachments = attachments.map(attachment => {
-            const creator = attachment.created_by_type === 'internal_user'
-                ? userMap.get(attachment.created_by_id)
-                : contactMap.get(attachment.created_by_id);
-            return { ...attachment, creator };
-        });
+        // Enrich attachments
+        const enrichedAttachments = attachments.map(a => ({
+            ...a,
+            creator: a.created_by_type === 'internal_user' 
+                ? userMap.get(a.created_by_id) 
+                : contactMap.get(a.created_by_id)
+        }));
 
         // Build linked task details
-        const linkedTaskDetails = linkedTasks.map(link => {
-            const task = taskMap.get(link.task_id);
-            return task ? { ...link, task } : null;
-        }).filter(Boolean);
+        const taskMap = new Map(linkedTasksData.map(t => [t.id, t]));
+        const linkedTaskDetails = linkedTasks
+            .map(link => {
+                const task = taskMap.get(link.task_id);
+                return task ? { ...link, task } : null;
+            })
+            .filter(Boolean);
 
-        // Enrich todo tasks with assignee info
-        const enrichedTodoTasks = todoTasksRaw.map(t => {
-            const assignee = t.assigned_to_type === 'internal_user'
-                ? userMap.get(t.assigned_to_id)
-                : contactMap.get(t.assigned_to_id);
-            return { ...t, assignee };
-        });
+        // Enrich todo tasks
+        const enrichedTodoTasks = todoTasksRaw.map(t => ({
+            ...t,
+            assignee: t.assigned_to_type === 'internal_user' 
+                ? userMap.get(t.assigned_to_id) 
+                : contactMap.get(t.assigned_to_id)
+        }));
 
-        // Get project-specific client contacts for assignable list
-        const activeAccesses = (projectAccesses || []).filter(pa => pa.access_status === 'active');
+        // Get project-specific client contacts
+        const activeAccesses = projectClientAccesses.filter(pa => pa.access_status === 'active');
         const projectClientContactIds = new Set(activeAccesses.map(pa => pa.client_contact_id));
         const projectClients = allClientContacts.filter(c => projectClientContactIds.has(c.id) && c.active);
 
-        // Get primary client slug for client portal URLs
+        // Get primary client slug
         let primaryClientSlug = null;
         for (const access of activeAccesses) {
             const contact = contactMap.get(access.client_contact_id);
@@ -189,10 +203,8 @@ Deno.serve(async (req) => {
             }
         }
 
-        // Get Achtung Kraft team members
-        const achtungKraftMembers = teamMembers.filter(tm => tm.is_achtung_kraft_member);
-        
-        // Build assignable users
+        // Build assignable users from Achtung Kraft team members
+        const achtungKraftMembers = allTeamMembers.filter(tm => tm.is_achtung_kraft_member);
         const assignableUsers = achtungKraftMembers
             .filter(tm => tm.user_id)
             .map(tm => {
@@ -203,34 +215,10 @@ Deno.serve(async (req) => {
             })
             .filter(Boolean);
 
-        // Only project-assigned clients
         const assignableContacts = projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
 
-        // Collect IDs actually used (for minimal response)
-        const usedUserIds = new Set();
-        const usedContactIds = new Set();
-        
-        if (request.created_by_user_id) usedUserIds.add(request.created_by_user_id);
-        comments.forEach(c => {
-            if (c.author_type === 'internal_user') usedUserIds.add(c.author_id);
-            else usedContactIds.add(c.author_id);
-        });
-        decisions.forEach(d => {
-            if (d.decided_by_type === 'internal_user') usedUserIds.add(d.decided_by_id);
-            else usedContactIds.add(d.decided_by_id);
-        });
-        assignableUsers.forEach(u => usedUserIds.add(u.id));
-        projectClients.forEach(c => usedContactIds.add(c.id));
-
-        // Return only the users/contacts that are actually needed
-        const usedUsers = allUsers.filter(u => usedUserIds.has(u.id));
-        const usedContacts = allClientContacts.filter(c => usedContactIds.has(c.id));
-
-        const endTime = Date.now();
-        const executionTime = endTime - startTime;
-
-        // Log performance metrics
-        console.log(`[getInternalFeedbackDetail] Performance: ${executionTime}ms | Comments: ${comments.length} | Decisions: ${decisions.length} | Attachments: ${attachments.length}`);
+        const executionTime = Date.now() - startTime;
+        console.log(`[getInternalFeedbackDetail] ${executionTime}ms - Comments:${comments.length} Decisions:${decisions.length} Attachments:${attachments.length}`);
 
         return Response.json({
             success: true,
@@ -240,22 +228,13 @@ Deno.serve(async (req) => {
             attachments: enrichedAttachments,
             todoTasks: enrichedTodoTasks,
             linkedTasks: linkedTaskDetails,
-            project: project || null,
-            users: usedUsers,
-            clientContacts: usedContacts,
+            project: projects[0] || null,
+            users: allUsers,
+            clientContacts: allClientContacts,
             assignableUsers,
             assignableContacts,
             primaryClientSlug,
-            _debug: {
-                executionTimeMs: executionTime,
-                counts: {
-                    users: usedUsers.length,
-                    contacts: usedContacts.length,
-                    comments: comments.length,
-                    decisions: decisions.length,
-                    attachments: attachments.length
-                }
-            }
+            _debug: { executionTimeMs: executionTime }
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
