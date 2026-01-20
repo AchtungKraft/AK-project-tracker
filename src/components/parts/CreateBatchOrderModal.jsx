@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign } from "lucide-react";
 
 /**
  * CreateBatchOrderModal - Create orders from selected parts grouped by vendor
@@ -34,6 +34,26 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     queryFn: () => base44.entities.Part.list(),
   });
 
+  const { data: poSequences = [] } = useQuery({
+    queryKey: ['poSequences'],
+    queryFn: () => base44.entities.POSequence.list(),
+  });
+
+  // Generate PO number in format: PREFIX_MMDDYYYY_SEQ
+  const generatePONumber = (prefix = 'AK') => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    
+    // Find current year sequence
+    const currentYear = yyyy;
+    const yearSeq = poSequences.find(s => s.year === currentYear);
+    const nextSeq = (yearSeq?.last_sequence || 0) + 1;
+    
+    return `${prefix}_${mm}${dd}${yyyy}_${String(nextSeq).padStart(3, '0')}`;
+  };
+
   // State for vendor-grouped items with editable fields
   const [vendorGroups, setVendorGroups] = useState(() => {
     const groups = {};
@@ -45,7 +65,10 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           vendorId,
           expanded: true,
           orderData: {
+            po_prefix: 'AK',
             po_number: '',
+            order_number: '',
+            order_url: '',
             order_date: new Date().toISOString().split('T')[0],
             eta_date: '',
             notes: '',
@@ -55,7 +78,7 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       }
       groups[vendorId].items.push({
         ...item,
-        qty_to_order: item.qty_to_order || 1,
+        qty_to_order: item.qty_to_order || item.part?.reorder_quantity || 1,
         unit_price: item.part?.default_cost || 0,
         vendorOverride: null,
       });
@@ -178,6 +201,12 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
   const createOrdersMutation = useMutation({
     mutationFn: async () => {
       const results = [];
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      
+      // Get or create current year sequence
+      let yearSeq = poSequences.find(s => s.year === currentYear);
+      let currentSeqNum = yearSeq?.last_sequence || 0;
       
       for (const [vendorId, group] of Object.entries(vendorGroups)) {
         if (group.items.length === 0) continue;
@@ -185,14 +214,28 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           throw new Error('Please assign a vendor to all items before creating orders');
         }
         
+        // Generate PO number if not provided
+        let poNumber = group.orderData.po_number;
+        if (!poNumber) {
+          currentSeqNum++;
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          const prefix = group.orderData.po_prefix || 'AK';
+          poNumber = `${prefix}_${mm}${dd}${currentYear}_${String(currentSeqNum).padStart(3, '0')}`;
+        }
+        
         // Create the order
         const order = await base44.entities.Order.create({
           vendor_id: vendorId,
-          po_number: group.orderData.po_number || `PO-${Date.now()}-${vendorId.slice(0, 4)}`,
+          po_number: poNumber,
+          po_prefix: group.orderData.po_prefix || 'AK',
+          order_number: group.orderData.order_number || null,
+          order_url: group.orderData.order_url || null,
           order_date: group.orderData.order_date || new Date().toISOString().split('T')[0],
           eta_date: group.orderData.eta_date || null,
           status: 'Ordered',
           notes: group.orderData.notes || null,
+          billing_status: 'Not Invoiced',
         });
         
         // Create line items and update requirements
@@ -223,12 +266,22 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
         results.push({ order, itemCount: group.items.length });
       }
       
+      // Update the year sequence
+      if (currentSeqNum > (yearSeq?.last_sequence || 0)) {
+        if (yearSeq) {
+          await base44.entities.POSequence.update(yearSeq.id, { last_sequence: currentSeqNum });
+        } else {
+          await base44.entities.POSequence.create({ year: currentYear, last_sequence: currentSeqNum });
+        }
+      }
+      
       return results;
     },
     onSuccess: (results) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      queryClient.invalidateQueries({ queryKey: ['poSequences'] });
       toast.success(`Created ${results.length} order(s) successfully`);
       onSuccess?.();
       onClose();
@@ -299,47 +352,78 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
               </div>
 
               {group.expanded && (
-                <div className="p-3 space-y-3">
-                  {/* Order Details */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <Label className="text-gray-400 text-xs">PO Number</Label>
-                      <Input
-                        value={group.orderData.po_number}
-                        onChange={(e) => updateVendorGroup(vendorId, 'po_number', e.target.value)}
-                        placeholder="Auto-generated"
-                        className="bg-gray-800 border-gray-700 h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-gray-400 text-xs">Order Date</Label>
-                      <Input
-                        type="date"
-                        value={group.orderData.order_date}
-                        onChange={(e) => updateVendorGroup(vendorId, 'order_date', e.target.value)}
-                        className="bg-gray-800 border-gray-700 h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-gray-400 text-xs">ETA Date</Label>
-                      <Input
-                        type="date"
-                        value={group.orderData.eta_date}
-                        onChange={(e) => updateVendorGroup(vendorId, 'eta_date', e.target.value)}
-                        className="bg-gray-800 border-gray-700 h-8 text-sm"
-                      />
-                    </div>
-                  </div>
-                  
+              <div className="p-3 space-y-3">
+                {/* Order Details */}
+                <div className="grid grid-cols-4 gap-3">
                   <div>
-                    <Label className="text-gray-400 text-xs">Notes / Reference URL</Label>
-                    <Textarea
-                      value={group.orderData.notes}
-                      onChange={(e) => updateVendorGroup(vendorId, 'notes', e.target.value)}
-                      placeholder="Order notes, reference links..."
-                      className="bg-gray-800 border-gray-700 h-16 text-sm"
+                    <Label className="text-gray-400 text-xs">PO Prefix</Label>
+                    <Input
+                      value={group.orderData.po_prefix}
+                      onChange={(e) => updateVendorGroup(vendorId, 'po_prefix', e.target.value.toUpperCase())}
+                      placeholder="AK"
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                      maxLength={10}
                     />
                   </div>
+                  <div>
+                    <Label className="text-gray-400 text-xs">PO Number (auto)</Label>
+                    <Input
+                      value={group.orderData.po_number}
+                      onChange={(e) => updateVendorGroup(vendorId, 'po_number', e.target.value)}
+                      placeholder={generatePONumber(group.orderData.po_prefix || 'AK')}
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-400 text-xs">Order Date</Label>
+                    <Input
+                      type="date"
+                      value={group.orderData.order_date}
+                      onChange={(e) => updateVendorGroup(vendorId, 'order_date', e.target.value)}
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-400 text-xs">ETA Date</Label>
+                    <Input
+                      type="date"
+                      value={group.orderData.eta_date}
+                      onChange={(e) => updateVendorGroup(vendorId, 'eta_date', e.target.value)}
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-gray-400 text-xs">Order / Confirmation #</Label>
+                    <Input
+                      value={group.orderData.order_number}
+                      onChange={(e) => updateVendorGroup(vendorId, 'order_number', e.target.value)}
+                      placeholder="Vendor's order number"
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-400 text-xs">Order URL</Label>
+                    <Input
+                      value={group.orderData.order_url}
+                      onChange={(e) => updateVendorGroup(vendorId, 'order_url', e.target.value)}
+                      placeholder="https://..."
+                      className="bg-gray-800 border-gray-700 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs">Notes</Label>
+                  <Textarea
+                    value={group.orderData.notes}
+                    onChange={(e) => updateVendorGroup(vendorId, 'notes', e.target.value)}
+                    placeholder="Order notes..."
+                    className="bg-gray-800 border-gray-700 h-12 text-sm"
+                  />
+                </div>
 
                   <Separator className="bg-gray-700" />
 
