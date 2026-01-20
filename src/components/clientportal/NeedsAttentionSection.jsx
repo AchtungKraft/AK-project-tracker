@@ -242,11 +242,42 @@ export default function NeedsAttentionSection({
               Awaiting AK confirmation
             </span>
           )}
-          {request.lastClientComment && request.attentionType !== 'client_approved' && (
-            <span className="text-yellow-400 truncate">
-              <span className="hidden md:inline">Client replied </span>{formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
-            </span>
-          )}
+          {request.attentionType !== 'client_approved' && (() => {
+            const postedAt = request.posted_at ? new Date(request.posted_at) : null;
+            const isOverdue = request.attentionType === 'overdue';
+            const lastCommentDate = request.lastClientComment ? 
+              (request.lastClientComment.posted_at ? new Date(request.lastClientComment.posted_at) : new Date(request.lastClientComment.created_date)) : null;
+            const isCommentAfterPosted = lastCommentDate && postedAt && lastCommentDate > postedAt;
+            
+            // Priority: Overdue without recent client activity > Client activity after posted_at > Waiting
+            if (isOverdue && !isCommentAfterPosted) {
+              return (
+                <span className="text-red-400 truncate">
+                  {postedAt ? (
+                    <><span className="hidden md:inline">Sent </span>{formatDistanceToNow(postedAt, { addSuffix: true })}, awaiting response</>
+                  ) : 'Overdue — awaiting response'}
+                </span>
+              );
+            }
+            
+            if (isCommentAfterPosted) {
+              return (
+                <span className="text-yellow-400 truncate">
+                  <span className="hidden md:inline">Client replied </span>{formatDistanceToNow(lastCommentDate, { addSuffix: true })}
+                </span>
+              );
+            }
+            
+            if (request.ownership?.ownership === 'waiting_on_client' && postedAt) {
+              return (
+                <span className="text-gray-400 truncate">
+                  <span className="hidden md:inline">Sent to client </span>{formatDistanceToNow(postedAt, { addSuffix: true })}
+                </span>
+              );
+            }
+            
+            return null;
+          })()}
           <span className="hidden md:block text-gray-500">
             {request.last_viewed_by_internal_at && (
               <>AK reviewed {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}</>

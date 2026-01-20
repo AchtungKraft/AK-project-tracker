@@ -557,13 +557,42 @@ export default function ClientPortalHub() {
                                       </span>
                                     )}
                                   </div>
-                                  {/* Activity context */}
+                                  {/* Activity context - only show client activity if after posted_at */}
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    {request.lastClientComment && (
-                                      <span className="text-yellow-400">
-                                        Client {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const postedAt = request.posted_at ? new Date(request.posted_at) : null;
+                                      const isOverdue = request.due_date && new Date(request.due_date) < new Date();
+                                      const lastCommentDate = request.lastClientComment ? 
+                                        (request.lastClientComment.posted_at ? new Date(request.lastClientComment.posted_at) : new Date(request.lastClientComment.created_date)) : null;
+                                      const isCommentAfterPosted = lastCommentDate && postedAt && lastCommentDate > postedAt;
+                                      
+                                      // Priority: Overdue > Client activity after posted_at > Waiting since repost
+                                      if (isOverdue && !isCommentAfterPosted) {
+                                        return (
+                                          <span className="text-red-400">
+                                            {postedAt ? `Sent to client ${formatDistanceToNow(postedAt, { addSuffix: true })}, awaiting response` : 'Overdue — awaiting client response'}
+                                          </span>
+                                        );
+                                      }
+                                      
+                                      if (isCommentAfterPosted) {
+                                        return (
+                                          <span className="text-yellow-400">
+                                            Client replied {formatDistanceToNow(lastCommentDate, { addSuffix: true })}
+                                          </span>
+                                        );
+                                      }
+                                      
+                                      if (request.ownership?.ownership === 'waiting_on_client' && postedAt) {
+                                        return (
+                                          <span className="text-gray-400">
+                                            Sent to client {formatDistanceToNow(postedAt, { addSuffix: true })}
+                                          </span>
+                                        );
+                                      }
+                                      
+                                      return null;
+                                    })()}
                                     {request.last_viewed_by_internal_at && (
                                       <span className="text-gray-500">
                                         AK {formatDistanceToNow(new Date(request.last_viewed_by_internal_at), { addSuffix: true })}
