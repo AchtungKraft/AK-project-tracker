@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { AttentionBadge, getAttentionPriority } from "./NeedsAttentionSection";
+import { CopyRequestLinkButton } from "./ClientLinksCopyButtons";
 
 const getTypeColor = (type) => {
   switch (type) {
@@ -63,7 +64,8 @@ export default function ClientPortalListView({
   sendingEmailForProject,
   comments = [],
   decisions = [],
-  projects = []
+  projects = [],
+  getProjectClientSlug = () => null
 }) {
   if (groupedData.length === 0) {
     return (
@@ -196,7 +198,13 @@ export default function ClientPortalListView({
                         </span>
                       )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                    <div className="flex items-center gap-1">
+                      <CopyRequestLinkButton 
+                        slug={getProjectClientSlug(request.project_id)} 
+                        requestId={request.id} 
+                      />
+                      <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                    </div>
                   </div>
                 </Link>
               );

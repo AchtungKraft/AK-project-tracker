@@ -37,6 +37,7 @@ import NeedsAttentionSection, { getAttentionType, AttentionBadge, getAttentionPr
 import { getReviewOwnership, getOwnershipSortPriority, sortByReviewOwnership } from "@/components/clientportal/reviewOwnership";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
+import { CopyRequestLinkButton } from "@/components/clientportal/ClientLinksCopyButtons";
 
 // Helper to determine request state
 const getRequestState = (request, decisions, attachments) => {
@@ -182,6 +183,29 @@ export default function ClientPortalHub() {
     queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list(),
   });
+
+  const { data: projectClientAccesses = [] } = useQuery({
+    queryKey: ["projectClientAccesses"],
+    queryFn: () => base44.entities.ProjectClientAccess.list(),
+  });
+
+  const { data: clientContacts = [] } = useQuery({
+    queryKey: ["clientContacts"],
+    queryFn: () => base44.entities.ClientContact.list(),
+  });
+
+  // Helper to get primary client slug for a project
+  const getProjectClientSlug = (projectId) => {
+    const accesses = projectClientAccesses.filter(
+      pa => pa.project_id === projectId && pa.access_status === 'active'
+    );
+    for (const access of accesses) {
+      const contact = clientContacts.find(c => c.id === access.client_contact_id);
+      if (contact?.url_slug) return contact.url_slug;
+      if (access.url_slug) return access.url_slug;
+    }
+    return null;
+  };
 
   const { data: projectTypes = [] } = useQuery({
     queryKey: ["projectTypes"],
@@ -600,7 +624,13 @@ export default function ClientPortalHub() {
                                     )}
                                   </div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 text-gray-500" />
+                                <div className="flex items-center gap-1">
+                                  <CopyRequestLinkButton 
+                                    slug={getProjectClientSlug(request.project_id)} 
+                                    requestId={request.id} 
+                                  />
+                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                                </div>
                               </div>
                             </Link>
                           ))}
@@ -822,7 +852,7 @@ export default function ClientPortalHub() {
 
             if (akNeedsReview.length === 0 && waitingOnClient.length === 0) {
               return viewMode === 'list' 
-                ? <ClientPortalListView groupedData={[]} emptyMessage="No items awaiting client review" tabName="awaiting" />
+                ? <ClientPortalListView groupedData={[]} emptyMessage="No items awaiting client review" tabName="awaiting" getProjectClientSlug={getProjectClientSlug} />
                 : renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
             }
 
@@ -845,6 +875,7 @@ export default function ClientPortalHub() {
                         sendingEmailForProject={sendingEmailForProject}
                         comments={comments}
                         decisions={decisions}
+                        getProjectClientSlug={getProjectClientSlug}
                       />
                     </div>
                   )}
@@ -864,6 +895,7 @@ export default function ClientPortalHub() {
                         sendingEmailForProject={sendingEmailForProject}
                         comments={comments}
                         decisions={decisions}
+                        getProjectClientSlug={getProjectClientSlug}
                       />
                     </div>
                   )}
@@ -918,6 +950,7 @@ export default function ClientPortalHub() {
               tabName="changes"
               comments={comments}
               decisions={decisions}
+              getProjectClientSlug={getProjectClientSlug}
             />
           ) : (
             renderRequestList(
@@ -937,6 +970,7 @@ export default function ClientPortalHub() {
               tabName="approved"
               comments={comments}
               decisions={decisions}
+              getProjectClientSlug={getProjectClientSlug}
             />
           ) : (
             renderRequestList(
