@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  Truck, Search, Package, ChevronDown, ChevronUp, CheckCircle, 
+  Truck, Search, Package, ChevronDown, ChevronUp, CheckCircle, DollarSign,
   FileText, Building2, FolderKanban, ExternalLink, Calendar, Pencil, Undo2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -486,13 +486,19 @@ export default function OnOrder({ onPartClick }) {
                   {order.order_number && (
                     <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
                   )}
-                  {order.billing_status && order.billing_status !== 'Not Invoiced' && (
-                    <Badge 
-                      variant="outline" 
-                      className={order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400 text-xs' : 'border-blue-600 text-blue-400 text-xs'}
-                    >
-                      {order.billing_status}
-                    </Badge>
+                  <Badge 
+                    variant="outline" 
+                    className={
+                      order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400 text-xs' : 
+                      order.billing_status === 'Client Invoiced' ? 'border-blue-600 text-blue-400 text-xs' :
+                      'border-gray-600 text-gray-400 text-xs'
+                    }
+                  >
+                    <DollarSign className="w-3 h-3 mr-1" />
+                    {order.billing_status || 'Not Invoiced'}
+                  </Badge>
+                  {order.invoice_number && (
+                    <span className="text-xs text-gray-400">INV: {order.invoice_number}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">

@@ -97,9 +97,13 @@ export default function EditOrderModal({ order, onClose }) {
 
         {isFullyReceived && (
           <div className="p-3 bg-green-900/20 border border-green-700/30 rounded-lg text-sm text-green-400">
-            This order has been fully received. Metadata is read-only.
+            This order has been fully received. Order metadata is read-only, but billing can still be updated.
           </div>
         )}
+        
+        <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg text-xs text-blue-300">
+          <strong>Billing Authority:</strong> Order-level billing is the source of truth. Parts inherit billing status from this order by default.
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
