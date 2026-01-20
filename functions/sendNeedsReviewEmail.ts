@@ -4,7 +4,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const DEFAULT_TEMPLATES = {
     needs_review: {
         subject: "Achtung Kraft // REVIEW NEEDED: {request_title}",
-        body_intro: "You have a new item that requires your review:",
+        body_intro: "You have an item that requires your review:",
+        body_intro_repost: "We've made updates and would like you to review the latest version:",
         button_text: "VIEW & APPROVE REQUEST",
         closing_text: "— Achtung Kraft Projects",
     }
@@ -29,7 +30,7 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         
         // Parse payload
-        const { requestId } = await req.json();
+        const { requestId, isRepost } = await req.json();
 
         if (!requestId) {
             return Response.json({ error: 'Missing requestId' }, { status: 400 });
@@ -41,6 +42,12 @@ Deno.serve(async (req) => {
 
         if (!request) {
             return Response.json({ error: 'Request not found' }, { status: 404 });
+        }
+
+        // HARD RULE: NO emails for archived requests
+        if (request.status === 'archived') {
+            console.log(`Request ${requestId} is archived - no client email sent`);
+            return Response.json({ message: 'Request is archived - no email sent' });
         }
 
         // Fetch Project details
@@ -126,9 +133,11 @@ Deno.serve(async (req) => {
                 client_slug: clientSlug
             };
 
-            // Get template values
+            // Get template values - use repost intro if this is a resend
             const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
-            const bodyIntro = savedTemplate?.body_intro || defaultTpl.body_intro;
+            const bodyIntro = isRepost 
+                ? (savedTemplate?.body_intro_repost || defaultTpl.body_intro_repost)
+                : (savedTemplate?.body_intro || defaultTpl.body_intro);
             const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
             const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
 

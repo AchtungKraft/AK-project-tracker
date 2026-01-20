@@ -167,10 +167,8 @@ export default function ClientFeedbackDetail() {
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         
-        if (oldStatus !== newStatus) {
-          base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-        }
-        base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+        // Send the review email (first post, not a repost)
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: false });
         toast.success('Request posted to client');
       } catch (error) {
         toast.error('Failed to post request');
@@ -180,18 +178,14 @@ export default function ClientFeedbackDetail() {
 
   const handleResendForApproval = async () => {
     if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
-      const oldStatus = request.status;
-      const newStatus = 'posted';
-      
       try {
-        await base44.functions.invoke('updateRequestStatus', { requestId, status: newStatus });
+        // Update status and posted_at timestamp (marks new review cycle)
+        await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         
-        if (oldStatus !== newStatus) {
-          base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-        }
-        base44.functions.invoke('sendNeedsReviewEmail', { requestId });
+        // Send email with repost messaging (frames as fresh review cycle)
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: true });
         toast.success('Request resent to client');
       } catch (error) {
         toast.error('Failed to resend request');
@@ -201,17 +195,10 @@ export default function ClientFeedbackDetail() {
 
   const handleArchive = () => {
     if (confirm('Archive this request?')) {
-      const oldStatus = request.status;
-      const newStatus = 'archived';
+      // Archive is an internal-only action - NO email is sent to clients
       updateRequestMutation.mutate({
         id: requestId,
-        data: { status: newStatus }
-      }, {
-        onSuccess: () => {
-          if (oldStatus !== newStatus) {
-            base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-          }
-        }
+        data: { status: 'archived' }
       });
       toast.success('Request archived');
     }

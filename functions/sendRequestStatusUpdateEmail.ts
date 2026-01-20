@@ -41,6 +41,12 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'Status did not change, no email sent' });
         }
 
+        // HARD RULE: NO emails when archiving - archive is internal-only
+        if (newStatus === 'archived') {
+            console.log(`Request ${requestId} archived - no client email sent (internal action)`);
+            return Response.json({ message: 'Request archived - no email sent (internal action)' });
+        }
+
         // Fetch Request details
         const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
         const request = requests[0];
