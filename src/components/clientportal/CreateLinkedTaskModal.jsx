@@ -55,11 +55,8 @@ export default function CreateLinkedTaskModal({
 
   const createTaskMutation = useMutation({
     mutationFn: async () => {
-      // Build description with selected images
-      let description = taskData.description || `Linked from feedback request: ${feedbackRequestTitle}`;
-      if (selectedImageUrls.length > 0) {
-        description += `\n\nReference Images:\n${selectedImageUrls.join('\n')}`;
-      }
+      // Use user description or default linked message
+      const description = taskData.description || `Linked from feedback request: ${feedbackRequestTitle}`;
 
       // Create the task
       const newTask = await base44.entities.Task.create({
@@ -80,6 +77,15 @@ export default function CreateLinkedTaskModal({
         feedback_request_id: feedbackRequestId,
         created_by_user_id: userId
       });
+
+      // If images were selected, create a TaskComment with the images attached
+      if (selectedImageUrls.length > 0) {
+        await base44.entities.TaskComment.create({
+          task_id: newTask.id,
+          content: `Reference images from feedback request: "${feedbackRequestTitle}"`,
+          photos: selectedImageUrls
+        });
+      }
 
       return newTask;
     },
