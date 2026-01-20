@@ -9,72 +9,49 @@ import {
   CheckCircle2, 
   ChevronRight,
   FolderKanban,
-  Clock
+  Clock,
+  Hourglass
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatDistanceToNow } from "date-fns";
+import { getReviewOwnership, getOwnershipSortPriority } from "./reviewOwnership";
 
 /**
- * Attention Badge Types:
+ * Attention Badge Types (derived from Review Ownership):
  * - changes_requested: 🔴 Client requested changes
  * - client_replied: 🟡 Client commented
+ * - overdue: 🔴 Past due date
  * - new_activity: 🔵 New activity since AK viewed
  * - client_approved: 🟢 Approved but not archived
  */
 export const getAttentionType = (request, comments, decisions, attachments) => {
-  const lastInternalView = request.last_viewed_by_internal_at 
-    ? new Date(request.last_viewed_by_internal_at) 
-    : null;
-  const postedAt = request.posted_at ? new Date(request.posted_at) : null;
-
-  // Check for changes requested decision (highest priority)
-  const hasChangesRequested = decisions.some(d => {
-    if (d.request_id !== request.id) return false;
-    if (d.decision !== 'changes_requested') return false;
-    // Only count if after last internal view or if never viewed
-    if (lastInternalView && d.created_date) {
-      return new Date(d.created_date) > lastInternalView;
-    }
-    return true;
-  });
-  if (hasChangesRequested) return 'changes_requested';
-
-  // Check for client comments after last internal view
-  const hasNewClientComments = comments.some(c => {
-    if (c.request_id !== request.id) return false;
-    if (c.author_type !== 'client_contact') return false;
-    const commentDate = c.posted_at ? new Date(c.posted_at) : new Date(c.created_date);
-    if (lastInternalView) {
-      return commentDate > lastInternalView;
-    }
-    // If never viewed internally, any client comment counts
-    return postedAt ? commentDate > postedAt : true;
-  });
-  if (hasNewClientComments) return 'client_replied';
-
-  // Check for approved but not archived
-  const isApproved = request.status === 'approved' || decisions.some(d => 
+  const ownership = getReviewOwnership(request, comments, decisions, attachments);
+  
+  // Map ownership reasons to attention types
+  if (ownership.ownership === 'ak_needs_review') {
+    if (ownership.reason === 'overdue') return 'overdue';
+    if (ownership.reason === 'changes_requested') return 'changes_requested';
+    if (ownership.reason === 'client_replied') return 'client_replied';
+    if (ownership.reason === 'design_review_pending') return 'changes_requested';
+    if (ownership.reason === 'never_viewed' || ownership.reason === 'new_activity') return 'new_activity';
+  }
+  
+  // Check for approved but not archived (still needs internal closure)
+  if (ownership.ownership === 'done' && ownership.reason === 'approved') {
+    return 'client_approved';
+  }
+  
+  // Check for approved via decisions but status not yet updated
+  const isApproved = decisions.some(d => 
     d.request_id === request.id && 
     d.decision === 'approved' && 
     d.target_type === 'request'
   );
-  if (isApproved && request.status !== 'archived') return 'client_approved';
-
-  // Check for new attachments since last internal view
-  const hasNewAttachments = attachments.some(a => {
-    if (a.request_id !== request.id) return false;
-    if (!lastInternalView) return false;
-    return new Date(a.created_date) > lastInternalView;
-  });
-  if (hasNewAttachments) return 'new_activity';
-
-  // Check for any activity since last internal view
-  if (lastInternalView) {
-    const requestUpdated = request.updated_date && new Date(request.updated_date) > lastInternalView;
-    if (requestUpdated) return 'new_activity';
+  if (isApproved && request.status !== 'archived' && request.status !== 'approved') {
+    return 'client_approved';
   }
-
+  
   return null;
 };
 
@@ -82,6 +59,11 @@ export const AttentionBadge = ({ type, size = 'sm' }) => {
   if (!type) return null;
 
   const configs = {
+    overdue: {
+      icon: Clock,
+      label: 'Overdue',
+      className: 'bg-red-600/30 text-red-300 border-red-500/50'
+    },
     changes_requested: {
       icon: AlertCircle,
       label: 'Changes Requested',
@@ -118,14 +100,42 @@ export const AttentionBadge = ({ type, size = 'sm' }) => {
   );
 };
 
+/**
+ * Ownership Badge - shows who owns the next action
+ */
+export const OwnershipBadge = ({ ownership, reason, size = 'sm' }) => {
+  const isSmall = size === 'sm';
+  
+  if (ownership === 'ak_needs_review') {
+    return (
+      <Badge className={`bg-red-500/20 text-red-400 border-red-500/50 flex items-center gap-1 ${isSmall ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1'}`}>
+        <AlertCircle className={isSmall ? 'w-3 h-3' : 'w-4 h-4'} />
+        {!isSmall && 'AK Needs Review'}
+      </Badge>
+    );
+  }
+  
+  if (ownership === 'waiting_on_client') {
+    return (
+      <Badge className={`bg-gray-500/20 text-gray-400 border-gray-500/50 flex items-center gap-1 ${isSmall ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1'}`}>
+        <Hourglass className={isSmall ? 'w-3 h-3' : 'w-4 h-4'} />
+        {!isSmall && 'Waiting on Client'}
+      </Badge>
+    );
+  }
+  
+  return null;
+};
+
 export const getAttentionPriority = (type) => {
   const priorities = {
+    overdue: 0,
     changes_requested: 1,
     client_replied: 2,
     new_activity: 3,
     client_approved: 4
   };
-  return priorities[type] || 99;
+  return priorities[type] ?? 99;
 };
 
 export default function NeedsAttentionSection({ 
@@ -135,12 +145,17 @@ export default function NeedsAttentionSection({
   decisions, 
   attachments 
 }) {
-  // Get all requests that need attention
+  // Get all requests that need attention using Review Ownership model
   const needsAttention = requests
     .filter(r => r.status !== 'draft' && r.status !== 'archived')
     .map(request => {
+      const ownership = getReviewOwnership(request, comments, decisions, attachments);
       const attentionType = getAttentionType(request, comments, decisions, attachments);
-      if (!attentionType) return null;
+      
+      // Only include items that need AK attention OR are pending closure (client approved)
+      if (ownership.ownership !== 'ak_needs_review' && attentionType !== 'client_approved') {
+        return null;
+      }
       
       const project = projects.find(p => p.id === request.project_id);
       
@@ -155,6 +170,7 @@ export default function NeedsAttentionSection({
 
       return {
         ...request,
+        ownership,
         attentionType,
         project,
         lastClientComment,
@@ -163,21 +179,27 @@ export default function NeedsAttentionSection({
     })
     .filter(Boolean)
     .sort((a, b) => {
-      // Sort by attention priority first
-      const priorityDiff = getAttentionPriority(a.attentionType) - getAttentionPriority(b.attentionType);
-      if (priorityDiff !== 0) return priorityDiff;
+      // Sort by ownership priority first
+      const priorityA = getOwnershipSortPriority(a.ownership);
+      const priorityB = getOwnershipSortPriority(b.ownership);
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      
+      // Within same priority, sort by attention type
+      const attentionPriorityDiff = getAttentionPriority(a.attentionType) - getAttentionPriority(b.attentionType);
+      if (attentionPriorityDiff !== 0) return attentionPriorityDiff;
+      
       // Then by most recent activity
       return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
     });
 
   if (needsAttention.length === 0) return null;
 
-  // Split into two groups: Action Required vs Pending Closure
+  // Split into two groups: AK Needs Review vs Pending Closure
   const actionRequired = needsAttention.filter(r => 
-    r.attentionType === 'changes_requested' || r.attentionType === 'client_replied'
+    r.ownership.ownership === 'ak_needs_review'
   );
   const pendingClosure = needsAttention.filter(r => 
-    r.attentionType === 'client_approved' || r.attentionType === 'new_activity'
+    r.attentionType === 'client_approved' && r.ownership.ownership !== 'ak_needs_review'
   );
 
   const RequestCard = ({ request, isDeemphasized = false }) => (

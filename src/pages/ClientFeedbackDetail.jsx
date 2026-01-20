@@ -65,6 +65,19 @@ export default function ClientFeedbackDetail() {
     enabled: !!requestId
   });
 
+  // Update last_viewed_by_internal_at when viewing the request (internal acknowledgment)
+  useEffect(() => {
+    if (requestId && feedbackDetail?.request && !isLoadingDetail) {
+      // Only update if the request exists and is in a reviewable state
+      const request = feedbackDetail.request;
+      if (request.status === 'posted' || request.status === 'changes_requested') {
+        base44.entities.ClientFeedbackRequest.update(requestId, {
+          last_viewed_by_internal_at: new Date().toISOString()
+        }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
+      }
+    }
+  }, [requestId, feedbackDetail?.request?.id, isLoadingDetail]);
+
   const request = feedbackDetail?.request;
   const comments = feedbackDetail?.comments || [];
   const decisions = feedbackDetail?.decisions || [];
