@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -279,8 +279,23 @@ export default function ClientFeedbackRequestDetail() {
     }
   };
 
-  const requestState = request ? getRequestState(request, decisions, attachments) : null;
+  // Memoize expensive state calculation
+  const requestState = useMemo(() => {
+    return request ? getRequestState(request, decisions, attachments) : null;
+  }, [request?.id, request?.status, decisions, attachments]);
+  
   const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
+  
+  // Memoize thread request object to prevent re-renders
+  const threadRequest = useMemo(() => {
+    if (!request) return null;
+    return {
+      ...request,
+      comments: requestData?.comments || [],
+      decisions: requestData?.decisions || [],
+      attachments: requestData?.attachments || []
+    };
+  }, [request, requestData?.comments, requestData?.decisions, requestData?.attachments]);
 
   // Show loading only while fetching - not blocking on clientAccess separately
   if (isLoading || !request) {
@@ -376,7 +391,7 @@ export default function ClientFeedbackRequestDetail() {
             slug={slug}
             queryKey={['clientRequestDetail', token, slug, requestId]}
           />
-        ) : (
+        ) : threadRequest && (
           <ClientFeedbackThread
             requestId={requestId}
             clientContactId={clientAccess.client_contact_id}
@@ -385,12 +400,7 @@ export default function ClientFeedbackRequestDetail() {
             accessRole={clientAccess.access_role}
             token={token}
             slug={slug}
-            request={{
-              ...request,
-              comments: requestData?.comments || [],
-              decisions: requestData?.decisions || [],
-              attachments: requestData?.attachments || []
-            }}
+            request={threadRequest}
           />
         )}
 
