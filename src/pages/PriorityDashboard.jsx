@@ -77,9 +77,6 @@ export default function PriorityDashboard() {
     localStorage.setItem('priority_statusFilter', value);
   };
 
-  // Get project statuses for filter
-  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
   const { data: priorityTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],
     queryFn: () => base44.entities.Task.filter({ is_priority: true }),
@@ -122,6 +119,9 @@ export default function PriorityDashboard() {
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
   });
+
+  // Get project statuses for filter (must be after statuses query)
+  const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   // Fetch all task comments in one query to avoid rate limiting
   const { data: allTaskComments = [] } = useQuery({
