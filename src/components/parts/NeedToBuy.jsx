@@ -234,6 +234,7 @@ export default function NeedToBuy({ onPartClick }) {
   }, [parts, inventoryItems, vendors, partOnOrder]);
 
   // Filter by search based on active tab
+  // Client Parts includes both project-linked AND general (null project_id) requirements
   const filteredItems = useMemo(() => {
     const sourceItems = activeTab === 'client' ? partsToOrder : lowStockParts;
     if (!searchTerm) return sourceItems;
