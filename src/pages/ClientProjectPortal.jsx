@@ -45,48 +45,42 @@ export default function ClientProjectPortal() {
   const slug = urlParams.get('slug');
   const projectId = urlParams.get('projectId');
   const initialTab = urlParams.get('tab') || 'requests';
-  const [clientAccess, setClientAccess] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('last_activity');
 
-  useEffect(() => {
-    if (!token && !slug) return;
-    if (!projectId) return;
-
-    base44.functions.invoke('getClientPortalData', { token, slug, projectId })
-      .then(response => {
-        if (response.data.success) {
-          setClientAccess(response.data.access);
-          // Track project view using the actual project ID from the response
-          const actualProjectId = response.data.project?.id || projectId;
-          console.log('Tracking view for project:', actualProjectId);
-          base44.functions.invoke('trackClientPortalView', { 
-            projectId: actualProjectId, 
-            token, 
-            slug 
-          }).catch(err => console.error('Failed to track view:', err));
-        }
-      })
-      .catch(error => {
-        console.error('Failed to load portal data:', error);
-      });
-  }, [token, slug, projectId]);
-
-  const { data: portalData } = useQuery({
-    queryKey: ['clientPortalData', token, slug, clientAccess?.project_id],
+  // Single data fetch - no duplicate calls
+  const { data: portalData, isLoading } = useQuery({
+    queryKey: ['clientPortalData', token, slug, projectId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getClientPortalData', { 
         token, 
         slug, 
-        projectId: clientAccess.project_id 
+        projectId 
       });
       return response.data;
     },
-    enabled: !!clientAccess?.project_id,
-    refetchOnMount: 'always',
+    enabled: !!(token || slug) && !!projectId,
+    staleTime: 30_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
+  // Fire-and-forget view tracking - non-blocking
+  useEffect(() => {
+    if (!portalData?.project?.id) return;
+    
+    // Use queueMicrotask to ensure it doesn't block render
+    queueMicrotask(() => {
+      base44.functions.invoke('trackClientPortalView', { 
+        projectId: portalData.project.id, 
+        token, 
+        slug 
+      }).catch(err => console.error('Failed to track view:', err));
+    });
+  }, [portalData?.project?.id, token, slug]);
+
+  const clientAccess = portalData?.access;
   const project = portalData?.project;
   const requests = portalData?.requests || [];
   const comments = portalData?.comments || [];
@@ -183,7 +177,7 @@ export default function ClientProjectPortal() {
     return sortedGroups;
   }, [filteredRequests]);
 
-  if ((!token && !slug) || !clientAccess || !project) {
+  if ((!token && !slug) || !projectId || isLoading || !portalData?.success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
