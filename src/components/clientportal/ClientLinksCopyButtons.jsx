@@ -24,7 +24,7 @@ export function getClientPortalUrl(slug) {
  */
 export function getClientRequestUrl(slug, requestId) {
   if (!slug || !requestId) return null;
-  return `${CLIENT_PORTAL_BASE_URL}/ClientProjects?slug=${slug}&requestId=${requestId}`;
+  return `${CLIENT_PORTAL_BASE_URL}/ClientFeedbackRequestDetail?id=${requestId}&slug=${slug}`;
 }
 
 /**
