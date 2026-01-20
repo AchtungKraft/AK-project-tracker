@@ -33,7 +33,8 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ClientPortalListView from "@/components/clientportal/ClientPortalListView";
-import NeedsAttentionSection, { getAttentionType, AttentionBadge, getAttentionPriority } from "@/components/clientportal/NeedsAttentionSection";
+import NeedsAttentionSection, { getAttentionType, AttentionBadge, getAttentionPriority, OwnershipBadge } from "@/components/clientportal/NeedsAttentionSection";
+import { getReviewOwnership, getOwnershipSortPriority, sortByReviewOwnership } from "@/components/clientportal/reviewOwnership";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 
@@ -194,7 +195,7 @@ export default function ClientPortalHub() {
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
 
-  // Categorize requests with attention indicators
+  // Categorize requests with attention indicators and review ownership
   const categorizedRequests = useMemo(() => {
     const awaiting = [];
     const changesRequested = [];
@@ -209,6 +210,9 @@ export default function ClientPortalHub() {
       if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return;
       
       const state = getRequestState(request, decisions, attachments);
+      
+      // Get review ownership (deterministic model)
+      const ownership = getReviewOwnership(request, comments, decisions, attachments);
       
       // Count client comments made AFTER the last posted_at (new comments since last review send)
       const postedAt = request.posted_at ? new Date(request.posted_at) : null;
@@ -234,6 +238,7 @@ export default function ClientPortalHub() {
       const enrichedRequest = { 
         ...request, 
         state, 
+        ownership,
         hasClientComments, 
         clientCommentCount,
         attentionType,
@@ -250,18 +255,37 @@ export default function ClientPortalHub() {
       }
     });
 
-    // Sort each category: items with attention float to top
-    const sortByAttention = (a, b) => {
+    // Sort using the review ownership model
+    const sortByOwnership = (a, b) => {
+      // First by ownership priority (AK needs review > waiting on client)
+      const ownershipPriorityA = getOwnershipSortPriority(a.ownership);
+      const ownershipPriorityB = getOwnershipSortPriority(b.ownership);
+      if (ownershipPriorityA !== ownershipPriorityB) return ownershipPriorityA - ownershipPriorityB;
+      
+      // Within same ownership, use attention priority
       const aPriority = a.attentionType ? getAttentionPriority(a.attentionType) : 99;
       const bPriority = b.attentionType ? getAttentionPriority(b.attentionType) : 99;
       if (aPriority !== bPriority) return aPriority - bPriority;
+      
+      // For AK needs review: most recent activity first
+      if (a.ownership.ownership === 'ak_needs_review') {
+        return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
+      }
+      
+      // For waiting on client: oldest posted_at first
+      if (a.ownership.ownership === 'waiting_on_client') {
+        const postedA = a.posted_at ? new Date(a.posted_at) : new Date(a.created_date);
+        const postedB = b.posted_at ? new Date(b.posted_at) : new Date(b.created_date);
+        return postedA - postedB;
+      }
+      
       return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
     };
 
     return { 
-      awaiting: awaiting.sort(sortByAttention), 
-      changesRequested: changesRequested.sort(sortByAttention), 
-      approved: approved.sort(sortByAttention) 
+      awaiting: awaiting.sort(sortByOwnership), 
+      changesRequested: changesRequested.sort(sortByOwnership), 
+      approved: approved.sort(sortByOwnership) 
     };
   }, [allRequests, decisions, attachments, comments, projects, selectedTypes, statusFilter]);
 
@@ -498,21 +522,17 @@ export default function ClientPortalHub() {
                               key={request.id}
                               to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=${tabName}`}
                               className={`block p-3 bg-gray-900/50 rounded-lg border hover:bg-gray-800/80 transition-colors ${
-                                request.attentionType ? 'border-l-4' : 'border-gray-700'
+                                request.ownership?.ownership === 'ak_needs_review' ? 'border-l-4 border-l-red-500' : 
+                                request.ownership?.ownership === 'waiting_on_client' ? 'border-l-4 border-l-gray-500' :
+                                'border-gray-700'
                               }`}
-                              style={request.attentionType ? {
-                                borderLeftColor: request.attentionType === 'changes_requested' ? '#ef4444' :
-                                  request.attentionType === 'client_replied' ? '#eab308' :
-                                  request.attentionType === 'new_activity' ? '#3b82f6' :
-                                  request.attentionType === 'client_approved' ? '#22c55e' : '#6b7280',
-                                borderColor: '#374151'
-                              } : {}}
+                              style={{ borderColor: '#374151' }}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <h4 className="text-white font-medium text-sm truncate flex-1">{request.title}</h4>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {request.attentionType && (
-                                    <AttentionBadge type={request.attentionType} size="sm" />
+                                  {request.ownership && (
+                                    <OwnershipBadge ownership={request.ownership.ownership} reason={request.ownership.reason} size="sm" />
                                   )}
                                   {request.totalCommentCount > 0 && (
                                     <Badge variant="outline" className="text-xs border-gray-600 text-gray-400 flex items-center gap-1">
@@ -526,7 +546,9 @@ export default function ClientPortalHub() {
                                 <div className="flex flex-col gap-0.5 text-xs">
                                   <div className="flex items-center gap-2 text-gray-400 flex-wrap">
                                     {request.due_date && (
-                                      <span>Due: {format(new Date(request.due_date), 'MMM d')}</span>
+                                      <span className={new Date(request.due_date) < new Date() ? 'text-red-400 font-medium' : ''}>
+                                        Due: {format(new Date(request.due_date), 'MMM d')}
+                                      </span>
                                     )}
                                     {showEmailButton && request.last_email_sent_at && (
                                       <span className="flex items-center gap-1 text-gray-500">
@@ -566,14 +588,14 @@ export default function ClientPortalHub() {
     );
   };
 
-  // Count items needing attention for mobile context
+  // Count items needing AK review for mobile context
   const needsAttentionCount = allRequests.filter(request => {
     if (request.status === 'draft' || request.status === 'archived') return false;
     const project = projects.find(p => p.id === request.project_id);
     if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
     if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
-    const attentionType = getAttentionType(request, comments, decisions, attachments);
-    return !!attentionType;
+    const ownership = getReviewOwnership(request, comments, decisions, attachments);
+    return ownership.ownership === 'ak_needs_review';
   }).length;
 
   return (
