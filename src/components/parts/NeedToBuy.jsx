@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   ShoppingCart, Search, CheckCircle, ChevronDown, ChevronUp, 
-  ExternalLink, Plus, Package, Building2, FolderKanban, MoreVertical, Trash2, ArrowRight
+  ExternalLink, Plus, Package, Building2, FolderKanban, MoreVertical, Trash2, ArrowRight, Truck
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -77,6 +77,34 @@ export default function NeedToBuy({ onPartClick }) {
     queryKey: ['inventoryItems'],
     queryFn: () => base44.entities.InventoryItem.list()
   });
+
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ['partPurchaseLineItems'],
+    queryFn: () => base44.entities.PartPurchaseLineItem.list()
+  });
+
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => base44.entities.Order.list()
+  });
+
+  // Calculate on-order quantity per part (from open PO line items)
+  const partOnOrder = useMemo(() => {
+    const map = {};
+    lineItems.forEach(li => {
+      const pending = Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0));
+      if (pending > 0) {
+        if (!map[li.part_id]) map[li.part_id] = { qty: 0, vendors: new Set() };
+        map[li.part_id].qty += pending;
+        const order = orders.find(o => o.id === li.order_id);
+        if (order?.vendor_id) {
+          const vendor = vendors.find(v => v.id === order.vendor_id);
+          if (vendor) map[li.part_id].vendors.add(vendor.vendor_name);
+        }
+      }
+    });
+    return map;
+  }, [lineItems, orders, vendors]);
 
   // Remove requirement mutation
   const removeRequirementMutation = useMutation({
@@ -148,6 +176,8 @@ export default function NeedToBuy({ onPartClick }) {
         const project = projects.find(p => p.id === req.project_id);
         const vendor = vendors.find(v => v.id === part.default_vendor_id);
         
+        const onOrderInfo = partOnOrder[part.id];
+        
         return {
           id: req.id,
           requirement: req,
@@ -155,11 +185,13 @@ export default function NeedToBuy({ onPartClick }) {
           project,
           vendor,
           qty_to_order: toOrder,
-          estimated_cost: toOrder * (part.default_cost || 0)
+          estimated_cost: toOrder * (part.default_cost || 0),
+          onOrderQty: onOrderInfo?.qty || 0,
+          onOrderVendors: onOrderInfo ? Array.from(onOrderInfo.vendors) : []
         };
       })
       .filter(Boolean);
-  }, [requirements, parts, projects, vendors]);
+  }, [requirements, parts, projects, vendors, partOnOrder]);
 
   // Calculate low stock parts (Low AK Stock tab)
   // Parts where reorder_point > 0 and current inventory (net available) is below reorder_point
@@ -184,6 +216,8 @@ export default function NeedToBuy({ onPartClick }) {
         const vendor = vendors.find(v => v.id === part.default_vendor_id);
         const qtyToOrder = Math.max(1, part.reorder_point - netAvailable);
         
+        const onOrderInfo = partOnOrder[part.id];
+        
         return {
           id: `lowstock-${part.id}`,
           part,
@@ -192,10 +226,12 @@ export default function NeedToBuy({ onPartClick }) {
           reorderPoint: part.reorder_point,
           qty_to_order: qtyToOrder,
           estimated_cost: qtyToOrder * (part.default_cost || 0),
-          isLowStock: true
+          isLowStock: true,
+          onOrderQty: onOrderInfo?.qty || 0,
+          onOrderVendors: onOrderInfo ? Array.from(onOrderInfo.vendors) : []
         };
       });
-  }, [parts, inventoryItems, vendors]);
+  }, [parts, inventoryItems, vendors, partOnOrder]);
 
   // Filter by search based on active tab
   const filteredItems = useMemo(() => {
@@ -505,20 +541,33 @@ export default function NeedToBuy({ onPartClick }) {
                   </div>
                   
                   <div className="flex items-center gap-4 flex-shrink-0">
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500">Current</p>
-                      <p className={`font-medium ${item.netAvailable < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
-                        {item.netAvailable}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500">Min</p>
-                      <p className="text-gray-300 font-medium">{item.reorderPoint}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500">Order</p>
-                      <p className="text-white font-bold">×{item.qty_to_order}</p>
-                    </div>
+                  {/* On Order indicator */}
+                  {item.onOrderQty > 0 && (
+                    <Badge variant="outline" className="border-purple-600 text-purple-400 gap-1">
+                      <Truck className="w-3 h-3" />
+                      {item.onOrderQty} on order
+                      {item.onOrderVendors.length > 0 && (
+                        <span className="text-xs text-gray-400 ml-1">
+                          ({item.onOrderVendors.slice(0, 2).join(', ')})
+                        </span>
+                      )}
+                    </Badge>
+                  )}
+
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500">Current</p>
+                    <p className={`font-medium ${item.netAvailable < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                      {item.netAvailable}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500">Min</p>
+                    <p className="text-gray-300 font-medium">{item.reorderPoint}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500">Order</p>
+                    <p className="text-white font-bold">×{item.qty_to_order}</p>
+                  </div>
                     
                     {item.estimated_cost > 0 && (
                       <div className="text-right w-20">
@@ -694,6 +743,19 @@ export default function NeedToBuy({ onPartClick }) {
                                       >
                                         {item.requirement.priority || 'Normal'}
                                       </Badge>
+                                      
+                                      {/* On Order indicator */}
+                                      {item.onOrderQty > 0 && (
+                                        <Badge variant="outline" className="border-purple-600 text-purple-400 gap-1">
+                                          <Truck className="w-3 h-3" />
+                                          {item.onOrderQty} on order
+                                          {item.onOrderVendors.length > 0 && (
+                                            <span className="text-xs text-gray-400 ml-1">
+                                              ({item.onOrderVendors.slice(0, 2).join(', ')})
+                                            </span>
+                                          )}
+                                        </Badge>
+                                      )}
                                       
                                       <div className="text-right w-20">
                                         <p className="text-white font-medium">×{item.qty_to_order}</p>
