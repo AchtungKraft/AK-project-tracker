@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
-  Search, Plus, Package, Trash2, 
+  Search, Plus, Package, Trash2, FileText, DollarSign, ChevronDown, ChevronUp,
   CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal, Download, ExternalLink
 } from "lucide-react";
 import {
@@ -63,6 +64,8 @@ export default function ProjectParts({ projectId }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [groupMode, setGroupMode] = useState('status'); // 'status', 'order', 'part'
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [showAddModal, setShowAddModal] = useState(false);
   const [allocatingRequirement, setAllocatingRequirement] = useState(null);
   const [installingRequirement, setInstallingRequirement] = useState(null);
@@ -105,7 +108,12 @@ export default function ProjectParts({ projectId }) {
 
   const { data: orders = [] } = useQuery({
     queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list(),
+    queryFn: () => base44.entities.Order.list('-order_date'),
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => base44.entities.Vendor.list(),
   });
 
   const { data: projects = [] } = useQuery({
@@ -127,6 +135,51 @@ export default function ProjectParts({ projectId }) {
     });
     return map;
   }, [lineItems]);
+
+  // Build order info for this project's parts
+  const projectOrders = useMemo(() => {
+    const projectPartIds = new Set(requirements.map(r => r.part_id));
+    const projectReqIds = new Set(requirements.map(r => r.id));
+    
+    // Find line items for this project's parts/requirements
+    const relevantLineItems = lineItems.filter(li => 
+      projectPartIds.has(li.part_id) || projectReqIds.has(li.requirement_id)
+    );
+    
+    // Group by order
+    const orderMap = {};
+    relevantLineItems.forEach(li => {
+      const order = orders.find(o => o.id === li.order_id);
+      if (!order) return;
+      
+      if (!orderMap[order.id]) {
+        const vendor = vendors.find(v => v.id === order.vendor_id);
+        orderMap[order.id] = {
+          order,
+          vendor,
+          lineItems: [],
+          totalQty: 0,
+          totalValue: 0,
+        };
+      }
+      orderMap[order.id].lineItems.push(li);
+      orderMap[order.id].totalQty += li.qty_ordered || 0;
+      orderMap[order.id].totalValue += li.line_total || 0;
+    });
+    
+    return Object.values(orderMap).sort((a, b) => 
+      (b.order?.order_date || '').localeCompare(a.order?.order_date || '')
+    );
+  }, [requirements, lineItems, orders, vendors]);
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (requirement) => {
@@ -288,7 +341,7 @@ export default function ProjectParts({ projectId }) {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="relative md:col-span-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
               <Input
@@ -309,9 +362,137 @@ export default function ProjectParts({ projectId }) {
                 ))}
               </SelectContent>
             </Select>
+            <Tabs value={groupMode} onValueChange={setGroupMode}>
+              <TabsList className="bg-gray-900/50 border border-gray-700 w-full">
+                <TabsTrigger value="status" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
+                  Status
+                </TabsTrigger>
+                <TabsTrigger value="order" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
+                  Order
+                </TabsTrigger>
+                <TabsTrigger value="part" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
+                  Part
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </CardContent>
       </Card>
+
+      {/* Project Orders Summary */}
+      {projectOrders.length > 0 && (
+        <Card className="bg-black/40 backdrop-blur-xl border border-purple-900/30">
+          <CardHeader className="border-b border-purple-900/30 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-400" />
+                <CardTitle className="text-white text-sm">Project Orders</CardTitle>
+                <Badge variant="outline" className="border-purple-600 text-purple-400">
+                  {projectOrders.length} PO{projectOrders.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 divide-y divide-purple-900/20">
+            {projectOrders.map(({ order, vendor, lineItems: orderLines, totalQty, totalValue }) => {
+              const isExpanded = expandedGroups.has(`order-${order.id}`);
+              
+              return (
+                <div key={order.id}>
+                  <div 
+                    className="p-3 flex items-center justify-between cursor-pointer hover:bg-purple-950/20 transition-colors"
+                    onClick={() => toggleGroup(`order-${order.id}`)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-medium">{order.po_number || `Order ${order.id.slice(0, 8)}`}</span>
+                          {order.order_number && (
+                            <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
+                          )}
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              order.status === 'Received' ? 'border-green-600 text-green-400' :
+                              order.status === 'Partial' ? 'border-orange-600 text-orange-400' :
+                              'border-yellow-600 text-yellow-400'
+                            }
+                          >
+                            {order.status}
+                          </Badge>
+                          {order.billing_status && order.billing_status !== 'Not Invoiced' && (
+                            <Badge 
+                              variant="outline" 
+                              className={order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400' : 'border-blue-600 text-blue-400'}
+                            >
+                              <DollarSign className="w-3 h-3 mr-1" />
+                              {order.billing_status}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>{vendor?.vendor_name}</span>
+                          {order.order_date && <span>· {order.order_date}</span>}
+                          <span>· {totalQty} items</span>
+                          {totalValue > 0 && <span>· ${totalValue.toFixed(2)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {order.order_url && (
+                        <a 
+                          href={order.order_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {isExpanded && (
+                    <div className="px-6 pb-3">
+                      <div className="bg-gray-900/50 rounded-lg p-2 space-y-1">
+                        {orderLines.map(li => {
+                          const part = getPartInfo(li.part_id);
+                          const pending = (li.qty_ordered || 0) - (li.qty_received || 0);
+                          return (
+                            <div key={li.id} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                {part.featured_photo && (
+                                  <img src={part.featured_photo} alt="" className="w-6 h-6 rounded object-contain bg-gray-800" />
+                                )}
+                                <span className="text-gray-300">{part.part_name}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-400">
+                                  {li.qty_received || 0}/{li.qty_ordered || 0} received
+                                </span>
+                                {pending > 0 && (
+                                  <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+                                    {pending} pending
+                                  </Badge>
+                                )}
+                                {li.line_total > 0 && (
+                                  <span className="text-green-400">${li.line_total.toFixed(2)}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Parts List */}
       {isLoading ? (
