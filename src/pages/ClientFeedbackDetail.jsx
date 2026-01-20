@@ -19,6 +19,7 @@ import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThrea
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
 import CreateLinkedTaskModal from "../components/clientportal/CreateLinkedTaskModal.jsx";
+import { ClientLinksSection } from "../components/clientportal/ClientLinksCopyButtons.jsx";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 
@@ -89,6 +90,7 @@ export default function ClientFeedbackDetail() {
   const clientContacts = feedbackDetail?.clientContacts || [];
   const assignableUsers = feedbackDetail?.assignableUsers || [];
   const assignableContacts = feedbackDetail?.assignableContacts || [];
+  const primaryClientSlug = feedbackDetail?.primaryClientSlug;
 
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
@@ -415,6 +417,17 @@ export default function ClientFeedbackDetail() {
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4 space-y-4">
+              {/* Client Links Section */}
+              {primaryClientSlug && (
+                <div className="border-b border-gray-700/50 pb-3">
+                  <ClientLinksSection 
+                    slug={primaryClientSlug} 
+                    requestId={requestId} 
+                    projectName={project?.name} 
+                  />
+                </div>
+              )}
+              
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>

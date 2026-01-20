@@ -153,6 +153,20 @@ Deno.serve(async (req) => {
         const projectClientContactIds = projectAccesses.map(pa => pa.client_contact_id);
         const projectClients = clientContacts.filter(c => projectClientContactIds.includes(c.id) && c.active);
 
+        // Get primary client slug for client portal URLs
+        // Priority: first active access with a slug on the contact, then access slug
+        let primaryClientSlug = null;
+        for (const access of projectAccesses) {
+            const contact = clientContacts.find(c => c.id === access.client_contact_id);
+            if (contact?.url_slug) {
+                primaryClientSlug = contact.url_slug;
+                break;
+            }
+            if (access.url_slug && !primaryClientSlug) {
+                primaryClientSlug = access.url_slug;
+            }
+        }
+
         // Get Achtung Kraft team members (is_achtung_kraft_member = true)
         const achtungKraftMembers = teamMembers.filter(tm => tm.is_achtung_kraft_member);
         
@@ -180,7 +194,8 @@ Deno.serve(async (req) => {
             users,
             clientContacts,
             assignableUsers,
-            assignableContacts
+            assignableContacts,
+            primaryClientSlug
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
