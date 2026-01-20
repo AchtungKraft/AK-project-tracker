@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +23,26 @@ import { ClientLinksSection } from "../components/clientportal/ClientLinksCopyBu
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
+
+// Memoized header component for progressive rendering
+const RequestHeader = React.memo(function RequestHeader({ request, project, onBack, fromHub, hubTab, projectId }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onBack}
+        className="border-gray-700 text-white"
+      >
+        <ArrowLeft className="w-4 h-4" />
+      </Button>
+      <div className="flex-1">
+        <h1 className="text-2xl font-bold text-white">{request.title}</h1>
+        {project && <p className="text-sm text-gray-400">{project.name}</p>}
+      </div>
+    </div>
+  );
+});
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();
@@ -71,25 +91,25 @@ export default function ClientFeedbackDetail() {
     refetchOnWindowFocus: false, // Don't refetch on tab switch
   });
 
-  // Update last_viewed_by_internal_at when viewing the request (internal acknowledgment)
-  // Debounced: only update if last view was >5 minutes ago to reduce DB writes
+  // Non-blocking view tracking - fire and forget via queueMicrotask
   useEffect(() => {
     if (!requestId || !feedbackDetail?.request || isLoadingDetail) return;
     
     const request = feedbackDetail.request;
-    // Only update for reviewable states
     if (request.status !== 'posted' && request.status !== 'changes_requested') return;
     
-    // Check if last view was recent (within 5 minutes) - skip update if so
     const lastView = request.last_viewed_by_internal_at;
     if (lastView) {
       const timeSinceLastView = Date.now() - new Date(lastView).getTime();
-      if (timeSinceLastView < 5 * 60 * 1000) return; // Skip if viewed within 5 minutes
+      if (timeSinceLastView < 5 * 60 * 1000) return;
     }
     
-    base44.entities.ClientFeedbackRequest.update(requestId, {
-      last_viewed_by_internal_at: new Date().toISOString()
-    }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
+    // Non-blocking - doesn't delay render
+    queueMicrotask(() => {
+      base44.entities.ClientFeedbackRequest.update(requestId, {
+        last_viewed_by_internal_at: new Date().toISOString()
+      }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
+    });
   }, [requestId, feedbackDetail?.request?.id, isLoadingDetail]);
 
   const request = feedbackDetail?.request;
@@ -351,11 +371,20 @@ export default function ClientFeedbackDetail() {
 
 
 
-  const requestState = request ? getRequestState(request, decisions, attachments) : null;
+  // Memoize expensive calculations to prevent re-computation on every render
+  const requestState = useMemo(() => {
+    return request ? getRequestState(request, decisions, attachments) : null;
+  }, [request?.id, request?.status, decisions, attachments]);
 
   // Determine button labels based on request type
   const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
+  
+  // Memoize the request object passed to thread to prevent unnecessary re-renders
+  const threadRequest = useMemo(() => {
+    if (!request) return null;
+    return { ...request, comments, decisions, attachments };
+  }, [request, comments, decisions, attachments]);
 
 
 
@@ -587,42 +616,39 @@ export default function ClientFeedbackDetail() {
                 queryKey={['internalFeedbackDetail', requestId, projectId]}
               />
               {/* Show comments thread for ToDo list requests */}
-              <ClientFeedbackThread
-                requestId={requestId}
-                userId={user.id}
-                requestType={request.request_type}
-                onDecisionSubmit={handleSubmitRequestDecision}
-                onDeleteComment={async (commentId) => {
-                  try {
-                    const commentAttachments = attachments.filter(a => a.comment_id === commentId);
-                    await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
-                    await base44.entities.ClientFeedbackComment.delete(commentId);
-                    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                    toast.success('Comment deleted');
-                  } catch (error) {
-                    toast.error('Failed to delete comment');
-                  }
-                }}
-                onDeleteDecision={async (decisionIds) => {
-                  try {
-                    await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
-                    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                    toast.success('Decision deleted');
-                  } catch (error) {
-                    toast.error('Failed to delete decision');
-                  }
-                }}
-                isClientView={false}
-                accessRole={user?.role}
-                request={{
-                  ...request,
-                  comments,
-                  decisions,
-                  attachments
-                }}
-              />
+              {threadRequest && (
+                <ClientFeedbackThread
+                  requestId={requestId}
+                  userId={user.id}
+                  requestType={request.request_type}
+                  onDecisionSubmit={handleSubmitRequestDecision}
+                  onDeleteComment={async (commentId) => {
+                    try {
+                      const commentAttachments = attachments.filter(a => a.comment_id === commentId);
+                      await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
+                      await base44.entities.ClientFeedbackComment.delete(commentId);
+                      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                      toast.success('Comment deleted');
+                    } catch (error) {
+                      toast.error('Failed to delete comment');
+                    }
+                  }}
+                  onDeleteDecision={async (decisionIds) => {
+                    try {
+                      await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
+                      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+                      toast.success('Decision deleted');
+                    } catch (error) {
+                      toast.error('Failed to delete decision');
+                    }
+                  }}
+                  isClientView={false}
+                  accessRole={user?.role}
+                  request={threadRequest}
+                />
+              )}
             </>
-          ) : (
+          ) : threadRequest && (
             <ClientFeedbackThread
               requestId={requestId}
               userId={user.id}
@@ -634,7 +660,6 @@ export default function ClientFeedbackDetail() {
               onDecisionSubmit={handleSubmitRequestDecision}
               onDeleteComment={async (commentId) => {
                 try {
-                  // Delete associated attachments first
                   const commentAttachments = attachments.filter(a => a.comment_id === commentId);
                   await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
                   await base44.entities.ClientFeedbackComment.delete(commentId);
@@ -646,7 +671,6 @@ export default function ClientFeedbackDetail() {
               }}
               onDeleteDecision={async (decisionIds) => {
                 try {
-                  // Delete all decisions in the group
                   await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
                   queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
                   toast.success('Decision deleted');
@@ -656,12 +680,7 @@ export default function ClientFeedbackDetail() {
               }}
               isClientView={false}
               accessRole={user?.role}
-              request={{
-                ...request,
-                comments,
-                decisions,
-                attachments
-              }}
+              request={threadRequest}
             />
           )}
 

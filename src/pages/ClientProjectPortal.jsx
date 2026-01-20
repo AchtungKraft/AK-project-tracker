@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +14,34 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getRequestTypeInfo, getRequestState } from "@/components/clientportal/utils";
 import ClientJournal from "@/components/clientportal/ClientJournal";
+
+// Memoized request card for better render performance
+const RequestCard = React.memo(function RequestCard({ request, slug, token, onClick }) {
+  const StateIcon = request.state.icon;
+  return (
+    <div
+      className="bg-gray-900/50 border border-gray-700 hover:bg-gray-800/80 cursor-pointer transition-all rounded-md p-3"
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="font-medium text-white text-sm line-clamp-2">{request.title}</h4>
+        {request.commentCount > 0 && (
+          <Badge variant="secondary" className="text-[10px] px-1 h-5 bg-gray-800 text-gray-300">
+            {request.commentCount}
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+        <span className={cn("flex items-center", request.state.color.split(' ')[1])}>
+          <StateIcon className="w-3 h-3 mr-1" />
+          {request.state.label}
+        </span>
+        <span>•</span>
+        <span>{format(request.lastActivity, 'MMM d')}</span>
+      </div>
+    </div>
+  );
+});
 
 // Helper for hex/oklch colors
 const getStateColor = (label) => {
@@ -66,7 +94,7 @@ export default function ClientProjectPortal() {
     refetchOnWindowFocus: false,
   });
 
-  // Fire-and-forget view tracking - non-blocking
+  // Fire-and-forget view tracking - non-blocking, debounced
   useEffect(() => {
     if (!portalData?.project?.id) return;
     
@@ -76,9 +104,9 @@ export default function ClientProjectPortal() {
         projectId: portalData.project.id, 
         token, 
         slug 
-      }).catch(err => console.error('Failed to track view:', err));
+      }).catch(() => {}); // Silent fail - tracking is not critical
     });
-  }, [portalData?.project?.id, token, slug]);
+  }, [portalData?.project?.id]); // Removed token/slug from deps - only track once per project
 
   const clientAccess = portalData?.access;
   const project = portalData?.project;
@@ -87,17 +115,22 @@ export default function ClientProjectPortal() {
   const decisions = portalData?.decisions || [];
   const attachments = portalData?.attachments || [];
 
+  // Memoize state calculations with stable reference - only recalculate when data changes
   const requestsWithState = useMemo(() => {
+    if (!requests.length) return [];
+    
+    // Pre-build comment count map for O(1) lookup
+    const commentCountMap = new Map();
+    comments.forEach(c => {
+      commentCountMap.set(c.request_id, (commentCountMap.get(c.request_id) || 0) + 1);
+    });
+    
     return requests.map(request => {
       const state = getRequestState(request, decisions, attachments);
-      const requestComments = comments.filter(c => c.request_id === request.id);
-      
-      // Calculate last activity
-      const lastActivity = [...requestComments, request]
-        .map(item => new Date(item.updated_date || item.created_date))
-        .sort((a, b) => b - a)[0] || new Date(request.created_date);
+      const commentCount = commentCountMap.get(request.id) || 0;
+      const lastActivity = new Date(request.updated_date || request.created_date);
 
-      return { ...request, state, commentCount: requestComments.length, lastActivity };
+      return { ...request, state, commentCount, lastActivity };
     });
   }, [requests, comments, decisions, attachments]);
 
@@ -311,33 +344,15 @@ export default function ClientProjectPortal() {
                             </span>
                           </div>
                           <div className="p-3 space-y-2">
-                            {subGroup.requests.map(request => {
-                              const StateIcon = request.state.icon;
-                              return (
-                                <div
-                                  key={request.id}
-                                  className="bg-gray-900/50 border border-gray-700 hover:bg-gray-800/80 cursor-pointer transition-all rounded-md p-3"
-                                  onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <h4 className="font-medium text-white text-sm line-clamp-2">{request.title}</h4>
-                                    {request.commentCount > 0 && (
-                                       <Badge variant="secondary" className="text-[10px] px-1 h-5 bg-gray-800 text-gray-300">
-                                         {request.commentCount}
-                                       </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-                                     <span className={cn("flex items-center", request.state.color.split(' ')[1])}>
-                                       <StateIcon className="w-3 h-3 mr-1" />
-                                       {request.state.label}
-                                     </span>
-                                     <span>•</span>
-                                     <span>{format(request.lastActivity, 'MMM d')}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                            {subGroup.requests.map(request => (
+                              <RequestCard
+                                key={request.id}
+                                request={request}
+                                slug={slug}
+                                token={token}
+                                onClick={() => navigate(createPageUrl("ClientFeedbackRequestDetail") + `?id=${request.id}&` + (slug ? `slug=${slug}` : `token=${token}`))}
+                              />
+                            ))}
                           </div>
                         </div>
                       </div>
