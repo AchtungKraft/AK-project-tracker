@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw, FileText } from "lucide-react";
+import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw, FileText, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ import CreateLinkedTaskModal from "../components/clientportal/CreateLinkedTaskMo
 import { ClientLinksSection } from "../components/clientportal/ClientLinksCopyButtons.jsx";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
+import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ export default function ClientFeedbackDetail() {
   const [reviewNewImages, setReviewNewImages] = useState([]);
   const [isUploadingReviewImages, setIsUploadingReviewImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Fetch user with React Query for consistent loading state
   const { data: user, isLoading: isLoadingUser } = useQuery({
@@ -99,6 +101,21 @@ export default function ClientFeedbackDetail() {
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
     }
   });
+
+  const handleEditSave = (updates) => {
+    updateRequestMutation.mutate(
+      { id: requestId, data: updates },
+      {
+        onSuccess: () => {
+          setShowEditModal(false);
+          toast.success('Request updated');
+        },
+        onError: () => {
+          toast.error('Failed to update request');
+        }
+      }
+    );
+  };
 
   const [isAddingComment, setIsAddingComment] = useState(false);
 
@@ -378,7 +395,19 @@ export default function ClientFeedbackDetail() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-white">{request.title}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-white">{request.title}</h1>
+                {request.status !== 'archived' && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setShowEditModal(true)}
+                    className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               {project && <p className="text-sm text-gray-400">{project.name}</p>}
             </div>
 
@@ -935,6 +964,14 @@ export default function ClientFeedbackDetail() {
         isOpen={!!selectedImage}
         onClose={() => setSelectedImage(null)}
         imageUrl={selectedImage}
+      />
+
+      <EditRequestModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        request={request}
+        onSave={handleEditSave}
+        isSaving={updateRequestMutation.isPending}
       />
     </>);
 
