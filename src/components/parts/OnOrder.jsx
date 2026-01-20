@@ -20,7 +20,7 @@ import EditOrderModal from "./EditOrderModal";
 export default function OnOrder({ onPartClick }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [groupMode, setGroupMode] = useState('project'); // 'project' or 'po'
+  const [groupMode, setGroupMode] = useState('project'); // 'project', 'po', 'vendor', or 'part'
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [editingOrder, setEditingOrder] = useState(null);
@@ -123,6 +123,7 @@ export default function OnOrder({ onPartClick }) {
             orders: {},
             totalValue: 0,
             totalItems: 0,
+            totalQty: 0,
           };
         }
         
@@ -133,13 +134,16 @@ export default function OnOrder({ onPartClick }) {
             vendor: item.vendor,
             items: [],
             totalValue: 0,
+            totalQty: 0,
           };
         }
         
         projectGroups[projectKey].orders[orderKey].items.push(item);
         projectGroups[projectKey].orders[orderKey].totalValue += item.value;
+        projectGroups[projectKey].orders[orderKey].totalQty += item.qtyPending;
         projectGroups[projectKey].totalValue += item.value;
         projectGroups[projectKey].totalItems += 1;
+        projectGroups[projectKey].totalQty += item.qtyPending;
       });
       
       // Convert to array and sort
@@ -155,6 +159,78 @@ export default function OnOrder({ onPartClick }) {
           if (b.isGeneral) return -1;
           return a.label.localeCompare(b.label);
         });
+    } else if (groupMode === 'vendor') {
+      // Group by Vendor, then by Order within each vendor
+      const vendorGroups = {};
+      
+      filteredItems.forEach(item => {
+        const vendorKey = item.vendor?.id || 'unknown';
+        const vendorLabel = item.vendor?.vendor_name || 'Unknown Vendor';
+        
+        if (!vendorGroups[vendorKey]) {
+          vendorGroups[vendorKey] = {
+            id: vendorKey,
+            label: vendorLabel,
+            vendor: item.vendor,
+            orders: {},
+            totalValue: 0,
+            totalItems: 0,
+            totalQty: 0,
+          };
+        }
+        
+        const orderKey = item.order?.id || 'no-order';
+        if (!vendorGroups[vendorKey].orders[orderKey]) {
+          vendorGroups[vendorKey].orders[orderKey] = {
+            order: item.order,
+            vendor: item.vendor,
+            items: [],
+            totalValue: 0,
+            totalQty: 0,
+          };
+        }
+        
+        vendorGroups[vendorKey].orders[orderKey].items.push(item);
+        vendorGroups[vendorKey].orders[orderKey].totalValue += item.value;
+        vendorGroups[vendorKey].orders[orderKey].totalQty += item.qtyPending;
+        vendorGroups[vendorKey].totalValue += item.value;
+        vendorGroups[vendorKey].totalItems += 1;
+        vendorGroups[vendorKey].totalQty += item.qtyPending;
+      });
+      
+      return Object.values(vendorGroups)
+        .map(g => ({
+          ...g,
+          orders: Object.values(g.orders).sort((a, b) => 
+            (b.order?.order_date || '').localeCompare(a.order?.order_date || '')
+          ),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    } else if (groupMode === 'part') {
+      // Group by Part
+      const partGroups = {};
+      
+      filteredItems.forEach(item => {
+        const partKey = item.part?.id || 'unknown';
+        
+        if (!partGroups[partKey]) {
+          partGroups[partKey] = {
+            id: partKey,
+            part: item.part,
+            items: [],
+            totalValue: 0,
+            totalQty: 0,
+          };
+        }
+        
+        partGroups[partKey].items.push(item);
+        partGroups[partKey].totalValue += item.value;
+        partGroups[partKey].totalQty += item.qtyPending;
+      });
+      
+      return Object.values(partGroups).sort((a, b) => 
+        (a.part?.part_name || '').localeCompare(b.part?.part_name || '')
+      );
     } else {
       // Group by PO/Order only
       const orderGroups = {};
@@ -169,11 +245,13 @@ export default function OnOrder({ onPartClick }) {
             vendor: item.vendor,
             items: [],
             totalValue: 0,
+            totalQty: 0,
           };
         }
         
         orderGroups[orderKey].items.push(item);
         orderGroups[orderKey].totalValue += item.value;
+        orderGroups[orderKey].totalQty += item.qtyPending;
       });
       
       return Object.values(orderGroups).sort((a, b) => 
@@ -401,9 +479,22 @@ export default function OnOrder({ onPartClick }) {
               {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
               <FileText className="w-4 h-4 text-blue-400" />
               <div>
-                <p className="text-sm font-medium text-white">
-                  {order.po_number || `Order ${order.id.slice(0, 8)}`}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-white">
+                    {order.po_number || `Order ${order.id.slice(0, 8)}`}
+                  </p>
+                  {order.order_number && (
+                    <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
+                  )}
+                  {order.billing_status && order.billing_status !== 'Not Invoiced' && (
+                    <Badge 
+                      variant="outline" 
+                      className={order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400 text-xs' : 'border-blue-600 text-blue-400 text-xs'}
+                    >
+                      {order.billing_status}
+                    </Badge>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span>{orderData.vendor?.vendor_name}</span>
                   {order.order_date && (
@@ -418,14 +509,14 @@ export default function OnOrder({ onPartClick }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {order.notes && order.notes.startsWith('http') && (
+              {order.order_url && (
                 <a 
-                  href={order.notes}
+                  href={order.order_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className="text-blue-400 hover:text-blue-300"
-                  title="Open reference link"
+                  title="Open order URL"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
@@ -443,7 +534,7 @@ export default function OnOrder({ onPartClick }) {
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
               <Badge variant="outline" className="border-gray-600 text-gray-400">
-                {orderData.items.length} item{orderData.items.length !== 1 ? 's' : ''}
+                {orderData.totalQty || orderData.items.length} qty
               </Badge>
               <span className="text-sm text-yellow-400 font-medium">
                 ${orderData.totalValue.toFixed(2)}
@@ -500,11 +591,19 @@ export default function OnOrder({ onPartClick }) {
               <TabsList className="bg-gray-900/50 border border-gray-700">
                 <TabsTrigger value="project" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
                   <FolderKanban className="w-3.5 h-3.5" />
-                  By Project
+                  Project
                 </TabsTrigger>
                 <TabsTrigger value="po" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
                   <FileText className="w-3.5 h-3.5" />
-                  By PO
+                  PO
+                </TabsTrigger>
+                <TabsTrigger value="vendor" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
+                  <Building2 className="w-3.5 h-3.5" />
+                  Vendor
+                </TabsTrigger>
+                <TabsTrigger value="part" className="data-[state=active]:bg-yellow-900/30 gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  Part
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -524,7 +623,7 @@ export default function OnOrder({ onPartClick }) {
             <p className="text-gray-400">No parts currently on order.</p>
           </CardContent>
         </Card>
-      ) : groupMode === 'project' ? (
+      ) : groupMode === 'project' || groupMode === 'vendor' ? (
         <div className="space-y-3">
           {groupedData.map(group => {
             const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
@@ -541,10 +640,11 @@ export default function OnOrder({ onPartClick }) {
                       <div>
                         <p className={`font-medium ${group.isGeneral ? 'text-yellow-400' : 'text-white'}`}>
                           {group.isGeneral && <Building2 className="w-4 h-4 inline mr-1.5" />}
+                          {groupMode === 'vendor' && <Building2 className="w-4 h-4 inline mr-1.5 text-blue-400" />}
                           {group.label}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {group.orders.length} order{group.orders.length !== 1 ? 's' : ''} · {group.totalItems} item{group.totalItems !== 1 ? 's' : ''}
+                          {group.orders.length} order{group.orders.length !== 1 ? 's' : ''} · {group.totalQty} qty
                         </p>
                       </div>
                     </div>
@@ -557,6 +657,51 @@ export default function OnOrder({ onPartClick }) {
                 {isExpanded && (
                   <CardContent className="p-3 pt-0 border-t border-yellow-900/20">
                     {group.orders.map(orderData => renderOrderGroup(orderData))}
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      ) : groupMode === 'part' ? (
+        <div className="space-y-3">
+          {groupedData.map(partGroup => {
+            const isExpanded = expandedGroups.has(partGroup.id) || expandedGroups.has('all');
+            const part = partGroup.part;
+            
+            return (
+              <Card key={partGroup.id} className="bg-black/40 backdrop-blur-xl border border-yellow-900/30">
+                <CardHeader 
+                  className="p-3 cursor-pointer hover:bg-yellow-950/20 transition-colors"
+                  onClick={() => toggleGroup(partGroup.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      {part?.featured_photo && (
+                        <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden">
+                          <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-white">{part?.part_name || 'Unknown Part'}</p>
+                        <p className="text-xs text-gray-500">
+                          {part?.vendor_part_number && <span className="font-mono mr-2">{part.vendor_part_number}</span>}
+                          {partGroup.items.length} line{partGroup.items.length !== 1 ? 's' : ''} · {partGroup.totalQty} qty pending
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm text-yellow-400 font-medium">
+                      ${partGroup.totalValue.toFixed(2)}
+                    </span>
+                  </div>
+                </CardHeader>
+                
+                {isExpanded && (
+                  <CardContent className="p-3 pt-0 border-t border-yellow-900/20">
+                    <div className="divide-y divide-yellow-900/10">
+                      {partGroup.items.map(item => renderLineItem(item))}
+                    </div>
                   </CardContent>
                 )}
               </Card>
