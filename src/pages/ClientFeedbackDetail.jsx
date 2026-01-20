@@ -453,17 +453,10 @@ export default function ClientFeedbackDetail() {
                   {request.status === 'archived' && (
                     <Button size="sm" onClick={() => {
                       if (confirm('Move this request back to draft?')) {
-                        const oldStatus = request.status;
-                        const newStatus = 'draft';
+                        // Moving from archived to draft is internal-only - no client email
                         updateRequestMutation.mutate({
                           id: requestId,
-                          data: { status: newStatus }
-                        }, {
-                          onSuccess: () => {
-                            if (oldStatus !== newStatus) {
-                               base44.functions.invoke('sendRequestStatusUpdateEmail', { requestId, oldStatus, newStatus });
-                            }
-                          }
+                          data: { status: 'draft' }
                         });
                         toast.success('Moved to Drafts');
                       }
