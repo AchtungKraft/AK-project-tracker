@@ -65,20 +65,31 @@ export default function ClientFeedbackDetail() {
       const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
       return response.data;
     },
-    enabled: !!requestId
+    enabled: !!requestId,
+    staleTime: 30_000, // 30 seconds - don't refetch if navigating back quickly
+    gcTime: 300_000, // 5 minutes cache
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
   });
 
   // Update last_viewed_by_internal_at when viewing the request (internal acknowledgment)
+  // Debounced: only update if last view was >5 minutes ago to reduce DB writes
   useEffect(() => {
-    if (requestId && feedbackDetail?.request && !isLoadingDetail) {
-      // Only update if the request exists and is in a reviewable state
-      const request = feedbackDetail.request;
-      if (request.status === 'posted' || request.status === 'changes_requested') {
-        base44.entities.ClientFeedbackRequest.update(requestId, {
-          last_viewed_by_internal_at: new Date().toISOString()
-        }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
-      }
+    if (!requestId || !feedbackDetail?.request || isLoadingDetail) return;
+    
+    const request = feedbackDetail.request;
+    // Only update for reviewable states
+    if (request.status !== 'posted' && request.status !== 'changes_requested') return;
+    
+    // Check if last view was recent (within 5 minutes) - skip update if so
+    const lastView = request.last_viewed_by_internal_at;
+    if (lastView) {
+      const timeSinceLastView = Date.now() - new Date(lastView).getTime();
+      if (timeSinceLastView < 5 * 60 * 1000) return; // Skip if viewed within 5 minutes
     }
+    
+    base44.entities.ClientFeedbackRequest.update(requestId, {
+      last_viewed_by_internal_at: new Date().toISOString()
+    }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
   }, [requestId, feedbackDetail?.request?.id, isLoadingDetail]);
 
   const request = feedbackDetail?.request;

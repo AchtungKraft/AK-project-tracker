@@ -455,7 +455,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                               setSelectedImage(att.file_url);
                             }}
                           >
-                            <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
+                            <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
 
                             <div className="absolute bottom-2 left-2 z-10">
                               {decision === 'approved' ? (
@@ -493,7 +493,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                                 setSelectedImage(att.file_url);
                               }}
                             >
-                              <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
+                              <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
                             </div>
                           </div>
                         );
@@ -546,7 +546,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                                 setSelectedImage(att.file_url);
                               }}
                             >
-                              <img src={att.file_url} alt="" className="w-full h-auto max-h-[70vh] object-contain" />
+                              <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
 
                               {canReview && requestType === 'design_review' && (
                                 <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
@@ -681,7 +681,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
                   {reviewNewImages.map((url, idx) => (
                     <div key={idx} className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden border border-gray-700">
-                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
                       <button 
                         onClick={() => setReviewNewImages(prev => prev.filter(u => u !== url))}
                         className="absolute top-0 right-0 bg-red-600 text-white p-0.5"
