@@ -51,37 +51,34 @@ export default function ClientFeedbackRequestDetail() {
   const [uploadingDecisionImages, setUploadingDecisionImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  useEffect(() => {
-    if (!token && !slug || !requestId) return;
-
-    base44.functions.invoke('publicClientRequestDetail', { token, slug, requestId })
-      .then(response => {
-        if (response.data.success) {
-          setClientAccess(response.data.access);
-          // Track request view (also updates project view)
-          const projectId = response.data.request?.project_id;
-          if (projectId) {
+  // Single consolidated API call - no duplicate fetches
+  const { data: requestData, isLoading } = useQuery({
+    queryKey: ['clientRequestDetail', token, slug, requestId],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('publicClientRequestDetail', { token, slug, requestId });
+      if (response.data.success) {
+        // Set clientAccess from the same response
+        setClientAccess(response.data.access);
+        
+        // Track view NON-BLOCKING (fire-and-forget via queueMicrotask)
+        const projectId = response.data.request?.project_id;
+        if (projectId) {
+          queueMicrotask(() => {
             base44.functions.invoke('trackClientPortalView', { 
               projectId, 
               requestId, 
               token, 
               slug 
             }).catch(err => console.error('Failed to track view:', err));
-          }
+          });
         }
-      })
-      .catch(error => {
-        console.error('Failed to load request data:', error);
-      });
-  }, [token, slug, requestId]);
-
-  const { data: requestData } = useQuery({
-    queryKey: ['clientRequestDetail', token, slug, requestId],
-    queryFn: async () => {
-      const response = await base44.functions.invoke('publicClientRequestDetail', { token, slug, requestId });
+      }
       return response.data;
     },
-    enabled: !!requestId && !!clientAccess,
+    enabled: !!requestId && (!!token || !!slug),
+    staleTime: 30_000, // 30 seconds cache
+    gcTime: 300_000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   const request = requestData?.request;
@@ -285,10 +282,20 @@ export default function ClientFeedbackRequestDetail() {
   const requestState = request ? getRequestState(request, decisions, attachments) : null;
   const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
 
-  if ((!token && !slug) || !clientAccess || !request) {
+  // Show loading only while fetching - not blocking on clientAccess separately
+  if (isLoading || !request) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+      </div>
+    );
+  }
+  
+  // No access or invalid params
+  if ((!token && !slug) || !clientAccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
+        <p className="text-gray-400">Unable to access this request</p>
       </div>
     );
   }
