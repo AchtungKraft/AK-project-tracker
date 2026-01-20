@@ -787,10 +787,11 @@ export default function ClientPortalHub() {
 
         <TabsContent value="awaiting" className="mt-6">
           {(() => {
-            const requestsWithComments = categorizedRequests.awaiting.filter(r => r.hasClientComments);
-            const requestsWithoutComments = categorizedRequests.awaiting.filter(r => !r.hasClientComments);
+            // Group by review ownership: AK Needs Review vs Waiting on Client
+            const akNeedsReview = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'ak_needs_review');
+            const waitingOnClient = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'waiting_on_client');
 
-            if (requestsWithComments.length === 0 && requestsWithoutComments.length === 0) {
+            if (akNeedsReview.length === 0 && waitingOnClient.length === 0) {
               return viewMode === 'list' 
                 ? <ClientPortalListView groupedData={[]} emptyMessage="No items awaiting client review" tabName="awaiting" />
                 : renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
@@ -799,16 +800,16 @@ export default function ClientPortalHub() {
             if (viewMode === 'list') {
               return (
                 <div className="space-y-6">
-                  {requestsWithComments.length > 0 && (
+                  {akNeedsReview.length > 0 && (
                     <div className="space-y-3">
                       <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <MessageSquareText className="w-5 h-5 text-green-400" />
-                        With Client Comments
-                        <Badge className="bg-green-500/20 text-green-400 ml-2">{requestsWithComments.length}</Badge>
+                        <AlertTriangle className="w-5 h-5 text-red-400" />
+                        AK Needs to Review
+                        <Badge className="bg-red-500/20 text-red-400 ml-2">{akNeedsReview.length}</Badge>
                       </h2>
                       <ClientPortalListView 
-                        groupedData={groupByProject(requestsWithComments)} 
-                        emptyMessage="No items with client comments" 
+                        groupedData={groupByProject(akNeedsReview)} 
+                        emptyMessage="No items need AK review" 
                         tabName="awaiting"
                         showEmailButton={true}
                         onSendBulkEmail={handleSendBulkEmail}
@@ -818,16 +819,16 @@ export default function ClientPortalHub() {
                       />
                     </div>
                   )}
-                  {requestsWithoutComments.length > 0 && (
+                  {waitingOnClient.length > 0 && (
                     <div className="space-y-3">
                       <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-amber-400" />
-                        Awaiting Review
-                        <Badge className="bg-amber-500/20 text-amber-400 ml-2">{requestsWithoutComments.length}</Badge>
+                        <Clock className="w-5 h-5 text-gray-400" />
+                        Waiting on Client
+                        <Badge className="bg-gray-500/20 text-gray-400 ml-2">{waitingOnClient.length}</Badge>
                       </h2>
                       <ClientPortalListView 
-                        groupedData={groupByProject(requestsWithoutComments)} 
-                        emptyMessage="No items awaiting review" 
+                        groupedData={groupByProject(waitingOnClient)} 
+                        emptyMessage="No items waiting on client" 
                         tabName="awaiting"
                         showEmailButton={true}
                         onSendBulkEmail={handleSendBulkEmail}
@@ -843,33 +844,33 @@ export default function ClientPortalHub() {
 
             return (
               <div className="space-y-8">
-                {requestsWithComments.length > 0 && (
+                {akNeedsReview.length > 0 && (
                   <div className="space-y-4">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <MessageSquareText className="w-5 h-5 text-green-400" />
-                      Requests with Client Comments
-                      <Badge className="bg-green-500/20 text-green-400 ml-2">{requestsWithComments.length}</Badge>
+                      <AlertTriangle className="w-5 h-5 text-red-400" />
+                      AK Needs to Review
+                      <Badge className="bg-red-500/20 text-red-400 ml-2">{akNeedsReview.length}</Badge>
                     </h2>
                     {renderRequestList(
-                      groupByProject(requestsWithComments),
-                      "No items with client comments",
-                      "bg-amber-500/20 text-amber-400 border-amber-500/50",
+                      groupByProject(akNeedsReview),
+                      "No items need AK review",
+                      "bg-red-500/20 text-red-400 border-red-500/50",
                       "awaiting",
                       true
                     )}
                   </div>
                 )}
-                {requestsWithoutComments.length > 0 && (
+                {waitingOnClient.length > 0 && (
                   <div className="space-y-4">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-amber-400" />
-                      Requests Awaiting Review (No Comments)
-                      <Badge className="bg-amber-500/20 text-amber-400 ml-2">{requestsWithoutComments.length}</Badge>
+                      <Clock className="w-5 h-5 text-gray-400" />
+                      Waiting on Client
+                      <Badge className="bg-gray-500/20 text-gray-400 ml-2">{waitingOnClient.length}</Badge>
                     </h2>
                     {renderRequestList(
-                      groupByProject(requestsWithoutComments),
-                      "No items awaiting review without comments",
-                      "bg-amber-500/20 text-amber-400 border-amber-500/50",
+                      groupByProject(waitingOnClient),
+                      "No items waiting on client",
+                      "bg-gray-500/20 text-gray-400 border-gray-500/50",
                       "awaiting",
                       true
                     )}
