@@ -380,8 +380,25 @@ export default function OnOrder({ onPartClick }) {
     },
   });
 
+  // Get effective billing status for a line item (inherited from order unless overridden)
+  const getEffectiveBilling = (lineItem, order) => {
+    if (lineItem.billing_override) {
+      return {
+        status: lineItem.billing_status_override || 'Not Invoiced',
+        invoiceNumber: lineItem.invoice_number_override,
+        isOverride: true,
+      };
+    }
+    return {
+      status: order?.billing_status || 'Not Invoiced',
+      invoiceNumber: order?.invoice_number,
+      isOverride: false,
+    };
+  };
+
   const renderLineItem = (item) => {
     const part = item.part;
+    const billing = getEffectiveBilling(item.lineItem, item.order);
     
     return (
       <div 
@@ -414,6 +431,17 @@ export default function OnOrder({ onPartClick }) {
           >
             {item.status}
           </Badge>
+          
+          {/* Inherited billing indicator (read-only) */}
+          {billing.isOverride && (
+            <Badge 
+              variant="outline" 
+              className="border-purple-600 text-purple-400 text-xs"
+              title="Billing override active"
+            >
+              ⚡ {billing.status}
+            </Badge>
+          )}
           
           <div className="text-right text-sm w-24">
             <p className="text-white">

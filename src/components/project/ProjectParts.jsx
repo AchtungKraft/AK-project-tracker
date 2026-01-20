@@ -421,14 +421,19 @@ export default function ProjectParts({ projectId }) {
                           >
                             {order.status}
                           </Badge>
-                          {order.billing_status && order.billing_status !== 'Not Invoiced' && (
-                            <Badge 
-                              variant="outline" 
-                              className={order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400' : 'border-blue-600 text-blue-400'}
-                            >
-                              <DollarSign className="w-3 h-3 mr-1" />
-                              {order.billing_status}
-                            </Badge>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              order.billing_status === 'Client Paid' ? 'border-green-600 text-green-400' : 
+                              order.billing_status === 'Client Invoiced' ? 'border-blue-600 text-blue-400' :
+                              'border-gray-600 text-gray-400'
+                            }
+                          >
+                            <DollarSign className="w-3 h-3 mr-1" />
+                            {order.billing_status || 'Not Invoiced'}
+                          </Badge>
+                          {order.invoice_number && (
+                            <span className="text-xs text-gray-400 ml-1">INV: {order.invoice_number}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
