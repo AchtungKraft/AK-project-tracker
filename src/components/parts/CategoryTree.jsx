@@ -81,7 +81,15 @@ export default function CategoryTree({
             paddingLeft: `${(level * 16) + 12}px`,
             borderLeftColor: level > 0 ? category.color + '40' : 'transparent'
           }}
-          onClick={() => !isEmpty && onCategorySelect(category.id)}
+          onClick={() => {
+            if (!isEmpty) {
+              onCategorySelect(category.id);
+              // Auto-expand to show this category's path
+              if (hasChildren && !isExpanded) {
+                onToggleExpand(category.id);
+              }
+            }
+          }}
           title={isEmpty ? "No parts in this category" : undefined}
         >
           {/* Expand/Collapse Icon */}

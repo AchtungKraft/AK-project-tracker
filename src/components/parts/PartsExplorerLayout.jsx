@@ -120,6 +120,21 @@ export default function PartsExplorerLayout({ onPartClick }) {
 
   const handleCategorySelect = (categoryId) => {
     setSelectedCategoryId(categoryId);
+    
+    // Auto-expand all ancestor categories to show the selected category
+    if (categoryId && categories.length > 0) {
+      const newExpanded = { ...expandedCategories };
+      let currentId = categoryId;
+      
+      while (currentId) {
+        const cat = categories.find(c => c.id === currentId);
+        if (!cat) break;
+        newExpanded[currentId] = true;
+        currentId = cat.parent_id;
+      }
+      
+      setExpandedCategories(newExpanded);
+    }
   };
 
   const handleBreadcrumbClick = (categoryId) => {
