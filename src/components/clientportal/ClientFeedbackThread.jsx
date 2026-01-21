@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,316 @@ import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loade
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
+
+// Memoized timeline event card to prevent unnecessary re-renders
+const TimelineEventCard = React.memo(function TimelineEventCard({ 
+  event, 
+  canReview, 
+  requestType, 
+  isClientView, 
+  selectedImageIds, 
+  onImageSelect, 
+  onImageClick,
+  onDeleteComment,
+  onDeleteDecision,
+  decisions 
+}) {
+  const isClientComment = event.type === 'comment' && event.comment?.author_type === 'client_contact';
+  const isInternalComment = event.type === 'comment' && event.comment?.author_type === 'internal_user';
+  const isApprovedDecision = event.type === 'decision' && event.decision.decision === 'approved';
+  const isChangesRequestedDecision = event.type === 'decision' && event.decision.decision === 'changes_requested';
+  const isRequestPost = event.type === 'request_post';
+
+  let cardClassName = "bg-black/60 backdrop-blur-xl border";
+  let cardStyle = {};
+
+  if (isRequestPost) {
+    cardClassName = "backdrop-blur-xl border border-green-500/50";
+    cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
+  } else if (isApprovedDecision) {
+    cardClassName = "bg-blue-900/30 backdrop-blur-xl border border-blue-500/50";
+  } else if (isChangesRequestedDecision) {
+    cardClassName = "bg-orange-900/30 backdrop-blur-xl border border-orange-500/50";
+  } else if (isInternalComment) {
+    cardClassName = "backdrop-blur-xl border border-green-500/50";
+    cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
+  } else if (isClientComment) {
+    cardClassName = "bg-yellow-900/20 backdrop-blur-xl border border-yellow-500/50";
+  } else {
+    cardClassName = "bg-black/60 backdrop-blur-xl border border-gray-700";
+  }
+
+  return (
+    <Card className={cardClassName} style={cardStyle}>
+      <CardContent className="p-3 md:p-4">
+        {/* Header Badge */}
+        <div className="mb-3">
+          {isRequestPost && (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
+              FOR REVIEW
+            </Badge>
+          )}
+          {isInternalComment && (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
+              FOR REVIEW
+            </Badge>
+          )}
+          {isClientComment && (
+            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
+              COMMENT
+            </Badge>
+          )}
+          {isApprovedDecision && (
+            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50 border font-semibold text-xs">
+              APPROVED
+            </Badge>
+          )}
+          {isChangesRequestedDecision && (
+            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
+              CHANGE REQUESTED
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-start justify-between gap-3 mb-3">
+          {event.type === 'request_post' && (
+            <div className="flex items-center gap-2 text-green-400">
+              <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/50">
+                <ImageIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">
+                  {event.creator?.full_name || 'Team'} posted review request
+                </p>
+                <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+              </div>
+            </div>
+          )}
+
+          {event.type === 'comment' && (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
+                  <span className="text-white font-bold text-xs">
+                    {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                  </span>
+                </div>
+                <div>
+                  <p className="font-medium text-white text-sm">
+                    {event.author?.name || event.author?.full_name || 'Unknown'}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {format(event.timestamp, 'MMM d, h:mm a')}
+                  </p>
+                </div>
+              </div>
+              {!isClientView && onDeleteComment && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm('Delete this comment?')) {
+                      onDeleteComment(event.comment.id);
+                    }
+                  }}
+                  className="text-gray-500 hover:text-red-500 h-8 w-8"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          )}
+
+          {event.type === 'decision' && (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2 text-white">
+                {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
+                <div>
+                  <p className="font-medium text-sm">
+                    {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
+                  </p>
+                  <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
+                </div>
+              </div>
+              {!isClientView && onDeleteDecision && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm('Delete this decision and its associated attachments?')) {
+                      onDeleteDecision(event.groupedDecisions.map(d => d.id));
+                    }
+                  }}
+                  className="text-gray-500 hover:text-red-500 h-8 w-8"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {event.comment?.body && (
+          <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.comment.body}</p>
+        )}
+        {event.decision?.note && (
+          <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.decision.note}</p>
+        )}
+
+        {event.type === 'decision' && event.selectedImages?.length > 0 && (
+          <div className="pl-0 md:pl-10 space-y-3 mb-3">
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {event.selectedImages.map((att, idx) => {
+                const decision = att.decision || 'approved';
+                const allImages = event.selectedImages.map(a => a.file_url);
+
+                return (
+                  <div key={att.id} className="relative group">
+                    <div 
+                      className={`
+                        relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                        ${decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
+                      `}
+                      onClick={() => onImageClick(att.file_url, allImages, idx)}
+                    >
+                      <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+
+                      <div className="absolute bottom-2 left-2 z-10">
+                        {decision === 'approved' ? (
+                          <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
+                            <AlertCircle className="w-3 h-3 mr-1" /> Changes
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {event.type === 'decision' && event.referenceAttachments?.length > 0 && (
+          <div className="pl-0 md:pl-10 space-y-3">
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
+            {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {event.referenceAttachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
+                  const allImages = event.referenceAttachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
+                  return (
+                    <div key={att.id} className="relative group">
+                      <div 
+                        className="relative w-full bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
+                        onClick={() => onImageClick(att.file_url, allImages, idx)}
+                      >
+                        <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {event.referenceAttachments.filter(a => a.attachment_type !== 'image').map(att => (
+                <a
+                  key={att.id}
+                  href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                >
+                  {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                  {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {event.type !== 'decision' && event.attachments?.length > 0 && (
+          <div className="pl-0 md:pl-10 space-y-3">
+            {canReview && requestType === 'design_review' && event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+              <p className="text-sm text-purple-400 font-medium">
+                SELECT CHECKBOX on IMAGE(s) above to APPROVE or REQUEST CHANGES
+              </p>
+            )}
+            {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {event.attachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
+                  const isSelected = selectedImageIds.includes(att.id);
+                  const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
+                  const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
+                  const allImages = event.attachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
+
+                  return (
+                    <div key={att.id} className="relative group">
+                      <div 
+                        className={`
+                          relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
+                          ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
+                        `}
+                        onClick={() => onImageClick(att.file_url, allImages, idx)}
+                      >
+                        <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+
+                        {canReview && requestType === 'design_review' && (
+                          <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
+                            <span className="text-white text-xs font-medium">SELECT</span>
+                            <Checkbox 
+                              checked={isSelected}
+                              onCheckedChange={() => onImageSelect(att.id)}
+                              className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        )}
+
+                        {latestDecision && (
+                          <div className="absolute bottom-2 left-2 z-10">
+                            {latestDecision.decision === 'approved' ? (
+                              <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
+                                <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
+                                <AlertCircle className="w-3 h-3 mr-1" /> Changes
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
+                <a
+                  key={att.id}
+                  href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                >
+                  {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                  {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+});
 
 export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision }) {
   const queryClient = useQueryClient();
@@ -199,14 +509,20 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
     return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [comments, decisions, attachments, isClientView, request]);
 
-  const handleImageSelect = (imageId) => {
+  const handleImageSelect = useCallback((imageId) => {
     setSelectedImageIds(prev => {
       if (prev.includes(imageId)) {
         return prev.filter(id => id !== imageId);
       }
       return [...prev, imageId];
     });
-  };
+  }, []);
+  
+  const handleImageClick = useCallback((url, allImages, idx) => {
+    setGalleryImages(allImages);
+    setGalleryIndex(idx);
+    setSelectedImage(url);
+  }, []);
 
   const handleReviewAction = (action) => {
     setReviewAction(action);
@@ -290,316 +606,21 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   return (
     <>
       <div className="space-y-6 pb-20">
-        {timeline.map((event, idx) => {
-          // Determine card styling based on event type
-          const isClientComment = event.type === 'comment' && event.comment?.author_type === 'client_contact';
-          const isInternalComment = event.type === 'comment' && event.comment?.author_type === 'internal_user';
-          const isApprovedDecision = event.type === 'decision' && event.decision.decision === 'approved';
-          const isChangesRequestedDecision = event.type === 'decision' && event.decision.decision === 'changes_requested';
-          const isRequestPost = event.type === 'request_post';
-
-          let cardClassName = "bg-black/60 backdrop-blur-xl border";
-          let cardStyle = {};
-
-          if (isRequestPost) {
-            cardClassName = "backdrop-blur-xl border border-green-500/50";
-            cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
-          } else if (isApprovedDecision) {
-            cardClassName = "bg-blue-900/30 backdrop-blur-xl border border-blue-500/50";
-          } else if (isChangesRequestedDecision) {
-            cardClassName = "bg-orange-900/30 backdrop-blur-xl border border-orange-500/50";
-          } else if (isInternalComment) {
-            cardClassName = "backdrop-blur-xl border border-green-500/50";
-            cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
-          } else if (isClientComment) {
-            cardClassName = "bg-yellow-900/20 backdrop-blur-xl border border-yellow-500/50";
-          } else {
-            cardClassName = "bg-black/60 backdrop-blur-xl border border-gray-700";
-          }
-
-          return (
-          <Card key={idx} className={cardClassName} style={cardStyle}>
-            <CardContent className="p-3 md:p-4">
-              {/* Header Badge */}
-              <div className="mb-3">
-                {isRequestPost && (
-                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
-                    FOR REVIEW
-                  </Badge>
-                )}
-                {isInternalComment && (
-                  <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
-                    FOR REVIEW
-                  </Badge>
-                )}
-                {isClientComment && (
-                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
-                    COMMENT
-                  </Badge>
-                )}
-                {isApprovedDecision && (
-                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50 border font-semibold text-xs">
-                    APPROVED
-                  </Badge>
-                )}
-                {isChangesRequestedDecision && (
-                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
-                    CHANGE REQUESTED
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex items-start justify-between gap-3 mb-3">
-                {event.type === 'request_post' && (
-                  <div className="flex items-center gap-2 text-green-400">
-                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/50">
-                      <ImageIcon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">
-                        {event.creator?.full_name || 'Team'} posted review request
-                      </p>
-                      <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
-                    </div>
-                  </div>
-                )}
-
-                {event.type === 'comment' && (
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">
-                          {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-white text-sm">
-                          {event.author?.name || event.author?.full_name || 'Unknown'}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {format(event.timestamp, 'MMM d, h:mm a')}
-                        </p>
-                      </div>
-                    </div>
-                    {!isClientView && onDeleteComment && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm('Delete this comment?')) {
-                            onDeleteComment(event.comment.id);
-                          }
-                        }}
-                        className="text-gray-500 hover:text-red-500 h-8 w-8"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {event.type === 'decision' && (
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-2 text-white">
-                      {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
-                      <div>
-                        <p className="font-medium text-sm">
-                          {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
-                        </p>
-                        <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
-                      </div>
-                    </div>
-                    {!isClientView && onDeleteDecision && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm('Delete this decision and its associated attachments?')) {
-                            onDeleteDecision(event.groupedDecisions.map(d => d.id));
-                          }
-                        }}
-                        className="text-gray-500 hover:text-red-500 h-8 w-8"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {event.comment?.body && (
-                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.comment.body}</p>
-              )}
-              {event.decision?.note && (
-                <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.decision.note}</p>
-              )}
-
-              {event.type === 'decision' && event.selectedImages?.length > 0 && (
-                <div className="pl-0 md:pl-10 space-y-3 mb-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {event.selectedImages.map((att, idx) => {
-                      const decision = att.decision || 'approved';
-                      const allImages = event.selectedImages.map(a => a.file_url);
-
-                      return (
-                        <div key={att.id} className="relative group">
-                          <div 
-                            className={`
-                              relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
-                              ${decision === 'approved' ? 'border-green-500/50' : 'border-orange-500/50'}
-                            `}
-                            onClick={() => {
-                              setGalleryImages(allImages);
-                              setGalleryIndex(idx);
-                              setSelectedImage(att.file_url);
-                            }}
-                          >
-                            <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
-
-                            <div className="absolute bottom-2 left-2 z-10">
-                              {decision === 'approved' ? (
-                                <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
-                                  <AlertCircle className="w-3 h-3 mr-1" /> Changes
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {event.type === 'decision' && event.referenceAttachments?.length > 0 && (
-                <div className="pl-0 md:pl-10 space-y-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
-                  {event.referenceAttachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {event.referenceAttachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
-                        const allImages = event.referenceAttachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
-                        return (
-                          <div key={att.id} className="relative group">
-                            <div 
-                              className="relative w-full bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
-                              onClick={() => {
-                                setGalleryImages(allImages);
-                                setGalleryIndex(idx);
-                                setSelectedImage(att.file_url);
-                              }}
-                            >
-                              <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {event.referenceAttachments.filter(a => a.attachment_type !== 'image').map(att => (
-                      <a
-                        key={att.id}
-                        href={att.attachment_type === 'link' ? att.link_url : att.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
-                      >
-                        {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                        {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {event.type !== 'decision' && event.attachments?.length > 0 && (
-                <div className="pl-0 md:pl-10 space-y-3">
-                  {canReview && requestType === 'design_review' && event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <p className="text-sm text-purple-400 font-medium">
-                      SELECT CHECKBOX on IMAGE(s) above to APPROVE or REQUEST CHANGES
-                    </p>
-                  )}
-                  {event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {event.attachments.filter(a => a.attachment_type === 'image').map((att, idx) => {
-                        const isSelected = selectedImageIds.includes(att.id);
-                        const imageDecisions = decisions.filter(d => d.target_attachment_id === att.id);
-                        const latestDecision = imageDecisions.sort((a,b) => new Date(b.created_date) - new Date(a.created_date))[0];
-                        const allImages = event.attachments.filter(a => a.attachment_type === 'image').map(a => a.file_url);
-
-                        return (
-                          <div key={att.id} className="relative group">
-                            <div 
-                              className={`
-                                relative w-full bg-gray-800 rounded-lg border-2 flex items-center justify-center overflow-hidden cursor-pointer transition-all
-                                ${isSelected ? 'border-red-500 ring-2 ring-red-500/20' : 'border-gray-700 hover:border-gray-500'}
-                              `}
-                              onClick={() => {
-                                setGalleryImages(allImages);
-                                setGalleryIndex(idx);
-                                setSelectedImage(att.file_url);
-                              }}
-                            >
-                              <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
-
-                              {canReview && requestType === 'design_review' && (
-                                <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
-                                  <span className="text-white text-xs font-medium">SELECT</span>
-                                  <Checkbox 
-                                    checked={isSelected}
-                                    onCheckedChange={() => handleImageSelect(att.id)}
-                                    className="bg-black/50 border-white data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 w-5 h-5"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </div>
-                              )}
-
-                              {latestDecision && (
-                                <div className="absolute bottom-2 left-2 z-10">
-                                  {latestDecision.decision === 'approved' ? (
-                                    <Badge className="bg-green-500/90 hover:bg-green-500 text-white border-none shadow-sm">
-                                      <CheckCircle2 className="w-3 h-3 mr-1" /> Approved
-                                    </Badge>
-                                  ) : (
-                                    <Badge className="bg-orange-500/90 hover:bg-orange-500 text-white border-none shadow-sm">
-                                      <AlertCircle className="w-3 h-3 mr-1" /> Changes
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {event.attachments.filter(a => a.attachment_type !== 'image').map(att => (
-                      <a
-                        key={att.id}
-                        href={att.attachment_type === 'link' ? att.link_url : att.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
-                      >
-                        {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                        {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          );
-        })}
+        {timeline.map((event, idx) => (
+          <TimelineEventCard
+            key={`${event.type}-${event.timestamp.getTime()}-${idx}`}
+            event={event}
+            canReview={canReview}
+            requestType={requestType}
+            isClientView={isClientView}
+            selectedImageIds={selectedImageIds}
+            onImageSelect={handleImageSelect}
+            onImageClick={handleImageClick}
+            onDeleteComment={onDeleteComment}
+            onDeleteDecision={onDeleteDecision}
+            decisions={decisions}
+          />
+        ))}
       </div>
 
       {selectedImageIds.length > 0 && requestType === 'design_review' && (
