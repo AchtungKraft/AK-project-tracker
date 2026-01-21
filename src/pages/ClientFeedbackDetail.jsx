@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -23,26 +23,7 @@ import { ClientLinksSection } from "../components/clientportal/ClientLinksCopyBu
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
-
-// Memoized header component for progressive rendering
-const RequestHeader = React.memo(function RequestHeader({ request, project, onBack, fromHub, hubTab, projectId }) {
-  return (
-    <div className="flex items-center gap-3">
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={onBack}
-        className="border-gray-700 text-white"
-      >
-        <ArrowLeft className="w-4 h-4" />
-      </Button>
-      <div className="flex-1">
-        <h1 className="text-2xl font-bold text-white">{request.title}</h1>
-        {project && <p className="text-sm text-gray-400">{project.name}</p>}
-      </div>
-    </div>
-  );
-});
+import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 
 export default function ClientFeedbackDetail() {
   const navigate = useNavigate();
@@ -71,29 +52,35 @@ export default function ClientFeedbackDetail() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Fetch user with React Query for consistent loading state
+  // Track if view has been logged this session to prevent duplicate tracking
+  const viewTrackedRef = useRef(false);
+
+  // Fetch user - separate from detail to allow progressive rendering
   const { data: user, isLoading: isLoadingUser } = useQuery({
     queryKey: ['currentUser'],
     queryFn: () => base44.auth.me(),
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   // Single consolidated API call for all feedback detail data
-  const { data: feedbackDetail, isLoading: isLoadingDetail } = useQuery({
+  const { data: feedbackDetail, isLoading: isLoadingDetail, isFetching } = useQuery({
     queryKey: ['internalFeedbackDetail', requestId, projectId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
       return response.data;
     },
     enabled: !!requestId,
-    staleTime: 30_000, // 30 seconds - don't refetch if navigating back quickly
-    gcTime: 300_000, // 5 minutes cache
-    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    staleTime: 60_000, // 60 seconds - longer stale time
+    gcTime: 300_000,
+    refetchOnMount: false, // Don't refetch if data exists
+    refetchOnWindowFocus: false,
   });
 
-  // Non-blocking view tracking - fire and forget via queueMicrotask
+  // Non-blocking view tracking - fire and forget, debounced per session
   useEffect(() => {
-    if (!requestId || !feedbackDetail?.request || isLoadingDetail) return;
+    if (!requestId || !feedbackDetail?.request || viewTrackedRef.current) return;
     
     const request = feedbackDetail.request;
     if (request.status !== 'posted' && request.status !== 'changes_requested') return;
@@ -101,16 +88,22 @@ export default function ClientFeedbackDetail() {
     const lastView = request.last_viewed_by_internal_at;
     if (lastView) {
       const timeSinceLastView = Date.now() - new Date(lastView).getTime();
-      if (timeSinceLastView < 5 * 60 * 1000) return;
+      if (timeSinceLastView < 5 * 60 * 1000) {
+        viewTrackedRef.current = true; // Mark as tracked to prevent future attempts
+        return;
+      }
     }
     
-    // Non-blocking - doesn't delay render
+    // Mark as tracked immediately to prevent duplicate calls
+    viewTrackedRef.current = true;
+    
+    // Non-blocking - fire and forget
     queueMicrotask(() => {
       base44.entities.ClientFeedbackRequest.update(requestId, {
         last_viewed_by_internal_at: new Date().toISOString()
-      }).catch(err => console.error('Failed to update last_viewed_by_internal_at:', err));
+      }).catch(() => {}); // Silent fail - tracking is non-critical
     });
-  }, [requestId, feedbackDetail?.request?.id, isLoadingDetail]);
+  }, [requestId, feedbackDetail?.request?.id]);
 
   const request = feedbackDetail?.request;
   const comments = feedbackDetail?.comments || [];
@@ -128,8 +121,8 @@ export default function ClientFeedbackDetail() {
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
     onSuccess: () => {
+      // Only invalidate the current request detail - not global lists
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
     }
   });
 
@@ -161,8 +154,8 @@ export default function ClientFeedbackDetail() {
     mutationFn: (payload) => base44.functions.invoke('publicClientDecision', payload),
     onSuccess: (response) => {
       if (response.data?.success) {
+        // Only invalidate the current request - not global lists
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         setRequestDecisionNote('');
         setReviewNewImages([]);
         setShowRequestDecisionForm(false);
@@ -179,24 +172,22 @@ export default function ClientFeedbackDetail() {
 
   const deleteRequestMutation = useMutation({
     mutationFn: async () => {
-      const [attachments, comments, decisions, links] = await Promise.all([
-      base44.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-      base44.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-      base44.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-      base44.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })]
-      );
+      // Use data already loaded - no extra fetches needed
+      const attachmentsToDelete = attachments;
+      const commentsToDelete = comments;
+      const decisionsToDelete = decisions;
+      const linksToDelete = linkedTaskDetails.map(l => ({ id: l.link?.id })).filter(l => l.id);
 
       await Promise.all([
-      ...attachments.map((a) => base44.entities.ClientFeedbackAttachment.delete(a.id)),
-      ...comments.map((c) => base44.entities.ClientFeedbackComment.delete(c.id)),
-      ...decisions.map((d) => base44.entities.ClientFeedbackDecision.delete(d.id)),
-      ...links.map((l) => base44.entities.ClientFeedbackTaskLink.delete(l.id))]
-      );
+        ...attachmentsToDelete.map((a) => base44.entities.ClientFeedbackAttachment.delete(a.id)),
+        ...commentsToDelete.map((c) => base44.entities.ClientFeedbackComment.delete(c.id)),
+        ...decisionsToDelete.map((d) => base44.entities.ClientFeedbackDecision.delete(d.id)),
+        ...linksToDelete.map((l) => base44.entities.ClientFeedbackTaskLink.delete(l.id))
+      ]);
 
       await base44.entities.ClientFeedbackRequest.delete(requestId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
       toast.success('Feedback request deleted');
       navigate(createPageUrl('ProjectDetail') + '?id=' + projectId + '&tab=clientportal');
     }
@@ -388,8 +379,17 @@ export default function ClientFeedbackDetail() {
 
 
 
-  // Show loading state while user or detail data is being fetched
-  if (isLoadingUser || isLoadingDetail) {
+  // Navigation handler - memoized
+  const handleBack = useMemo(() => () => {
+    if (fromHub) {
+      navigate(createPageUrl("ClientPortalHub") + `?tab=${hubTab}`);
+    } else {
+      navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=clientportal");
+    }
+  }, [fromHub, hubTab, projectId, navigate]);
+
+  // Handle user not loaded yet - show minimal loading
+  if (isLoadingUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -397,12 +397,33 @@ export default function ClientFeedbackDetail() {
     );
   }
 
-  // Handle missing request or user after loading completes
-  if (!request || !user) {
+  // Handle no user after loading
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-400">{!user ? 'Please log in to view this page' : 'Request not found'}</p>
+          <p className="text-gray-400">Please log in to view this page</p>
+          <Button 
+            variant="outline" 
+            className="mt-4 border-gray-700 text-white"
+            onClick={() => navigate(createPageUrl("ClientPortalHub"))}
+          >
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // PROGRESSIVE RENDERING: Show header skeleton while loading, then render progressively
+  const isInitialLoad = isLoadingDetail && !feedbackDetail;
+  
+  // Handle request not found after load completes
+  if (!isLoadingDetail && !request) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">Request not found</p>
           <Button 
             variant="outline" 
             className="mt-4 border-gray-700 text-white"
@@ -419,70 +440,85 @@ export default function ClientFeedbackDetail() {
     <>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
         <div className="max-w-5xl mx-auto space-y-6">
+          {/* PHASE 1: Header - renders immediately with skeleton fallback */}
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="icon"
-              onClick={() => {
-                if (fromHub) {
-                  navigate(createPageUrl("ClientPortalHub") + `?tab=${hubTab}`);
-                } else {
-                  navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=clientportal");
-                }
-              }}
-              className="border-gray-700 text-white">
-
+              onClick={handleBack}
+              className="border-gray-700 text-white"
+            >
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-white">{request.title}</h1>
-                {request.status !== 'archived' && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setShowEditModal(true)}
-                    className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-              {project && <p className="text-sm text-gray-400">{project.name}</p>}
+              {isInitialLoad ? (
+                <>
+                  <div className="h-8 w-64 bg-gray-700 rounded animate-pulse" />
+                  <div className="h-4 w-32 bg-gray-800 rounded animate-pulse mt-1" />
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold text-white">{request?.title}</h1>
+                    {request?.status !== 'archived' && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setShowEditModal(true)}
+                        className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {project && <p className="text-sm text-gray-400">{project.name}</p>}
+                </>
+              )}
             </div>
 
-            {request.status === 'posted' && request.request_type !== 'design_review' &&
-            <div className="flex gap-2">
+            {/* Action buttons - only show when data is loaded */}
+            {!isInitialLoad && request?.status === 'posted' && request?.request_type !== 'design_review' && (
+              <div className="flex gap-2">
                 <Button
-                size="sm"
-                onClick={() => handleSubmitRequestDecision({
-                  requestId,
-                  decision: 'approved',
-                  note: '',
-                  targetAttachmentIds: null,
-                  newImages: reviewNewImages,
-                })}
-                className="bg-green-600 hover:bg-green-700 text-white border-green-600">
-
+                  size="sm"
+                  onClick={() => handleSubmitRequestDecision({
+                    requestId,
+                    decision: 'approved',
+                    note: '',
+                    targetAttachmentIds: null,
+                    newImages: reviewNewImages,
+                  })}
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+                >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   {approveLabel}
                 </Button>
                 <Button
-                size="sm"
-                onClick={handleRequestChangesRequest}
-                className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600">
-
+                  size="sm"
+                  onClick={handleRequestChangesRequest}
+                  className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
+                >
                   <AlertCircle className="w-4 h-4 mr-1" />
                   {requestChangesLabel}
                 </Button>
               </div>
-            }
+            )}
 
-            {request.status === 'posted' && request.request_type === 'design_review' &&
-            <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
-            }
-
+            {!isInitialLoad && request?.status === 'posted' && request?.request_type === 'design_review' && (
+              <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
+            )}
           </div>
+
+          {/* PHASE 2: Show skeleton while loading metadata and thread */}
+          {isInitialLoad ? (
+            <>
+              <MetadataCardSkeleton />
+              <ThreadSkeleton />
+              <CommentFormSkeleton />
+            </>
+          ) : (
+            <>
+              {/* PHASE 3: Actual content - hydrated progressively */}
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4 space-y-4">
@@ -715,9 +751,10 @@ export default function ClientFeedbackDetail() {
                   <div key={idx} className="relative group">
                         <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
                           <img
-                        src={url}
-                        alt={`Upload ${idx + 1}`}
-                        className="max-w-full max-h-full object-contain" />
+                            src={url}
+                            alt={`Upload ${idx + 1}`}
+                            loading="lazy"
+                            className="max-w-full max-h-full object-contain" />
 
                         </div>
                         <button
@@ -855,6 +892,8 @@ export default function ClientFeedbackDetail() {
               </div>
             </CardContent>
           </Card>
+            </>
+          )}
         </div>
       </div>
 
