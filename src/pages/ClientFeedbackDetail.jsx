@@ -200,16 +200,12 @@ export default function ClientFeedbackDetail() {
 
   const handlePostToClient = async () => {
     if (confirm('Post this request to the client? They will be notified.')) {
-      const oldStatus = request.status;
-      const newStatus = 'posted';
-      
       try {
-        await base44.functions.invoke('updateRequestStatus', { requestId, status: newStatus });
+        await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         
-        // Send the review email (first post, not a repost)
-        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: false });
+        // Send the review email - fire and forget
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: false }).catch(() => {});
         toast.success('Request posted to client');
       } catch (error) {
         toast.error('Failed to post request');
@@ -220,13 +216,11 @@ export default function ClientFeedbackDetail() {
   const handleResendForApproval = async () => {
     if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
       try {
-        // Update status and posted_at timestamp (marks new review cycle)
         await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-        queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
         
-        // Send email with repost messaging (frames as fresh review cycle)
-        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: true });
+        // Send email - fire and forget
+        base44.functions.invoke('sendNeedsReviewEmail', { requestId, isRepost: true }).catch(() => {});
         toast.success('Request resent to client');
       } catch (error) {
         toast.error('Failed to resend request');
@@ -343,6 +337,7 @@ export default function ClientFeedbackDetail() {
       });
 
       if (response.data?.success) {
+        // Only invalidate current request detail
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         setNewComment('');
         setNewLinks(['']);
