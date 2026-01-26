@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
+import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -30,13 +31,10 @@ export default function PriorityDashboard() {
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('calendar-view');
-  const [selectedTypes, setSelectedTypes] = useState(() => {
-    const saved = localStorage.getItem('priority_selectedTypes');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [statusFilter, setStatusFilter] = useState(() => 
-    localStorage.getItem('priority_statusFilter') || 'all'
-  );
+
+  // Unified filter state with URL/localStorage persistence
+  const { filters, setFilter, applyView } = useFilterState('priority', PRIORITY_DEFAULTS);
+  const { selectedTypes, statusFilter } = filters;
 
   // Saved views hook
   const {
@@ -49,33 +47,21 @@ export default function PriorityDashboard() {
     selectView,
   } = useSavedProjectViews();
 
-  // Apply filters when a saved view is selected
-  useEffect(() => {
-    if (activeView) {
-      setSelectedTypes(activeView.selectedTypes || []);
-      setStatusFilter(activeView.statusFilter || 'all');
-    }
-  }, [activeViewName]);
-
-  const handleSelectView = (name) => {
+  // Handle saved view selection - apply filters immediately
+  const handleSelectView = useCallback((name) => {
     const view = selectView(name);
     if (view) {
-      setSelectedTypes(view.selectedTypes || []);
-      setStatusFilter(view.statusFilter || 'all');
-      localStorage.setItem('priority_selectedTypes', JSON.stringify(view.selectedTypes || []));
-      localStorage.setItem('priority_statusFilter', view.statusFilter || 'all');
+      applyView(view);
     }
-  };
+  }, [selectView, applyView]);
 
-  const handleSelectedTypesChange = (newTypes) => {
-    setSelectedTypes(newTypes);
-    localStorage.setItem('priority_selectedTypes', JSON.stringify(newTypes));
-  };
+  const handleSelectedTypesChange = useCallback((newTypes) => {
+    setFilter('selectedTypes', newTypes);
+  }, [setFilter]);
 
-  const handleStatusFilterChange = (value) => {
-    setStatusFilter(value);
-    localStorage.setItem('priority_statusFilter', value);
-  };
+  const handleStatusFilterChange = useCallback((value) => {
+    setFilter('statusFilter', value);
+  }, [setFilter]);
 
   const { data: priorityTasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['priorityTasks'],

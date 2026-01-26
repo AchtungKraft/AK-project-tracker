@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -25,20 +25,18 @@ import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
+import { useFilterState, DASHBOARD_DEFAULTS } from "@/components/common/useFilterState";
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('dashboard_statusFilter') || 'all');
-  const [selectedTypes, setSelectedTypes] = useState(() => {
-    const saved = localStorage.getItem('dashboard_selectedTypes');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [groupBy, setGroupBy] = useState(() => localStorage.getItem('dashboard_groupBy') || 'projectType');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('dashboard_viewMode') || 'list');
+
+  // Unified filter state with URL/localStorage persistence
+  const { filters, setFilter, clearFilters: clearFilterState, applyView } = useFilterState('dashboard', DASHBOARD_DEFAULTS);
+  const { selectedTypes, statusFilter, groupBy, viewMode } = filters;
 
   // Saved views hook
   const {
@@ -51,53 +49,36 @@ export default function Dashboard() {
     selectView,
   } = useSavedProjectViews();
 
-  // Apply filters when a saved view is selected
-  useEffect(() => {
-    if (activeView) {
-      setSelectedTypes(activeView.selectedTypes || []);
-      setStatusFilter(activeView.statusFilter || 'all');
-    }
-  }, [activeViewName]);
-
-  const handleSelectView = (name) => {
+  // Handle saved view selection - apply filters immediately
+  const handleSelectView = useCallback((name) => {
     const view = selectView(name);
     if (view) {
-      setSelectedTypes(view.selectedTypes || []);
-      setStatusFilter(view.statusFilter || 'all');
+      applyView(view);
     }
-  };
+  }, [selectView, applyView]);
 
-  // Persist filter changes
-  const handleStatusFilterChange = (value) => {
-    setStatusFilter(value);
-    localStorage.setItem('dashboard_statusFilter', value);
-  };
+  // Filter change handlers
+  const handleStatusFilterChange = useCallback((value) => {
+    setFilter('statusFilter', value);
+  }, [setFilter]);
 
-  const handleSelectedTypesChange = (newTypes) => {
-    setSelectedTypes(newTypes);
-    localStorage.setItem('dashboard_selectedTypes', JSON.stringify(newTypes));
-  };
+  const handleSelectedTypesChange = useCallback((newTypes) => {
+    setFilter('selectedTypes', newTypes);
+  }, [setFilter]);
 
-  const handleGroupByChange = (value) => {
-    setGroupBy(value);
-    localStorage.setItem('dashboard_groupBy', value);
-  };
+  const handleGroupByChange = useCallback((value) => {
+    setFilter('groupBy', value);
+  }, [setFilter]);
 
-  const handleViewModeChange = (value) => {
-    setViewMode(value);
-    localStorage.setItem('dashboard_viewMode', value);
-  };
+  const handleViewModeChange = useCallback((value) => {
+    setFilter('viewMode', value);
+  }, [setFilter]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearchTerm('');
-    setStatusFilter('all');
-    setSelectedTypes([]);
-    setGroupBy('projectType');
-    localStorage.removeItem('dashboard_statusFilter');
-    localStorage.removeItem('dashboard_selectedTypes');
-    localStorage.removeItem('dashboard_groupBy');
+    clearFilterState();
     selectView('All Projects');
-  };
+  }, [clearFilterState, selectView]);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],

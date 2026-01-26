@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +38,7 @@ import { getReviewOwnership, getOwnershipSortPriority, sortByReviewOwnership } f
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { CopyRequestLinkButton } from "@/components/clientportal/ClientLinksCopyButtons";
+import { useFilterState, CLIENT_PORTAL_DEFAULTS } from "@/components/common/useFilterState";
 
 // Helper to determine request state
 const getRequestState = (request, decisions, attachments) => {
@@ -85,16 +86,11 @@ const getRequestState = (request, decisions, attachments) => {
 
 export default function ClientPortalHub() {
   const queryClient = useQueryClient();
-  const urlParams = new URLSearchParams(window.location.search);
-  const initialTab = urlParams.get('tab') || 'awaiting';
-  const [activeTab, setActiveTab] = useState(initialTab);
-  const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('clientPortalHub_viewMode') || 'cards';
-  });
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('all');
-
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
+
+  // Unified filter state with URL/localStorage persistence
+  const { filters, setFilter, applyView } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
+  const { selectedTypes, statusFilter, viewMode, tab: activeTab } = filters;
 
   // Saved views hook
   const {
@@ -107,34 +103,21 @@ export default function ClientPortalHub() {
     selectView,
   } = useSavedProjectViews();
 
-  // Apply filters when a saved view is selected
-  useEffect(() => {
-    if (activeView) {
-      setSelectedTypes(activeView.selectedTypes || []);
-      setStatusFilter(activeView.statusFilter || 'all');
-    }
-  }, [activeViewName]);
-
-  const handleSelectView = (name) => {
+  // Handle saved view selection - apply filters immediately
+  const handleSelectView = useCallback((name) => {
     const view = selectView(name);
     if (view) {
-      setSelectedTypes(view.selectedTypes || []);
-      setStatusFilter(view.statusFilter || 'all');
+      applyView(view);
     }
-  };
+  }, [selectView, applyView]);
 
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    localStorage.setItem('clientPortalHub_viewMode', mode);
-  };
+  const handleViewModeChange = useCallback((mode) => {
+    setFilter('viewMode', mode);
+  }, [setFilter]);
 
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    // Refetch all data when switching tabs
-    queryClient.invalidateQueries({ queryKey: ["allFeedbackRequests"] });
-    queryClient.invalidateQueries({ queryKey: ["allFeedbackDecisions"] });
-    queryClient.invalidateQueries({ queryKey: ["allFeedbackAttachments"] });
-  };
+  const handleTabChange = useCallback((tab) => {
+    setFilter('tab', tab);
+  }, [setFilter]);
 
   const handleSendBulkEmail = async (projectId, requestIds) => {
     setSendingEmailForProject(projectId);
