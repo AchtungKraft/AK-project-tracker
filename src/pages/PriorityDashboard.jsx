@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,13 +28,17 @@ export default function PriorityDashboard() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [primaryGroupBy, setPrimaryGroupBy] = useState('project');
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('calendar-view');
 
   // Unified filter state with URL/localStorage persistence
-  const { filters, setFilter, applyView } = useFilterState('priority', PRIORITY_DEFAULTS);
-  const { selectedTypes, statusFilter } = filters;
+  const { filters, setFilter, applyView, clearFilters } = useFilterState('priority', PRIORITY_DEFAULTS);
+  const { selectedTypes, statusFilter, assignedTo } = filters;
+
+  // Handler for assigned to filter changes
+  const handleAssignedToChange = useCallback((newAssigned) => {
+    setFilter('assignedTo', newAssigned);
+  }, [setFilter]);
 
   // Saved views hook
   const {
@@ -124,6 +128,13 @@ export default function PriorityDashboard() {
     return map;
   }, [allTaskComments]);
 
+  // Get active team members sorted by sort_order for the Assigned To filter
+  const activeTeamMembers = useMemo(() => {
+    return teamMembers
+      .filter(tm => tm.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [teamMembers]);
+
   // Filter out completed tasks and apply project filters from saved views
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const completedStatus = taskStatuses.find(s => {
@@ -132,7 +143,9 @@ export default function PriorityDashboard() {
   });
   const activePriorityTasks = priorityTasks.filter(t => {
     if (t.status_id === completedStatus?.id) return false;
-    if (assignedToFilter !== 'all' && t.assigned_team_member_id !== assignedToFilter) return false;
+    
+    // Filter by assigned team members (OR logic - show if assigned to ANY selected member)
+    if (assignedTo.length > 0 && !assignedTo.includes(t.assigned_team_member_id)) return false;
     
     // Filter by project type and status from saved views
     const project = projects.find(p => p.id === t.project_id);
@@ -371,14 +384,61 @@ export default function PriorityDashboard() {
                 </SelectContent>
               </Select>
 
+              {/* Assigned To Multi-Select */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className={`w-48 justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <User className="w-4 h-4 shrink-0" />
+                      {assignedTo.length === 0 
+                        ? 'All Assignees' 
+                        : assignedTo.length === 1 
+                          ? activeTeamMembers.find(tm => tm.id === assignedTo[0])?.full_name || 'Assignee'
+                          : `${assignedTo.length} Assignees`}
+                    </span>
+                    {assignedTo.length > 0 && (
+                      <X 
+                        className="w-4 h-4 ml-2 hover:text-red-400 shrink-0" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAssignedToChange([]);
+                        }}
+                      />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 max-h-80 overflow-y-auto">
+                  {activeTeamMembers.map(tm => (
+                    <DropdownMenuCheckboxItem
+                      key={tm.id}
+                      checked={assignedTo.includes(tm.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          handleAssignedToChange([...assignedTo, tm.id]);
+                        } else {
+                          handleAssignedToChange(assignedTo.filter(id => id !== tm.id));
+                        }
+                      }}
+                    >
+                      <span className="truncate">
+                        {tm.full_name}
+                        {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+                      </span>
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               {/* Clear Filters */}
-              {(selectedTypes.length > 0 || statusFilter !== 'all') && (
+              {(selectedTypes.length > 0 || statusFilter !== 'all' || assignedTo.length > 0) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setFilter('selectedTypes', []);
-                    setFilter('statusFilter', 'all');
+                    clearFilters();
                     selectView('All Projects');
                   }}
                   className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
@@ -413,19 +473,6 @@ export default function PriorityDashboard() {
               {/* Filters - only show on card view */}
               {activeTab === 'card-view' && priorityTasks.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
-                    <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
-                      <SelectValue placeholder="Filter by Assigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Team Members</SelectItem>
-                      {teamMembers.filter(tm => tm.active).map(member => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
                     <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
                       <SelectValue placeholder="Primary Group" />

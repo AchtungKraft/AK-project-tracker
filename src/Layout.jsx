@@ -94,7 +94,6 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
   const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
-    { title: "Tasks", url: createPageUrl("TasksExplorer"), icon: ListChecks },
     { title: "Clients", url: createPageUrl("ClientPortalHub"), icon: Building2 },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
   ] : [

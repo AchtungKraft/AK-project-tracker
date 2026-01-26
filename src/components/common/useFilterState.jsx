@@ -18,7 +18,7 @@ export function useFilterState(pageKey, defaultFilters = {}) {
   const pageStorageKey = `${PAGE_STORAGE_PREFIX}${pageKey}`;
   
   // Keys that are shared across all pages
-  const sharedKeys = ['selectedTypes', 'statusFilter'];
+  const sharedKeys = ['selectedTypes', 'statusFilter', 'assignedTo'];
   
   // Initialize state from shared storage + page storage + URL params
   const [filters, setFiltersInternal] = useState(() => {
@@ -157,6 +157,7 @@ export function useFilterState(pageKey, defaultFilters = {}) {
 export const DASHBOARD_DEFAULTS = {
   selectedTypes: [],
   statusFilter: 'all',
+  assignedTo: [],
   groupBy: 'projectType',
   viewMode: 'list',
 };
@@ -164,11 +165,13 @@ export const DASHBOARD_DEFAULTS = {
 export const PRIORITY_DEFAULTS = {
   selectedTypes: [],
   statusFilter: 'all',
+  assignedTo: [],
 };
 
 export const CLIENT_PORTAL_DEFAULTS = {
   selectedTypes: [],
   statusFilter: 'all',
+  assignedTo: [],
   viewMode: 'cards',
   tab: 'awaiting',
 };
