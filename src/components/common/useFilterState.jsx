@@ -1,33 +1,50 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
-const STORAGE_KEY_PREFIX = 'ak_filter_';
+// SHARED storage key for project type/status filters (synced across pages)
+const SHARED_FILTER_KEY = 'ak_shared_filters';
+// Page-specific storage key for page-only settings (viewMode, groupBy, tab)
+const PAGE_STORAGE_PREFIX = 'ak_page_';
 
 /**
  * Shared hook for sticky filter state across Dashboard, PriorityDashboard, ClientPortalHub
  * 
- * Single source of truth for filter state with:
- * - URL query parameter sync (primary - enables sharing/bookmarking)
- * - localStorage persistence (fallback when no URL params)
- * - Consistent behavior across mobile/desktop
+ * SHARED filters (synced across all pages): selectedTypes, statusFilter
+ * PAGE-SPECIFIC filters: viewMode, groupBy, tab
  * 
  * @param {string} pageKey - Unique key for the page ('dashboard', 'priority', 'clientportal')
  * @param {Object} defaultFilters - Default filter values
  */
 export function useFilterState(pageKey, defaultFilters = {}) {
-  const storageKey = `${STORAGE_KEY_PREFIX}${pageKey}`;
+  const pageStorageKey = `${PAGE_STORAGE_PREFIX}${pageKey}`;
   
-  // Initialize state from URL params first, then localStorage, then defaults
+  // Keys that are shared across all pages
+  const sharedKeys = ['selectedTypes', 'statusFilter'];
+  
+  // Initialize state from shared storage + page storage + URL params
   const [filters, setFiltersInternal] = useState(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const stored = localStorage.getItem(storageKey);
-    const parsedStored = stored ? JSON.parse(stored) : {};
+    
+    // Load shared filters (selectedTypes, statusFilter)
+    const sharedStored = localStorage.getItem(SHARED_FILTER_KEY);
+    const parsedShared = sharedStored ? JSON.parse(sharedStored) : {};
+    
+    // Load page-specific filters (viewMode, groupBy, tab)
+    const pageStored = localStorage.getItem(pageStorageKey);
+    const parsedPage = pageStored ? JSON.parse(pageStored) : {};
     
     const result = { ...defaultFilters };
     
-    // Apply stored values first (fallback)
+    // Apply shared stored values
+    sharedKeys.forEach(key => {
+      if (key in defaultFilters && parsedShared[key] !== undefined) {
+        result[key] = parsedShared[key];
+      }
+    });
+    
+    // Apply page-specific stored values
     Object.keys(defaultFilters).forEach(key => {
-      if (parsedStored[key] !== undefined) {
-        result[key] = parsedStored[key];
+      if (!sharedKeys.includes(key) && parsedPage[key] !== undefined) {
+        result[key] = parsedPage[key];
       }
     });
     
@@ -35,7 +52,6 @@ export function useFilterState(pageKey, defaultFilters = {}) {
     Object.keys(defaultFilters).forEach(key => {
       const urlValue = urlParams.get(key);
       if (urlValue !== null) {
-        // Parse arrays from URL (comma-separated)
         if (Array.isArray(defaultFilters[key])) {
           result[key] = urlValue ? urlValue.split(',').filter(Boolean) : [];
         } else {
@@ -47,16 +63,30 @@ export function useFilterState(pageKey, defaultFilters = {}) {
     return result;
   });
 
-  // Sync filters to both localStorage and URL
+  // Sync filters to storage (shared + page-specific)
   const syncToStorage = useCallback((newFilters) => {
-    // Save to localStorage
-    localStorage.setItem(storageKey, JSON.stringify(newFilters));
+    // Separate shared vs page-specific
+    const sharedFilters = {};
+    const pageFilters = {};
+    
+    Object.entries(newFilters).forEach(([key, value]) => {
+      if (sharedKeys.includes(key)) {
+        sharedFilters[key] = value;
+      } else {
+        pageFilters[key] = value;
+      }
+    });
+    
+    // Save shared filters (available to all pages)
+    localStorage.setItem(SHARED_FILTER_KEY, JSON.stringify(sharedFilters));
+    
+    // Save page-specific filters
+    localStorage.setItem(pageStorageKey, JSON.stringify(pageFilters));
     
     // Update URL without triggering navigation
     const url = new URL(window.location.href);
     
     Object.entries(newFilters).forEach(([key, value]) => {
-      // Skip if value equals default
       const isDefault = Array.isArray(value) 
         ? value.length === 0 
         : value === defaultFilters[key];
@@ -64,27 +94,24 @@ export function useFilterState(pageKey, defaultFilters = {}) {
       if (isDefault) {
         url.searchParams.delete(key);
       } else {
-        // Serialize arrays as comma-separated
         const serialized = Array.isArray(value) ? value.join(',') : value;
         url.searchParams.set(key, serialized);
       }
     });
     
-    // Use replaceState to update URL without adding history entry
     window.history.replaceState({}, '', url.toString());
-  }, [storageKey, defaultFilters]);
+  }, [pageStorageKey, defaultFilters]);
 
-  // Main setter function - always syncs state + storage + URL
+  // Main setter function
   const setFilters = useCallback((updater) => {
     setFiltersInternal(prev => {
       const newFilters = typeof updater === 'function' ? updater(prev) : updater;
-      // Sync asynchronously to avoid render-during-render
       queueMicrotask(() => syncToStorage(newFilters));
       return newFilters;
     });
   }, [syncToStorage]);
 
-  // Individual filter setters for convenience
+  // Individual filter setter
   const setFilter = useCallback((key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   }, [setFilters]);
@@ -104,7 +131,7 @@ export function useFilterState(pageKey, defaultFilters = {}) {
     }));
   }, [setFilters]);
 
-  // Check if any filters are active (non-default)
+  // Check if any filters are active
   const hasActiveFilters = useMemo(() => {
     return Object.entries(filters).some(([key, value]) => {
       if (Array.isArray(value)) {
