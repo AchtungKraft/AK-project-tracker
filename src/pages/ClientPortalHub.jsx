@@ -231,10 +231,15 @@ export default function ClientPortalHub() {
     allRequests.forEach(request => {
       if (request.status === 'draft' || request.status === 'archived') return;
       
-      // Filter by project type and status from saved views
+      // Filter by project type, status, and assigned team from saved views
       const project = projects.find(p => p.id === request.project_id);
       if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return;
       if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return;
+      // Filter by assigned team members (OR logic)
+      if (assignedTo.length > 0 && project) {
+        const projectTeam = project.assigned_team || [];
+        if (!projectTeam.some(memberId => assignedTo.includes(memberId))) return;
+      }
       
       const state = getRequestState(request, decisions, attachments);
       
