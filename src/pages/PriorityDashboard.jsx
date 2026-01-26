@@ -377,8 +377,9 @@ export default function PriorityDashboard() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    handleSelectedTypesChange([]);
-                    handleStatusFilterChange('all');
+                    setFilter('selectedTypes', []);
+                    setFilter('statusFilter', 'all');
+                    selectView('All Projects');
                   }}
                   className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                 >
