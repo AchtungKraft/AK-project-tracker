@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, RefreshCw, LayoutGrid, List, X, Check } from "lucide-react";
+import { Plus, Search, RefreshCw, LayoutGrid, List, X, Check, User } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -36,7 +36,12 @@ export default function Dashboard() {
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, clearFilters: clearFilterState, applyView } = useFilterState('dashboard', DASHBOARD_DEFAULTS);
-  const { selectedTypes, statusFilter, groupBy, viewMode } = filters;
+  const { selectedTypes, statusFilter, assignedTo, groupBy, viewMode } = filters;
+
+  // Handler for assigned to filter changes
+  const handleAssignedToChange = useCallback((newAssigned) => {
+    setFilter('assignedTo', newAssigned);
+  }, [setFilter]);
 
   // Saved views hook
   const {
@@ -111,13 +116,23 @@ export default function Dashboard() {
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
+  // Get active team members sorted by sort_order for the Assigned To filter
+  const activeTeamMembers = useMemo(() => {
+    return teamMembers
+      .filter(tm => tm.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [teamMembers]);
+
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          p.vin?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status_id === statusFilter;
     const matchesType = selectedTypes.length === 0 || selectedTypes.includes(p.project_type_id);
-    return matchesSearch && matchesStatus && matchesType;
+    // Filter by assigned team members (OR logic - show if ANY team member in assigned_team matches)
+    const matchesAssigned = assignedTo.length === 0 || 
+      (p.assigned_team && p.assigned_team.some(memberId => assignedTo.includes(memberId)));
+    return matchesSearch && matchesStatus && matchesType && matchesAssigned;
   });
 
   // Group projects
@@ -287,8 +302,58 @@ export default function Dashboard() {
               </DropdownMenu>
             </div>
 
+            {/* Assigned To Multi-Select */}
+            <div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className={`w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <User className="w-4 h-4 shrink-0" />
+                      {assignedTo.length === 0 
+                        ? 'All Assignees' 
+                        : assignedTo.length === 1 
+                          ? activeTeamMembers.find(tm => tm.id === assignedTo[0])?.full_name || 'Assignee'
+                          : `${assignedTo.length} Assignees`}
+                    </span>
+                    {assignedTo.length > 0 && (
+                      <X 
+                        className="w-4 h-4 ml-2 hover:text-red-400 shrink-0" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAssignedToChange([]);
+                        }}
+                      />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 max-h-80 overflow-y-auto">
+                  {activeTeamMembers.map(tm => (
+                    <DropdownMenuCheckboxItem
+                      key={tm.id}
+                      checked={assignedTo.includes(tm.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          handleAssignedToChange([...assignedTo, tm.id]);
+                        } else {
+                          handleAssignedToChange(assignedTo.filter(id => id !== tm.id));
+                        }
+                      }}
+                    >
+                      <span className="truncate">
+                        {tm.full_name}
+                        {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+                      </span>
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
             {/* Clear Filters */}
-            {(searchTerm || statusFilter !== 'all' || selectedTypes.length > 0 || groupBy !== 'projectType') && (
+            {(searchTerm || statusFilter !== 'all' || selectedTypes.length > 0 || assignedTo.length > 0 || groupBy !== 'projectType') && (
               <div>
                 <Button
                   variant="ghost"

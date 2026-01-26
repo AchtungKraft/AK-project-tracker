@@ -19,13 +19,16 @@ import {
   MessageSquareText,
   LayoutGrid,
   List,
-  Eye
+  Eye,
+  User,
+  X
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
@@ -89,8 +92,13 @@ export default function ClientPortalHub() {
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
 
   // Unified filter state with URL/localStorage persistence
-  const { filters, setFilter, applyView } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
-  const { selectedTypes, statusFilter, viewMode, tab: activeTab } = filters;
+  const { filters, setFilter, applyView, clearFilters } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
+  const { selectedTypes, statusFilter, assignedTo, viewMode, tab: activeTab } = filters;
+
+  // Handler for assigned to filter changes
+  const handleAssignedToChange = useCallback((newAssigned) => {
+    setFilter('assignedTo', newAssigned);
+  }, [setFilter]);
 
   // Saved views hook
   const {
@@ -200,7 +208,19 @@ export default function ClientPortalHub() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["teamMembers"],
+    queryFn: () => base44.entities.TeamMember.list(),
+  });
+
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+
+  // Get active team members sorted by sort_order for the Assigned To filter
+  const activeTeamMembers = useMemo(() => {
+    return teamMembers
+      .filter(tm => tm.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [teamMembers]);
 
   // Categorize requests with attention indicators and review ownership
   const categorizedRequests = useMemo(() => {
@@ -294,7 +314,7 @@ export default function ClientPortalHub() {
       changesRequested: changesRequested.sort(sortByOwnership), 
       approved: approved.sort(sortByOwnership) 
     };
-  }, [allRequests, decisions, attachments, comments, projects, selectedTypes, statusFilter]);
+  }, [allRequests, decisions, attachments, comments, projects, selectedTypes, statusFilter, assignedTo]);
 
   // Group requests by project
   const groupByProject = (requestList) => {
@@ -636,6 +656,10 @@ export default function ClientPortalHub() {
     const project = projects.find(p => p.id === request.project_id);
     if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
     if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
+    if (assignedTo.length > 0 && project) {
+      const projectTeam = project.assigned_team || [];
+      if (!projectTeam.some(memberId => assignedTo.includes(memberId))) return false;
+    }
     const ownership = getReviewOwnership(request, comments, decisions, attachments);
     return ownership.ownership === 'ak_needs_review';
   }).length;
@@ -658,8 +682,8 @@ export default function ClientPortalHub() {
           </p>
         </div>
         
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2 md:gap-3">
+        {/* Filters and View Mode Toggle */}
+        <div className="flex items-center gap-2 md:gap-3 flex-wrap">
           <div className="hidden md:block">
             <SavedViewsSelector
               savedViews={savedViews}
@@ -672,6 +696,60 @@ export default function ClientPortalHub() {
               currentStatusFilter={statusFilter}
             />
           </div>
+          
+          {/* Assigned To Multi-Select */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className={`justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <User className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">
+                    {assignedTo.length === 0 
+                      ? 'All Assignees' 
+                      : assignedTo.length === 1 
+                        ? activeTeamMembers.find(tm => tm.id === assignedTo[0])?.full_name || 'Assignee'
+                        : `${assignedTo.length} Assignees`}
+                  </span>
+                  <span className="sm:hidden">
+                    {assignedTo.length === 0 ? 'All' : assignedTo.length}
+                  </span>
+                </span>
+                {assignedTo.length > 0 && (
+                  <X 
+                    className="w-4 h-4 ml-1 hover:text-red-400 shrink-0" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAssignedToChange([]);
+                    }}
+                  />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 max-h-80 overflow-y-auto">
+              {activeTeamMembers.map(tm => (
+                <DropdownMenuCheckboxItem
+                  key={tm.id}
+                  checked={assignedTo.includes(tm.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      handleAssignedToChange([...assignedTo, tm.id]);
+                    } else {
+                      handleAssignedToChange(assignedTo.filter(id => id !== tm.id));
+                    }
+                  }}
+                >
+                  <span className="truncate">
+                    {tm.full_name}
+                    {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
             <Button
               size="sm"
