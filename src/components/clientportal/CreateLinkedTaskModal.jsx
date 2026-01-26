@@ -1,16 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, ImageIcon, Check } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "../tasks/useTaskDropdownData";
+import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "../tasks/TaskDropdownSelects";
 
 export default function CreateLinkedTaskModal({ 
   open, 
@@ -34,31 +35,22 @@ export default function CreateLinkedTaskModal({
   });
   const [selectedImageUrls, setSelectedImageUrls] = useState([]);
 
-  // Fetch categories, team members, and statuses
-  const { data: categories = [] } = useQuery({
-    queryKey: ['taskCategories'],
-    queryFn: () => base44.entities.TaskCategory.filter({ active: true }),
-    enabled: open
-  });
+  // Use shared hooks for dropdown data
+  const { categories } = useTaskCategories(open);
+  const { statuses, defaultStatusId } = useTaskStatuses(open);
+  const { teamMembers } = useAssignableTeamMembers(open);
 
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.filter({ active: true }),
-    enabled: open
-  });
-
-  const { data: statuses = [] } = useQuery({
-    queryKey: ['taskStatuses'],
-    queryFn: () => base44.entities.StatusList.filter({ scope: "Task", active: true }),
-    enabled: open
-  });
+  // Auto-select default status when loaded
+  useEffect(() => {
+    if (defaultStatusId && !taskData.status_id) {
+      setTaskData(prev => ({ ...prev, status_id: defaultStatusId }));
+    }
+  }, [defaultStatusId, taskData.status_id]);
 
   const createTaskMutation = useMutation({
     mutationFn: async () => {
-      // Use user description or default linked message
       const description = taskData.description || `Linked from feedback request: ${feedbackRequestTitle}`;
 
-      // Create the task
       const newTask = await base44.entities.Task.create({
         name: taskData.name,
         description,
@@ -70,7 +62,6 @@ export default function CreateLinkedTaskModal({
         due_date: taskData.due_date || undefined
       });
 
-      // Create the link between task and feedback request
       await base44.entities.ClientFeedbackTaskLink.create({
         project_id: projectId,
         task_id: newTask.id,
@@ -78,7 +69,6 @@ export default function CreateLinkedTaskModal({
         created_by_user_id: userId
       });
 
-      // If images were selected, create a TaskComment with the images attached
       if (selectedImageUrls.length > 0) {
         await base44.entities.TaskComment.create({
           task_id: newTask.id,
@@ -115,7 +105,6 @@ export default function CreateLinkedTaskModal({
     onClose();
   };
 
-  // Get all image attachments from the feedback request (use file_url field)
   const imageAttachments = feedbackAttachments.filter(a => a.attachment_type === 'image' && a.file_url);
 
   const toggleImageSelection = (url) => {
@@ -170,55 +159,34 @@ export default function CreateLinkedTaskModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-gray-300">Category</Label>
-              <Select 
-                value={taskData.category_id} 
+              <TaskCategorySelect
+                value={taskData.category_id}
                 onValueChange={(val) => setTaskData({ ...taskData, category_id: val })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                categories={categories}
+                className="mt-1"
+              />
             </div>
 
             <div>
               <Label className="text-gray-300">Assignee</Label>
-              <Select 
-                value={taskData.assigned_team_member_id} 
+              <TaskAssigneeSelect
+                value={taskData.assigned_team_member_id}
                 onValueChange={(val) => setTaskData({ ...taskData, assigned_team_member_id: val })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
-                  <SelectValue placeholder="Select assignee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamMembers.map(tm => (
-                    <SelectItem key={tm.id} value={tm.id}>{tm.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                teamMembers={teamMembers}
+                className="mt-1"
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-gray-300">Status</Label>
-              <Select 
-                value={taskData.status_id} 
+              <TaskStatusSelect
+                value={taskData.status_id}
                 onValueChange={(val) => setTaskData({ ...taskData, status_id: val })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statuses.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                statuses={statuses}
+                className="mt-1"
+              />
             </div>
 
             <div>

@@ -12,21 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Loader2, CalendarIcon, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-
-// Helper to get full category path
-const getCategoryPath = (categoryId, categories) => {
-  if (!categoryId) return null;
-  const category = categories.find(c => c.id === categoryId);
-  if (!category) return null;
-  
-  if (category.parent_id) {
-    const parent = categories.find(c => c.id === category.parent_id);
-    if (parent) {
-      return `${parent.name} > ${category.name}`;
-    }
-  }
-  return category.name;
-};
+import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
+import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 
 export default function CreateTaskModal({ onClose, projectId }) {
   const queryClient = useQueryClient();
@@ -46,20 +33,10 @@ export default function CreateTaskModal({ onClose, projectId }) {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['taskCategories'],
-    queryFn: () => base44.entities.TaskCategory.list(),
-  });
-
-  const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
-  });
-
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
-  });
+  // Use shared hooks for dropdown data
+  const { categories } = useTaskCategories();
+  const { statuses, defaultStatusId } = useTaskStatuses();
+  const { teamMembers } = useAssignableTeamMembers();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -74,10 +51,12 @@ export default function CreateTaskModal({ onClose, projectId }) {
     enabled: !!user?.id,
   });
 
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-  const activeCategories = categories.filter(c => c.active);
-  const parentCategories = activeCategories.filter(c => !c.parent_id);
-  const activeTeamMembers = teamMembers.filter(tm => tm.active);
+  // Auto-select default status when loaded
+  useEffect(() => {
+    if (defaultStatusId && !taskData.status_id) {
+      setTaskData(prev => ({ ...prev, status_id: defaultStatusId }));
+    }
+  }, [defaultStatusId, taskData.status_id]);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
@@ -158,50 +137,20 @@ export default function CreateTaskModal({ onClose, projectId }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label className="text-gray-400">Category</Label>
-              <Select
+              <TaskCategorySelect
                 value={taskData.category_id}
                 onValueChange={(value) => setTaskData({ ...taskData, category_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {parentCategories.map(parent => {
-                    const children = activeCategories.filter(c => c.parent_id === parent.id);
-                    return (
-                      <React.Fragment key={parent.id}>
-                        <SelectItem value={parent.id}>
-                          <span style={{ color: parent.color }}>{parent.name}</span>
-                        </SelectItem>
-                        {children.map(child => (
-                          <SelectItem key={child.id} value={child.id}>
-                            <span className="ml-4" style={{ color: child.color }}>
-                              → {child.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+                categories={categories}
+              />
             </div>
 
             <div>
               <Label className="text-gray-400">Status</Label>
-              <Select
+              <TaskStatusSelect
                 value={taskData.status_id}
                 onValueChange={(value) => setTaskData({ ...taskData, status_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {taskStatuses.map(status => (
-                    <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                statuses={statuses}
+              />
             </div>
           </div>
 
@@ -221,21 +170,11 @@ export default function CreateTaskModal({ onClose, projectId }) {
                 </Button>
               )}
             </div>
-            <Select
+            <TaskAssigneeSelect
               value={taskData.assigned_team_member_id}
               onValueChange={(value) => setTaskData({ ...taskData, assigned_team_member_id: value })}
-            >
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                <SelectValue placeholder="Assign to team member" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeTeamMembers.map(member => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name} {member.team_role && `(${member.team_role})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              teamMembers={teamMembers}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

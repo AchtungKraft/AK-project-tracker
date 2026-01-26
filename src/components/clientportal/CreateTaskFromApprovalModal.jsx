@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "../tasks/useTaskDropdownData";
+import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "../tasks/TaskDropdownSelects";
 
 export default function CreateTaskFromApprovalModal({ open, onClose, projectId, requestId, approval, userId }) {
   const queryClient = useQueryClient();
@@ -23,34 +24,27 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
     enabled: !!requestId,
   });
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['taskCategories'],
-    queryFn: () => base44.entities.TaskCategory.list(),
-  });
-
-  const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
-    queryFn: () => base44.entities.StatusList.list(),
-  });
-
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list(),
-  });
-
-  const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-  const activeCategories = categories.filter(c => c.active);
-  const activeTeamMembers = teamMembers.filter(tm => tm.active);
+  // Use shared hooks for dropdown data
+  const { categories } = useTaskCategories();
+  const { statuses, defaultStatusId } = useTaskStatuses();
+  const { teamMembers } = useAssignableTeamMembers();
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     project_id: projectId,
-    status_id: taskStatuses[0]?.id || '',
+    status_id: '',
     category_id: '',
     assigned_team_member_id: '',
     due_date: '',
   });
+
+  // Auto-select default status when loaded
+  useEffect(() => {
+    if (defaultStatusId && !formData.status_id) {
+      setFormData(prev => ({ ...prev, status_id: defaultStatusId }));
+    }
+  }, [defaultStatusId, formData.status_id]);
 
   useEffect(() => {
     if (request) {
@@ -121,47 +115,30 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Status</Label>
-              <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {taskStatuses.map(status => (
-                    <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TaskStatusSelect
+                value={formData.status_id}
+                onValueChange={(value) => setFormData({ ...formData, status_id: value })}
+                statuses={statuses}
+              />
             </div>
 
             <div>
               <Label>Category</Label>
-              <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TaskCategorySelect
+                value={formData.category_id}
+                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                categories={categories}
+              />
             </div>
           </div>
 
           <div>
             <Label>Assign To</Label>
-            <Select value={formData.assigned_team_member_id} onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}>
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                <SelectValue placeholder="Assign to team member" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeTeamMembers.map(member => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name} {member.team_role && `(${member.team_role})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TaskAssigneeSelect
+              value={formData.assigned_team_member_id}
+              onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
+              teamMembers={teamMembers}
+            />
           </div>
 
           <div>
