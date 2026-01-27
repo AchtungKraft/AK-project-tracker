@@ -918,96 +918,77 @@ export default function ClientPortalHub() {
 
         <TabsContent value="awaiting" className="mt-6">
           {(() => {
-            // Group by review ownership: AK Needs Review vs Waiting on Client
-            const akNeedsReview = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'ak_needs_review');
-            const waitingOnClient = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'waiting_on_client');
+            // Group by project FIRST, then show ownership per-request inside each project
+            // This ensures each project appears only once
+            const groupedByProject = groupByProject(categorizedRequests.awaiting);
+            
+            // Sort projects: those with AK needs review requests come first
+            const sortedGroups = [...groupedByProject].sort((a, b) => {
+              const aHasAkReview = a.requests.some(r => r.ownership?.ownership === 'ak_needs_review');
+              const bHasAkReview = b.requests.some(r => r.ownership?.ownership === 'ak_needs_review');
+              if (aHasAkReview && !bHasAkReview) return -1;
+              if (!aHasAkReview && bHasAkReview) return 1;
+              return 0;
+            });
 
-            if (akNeedsReview.length === 0 && waitingOnClient.length === 0) {
+            // Count totals for header badges
+            const akNeedsReviewCount = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'ak_needs_review').length;
+            const waitingOnClientCount = categorizedRequests.awaiting.filter(r => r.ownership?.ownership === 'waiting_on_client').length;
+
+            if (sortedGroups.length === 0) {
               return viewMode === 'list' 
                 ? <ClientPortalListView groupedData={[]} emptyMessage="No items awaiting client review" tabName="awaiting" getProjectClientSlug={getProjectClientSlug} />
                 : renderRequestList([], "No items awaiting client review", "bg-amber-500/20 text-amber-400 border-amber-500/50", "awaiting", true);
             }
 
+            // Summary header showing counts
+            const SummaryHeader = () => (
+              <div className="flex items-center gap-4 mb-4 flex-wrap">
+                {akNeedsReviewCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <span className="text-sm text-gray-300">AK Needs Review:</span>
+                    <Badge className="bg-red-500/20 text-red-400">{akNeedsReviewCount}</Badge>
+                  </div>
+                )}
+                {waitingOnClientCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-300">Waiting on Client:</span>
+                    <Badge className="bg-gray-500/20 text-gray-400">{waitingOnClientCount}</Badge>
+                  </div>
+                )}
+              </div>
+            );
+
             if (viewMode === 'list') {
               return (
-                <div className="space-y-6">
-                  {akNeedsReview.length > 0 && (
-                    <div className="space-y-3">
-                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-red-400" />
-                        AK Needs to Review
-                        <Badge className="bg-red-500/20 text-red-400 ml-2">{akNeedsReview.length}</Badge>
-                      </h2>
-                      <ClientPortalListView 
-                        groupedData={groupByProject(akNeedsReview)} 
-                        emptyMessage="No items need AK review" 
-                        tabName="awaiting"
-                        showEmailButton={true}
-                        onSendBulkEmail={handleSendBulkEmail}
-                        sendingEmailForProject={sendingEmailForProject}
-                        comments={comments}
-                        decisions={decisions}
-                        getProjectClientSlug={getProjectClientSlug}
-                      />
-                    </div>
-                  )}
-                  {waitingOnClient.length > 0 && (
-                    <div className="space-y-3">
-                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-gray-400" />
-                        Waiting on Client
-                        <Badge className="bg-gray-500/20 text-gray-400 ml-2">{waitingOnClient.length}</Badge>
-                      </h2>
-                      <ClientPortalListView 
-                        groupedData={groupByProject(waitingOnClient)} 
-                        emptyMessage="No items waiting on client" 
-                        tabName="awaiting"
-                        showEmailButton={true}
-                        onSendBulkEmail={handleSendBulkEmail}
-                        sendingEmailForProject={sendingEmailForProject}
-                        comments={comments}
-                        decisions={decisions}
-                        getProjectClientSlug={getProjectClientSlug}
-                      />
-                    </div>
-                  )}
+                <div className="space-y-4">
+                  <SummaryHeader />
+                  <ClientPortalListView 
+                    groupedData={sortedGroups} 
+                    emptyMessage="No items awaiting review" 
+                    tabName="awaiting"
+                    showEmailButton={true}
+                    onSendBulkEmail={handleSendBulkEmail}
+                    sendingEmailForProject={sendingEmailForProject}
+                    comments={comments}
+                    decisions={decisions}
+                    getProjectClientSlug={getProjectClientSlug}
+                  />
                 </div>
               );
             }
 
             return (
-              <div className="space-y-8">
-                {akNeedsReview.length > 0 && (
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-red-400" />
-                      AK Needs to Review
-                      <Badge className="bg-red-500/20 text-red-400 ml-2">{akNeedsReview.length}</Badge>
-                    </h2>
-                    {renderRequestList(
-                      groupByProject(akNeedsReview),
-                      "No items need AK review",
-                      "bg-red-500/20 text-red-400 border-red-500/50",
-                      "awaiting",
-                      true
-                    )}
-                  </div>
-                )}
-                {waitingOnClient.length > 0 && (
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-gray-400" />
-                      Waiting on Client
-                      <Badge className="bg-gray-500/20 text-gray-400 ml-2">{waitingOnClient.length}</Badge>
-                    </h2>
-                    {renderRequestList(
-                      groupByProject(waitingOnClient),
-                      "No items waiting on client",
-                      "bg-gray-500/20 text-gray-400 border-gray-500/50",
-                      "awaiting",
-                      true
-                    )}
-                  </div>
+              <div className="space-y-4">
+                <SummaryHeader />
+                {renderRequestList(
+                  sortedGroups,
+                  "No items awaiting review",
+                  "bg-amber-500/20 text-amber-400 border-amber-500/50",
+                  "awaiting",
+                  true
                 )}
               </div>
             );
