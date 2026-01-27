@@ -2,11 +2,10 @@ import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { MapPin, Check, X, Loader2, Edit2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import LocationSelect from "@/components/common/LocationSelect";
 
 /**
  * InventoryLocationEditor - Shared component for viewing and editing inventory locations
@@ -75,7 +74,6 @@ export default function InventoryLocationEditor({
   };
 
   const currentLocation = getLocationDisplay(currentLocationId);
-  const parentLocations = locations.filter(l => !l.parent_id && l.active);
 
   const handleSave = () => {
     updateMutation.mutate(selectedLocationId);
@@ -113,41 +111,13 @@ export default function InventoryLocationEditor({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Select 
-            value={selectedLocationId || 'unassigned'} 
-            onValueChange={(v) => setSelectedLocationId(v === 'unassigned' ? '' : v)}
-          >
-            <SelectTrigger className="bg-gray-800 border-gray-700 text-white flex-1">
-              <SelectValue placeholder="Select location..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unassigned">
-                <span className="text-yellow-400">— Unassigned —</span>
-              </SelectItem>
-              {parentLocations.map(parent => {
-                const children = locations.filter(l => l.parent_id === parent.id && l.active);
-                return (
-                  <React.Fragment key={parent.id}>
-                    <SelectItem value={parent.id}>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-3 h-3" style={{ color: parent.color }} />
-                        <span style={{ color: parent.color }}>{parent.location_area}</span>
-                      </div>
-                    </SelectItem>
-                    {children.map(child => (
-                      <SelectItem key={child.id} value={child.id}>
-                        <div className="flex items-center gap-2 ml-4">
-                          <span className="text-gray-500">→</span>
-                          <MapPin className="w-3 h-3" style={{ color: child.color }} />
-                          <span style={{ color: child.color }}>{child.location_area}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          <div className="flex-1">
+            <LocationSelect
+              value={selectedLocationId}
+              onValueChange={setSelectedLocationId}
+              className="bg-gray-800 border-gray-700 text-white"
+            />
+          </div>
           
           <Button
             size="icon"
