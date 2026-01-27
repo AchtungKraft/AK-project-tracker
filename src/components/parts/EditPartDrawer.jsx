@@ -15,6 +15,7 @@ import CreateInlineModal from "../common/CreateInlineModal";
 import PartJournalSection from "./PartJournalSection";
 import PartStatusSummary from "./PartStatusSummary";
 import AddInventoryModal from "../inventory/AddInventoryModal";
+import { InventoryLocationsList } from "../inventory/InventoryLocationEditor";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
 
@@ -316,33 +317,9 @@ export default function EditPartDrawer({ partId, onClose }) {
             {/* Complete Status Summary */}
             <PartStatusSummary partId={partId} />
 
-            {/* Inventory Locations Detail */}
+            {/* Inventory Locations Detail - Editable */}
             {inventoryItems.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-400">Storage Locations</h4>
-                <div className="space-y-1">
-                  {inventoryItems.map(item => {
-                    const loc = locations.find(l => l.id === item.location_id);
-                    return (
-                      <div key={item.id} className="flex items-center justify-between p-2 bg-gray-800/30 rounded text-sm">
-                        <div className="flex items-center gap-2">
-                          <Box className="w-4 h-4 text-gray-500" />
-                          <span className="text-gray-300">{loc?.location_area || 'No location'}</span>
-                          {loc?.bin_description && (
-                            <span className="text-gray-500">({loc.bin_description})</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className="text-white">{item.quantity_on_hand} on hand</span>
-                          {item.quantity_reserved > 0 && (
-                            <span className="text-yellow-400">{item.quantity_reserved} reserved</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <InventoryLocationsList partId={partId} />
             )}
 
             <Separator className="bg-gray-700" />
