@@ -645,11 +645,14 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
             
-            /* Location/Category Group - atomic block */
+            /* Location/Category Group - section-based pagination */
             .location-group { 
               margin-bottom: 20px; 
               page-break-inside: avoid;
               break-inside: avoid;
+            }
+            .location-group:not(:first-of-type) {
+              page-break-before: auto;
             }
             .location-header { 
               border-left: 6px solid #333;
@@ -661,8 +664,8 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               margin-bottom: 0;
               text-transform: uppercase;
               letter-spacing: 0.5px;
-              page-break-after: avoid;
-              break-after: avoid;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
             .location-header.non-inventory {
               border-left-color: #999;
@@ -677,12 +680,18 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               border-bottom-color: #7b1fa2;
             }
             
-            /* Sub-group - atomic block with header */
+            /* Sub-group container */
             .sub-group {
-              page-break-inside: avoid;
-              break-inside: avoid;
               margin-left: 6px;
             }
+            
+            /* Print-block: atomic unit containing header + first rows */
+            .print-block {
+              page-break-inside: avoid;
+              break-inside: avoid;
+              min-height: 140px;
+            }
+            
             .sub-location-header { 
               border-left: 3px solid #888;
               padding: 6px 12px 6px 22px; 
@@ -690,13 +699,16 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               font-weight: 600;
               color: #444;
               border-bottom: 1px solid #ddd;
-              page-break-after: avoid;
-              break-after: avoid;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
             
             /* Parts list container */
             .parts-list {
+              display: block;
               margin-bottom: 10px;
+              orphans: 2;
+              widows: 2;
             }
             
             /* Grid header row */
@@ -710,6 +722,8 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               text-transform: uppercase;
               color: #666;
               font-weight: 600;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
             .parts-header .col-qty,
             .parts-header .col-cost { text-align: center; }
@@ -718,11 +732,13 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .part-row {
               display: grid;
               grid-template-columns: 36px 1fr 70px ${showCostOnPickList ? '90px' : ''};
+              grid-auto-rows: min-content;
               gap: 8px;
               padding: 10px 12px;
               border-bottom: 1px solid #ddd;
-              align-items: center;
+              align-items: flex-start;
               min-height: 60px;
+              max-height: 80px;
               page-break-inside: avoid;
               break-inside: avoid;
             }
@@ -730,6 +746,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .part-row.non-physical {
               color: #666;
               font-style: italic;
+            }
+            /* Allow page break before rows outside print-block (overflow rows) */
+            .part-row.allow-break {
+              page-break-before: auto;
             }
             
             /* Checkbox column */
@@ -757,6 +777,8 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               align-items: flex-start;
               gap: 10px;
               min-width: 0;
+              max-height: 60px;
+              overflow: hidden;
             }
             .part-thumb {
               width: 40px;
@@ -789,7 +811,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               height: 20px;
               fill: #999;
             }
-            .part-info { flex: 1; min-width: 0; }
+            .part-info { flex: 1; min-width: 0; overflow: hidden; }
             .part-name { font-weight: bold; font-size: 14px; line-height: 1.3; }
             .part-meta { font-size: 11px; color: #666; margin-top: 2px; }
             .part-meta span { margin-right: 12px; }
@@ -874,18 +896,25 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 page-break-inside: avoid; 
                 break-inside: avoid;
               }
-              .sub-group {
-                page-break-inside: avoid;
-                break-inside: avoid;
+              .location-group:not(:first-of-type) {
+                page-break-before: auto;
+              }
+              .print-block {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
               }
               .location-header,
-              .sub-location-header {
-                page-break-after: avoid;
-                break-after: avoid;
+              .sub-location-header,
+              .parts-header {
+                page-break-after: avoid !important;
+                break-after: avoid !important;
               }
               .part-row {
-                page-break-inside: avoid;
-                break-inside: avoid;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              .part-row.allow-break {
+                page-break-before: auto;
               }
               .summary {
                 page-break-inside: avoid;
@@ -919,60 +948,78 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               return a[0].localeCompare(b[0]);
             });
 
+            // Helper to render a part row
+            const renderPartRow = (item, allowBreak = false) => {
+              const locationDisplay = item.mainLocation 
+                ? (item.subLocation ? `${item.mainLocation} › ${item.subLocation}` : item.mainLocation)
+                : '';
+              
+              return `
+              <div class="part-row ${!item.isPhysical ? 'non-physical' : ''} ${allowBreak ? 'allow-break' : ''}">
+                <div class="col-check">
+                  ${item.isPhysical && !item.isInstalled
+                    ? '<span class="checkbox"></span>' 
+                    : '<span class="checkbox disabled"></span>'
+                  }
+                </div>
+                <div class="col-part">
+                  ${item.partImage 
+                    ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
+                    : `<div class="part-thumb-placeholder">
+                        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
+                      </div>`
+                  }
+                  <div class="part-info">
+                    <div class="part-name">
+                      ${item.partName}
+                      ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
+                      ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
+                      ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
+                    </div>
+                    <div class="part-meta">
+                      ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
+                      ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
+                      ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-qty">${item.qtyToPick}</div>
+                ${showCostOnPickList ? `<div class="col-cost">$${item.extendedCost.toFixed(2)}</div>` : ''}
+              </div>
+            `};
+
             return `
             <div class="location-group">
               <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
-              ${sortedSubGroups.map(([subKey, items]) => `
+              ${sortedSubGroups.map(([subKey, items]) => {
+                // Split items: first 2 go in print-block, rest are overflow
+                const printBlockItems = items.slice(0, 2);
+                const overflowItems = items.slice(2);
+                const hasOverflow = overflowItems.length > 0;
+                
+                return `
                 <div class="sub-group">
-                  ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
-                  <div class="parts-list">
-                    <div class="parts-header">
-                      <div></div>
-                      <div>Part</div>
-                      <div class="col-qty">Qty</div>
-                      ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
-                    </div>
-                    ${items.map(item => {
-                      const locationDisplay = item.mainLocation 
-                        ? (item.subLocation ? `${item.mainLocation} › ${item.subLocation}` : item.mainLocation)
-                        : '';
-                      
-                      return `
-                      <div class="part-row ${!item.isPhysical ? 'non-physical' : ''}">
-                        <div class="col-check">
-                          ${item.isPhysical && !item.isInstalled
-                            ? '<span class="checkbox"></span>' 
-                            : '<span class="checkbox disabled"></span>'
-                          }
-                        </div>
-                        <div class="col-part">
-                          ${item.partImage 
-                            ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
-                            : `<div class="part-thumb-placeholder">
-                                <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
-                              </div>`
-                          }
-                          <div class="part-info">
-                            <div class="part-name">
-                              ${item.partName}
-                              ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
-                              ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
-                              ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
-                            </div>
-                            <div class="part-meta">
-                              ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
-                              ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
-                              ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
-                            </div>
-                          </div>
-                        </div>
-                        <div class="col-qty">${item.qtyToPick}</div>
-                        ${showCostOnPickList ? `<div class="col-cost">$${item.extendedCost.toFixed(2)}</div>` : ''}
+                  <!-- Print-block: header + first rows kept together -->
+                  <div class="print-block">
+                    ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
+                    <div class="parts-list">
+                      <div class="parts-header">
+                        <div></div>
+                        <div>Part</div>
+                        <div class="col-qty">Qty</div>
+                        ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
                       </div>
-                    `}).join('')}
+                      ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
+                    </div>
                   </div>
+                  ${hasOverflow ? `
+                  <!-- Overflow rows: can break between these if needed -->
+                  <div class="parts-list">
+                    ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
+                  </div>
+                  ` : ''}
                 </div>
-              `).join('')}
+              `}).join('')}
             </div>
           `}).join('')}
 
