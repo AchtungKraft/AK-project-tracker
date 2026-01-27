@@ -25,8 +25,7 @@ export default function InventoryLocations({ onPartClick }) {
   const [showEmptyLocations, setShowEmptyLocations] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 25;
+
   
   // Modals
   const [inventoryModalPart, setInventoryModalPart] = useState(null);
@@ -121,6 +120,8 @@ export default function InventoryLocations({ onPartClick }) {
   };
 
   // Calculate part counts for each location
+  // IMPORTANT: Count ALL parts with physical inventory (quantity_on_hand > 0), 
+  // regardless of reservation status. Reserved parts still physically exist at the location.
   const locationPartCounts = useMemo(() => {
     const counts = {};
     
@@ -135,15 +136,15 @@ export default function InventoryLocations({ onPartClick }) {
       return descendants;
     };
 
-    // Count unique parts with available inventory > 0 at each location
+    // Count unique parts with ANY physical inventory at each location (not just available)
     locations.forEach(loc => {
       const locationIds = getDescendants(loc.id);
       const partsAtLocation = new Set();
       
       inventoryItems.forEach(item => {
         if (locationIds.includes(item.location_id)) {
-          const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
-          if (available > 0) {
+          // Count if there's any physical stock, regardless of reservation
+          if ((item.quantity_on_hand || 0) > 0) {
             partsAtLocation.add(item.part_id);
           }
         }
@@ -152,12 +153,11 @@ export default function InventoryLocations({ onPartClick }) {
       counts[loc.id] = partsAtLocation.size;
     });
 
-    // Count unassigned
+    // Count unassigned - parts with physical inventory but no location
     const unassignedParts = new Set();
     inventoryItems.forEach(item => {
       if (!item.location_id) {
-        const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
-        if (available > 0) {
+        if ((item.quantity_on_hand || 0) > 0) {
           unassignedParts.add(item.part_id);
         }
       }
@@ -167,27 +167,31 @@ export default function InventoryLocations({ onPartClick }) {
     return counts;
   }, [locations, inventoryItems]);
 
-  // Get parts for selected location
+  // Helper to get all descendant location IDs
+  const getDescendants = (locationId) => {
+    const descendants = [locationId];
+    locations
+      .filter(loc => loc.parent_id === locationId)
+      .forEach(child => {
+        descendants.push(...getDescendants(child.id));
+      });
+    return descendants;
+  };
+
+  // Get parts for selected location - include ALL parts with physical inventory (quantity_on_hand > 0)
   const partsAtSelectedLocation = useMemo(() => {
+    // Filter to only inventory items with physical stock
+    const itemsWithStock = inventoryItems.filter(i => (i.quantity_on_hand || 0) > 0);
+
     if (selectedLocationId === null) {
-      // "All Locations" - show all parts with inventory
-      const partIds = new Set(inventoryItems.map(i => i.part_id));
+      // "All Locations" - show all parts with any physical inventory
+      const partIds = new Set(itemsWithStock.map(i => i.part_id));
       return parts.filter(p => partIds.has(p.id));
     }
 
-    const getDescendants = (locationId) => {
-      const descendants = [locationId];
-      locations
-        .filter(loc => loc.parent_id === locationId)
-        .forEach(child => {
-          descendants.push(...getDescendants(child.id));
-        });
-      return descendants;
-    };
-
     if (selectedLocationId === 'unassigned') {
       const partIds = new Set(
-        inventoryItems
+        itemsWithStock
           .filter(i => !i.location_id)
           .map(i => i.part_id)
       );
@@ -196,7 +200,7 @@ export default function InventoryLocations({ onPartClick }) {
 
     const locationIds = getDescendants(selectedLocationId);
     const partIds = new Set(
-      inventoryItems
+      itemsWithStock
         .filter(i => locationIds.includes(i.location_id))
         .map(i => i.part_id)
     );
@@ -214,15 +218,125 @@ export default function InventoryLocations({ onPartClick }) {
     );
   }, [partsAtSelectedLocation, searchTerm]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredParts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedParts = filteredParts.slice(startIndex, startIndex + itemsPerPage);
+  // Group parts by location hierarchy for display
+  const groupedParts = useMemo(() => {
+    if (selectedLocationId === 'unassigned') {
+      // Single group for unassigned
+      return [{
+        locationId: 'unassigned',
+        locationName: 'Unassigned',
+        color: '#EAB308',
+        subLocations: [{
+          locationId: 'unassigned',
+          locationName: null,
+          parts: filteredParts
+        }]
+      }];
+    }
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedLocationId, searchTerm]);
+    // Build a map of part -> locations (with quantities)
+    const partLocationMap = {};
+    inventoryItems.forEach(item => {
+      if ((item.quantity_on_hand || 0) > 0) {
+        if (!partLocationMap[item.part_id]) {
+          partLocationMap[item.part_id] = [];
+        }
+        partLocationMap[item.part_id].push({
+          locationId: item.location_id,
+          onHand: item.quantity_on_hand || 0,
+          reserved: item.quantity_reserved || 0
+        });
+      }
+    });
+
+    // Get relevant location IDs based on selection
+    let relevantLocationIds;
+    if (selectedLocationId === null) {
+      // All locations
+      relevantLocationIds = new Set(locations.map(l => l.id));
+      relevantLocationIds.add(null); // Include unassigned
+    } else {
+      relevantLocationIds = new Set(getDescendants(selectedLocationId));
+    }
+
+    // Group parts by their actual storage locations
+    const locationGroups = {};
+    
+    filteredParts.forEach(part => {
+      const partLocations = partLocationMap[part.id] || [];
+      
+      partLocations.forEach(pl => {
+        if (!relevantLocationIds.has(pl.locationId)) return;
+        
+        const loc = locations.find(l => l.id === pl.locationId);
+        let parentLoc = null;
+        let subLoc = null;
+        
+        if (!loc) {
+          // Unassigned
+          parentLoc = { id: 'unassigned', location_area: 'Unassigned', color: '#EAB308' };
+        } else if (loc.parent_id) {
+          parentLoc = locations.find(l => l.id === loc.parent_id) || loc;
+          subLoc = loc;
+        } else {
+          parentLoc = loc;
+        }
+        
+        const parentKey = parentLoc.id;
+        if (!locationGroups[parentKey]) {
+          locationGroups[parentKey] = {
+            locationId: parentLoc.id,
+            locationName: parentLoc.location_area,
+            color: parentLoc.color || '#6B7280',
+            sortOrder: parentLoc.sort_order || 0,
+            subLocations: {}
+          };
+        }
+        
+        const subKey = subLoc ? subLoc.id : '_direct';
+        if (!locationGroups[parentKey].subLocations[subKey]) {
+          locationGroups[parentKey].subLocations[subKey] = {
+            locationId: subLoc?.id || null,
+            locationName: subLoc?.location_area || null,
+            color: subLoc?.color || parentLoc.color || '#6B7280',
+            sortOrder: subLoc?.sort_order || 0,
+            parts: []
+          };
+        }
+        
+        // Avoid duplicates
+        if (!locationGroups[parentKey].subLocations[subKey].parts.find(p => p.id === part.id)) {
+          locationGroups[parentKey].subLocations[subKey].parts.push({
+            ...part,
+            _locationQty: pl.onHand,
+            _locationReserved: pl.reserved
+          });
+        }
+      });
+    });
+
+    // Convert to sorted array
+    return Object.values(locationGroups)
+      .sort((a, b) => {
+        if (a.locationId === 'unassigned') return 1;
+        if (b.locationId === 'unassigned') return -1;
+        return (a.sortOrder || 0) - (b.sortOrder || 0);
+      })
+      .map(group => ({
+        ...group,
+        subLocations: Object.values(group.subLocations)
+          .sort((a, b) => {
+            if (!a.locationName) return -1;
+            if (!b.locationName) return 1;
+            return (a.sortOrder || 0) - (b.sortOrder || 0);
+          })
+      }));
+  }, [filteredParts, inventoryItems, locations, selectedLocationId]);
+
+  // Total parts count for display (grouping handles pagination differently)
+  const totalPartsCount = filteredParts.length;
+
+
 
   // Handle location selection
   const handleLocationSelect = (locationId) => {
@@ -374,16 +488,21 @@ export default function InventoryLocations({ onPartClick }) {
     );
   };
 
-  // Part Row component
-  const PartRow = ({ part }) => {
+  // Part Row component - now accepts location-specific quantities
+  const PartRow = ({ part, locationQty, locationReserved }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
-    const stats = selectedLocationId && selectedLocationId !== 'unassigned'
-      ? getInventoryStats(part.id, selectedLocationId)
-      : getInventoryStats(part.id);
+    // Use location-specific quantities if provided, otherwise fall back to global
+    const hasLocationQty = locationQty !== undefined;
+    const stats = hasLocationQty 
+      ? { onHand: locationQty, reserved: locationReserved || 0, available: locationQty - (locationReserved || 0) }
+      : (selectedLocationId && selectedLocationId !== 'unassigned'
+          ? getInventoryStats(part.id, selectedLocationId)
+          : getInventoryStats(part.id));
     const hasMultipleImages = images.length > 1;
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const isLowStock = stats.available <= (part.reorder_point || 0) && stats.available > 0;
+    const isFullyReserved = stats.onHand > 0 && stats.available === 0;
 
     return (
       <div
@@ -426,7 +545,12 @@ export default function InventoryLocations({ onPartClick }) {
               <h4 className="text-white text-sm font-medium line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
                 {part.part_name}
               </h4>
-              {isLowStock && (
+              {isFullyReserved && (
+                <Badge variant="outline" className="border-orange-500 text-orange-400 text-xs shrink-0">
+                  Reserved
+                </Badge>
+              )}
+              {isLowStock && !isFullyReserved && (
                 <Badge variant="outline" className="border-yellow-500 text-yellow-400 text-xs shrink-0">
                   Low Stock
                 </Badge>
@@ -450,25 +574,23 @@ export default function InventoryLocations({ onPartClick }) {
         {/* Stats */}
         <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
           <div className="text-center min-w-[50px]">
-            <div className="text-gray-500 mb-0.5">Stock</div>
-            <div className="text-white font-semibold">{stats.onHand}</div>
+            <div className="text-gray-500 mb-0.5">Qty</div>
+            <div className="text-white font-semibold">
+              {stats.onHand}
+              {stats.reserved > 0 && (
+                <span className="text-orange-400 font-normal ml-1">
+                  ({stats.reserved} rsv)
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Available</div>
             <div className={cn(
               "font-semibold",
-              stats.available > 0 ? "text-green-400" : "text-red-400"
+              stats.available > 0 ? "text-green-400" : stats.onHand > 0 ? "text-orange-400" : "text-red-400"
             )}>
               {stats.available}
-            </div>
-          </div>
-          <div className="text-center min-w-[50px]">
-            <div className="text-gray-500 mb-0.5">Reserved</div>
-            <div className={cn(
-              "font-semibold",
-              stats.reserved > 0 ? "text-yellow-400" : "text-gray-500"
-            )}>
-              {stats.reserved}
             </div>
           </div>
         </div>
@@ -488,16 +610,20 @@ export default function InventoryLocations({ onPartClick }) {
     );
   };
 
-  // Part Card component
-  const PartCard = ({ part }) => {
+  // Part Card component - now accepts location-specific quantities
+  const PartCard = ({ part, locationQty, locationReserved }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
-    const stats = selectedLocationId && selectedLocationId !== 'unassigned'
-      ? getInventoryStats(part.id, selectedLocationId)
-      : getInventoryStats(part.id);
+    const hasLocationQty = locationQty !== undefined;
+    const stats = hasLocationQty 
+      ? { onHand: locationQty, reserved: locationReserved || 0, available: locationQty - (locationReserved || 0) }
+      : (selectedLocationId && selectedLocationId !== 'unassigned'
+          ? getInventoryStats(part.id, selectedLocationId)
+          : getInventoryStats(part.id));
     const hasMultipleImages = images.length > 1;
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const isLowStock = stats.available <= (part.reorder_point || 0) && stats.available > 0;
+    const isFullyReserved = stats.onHand > 0 && stats.available === 0;
 
     return (
       <div
@@ -536,7 +662,12 @@ export default function InventoryLocations({ onPartClick }) {
             <h4 className="text-white text-sm font-semibold line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
               {part.part_name}
             </h4>
-            {isLowStock && (
+            {isFullyReserved && (
+              <Badge variant="outline" className="border-orange-500 text-orange-400 text-xs shrink-0">
+                Rsv
+              </Badge>
+            )}
+            {isLowStock && !isFullyReserved && (
               <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
             )}
           </div>
@@ -548,21 +679,18 @@ export default function InventoryLocations({ onPartClick }) {
           )}
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-gray-800">
+          <div className="grid grid-cols-2 gap-1 pt-2 border-t border-gray-800">
             <div className="text-center">
-              <p className="text-xs text-gray-500">Stock</p>
-              <p className="text-sm text-white font-semibold">{stats.onHand}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Available</p>
-              <p className={`text-sm font-semibold ${stats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {stats.available}
+              <p className="text-xs text-gray-500">Qty</p>
+              <p className="text-sm text-white font-semibold">
+                {stats.onHand}
+                {stats.reserved > 0 && <span className="text-orange-400 text-xs ml-1">({stats.reserved})</span>}
               </p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-gray-500">Reserved</p>
-              <p className={`text-sm font-semibold ${stats.reserved > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                {stats.reserved}
+              <p className="text-xs text-gray-500">Available</p>
+              <p className={`text-sm font-semibold ${stats.available > 0 ? 'text-green-400' : stats.onHand > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                {stats.available}
               </p>
             </div>
           </div>
@@ -725,7 +853,7 @@ export default function InventoryLocations({ onPartClick }) {
 
           {/* Right Pane - Parts Display */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Parts Display */}
+            {/* Parts Display - Grouped by Location */}
             <div className="flex-1 p-4 overflow-y-auto">
               {filteredParts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center">
@@ -739,49 +867,75 @@ export default function InventoryLocations({ onPartClick }) {
                       : 'No inventory items found'}
                   </p>
                 </div>
-              ) : viewMode === 'list' ? (
-                <div className="space-y-2">
-                  {paginatedParts.map(part => (
-                    <PartRow key={part.id} part={part} />
-                  ))}
-                </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-                  {paginatedParts.map(part => (
-                    <PartCard key={part.id} part={part} />
+                <div className="space-y-6">
+                  {groupedParts.map(group => (
+                    <div key={group.locationId} className="space-y-3">
+                      {/* Main Location Header */}
+                      <div 
+                        className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4"
+                        style={{ borderLeftColor: group.color }}
+                      >
+                        <MapPin className="w-5 h-5" style={{ color: group.color }} />
+                        <h3 className="text-base font-bold text-white">{group.locationName}</h3>
+                        <span className="text-xs text-gray-400">
+                          ({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)
+                        </span>
+                      </div>
+
+                      {/* Sub-locations */}
+                      {group.subLocations.map(subLoc => (
+                        <div key={subLoc.locationId || '_direct'} className="ml-4 space-y-2">
+                          {/* Sub-location Header (if has name) */}
+                          {subLoc.locationName && (
+                            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/50 rounded border-l-2"
+                                 style={{ borderLeftColor: subLoc.color }}>
+                              <ChevronRight className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm font-medium text-gray-300">{subLoc.locationName}</span>
+                              <span className="text-xs text-gray-500">({subLoc.parts.length})</span>
+                            </div>
+                          )}
+
+                          {/* Parts in this sub-location */}
+                          {viewMode === 'list' ? (
+                            <div className={cn("space-y-2", subLoc.locationName && "ml-4")}>
+                              {subLoc.parts.map(part => (
+                                <PartRow 
+                                  key={`${part.id}-${subLoc.locationId}`} 
+                                  part={part}
+                                  locationQty={part._locationQty}
+                                  locationReserved={part._locationReserved}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className={cn(
+                              "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3",
+                              subLoc.locationName && "ml-4"
+                            )}>
+                              {subLoc.parts.map(part => (
+                                <PartCard 
+                                  key={`${part.id}-${subLoc.locationId}`} 
+                                  part={part}
+                                  locationQty={part._locationQty}
+                                  locationReserved={part._locationReserved}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="border-t border-red-900/20 bg-gray-900/30 p-3 flex items-center justify-between">
+            {/* Parts count footer */}
+            {totalPartsCount > 0 && (
+              <div className="border-t border-red-900/20 bg-gray-900/30 p-3">
                 <div className="text-xs text-gray-400">
-                  Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredParts.length)} of {filteredParts.length}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="h-8 px-3 text-xs"
-                  >
-                    Previous
-                  </Button>
-                  <div className="text-xs text-gray-400">
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-8 px-3 text-xs"
-                  >
-                    Next
-                  </Button>
+                  {totalPartsCount} part{totalPartsCount !== 1 ? 's' : ''} across {groupedParts.length} location{groupedParts.length !== 1 ? 's' : ''}
                 </div>
               </div>
             )}
