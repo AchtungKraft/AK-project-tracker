@@ -632,9 +632,11 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               margin: 0;
               padding: 20px;
               color: #000;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .header { 
-              border-bottom: 2px solid #000; 
+              border-bottom: 3px solid #000; 
               padding-bottom: 15px; 
               margin-bottom: 20px; 
             }
@@ -642,30 +644,63 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px; }
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
-            .location-group { margin-bottom: 25px; page-break-inside: avoid; }
+            
+            /* Location/Category Group - print-safe with borders */
+            .location-group { 
+              margin-bottom: 20px; 
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
             .location-header { 
-              background: #333; 
-              color: #fff; 
-              padding: 8px 12px; 
+              border-left: 6px solid #333;
+              border-top: 2px solid #333;
+              border-bottom: 1px solid #333;
+              padding: 10px 12px 10px 14px; 
               font-weight: bold; 
               font-size: 16px;
-              margin-bottom: 2px;
+              margin-bottom: 0;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              page-break-after: avoid;
+              break-after: avoid;
             }
             .location-header.non-inventory {
-              background: #999;
+              border-left-color: #999;
+              border-top-color: #999;
+              border-bottom-color: #999;
               font-style: italic;
+              color: #666;
             }
+            .location-header.installed-group {
+              border-left-color: #7b1fa2;
+              border-top-color: #7b1fa2;
+              border-bottom-color: #7b1fa2;
+            }
+            
+            /* Sub-location/Subcategory header - thinner rule, indented */
             .sub-location-header { 
-              background: #666; 
-              color: #fff; 
-              padding: 5px 12px 5px 24px; 
+              border-left: 3px solid #888;
+              padding: 6px 12px 6px 28px; 
               font-size: 13px;
-              margin-bottom: 2px;
+              font-weight: 600;
+              color: #444;
+              margin-left: 6px;
+              border-bottom: 1px solid #ddd;
+              page-break-after: avoid;
+              break-after: avoid;
             }
+            
+            /* Sub-group container to keep header with first items */
+            .sub-group {
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            
             .parts-table { 
               width: 100%; 
               border-collapse: collapse; 
               margin-bottom: 10px;
+              margin-left: 6px;
             }
             .parts-table th { 
               text-align: left; 
@@ -682,28 +717,43 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             }
             .parts-table tr:last-child td { border-bottom: none; }
             .parts-table tr.non-physical td {
-              color: #888;
+              color: #666;
               font-style: italic;
             }
+            
+            /* Part row - keep together */
+            .parts-table tr {
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            
             .part-cell {
               display: flex;
               align-items: flex-start;
               gap: 10px;
             }
+            /* Fixed thumbnail sizes for consistent row heights */
             .part-thumb {
               width: 40px;
               height: 40px;
+              min-width: 40px;
+              min-height: 40px;
+              max-width: 40px;
+              max-height: 40px;
               object-fit: cover;
               border-radius: 4px;
-              border: 1px solid #ddd;
+              border: 1px solid #999;
               flex-shrink: 0;
             }
             .part-thumb-placeholder {
               width: 40px;
               height: 40px;
-              background: #f0f0f0;
+              min-width: 40px;
+              min-height: 40px;
+              max-width: 40px;
+              max-height: 40px;
               border-radius: 4px;
-              border: 1px solid #ddd;
+              border: 1px solid #ccc;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -715,7 +765,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               fill: #999;
             }
             .part-info { flex: 1; min-width: 0; }
-            .part-name { font-weight: bold; font-size: 14px; }
+            .part-name { font-weight: bold; font-size: 14px; line-height: 1.3; }
             .part-meta { font-size: 11px; color: #666; margin-top: 2px; }
             .part-meta span { margin-right: 12px; }
             .part-number { font-family: monospace; }
@@ -735,14 +785,15 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               vertical-align: middle;
             }
             .checkbox.disabled {
-              border-color: #ccc;
-              background: #f5f5f5;
+              border: 1px dashed #999;
             }
             .cost { 
               text-align: right; 
               font-size: 12px; 
               color: #666; 
             }
+            
+            /* Print-safe badges using borders instead of backgrounds */
             .badge {
               display: inline-block;
               font-size: 9px;
@@ -750,46 +801,37 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               border-radius: 3px;
               margin-left: 8px;
               font-weight: bold;
-            }
-            .reserved-badge {
-              background: #333;
-              color: #fff;
+              border: 1.5px solid;
             }
             .status-badge {
-              background: #f0f0f0;
+              border-color: #999;
               color: #666;
-              border: 1px solid #ccc;
             }
             .status-badge.on-order {
-              background: #e3f2fd;
+              border-color: #1565c0;
               color: #1565c0;
-              border-color: #90caf9;
             }
             .status-badge.to-buy {
-              background: #fff3e0;
+              border-color: #e65100;
               color: #e65100;
-              border-color: #ffcc80;
             }
             .status-badge.in-stock {
-              background: #e8f5e9;
+              border-color: #2e7d32;
               color: #2e7d32;
-              border-color: #81c784;
             }
             .status-badge.installed {
-              background: #f3e5f5;
+              border-color: #7b1fa2;
               color: #7b1fa2;
-              border-color: #ce93d8;
-            }
-            .location-header.installed-group {
-              background: #7b1fa2;
             }
 
             .summary { 
               margin-top: 30px; 
               padding-top: 15px; 
-              border-top: 2px solid #000;
+              border-top: 3px solid #000;
               display: flex;
               justify-content: space-between;
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             .summary-item { text-align: right; }
             .summary-label { font-size: 12px; color: #666; }
@@ -797,13 +839,41 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .footer { 
               margin-top: 40px; 
               padding-top: 15px;
-              border-top: 1px solid #ccc;
+              border-top: 1px solid #999;
               font-size: 11px;
               color: #666;
             }
+            
             @media print {
-              body { padding: 0; }
-              .location-group { page-break-inside: avoid; }
+              body { 
+                padding: 10px; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .location-group { 
+                page-break-inside: avoid; 
+                break-inside: avoid;
+              }
+              .sub-group {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              .location-header {
+                page-break-after: avoid;
+                break-after: avoid;
+              }
+              .sub-location-header {
+                page-break-after: avoid;
+                break-after: avoid;
+              }
+              .parts-table tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              .summary {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
             }
           </style>
         </head>
@@ -836,59 +906,61 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             <div class="location-group">
               <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
               ${sortedSubGroups.map(([subKey, items]) => `
-                ${subKey !== '_direct' ? `<div class="sub-location-header">→ ${subKey}</div>` : ''}
-                <table class="parts-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 30px;"></th>
-                      <th>Part</th>
-                      <th style="width: 80px; text-align: center;">Qty</th>
-                      ${showCostOnPickList ? '<th style="width: 100px; text-align: right;">Cost</th>' : ''}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${items.map(item => {
-                      const locationDisplay = item.mainLocation 
-                        ? (item.subLocation ? `${item.mainLocation} > ${item.subLocation}` : item.mainLocation)
-                        : '';
-                      
-                      return `
-                      <tr class="${!item.isPhysical ? 'non-physical' : ''}">
-                        <td>
-                          ${item.isPhysical && !item.isInstalled
-                            ? '<span class="checkbox"></span>' 
-                            : '<span class="checkbox disabled"></span>'
-                          }
-                        </td>
-                        <td>
-                          <div class="part-cell">
-                            ${item.partImage 
-                              ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
-                              : `<div class="part-thumb-placeholder">
-                                  <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
-                                </div>`
+                <div class="sub-group">
+                  ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
+                  <table class="parts-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 30px;"></th>
+                        <th>Part</th>
+                        <th style="width: 80px; text-align: center;">Qty</th>
+                        ${showCostOnPickList ? '<th style="width: 100px; text-align: right;">Cost</th>' : ''}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map(item => {
+                        const locationDisplay = item.mainLocation 
+                          ? (item.subLocation ? `${item.mainLocation} › ${item.subLocation}` : item.mainLocation)
+                          : '';
+                        
+                        return `
+                        <tr class="${!item.isPhysical ? 'non-physical' : ''}">
+                          <td>
+                            ${item.isPhysical && !item.isInstalled
+                              ? '<span class="checkbox"></span>' 
+                              : '<span class="checkbox disabled"></span>'
                             }
-                            <div class="part-info">
-                              <div class="part-name">
-                                ${item.partName}
-                                ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
-                                ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
-                                ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
-                              </div>
-                              <div class="part-meta">
-                                ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
-                                ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
-                                ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
+                          </td>
+                          <td>
+                            <div class="part-cell">
+                              ${item.partImage 
+                                ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
+                                : `<div class="part-thumb-placeholder">
+                                    <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
+                                  </div>`
+                              }
+                              <div class="part-info">
+                                <div class="part-name">
+                                  ${item.partName}
+                                  ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
+                                  ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
+                                  ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
+                                </div>
+                                <div class="part-meta">
+                                  ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
+                                  ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
+                                  ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td class="qty">${item.qtyToPick}</td>
-                        ${showCostOnPickList ? `<td class="cost">$${item.extendedCost.toFixed(2)}</td>` : ''}
-                      </tr>
-                    `}).join('')}
-                  </tbody>
-                </table>
+                          </td>
+                          <td class="qty">${item.qtyToPick}</td>
+                          ${showCostOnPickList ? `<td class="cost">$${item.extendedCost.toFixed(2)}</td>` : ''}
+                        </tr>
+                      `}).join('')}
+                    </tbody>
+                  </table>
+                </div>
               `).join('')}
             </div>
           `}).join('')}
