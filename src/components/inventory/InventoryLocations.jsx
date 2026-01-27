@@ -18,6 +18,7 @@ import AddToNeedToBuyModal from "../parts/AddToNeedToBuyModal";
 import ImageGallery from "../parts/ImageGallery";
 import PartActionsDropdown from "../parts/PartActionsDropdown";
 import InventoryLocationEditor from "./InventoryLocationEditor";
+import BuildExportActions from "./BuildExportActions";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -944,14 +945,21 @@ export default function InventoryLocations({ onPartClick }) {
               </Select>
             </div>
             {selectedBuild && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSelectedBuildId(null)}
-                className="text-gray-400 hover:text-white h-9 px-3"
-              >
-                Clear filter
-              </Button>
+              <>
+                <BuildExportActions
+                  buildId={selectedBuildId}
+                  buildName={selectedBuild.name}
+                  clientName={selectedBuild.client_name}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedBuildId(null)}
+                  className="text-gray-400 hover:text-white h-9 px-3"
+                >
+                  Clear filter
+                </Button>
+              </>
             )}
           </div>
         </div>
