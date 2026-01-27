@@ -47,8 +47,12 @@ import { useFilterState, CLIENT_PORTAL_DEFAULTS } from "@/components/common/useF
 const getRequestState = (request, decisions, attachments) => {
   if (request.status === 'draft') return 'draft';
   if (request.status === 'archived') return 'archived';
-  if (request.status === 'approved') return 'approved';
-  if (request.status === 'changes_requested') return 'changes_requested';
+  
+  // For status-based states, trust the status field if explicitly set
+  // BUT only if there's no posted_at (hasn't been sent to client yet)
+  // Once posted, we derive state from decisions
+  if (request.status === 'approved' && !request.posted_at) return 'approved';
+  if (request.status === 'changes_requested' && !request.posted_at) return 'changes_requested';
   
   // Only consider decisions made AFTER the request was last posted
   const postedAt = request.posted_at ? new Date(request.posted_at) : null;
@@ -84,6 +88,8 @@ const getRequestState = (request, decisions, attachments) => {
     }
   }
   
+  // If request has status approved/changes_requested but was re-posted, it's awaiting review again
+  // This handles the "resend for review" workflow
   return 'awaiting_review';
 };
 
