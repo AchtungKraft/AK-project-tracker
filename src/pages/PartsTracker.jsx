@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import NeedToBuy from "../components/parts/NeedToBuy";
 import OnOrder from "../components/parts/OnOrder";
-import InventoryLocations from "../components/parts/InventoryLocations";
+import InventoryLocations from "../components/inventory/InventoryLocations";
 import BuildsDashboard from "../components/parts/BuildsDashboard";
 import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLayout";
 import InventoryManagement from "../components/inventory/InventoryManagement";
