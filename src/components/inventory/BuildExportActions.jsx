@@ -722,6 +722,11 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               color: #e65100;
               border-color: #ffcc80;
             }
+            .status-badge.in-stock {
+              background: #e8f5e9;
+              color: #2e7d32;
+              border-color: #81c784;
+            }
             .summary { 
               margin-top: 30px; 
               padding-top: 15px; 
@@ -807,7 +812,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                             <div class="part-info">
                               <div class="part-name">
                                 ${item.partName}
-                                ${item.isReserved && item.isPhysical ? '<span class="badge reserved-badge">RSV</span>' : ''}
+                                ${item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
                                 ${item.status ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
                               </div>
                               <div class="part-meta">
