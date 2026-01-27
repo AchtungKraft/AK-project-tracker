@@ -16,6 +16,7 @@ import AddToBuildModal from "../parts/AddToBuildModal";
 import AddToNeedToBuyModal from "../parts/AddToNeedToBuyModal";
 import ImageGallery from "../parts/ImageGallery";
 import PartActionsDropdown from "../parts/PartActionsDropdown";
+import InventoryLocationEditor from "./InventoryLocationEditor";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -488,8 +489,17 @@ export default function InventoryLocations({ onPartClick }) {
     );
   };
 
+  // Get inventory item ID for a part at a specific location
+  const getInventoryItemId = (partId, locationId) => {
+    const item = inventoryItems.find(i => 
+      i.part_id === partId && 
+      (locationId === 'unassigned' ? !i.location_id : i.location_id === locationId)
+    );
+    return item?.id;
+  };
+
   // Part Row component - now accepts location-specific quantities
-  const PartRow = ({ part, locationQty, locationReserved }) => {
+  const PartRow = ({ part, locationQty, locationReserved, locationId }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
     // Use location-specific quantities if provided, otherwise fall back to global
@@ -503,6 +513,7 @@ export default function InventoryLocations({ onPartClick }) {
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const isLowStock = stats.available <= (part.reorder_point || 0) && stats.available > 0;
     const isFullyReserved = stats.onHand > 0 && stats.available === 0;
+    const inventoryItemId = locationId ? getInventoryItemId(part.id, locationId) : null;
 
     return (
       <div
@@ -595,6 +606,17 @@ export default function InventoryLocations({ onPartClick }) {
           </div>
         </div>
 
+        {/* Move Location Button (inline) */}
+        {inventoryItemId && (
+          <div className="hidden md:block">
+            <InventoryLocationEditor
+              inventoryItemId={inventoryItemId}
+              currentLocationId={locationId === 'unassigned' ? null : locationId}
+              compact
+            />
+          </div>
+        )}
+
         {/* Actions */}
         <div className="hidden md:block ml-2">
           <PartActionsDropdown
@@ -611,7 +633,7 @@ export default function InventoryLocations({ onPartClick }) {
   };
 
   // Part Card component - now accepts location-specific quantities
-  const PartCard = ({ part, locationQty, locationReserved }) => {
+  const PartCard = ({ part, locationQty, locationReserved, locationId }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
     const hasLocationQty = locationQty !== undefined;
@@ -624,6 +646,7 @@ export default function InventoryLocations({ onPartClick }) {
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const isLowStock = stats.available <= (part.reorder_point || 0) && stats.available > 0;
     const isFullyReserved = stats.onHand > 0 && stats.available === 0;
+    const inventoryItemId = locationId ? getInventoryItemId(part.id, locationId) : null;
 
     return (
       <div
@@ -694,6 +717,17 @@ export default function InventoryLocations({ onPartClick }) {
               </p>
             </div>
           </div>
+
+          {/* Move Location (inline editor) */}
+          {inventoryItemId && (
+            <div className="mt-2 pt-2 border-t border-gray-800">
+              <InventoryLocationEditor
+                inventoryItemId={inventoryItemId}
+                currentLocationId={locationId === 'unassigned' ? null : locationId}
+                compact
+              />
+            </div>
+          )}
 
           {/* Vendor & Actions */}
           <div className="flex items-center justify-between text-xs mt-2">
@@ -905,6 +939,7 @@ export default function InventoryLocations({ onPartClick }) {
                                   part={part}
                                   locationQty={part._locationQty}
                                   locationReserved={part._locationReserved}
+                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
                                 />
                               ))}
                             </div>
@@ -919,6 +954,7 @@ export default function InventoryLocations({ onPartClick }) {
                                   part={part}
                                   locationQty={part._locationQty}
                                   locationReserved={part._locationReserved}
+                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
                                 />
                               ))}
                             </div>
