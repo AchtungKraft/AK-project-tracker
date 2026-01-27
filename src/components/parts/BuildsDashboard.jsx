@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Search, Package, CheckCircle2, AlertTriangle, Wrench, Eye, 
-  ChevronDown, ChevronUp, ShoppingCart, Truck, Download
+  ChevronDown, ChevronUp, ShoppingCart, Truck, Download, FileSpreadsheet, Printer
 } from "lucide-react";
 import InstallPartModal from "../project/InstallPartModal";
+import BuildExportActions from "../inventory/BuildExportActions";
 
 /**
  * BuildsDashboard - Shows projects with their part requirements
@@ -48,6 +49,11 @@ export default function BuildsDashboard({ onPartClick }) {
     queryFn: () => base44.entities.InstalledPart.list()
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ['partCategories'],
+    queryFn: () => base44.entities.PartCategory.list()
+  });
+
   // Filter projects that have requirements
   const projectsWithRequirements = projects.filter(project => 
     requirements.some(r => r.project_id === project.id)
@@ -58,6 +64,55 @@ export default function BuildsDashboard({ onPartClick }) {
     project.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     project.vin?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Helper to get category info
+  const getCategoryInfo = (part) => {
+    const category = categories.find(c => c.id === part.part_category_id);
+    let mainCategory = 'Uncategorized';
+    let subCategory = '';
+    let sortOrder = 999;
+
+    if (category) {
+      sortOrder = category.sort_order || 0;
+      if (category.parent_id) {
+        const parent = categories.find(c => c.id === category.parent_id);
+        mainCategory = parent?.name || 'Uncategorized';
+        subCategory = category.name;
+      } else {
+        mainCategory = category.name;
+      }
+    }
+
+    return { mainCategory, subCategory, sortOrder };
+  };
+
+  // Group items by category
+  const groupByCategory = (items) => {
+    const grouped = {};
+    
+    items.forEach(item => {
+      const { mainCategory, subCategory, sortOrder } = getCategoryInfo(item.part);
+      
+      if (!grouped[mainCategory]) {
+        grouped[mainCategory] = { subCategories: {}, sortOrder };
+      }
+      
+      const subKey = subCategory || '_direct';
+      if (!grouped[mainCategory].subCategories[subKey]) {
+        grouped[mainCategory].subCategories[subKey] = [];
+      }
+      grouped[mainCategory].subCategories[subKey].push(item);
+    });
+
+    // Sort by category order
+    const sortedGroups = Object.entries(grouped).sort((a, b) => {
+      if (a[0] === 'Uncategorized') return 1;
+      if (b[0] === 'Uncategorized') return -1;
+      return (a[1].sortOrder || 0) - (b[1].sortOrder || 0);
+    });
+
+    return sortedGroups;
+  };
 
   const getProjectData = (projectId) => {
     const projectReqs = requirements.filter(r => r.project_id === projectId);
@@ -289,11 +344,18 @@ export default function BuildsDashboard({ onPartClick }) {
                         <Progress value={percentComplete} className="h-1.5" />
                       </div>
                       
-                      <Link to={createPageUrl(`ProjectDetail?id=${project.id}&tab=parts`)} onClick={(e) => e.stopPropagation()}>
-                        <Button size="sm" variant="outline" className="border-gray-700 gap-1">
-                          <Eye className="w-3 h-3" /> View
-                        </Button>
-                      </Link>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <BuildExportActions
+                          buildId={project.id}
+                          buildName={project.name}
+                          clientName={project.client_name}
+                        />
+                        <Link to={createPageUrl(`ProjectDetail?id=${project.id}&tab=parts`)}>
+                          <Button size="sm" variant="outline" className="border-gray-700 gap-1">
+                            <Eye className="w-3 h-3" /> View
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -328,25 +390,35 @@ export default function BuildsDashboard({ onPartClick }) {
 
                     {/* Coverage Sections */}
                     <div className="space-y-3">
-                      {/* Installed Section */}
+                      {/* Installed Section - Grouped by Category */}
                       {data.sections.installed.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <CheckCircle2 className="w-4 h-4 text-green-400" />
                             <span className="text-sm font-medium text-green-400">Installed ({data.sections.installed.length})</span>
                           </div>
-                          <div className="bg-green-900/10 border border-green-900/20 rounded-lg p-2 space-y-1">
-                            {data.sections.installed.slice(0, 3).map(item => renderPartRow(item, false))}
-                            {data.sections.installed.length > 3 && (
-                              <p className="text-xs text-gray-500 text-center py-1">
-                                +{data.sections.installed.length - 3} more installed
-                              </p>
-                            )}
+                          <div className="bg-green-900/10 border border-green-900/20 rounded-lg p-2 space-y-2">
+                            {groupByCategory(data.sections.installed).map(([catName, catData]) => (
+                              <div key={catName}>
+                                <p className="text-xs text-green-300/70 font-medium px-2 py-1 border-b border-green-900/20">{catName}</p>
+                                {Object.entries(catData.subCategories).map(([subCat, items]) => (
+                                  <div key={subCat}>
+                                    {subCat !== '_direct' && (
+                                      <p className="text-xs text-green-400/50 pl-4 py-0.5">↳ {subCat}</p>
+                                    )}
+                                    {items.slice(0, 3).map(item => renderPartRow(item, false))}
+                                    {items.length > 3 && (
+                                      <p className="text-xs text-gray-500 text-center py-1">+{items.length - 3} more</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Allocated Section - With Install Action */}
+                      {/* Allocated Section - Grouped by Category */}
                       {data.sections.allocated.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
@@ -354,50 +426,86 @@ export default function BuildsDashboard({ onPartClick }) {
                             <span className="text-sm font-medium text-blue-400">Reserved / Allocated ({data.sections.allocated.length})</span>
                             <span className="text-xs text-gray-500 ml-auto">Ready to install</span>
                           </div>
-                          <div className="bg-blue-900/10 border border-blue-900/20 rounded-lg p-2 space-y-1">
-                            {data.sections.allocated.map(item => renderPartRow(item, false, true))}
+                          <div className="bg-blue-900/10 border border-blue-900/20 rounded-lg p-2 space-y-2">
+                            {groupByCategory(data.sections.allocated).map(([catName, catData]) => (
+                              <div key={catName}>
+                                <p className="text-xs text-blue-300/70 font-medium px-2 py-1 border-b border-blue-900/20">{catName}</p>
+                                {Object.entries(catData.subCategories).map(([subCat, items]) => (
+                                  <div key={subCat}>
+                                    {subCat !== '_direct' && (
+                                      <p className="text-xs text-blue-400/50 pl-4 py-0.5">↳ {subCat}</p>
+                                    )}
+                                    {items.map(item => renderPartRow(item, false, true))}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      {/* On Order Section */}
+                      {/* On Order Section - Grouped by Category */}
                       {data.sections.onOrder.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <Truck className="w-4 h-4 text-yellow-400" />
                             <span className="text-sm font-medium text-yellow-400">On Order ({data.sections.onOrder.length})</span>
                           </div>
-                          <div className="bg-yellow-900/10 border border-yellow-900/20 rounded-lg p-2 space-y-1">
-                            {data.sections.onOrder.map(item => renderPartRow(item, false))}
+                          <div className="bg-yellow-900/10 border border-yellow-900/20 rounded-lg p-2 space-y-2">
+                            {groupByCategory(data.sections.onOrder).map(([catName, catData]) => (
+                              <div key={catName}>
+                                <p className="text-xs text-yellow-300/70 font-medium px-2 py-1 border-b border-yellow-900/20">{catName}</p>
+                                {Object.entries(catData.subCategories).map(([subCat, items]) => (
+                                  <div key={subCat}>
+                                    {subCat !== '_direct' && (
+                                      <p className="text-xs text-yellow-400/50 pl-4 py-0.5">↳ {subCat}</p>
+                                    )}
+                                    {items.map(item => renderPartRow(item, false))}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Need To Order Section */}
+                      {/* Need To Order Section - Grouped by Category */}
                       {data.sections.needToOrder.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle className="w-4 h-4 text-red-400" />
                             <span className="text-sm font-medium text-red-400">Need To Order ({data.sections.needToOrder.length})</span>
                           </div>
-                          <div className="bg-red-900/10 border border-red-900/20 rounded-lg p-2 space-y-1">
-                            {data.sections.needToOrder.map(item => (
-                              <div 
-                                key={item.requirement.id}
-                                className="flex items-center gap-3 p-2 hover:bg-gray-800/30 rounded cursor-pointer"
-                                onClick={() => onPartClick?.(item.part)}
-                              >
-                                {item.part.featured_photo && (
-                                  <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden flex-shrink-0">
-                                    <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+                          <div className="bg-red-900/10 border border-red-900/20 rounded-lg p-2 space-y-2">
+                            {groupByCategory(data.sections.needToOrder).map(([catName, catData]) => (
+                              <div key={catName}>
+                                <p className="text-xs text-red-300/70 font-medium px-2 py-1 border-b border-red-900/20">{catName}</p>
+                                {Object.entries(catData.subCategories).map(([subCat, items]) => (
+                                  <div key={subCat}>
+                                    {subCat !== '_direct' && (
+                                      <p className="text-xs text-red-400/50 pl-4 py-0.5">↳ {subCat}</p>
+                                    )}
+                                    {items.map(item => (
+                                      <div 
+                                        key={item.requirement.id}
+                                        className="flex items-center gap-3 p-2 hover:bg-gray-800/30 rounded cursor-pointer"
+                                        onClick={() => onPartClick?.(item.part)}
+                                      >
+                                        {item.part.featured_photo && (
+                                          <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden flex-shrink-0">
+                                            <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm text-white truncate">{item.part.part_name}</p>
+                                        </div>
+                                        <Badge variant="outline" className="border-red-500 text-red-400">
+                                          Order {item.qty_to_order}
+                                        </Badge>
+                                      </div>
+                                    ))}
                                   </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-white truncate">{item.part.part_name}</p>
-                                </div>
-                                <Badge variant="outline" className="border-red-500 text-red-400">
-                                  Order {item.qty_to_order}
-                                </Badge>
+                                ))}
                               </div>
                             ))}
                           </div>
