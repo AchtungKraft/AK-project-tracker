@@ -101,8 +101,13 @@ export function getReviewOwnership(request, comments, decisions, attachments) {
     return { ownership: 'done', reason: 'draft' };
   }
   
-  // Only 'posted' and 'changes_requested' statuses can have ownership
-  if (request.status !== 'posted' && request.status !== 'changes_requested') {
+  // Active statuses that can have ownership: posted, changes_requested, approved (when reposted)
+  // A request with status 'approved' but has posted_at is awaiting re-review
+  const isActiveStatus = request.status === 'posted' || 
+                         request.status === 'changes_requested' ||
+                         (request.status === 'approved' && request.posted_at);
+  
+  if (!isActiveStatus) {
     return { ownership: 'done', reason: 'unknown_status' };
   }
   
