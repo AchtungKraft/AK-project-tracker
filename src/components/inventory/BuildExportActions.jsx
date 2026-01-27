@@ -31,6 +31,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const [isPrinting, setIsPrinting] = useState(false);
   const [showCostOnPickList, setShowCostOnPickList] = useState(false);
   const [showAllPartsOnPickList, setShowAllPartsOnPickList] = useState(false);
+  const [includeInstalledParts, setIncludeInstalledParts] = useState(false);
   const [pickListGroupBy, setPickListGroupBy] = useState('location');
 
   // Fetch all required data
@@ -246,9 +247,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   };
 
   // Generate pick list data
-  const generatePickListData = (includeAllParts = false, groupBy = 'location') => {
+  const generatePickListData = (includeAllParts = false, groupBy = 'location', includeInstalled = false) => {
     const pickItems = [];
     const nonPhysicalItems = [];
+    const installedItems = [];
     const processedPartIds = new Set();
 
     // Get all build requirements
@@ -273,8 +275,33 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       const neededQty = req.qty_needed || 0;
       const remainingToAllocate = neededQty - allocatedQty - installedQty;
 
+      // Add installed items if requested
+      if (includeInstalled && installedQty > 0) {
+        installedItems.push({
+          partId: part.id,
+          partName: part.part_name,
+          partNumber: part.vendor_part_number || '',
+          partImage,
+          vendorName,
+          mainCategory,
+          subCategory,
+          categorySortOrder: sortOrder,
+          qtyToPick: installedQty,
+          mainLocation: '',
+          subLocation: '',
+          locationId: null,
+          unitCost: part.default_cost || 0,
+          extendedCost: (part.default_cost || 0) * installedQty,
+          isReserved: false,
+          isPhysical: false,
+          isInstalled: true,
+          status: 'INSTALLED',
+          notes: req.notes || '',
+        });
+      }
+
       // Add physical inventory items
-      if (allocatedQty > 0) {
+      if (allocatedQty > 0 && allocatedQty > installedQty) {
         partInventory.forEach(inv => {
           const { mainLocation, subLocation } = getLocationInfo(inv);
 
@@ -302,6 +329,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
               isReserved: (inv.quantity_reserved || 0) > 0,
               isPhysical: true,
+              isInstalled: false,
               status: null,
               notes: req.notes || '',
             });
@@ -340,6 +368,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           extendedCost: (part.default_cost || 0) * remainingToAllocate,
           isReserved: false,
           isPhysical: false,
+          isInstalled: false,
           status,
           notes: req.notes || '',
         });
@@ -396,6 +425,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
               isReserved: true,
               isPhysical: true,
+              isInstalled: false,
               status: null,
               notes: ba.notes || '',
             });
@@ -425,11 +455,15 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           extendedCost: (part.default_cost || 0) * remainingQty,
           isReserved: false,
           isPhysical: false,
+          isInstalled: false,
           status,
           notes: ba.notes || '',
         });
       }
     });
+
+    // Combine all items
+    const allItems = [...pickItems, ...nonPhysicalItems, ...installedItems];
 
     // Group items based on groupBy parameter
     const grouped = {};
@@ -456,10 +490,17 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           isNonInventory: true
         };
       }
+
+      // Add installed items as separate group
+      if (installedItems.length > 0) {
+        grouped['INSTALLED PARTS'] = {
+          subLocations: { '_direct': installedItems },
+          sortOrder: 9998,
+          isInstalled: true
+        };
+      }
     } else if (groupBy === 'category') {
       // Group by category
-      const allItems = [...pickItems, ...nonPhysicalItems];
-      
       allItems.forEach(item => {
         const mainKey = item.mainCategory || 'Uncategorized';
         if (!grouped[mainKey]) {
@@ -475,12 +516,34 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
         }
         grouped[mainKey].subLocations[subKey].push(item);
       });
+    } else if (groupBy === 'vendor') {
+      // Group by vendor, then by category/subcategory
+      allItems.forEach(item => {
+        const vendorKey = item.vendorName || 'Unassigned';
+        if (!grouped[vendorKey]) {
+          grouped[vendorKey] = { 
+            subLocations: {}, 
+            sortOrder: vendorKey === 'Unassigned' ? 9999 : 0,
+            isVendorGroup: true
+          };
+        }
+        
+        // Sub-group by category then subcategory
+        const catKey = item.mainCategory || 'Uncategorized';
+        const subCatKey = item.subCategory ? `${catKey} > ${item.subCategory}` : catKey;
+        
+        if (!grouped[vendorKey].subLocations[subCatKey]) {
+          grouped[vendorKey].subLocations[subCatKey] = [];
+        }
+        grouped[vendorKey].subLocations[subCatKey].push(item);
+      });
     }
 
     return { 
-      items: [...pickItems, ...nonPhysicalItems], 
+      items: allItems, 
       grouped, 
       physicalCount: pickItems.length,
+      installedCount: installedItems.length,
       groupBy 
     };
   };
@@ -548,7 +611,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const printPickList = () => {
     setIsPrinting(true);
     try {
-      const { items, grouped, physicalCount, groupBy } = generatePickListData(showAllPartsOnPickList, pickListGroupBy);
+      const { items, grouped, physicalCount, installedCount, groupBy } = generatePickListData(showAllPartsOnPickList, pickListGroupBy, includeInstalledParts);
       const physicalItems = items.filter(i => i.isPhysical);
       const totalCost = physicalItems.reduce((sum, i) => sum + i.extendedCost, 0);
       const totalPhysicalParts = physicalItems.reduce((sum, i) => sum + i.qtyToPick, 0);
@@ -727,6 +790,17 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               color: #2e7d32;
               border-color: #81c784;
             }
+            .status-badge.installed {
+              background: #f3e5f5;
+              color: #7b1fa2;
+              border-color: #ce93d8;
+            }
+            .location-header.installed-group {
+              background: #7b1fa2;
+            }
+            .location-header.vendor-group {
+              background: #1565c0;
+            }
             .summary { 
               margin-top: 30px; 
               padding-top: 15px; 
@@ -765,6 +839,8 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
 
           ${sortedGroups.map(([mainKey, data]) => {
             const isNonInventory = mainKey === 'NOT IN INVENTORY' || data.isNonInventory;
+            const isInstalledGroup = mainKey === 'INSTALLED PARTS' || data.isInstalled;
+            const isVendorGroup = data.isVendorGroup;
             
             // Sort sub-groups
             const sortedSubGroups = Object.entries(data.subLocations).sort((a, b) => {
@@ -775,7 +851,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
 
             return `
             <div class="location-group">
-              <div class="location-header ${isNonInventory ? 'non-inventory' : ''}">${mainKey}</div>
+              <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''} ${isVendorGroup ? 'vendor-group' : ''}">${isVendorGroup ? 'Vendor: ' + mainKey : mainKey}</div>
               ${sortedSubGroups.map(([subKey, items]) => `
                 ${subKey !== '_direct' ? `<div class="sub-location-header">→ ${subKey}</div>` : ''}
                 <table class="parts-table">
@@ -796,7 +872,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                       return `
                       <tr class="${!item.isPhysical ? 'non-physical' : ''}">
                         <td>
-                          ${item.isPhysical 
+                          ${item.isPhysical && !item.isInstalled
                             ? '<span class="checkbox"></span>' 
                             : '<span class="checkbox disabled"></span>'
                           }
@@ -812,8 +888,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                             <div class="part-info">
                               <div class="part-name">
                                 ${item.partName}
-                                ${item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
-                                ${item.status ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
+                                ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
+                                ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
+                                ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
                               </div>
                               <div class="part-meta">
                                 ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
@@ -951,6 +1028,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                   <SelectContent>
                     <SelectItem value="location">Location</SelectItem>
                     <SelectItem value="category">Part Category / Subcategory</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -964,6 +1042,17 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                   />
                   <Label htmlFor="showAllParts" className="text-sm text-gray-300 cursor-pointer">
                     Include all build parts (on order / to buy)
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="includeInstalled"
+                    checked={includeInstalledParts}
+                    onCheckedChange={setIncludeInstalledParts}
+                  />
+                  <Label htmlFor="includeInstalled" className="text-sm text-gray-300 cursor-pointer">
+                    Include installed parts
                   </Label>
                 </div>
 
