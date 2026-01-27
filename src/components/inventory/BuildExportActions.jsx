@@ -645,14 +645,24 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
             
-            /* Location/Category Group - section-based pagination */
+            /* Location/Category Group - container only */
             .location-group { 
               margin-bottom: 20px; 
-              page-break-inside: avoid;
-              break-inside: avoid;
-              /* Allow Chrome to place groups mid-page */
+              /* Do NOT use break-inside: avoid here - let Chrome start mid-page */
               page-break-before: auto;
               break-before: auto;
+            }
+            
+            /* Soft-start zone: allows group to begin mid-page */
+            .location-group-start {
+              page-break-inside: auto;
+              break-inside: auto;
+            }
+            
+            /* Hard atomic zone: contains the actual parts rows */
+            .location-group-body {
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             .location-header { 
               border-left: 6px solid #333;
@@ -893,12 +903,17 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 print-color-adjust: exact;
               }
               .location-group { 
-                page-break-inside: avoid; 
-                break-inside: avoid;
-                /* Allow Chrome to place groups mid-page without forcing break */
+                /* Do NOT use break-inside: avoid - allows Chrome to start group mid-page */
                 page-break-before: auto;
                 break-before: auto;
-                /* Prevent speculative reflow that causes premature breaks */
+              }
+              .location-group-start {
+                page-break-inside: auto;
+                break-inside: auto;
+              }
+              .location-group-body {
+                page-break-inside: avoid;
+                break-inside: avoid;
                 contain: layout;
               }
               .print-block {
@@ -990,38 +1005,76 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               </div>
             `};
 
+            // Get first sub-group for soft-start zone
+            const firstSubGroup = sortedSubGroups[0];
+            const remainingSubGroups = sortedSubGroups.slice(1);
+            
             return `
             <div class="location-group">
-              <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
-              ${sortedSubGroups.map(([subKey, items]) => {
-                // Split items: first 2 go in print-block, rest are overflow
-                const printBlockItems = items.slice(0, 2);
-                const overflowItems = items.slice(2);
-                const hasOverflow = overflowItems.length > 0;
-                
-                return `
-                <div class="sub-group">
-                  <!-- Print-block: header + first rows kept together -->
-                  <div class="print-block">
-                    ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
-                    <div class="parts-list">
-                      <div class="parts-header">
-                        <div></div>
-                        <div>Part</div>
-                        <div class="col-qty">Qty</div>
-                        ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
+              <!-- Soft-start zone: header + first sub-group header (allows mid-page start) -->
+              <div class="location-group-start">
+                <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
+                ${firstSubGroup ? (() => {
+                  const [subKey, items] = firstSubGroup;
+                  const printBlockItems = items.slice(0, 2);
+                  const overflowItems = items.slice(2);
+                  const hasOverflow = overflowItems.length > 0;
+                  
+                  return `
+                  <div class="sub-group">
+                    <div class="print-block">
+                      ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
+                      <div class="parts-list">
+                        <div class="parts-header">
+                          <div></div>
+                          <div>Part</div>
+                          <div class="col-qty">Qty</div>
+                          ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
+                        </div>
+                        ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
                       </div>
-                      ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
                     </div>
+                    ${hasOverflow ? `
+                    <div class="parts-list">
+                      ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
+                    </div>
+                    ` : ''}
                   </div>
-                  ${hasOverflow ? `
-                  <!-- Overflow rows: can break between these if needed -->
-                  <div class="parts-list">
-                    ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
+                  `;
+                })() : ''}
+              </div>
+              
+              <!-- Hard atomic zone: remaining sub-groups -->
+              ${remainingSubGroups.length > 0 ? `
+              <div class="location-group-body">
+                ${remainingSubGroups.map(([subKey, items]) => {
+                  const printBlockItems = items.slice(0, 2);
+                  const overflowItems = items.slice(2);
+                  const hasOverflow = overflowItems.length > 0;
+                  
+                  return `
+                  <div class="sub-group">
+                    <div class="print-block">
+                      ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
+                      <div class="parts-list">
+                        <div class="parts-header">
+                          <div></div>
+                          <div>Part</div>
+                          <div class="col-qty">Qty</div>
+                          ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
+                        </div>
+                        ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
+                      </div>
+                    </div>
+                    ${hasOverflow ? `
+                    <div class="parts-list">
+                      ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
+                    </div>
+                    ` : ''}
                   </div>
-                  ` : ''}
-                </div>
-              `}).join('')}
+                `}).join('')}
+              </div>
+              ` : ''}
             </div>
           `}).join('')}
 
