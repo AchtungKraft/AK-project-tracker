@@ -500,42 +500,27 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
         };
       }
     } else if (groupBy === 'category') {
-      // Group by category
+      // Group by category → subcategory → vendor
       allItems.forEach(item => {
         const mainKey = item.mainCategory || 'Uncategorized';
         if (!grouped[mainKey]) {
           grouped[mainKey] = { 
             subLocations: {}, 
             sortOrder: item.categorySortOrder,
-            isNonInventory: false
+            isNonInventory: false,
+            isCategoryGroup: true
           };
         }
-        const subKey = item.subCategory || '_direct';
+        
+        // Build subkey: subcategory (if any) + vendor
+        const subCatPart = item.subCategory || '';
+        const vendorPart = item.vendorName || 'No Vendor';
+        const subKey = subCatPart ? `${subCatPart} › ${vendorPart}` : vendorPart;
+        
         if (!grouped[mainKey].subLocations[subKey]) {
           grouped[mainKey].subLocations[subKey] = [];
         }
         grouped[mainKey].subLocations[subKey].push(item);
-      });
-    } else if (groupBy === 'vendor') {
-      // Group by vendor, then by category/subcategory
-      allItems.forEach(item => {
-        const vendorKey = item.vendorName || 'Unassigned';
-        if (!grouped[vendorKey]) {
-          grouped[vendorKey] = { 
-            subLocations: {}, 
-            sortOrder: vendorKey === 'Unassigned' ? 9999 : 0,
-            isVendorGroup: true
-          };
-        }
-        
-        // Sub-group by category then subcategory
-        const catKey = item.mainCategory || 'Uncategorized';
-        const subCatKey = item.subCategory ? `${catKey} > ${item.subCategory}` : catKey;
-        
-        if (!grouped[vendorKey].subLocations[subCatKey]) {
-          grouped[vendorKey].subLocations[subCatKey] = [];
-        }
-        grouped[vendorKey].subLocations[subCatKey].push(item);
       });
     }
 
@@ -798,9 +783,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .location-header.installed-group {
               background: #7b1fa2;
             }
-            .location-header.vendor-group {
-              background: #1565c0;
-            }
+
             .summary { 
               margin-top: 30px; 
               padding-top: 15px; 
@@ -840,7 +823,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           ${sortedGroups.map(([mainKey, data]) => {
             const isNonInventory = mainKey === 'NOT IN INVENTORY' || data.isNonInventory;
             const isInstalledGroup = mainKey === 'INSTALLED PARTS' || data.isInstalled;
-            const isVendorGroup = data.isVendorGroup;
+            const isCategoryGroup = data.isCategoryGroup;
             
             // Sort sub-groups
             const sortedSubGroups = Object.entries(data.subLocations).sort((a, b) => {
@@ -851,7 +834,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
 
             return `
             <div class="location-group">
-              <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''} ${isVendorGroup ? 'vendor-group' : ''}">${isVendorGroup ? 'Vendor: ' + mainKey : mainKey}</div>
+              <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
               ${sortedSubGroups.map(([subKey, items]) => `
                 ${subKey !== '_direct' ? `<div class="sub-location-header">→ ${subKey}</div>` : ''}
                 <table class="parts-table">
@@ -1027,8 +1010,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="location">Location</SelectItem>
-                    <SelectItem value="category">Part Category / Subcategory</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
+                    <SelectItem value="category">Category → Subcategory → Vendor</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
