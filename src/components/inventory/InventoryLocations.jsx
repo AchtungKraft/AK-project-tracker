@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Search, MapPin, ChevronRight, ChevronDown, Package, LayoutGrid, List,
-  FolderOpen, Folder, AlertTriangle
+  FolderOpen, Folder, AlertTriangle, Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import EditPartDrawer from "../parts/EditPartDrawer";
@@ -26,6 +27,7 @@ export default function InventoryLocations({ onPartClick }) {
   const [showEmptyLocations, setShowEmptyLocations] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list');
+  const [selectedBuildId, setSelectedBuildId] = useState(null);
 
   
   // Modals
@@ -51,6 +53,7 @@ export default function InventoryLocations({ onPartClick }) {
         setExpandedLocations(state.expandedLocations || {});
         setShowEmptyLocations(state.showEmptyLocations || false);
         setViewMode(state.viewMode || 'list');
+        // Don't restore build filter - always start fresh
       }
     } catch (e) {}
   }, []);
@@ -98,6 +101,81 @@ export default function InventoryLocations({ onPartClick }) {
     queryFn: () => base44.entities.PartProjectRequirement.list(),
   });
 
+  const { data: buildAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+  });
+
+  // Get builds/projects that have allocated parts with reserved inventory
+  const buildsWithAllocatedParts = useMemo(() => {
+    // Get all part IDs that have reserved inventory
+    const partsWithReservedInventory = new Set(
+      inventoryItems
+        .filter(i => (i.quantity_reserved || 0) > 0)
+        .map(i => i.part_id)
+    );
+
+    // Find builds that have assignments with qty_reserved > 0 for parts that have reserved inventory
+    const buildIds = new Set();
+    buildAssignments.forEach(ba => {
+      if ((ba.qty_reserved || 0) > 0 && partsWithReservedInventory.has(ba.part_id)) {
+        buildIds.add(ba.project_id);
+      }
+    });
+
+    // Also check PartProjectRequirement for allocated parts
+    requirements.forEach(req => {
+      if ((req.qty_allocated || 0) > 0) {
+        const part = parts.find(p => p.id === req.part_id);
+        if (part) {
+          const hasInventory = inventoryItems.some(i => 
+            i.part_id === req.part_id && (i.quantity_on_hand || 0) > 0
+          );
+          if (hasInventory) {
+            buildIds.add(req.project_id);
+          }
+        }
+      }
+    });
+
+    return projects
+      .filter(p => buildIds.has(p.id))
+      .sort((a, b) => {
+        // Sort by most recently updated
+        const dateA = new Date(a.updated_date || a.created_date || 0);
+        const dateB = new Date(b.updated_date || b.created_date || 0);
+        return dateB - dateA;
+      });
+  }, [buildAssignments, requirements, inventoryItems, projects, parts]);
+
+  // Get parts allocated to selected build
+  const partsAllocatedToBuild = useMemo(() => {
+    if (!selectedBuildId) return null;
+
+    const allocatedPartIds = new Set();
+    
+    // From PartBuildAssignment
+    buildAssignments.forEach(ba => {
+      if (ba.project_id === selectedBuildId && (ba.qty_reserved || 0) > 0) {
+        allocatedPartIds.add(ba.part_id);
+      }
+    });
+
+    // From PartProjectRequirement
+    requirements.forEach(req => {
+      if (req.project_id === selectedBuildId && (req.qty_allocated || 0) > 0) {
+        allocatedPartIds.add(req.part_id);
+      }
+    });
+
+    return allocatedPartIds;
+  }, [selectedBuildId, buildAssignments, requirements]);
+
   // Calculate inventory stats for a part at a specific location (or all locations)
   const getInventoryStats = (partId, locationId = null) => {
     const items = locationId 
@@ -123,6 +201,7 @@ export default function InventoryLocations({ onPartClick }) {
   // Calculate part counts for each location
   // IMPORTANT: Count ALL parts with physical inventory (quantity_on_hand > 0), 
   // regardless of reservation status. Reserved parts still physically exist at the location.
+  // When build filter is active, only count parts allocated to that build.
   const locationPartCounts = useMemo(() => {
     const counts = {};
     
@@ -146,7 +225,14 @@ export default function InventoryLocations({ onPartClick }) {
         if (locationIds.includes(item.location_id)) {
           // Count if there's any physical stock, regardless of reservation
           if ((item.quantity_on_hand || 0) > 0) {
-            partsAtLocation.add(item.part_id);
+            // If build filter active, only count parts allocated to that build
+            if (partsAllocatedToBuild) {
+              if (partsAllocatedToBuild.has(item.part_id)) {
+                partsAtLocation.add(item.part_id);
+              }
+            } else {
+              partsAtLocation.add(item.part_id);
+            }
           }
         }
       });
@@ -159,14 +245,20 @@ export default function InventoryLocations({ onPartClick }) {
     inventoryItems.forEach(item => {
       if (!item.location_id) {
         if ((item.quantity_on_hand || 0) > 0) {
-          unassignedParts.add(item.part_id);
+          if (partsAllocatedToBuild) {
+            if (partsAllocatedToBuild.has(item.part_id)) {
+              unassignedParts.add(item.part_id);
+            }
+          } else {
+            unassignedParts.add(item.part_id);
+          }
         }
       }
     });
     counts['unassigned'] = unassignedParts.size;
 
     return counts;
-  }, [locations, inventoryItems]);
+  }, [locations, inventoryItems, partsAllocatedToBuild]);
 
   // Helper to get all descendant location IDs
   const getDescendants = (locationId) => {
@@ -180,9 +272,15 @@ export default function InventoryLocations({ onPartClick }) {
   };
 
   // Get parts for selected location - include ALL parts with physical inventory (quantity_on_hand > 0)
+  // When build filter is active, only show parts allocated to that build.
   const partsAtSelectedLocation = useMemo(() => {
     // Filter to only inventory items with physical stock
-    const itemsWithStock = inventoryItems.filter(i => (i.quantity_on_hand || 0) > 0);
+    let itemsWithStock = inventoryItems.filter(i => (i.quantity_on_hand || 0) > 0);
+
+    // If build filter active, further filter to only parts allocated to that build
+    if (partsAllocatedToBuild) {
+      itemsWithStock = itemsWithStock.filter(i => partsAllocatedToBuild.has(i.part_id));
+    }
 
     if (selectedLocationId === null) {
       // "All Locations" - show all parts with any physical inventory
@@ -206,7 +304,7 @@ export default function InventoryLocations({ onPartClick }) {
         .map(i => i.part_id)
     );
     return parts.filter(p => partIds.has(p.id));
-  }, [selectedLocationId, inventoryItems, parts, locations]);
+  }, [selectedLocationId, inventoryItems, parts, locations, partsAllocatedToBuild]);
 
   // Filter by search
   const filteredParts = useMemo(() => {
@@ -756,42 +854,105 @@ export default function InventoryLocations({ onPartClick }) {
 
   const unassignedCount = locationPartCounts['unassigned'] || 0;
 
+  // Get selected build info for display
+  const selectedBuild = selectedBuildId ? projects.find(p => p.id === selectedBuildId) : null;
+
   return (
     <>
       <div className="flex flex-col bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-8rem)] md:overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
-          <div>
-            <h2 className="text-lg font-bold text-white">Inventory by Location</h2>
-            <p className="text-xs text-gray-400">
-              {filteredParts.length} parts at {getSelectedLocationName()}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
-              <Button
-                size="sm"
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('list')}
-                className={cn(
-                  "h-7 px-2",
-                  viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+        {/* Header with Build Filter */}
+        <div className="flex flex-col gap-3 p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">Inventory by Location</h2>
+              <p className="text-xs text-gray-400">
+                {filteredParts.length} parts at {getSelectedLocationName()}
+                {selectedBuild && (
+                  <span className="text-orange-400 ml-1">• Filtered by build</span>
                 )}
-              >
-                <List className="w-4 h-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === 'cards' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('cards')}
-                className={cn(
-                  "h-7 px-2",
-                  viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
-                )}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
+              </p>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
+                <Button
+                  size="sm"
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    "h-7 px-2",
+                    viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                  onClick={() => setViewMode('cards')}
+                  className={cn(
+                    "h-7 px-2",
+                    viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Build Filter */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-1 max-w-sm">
+              <Wrench className="w-4 h-4 text-orange-400 shrink-0" />
+              <Select 
+                value={selectedBuildId || 'all'} 
+                onValueChange={(v) => setSelectedBuildId(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className={cn(
+                  "bg-gray-900/50 border-gray-700 text-white h-9",
+                  selectedBuildId && "border-orange-600/50 bg-orange-950/20"
+                )}>
+                  <SelectValue placeholder="Filter by Build" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <span className="text-gray-300">All Builds</span>
+                  </SelectItem>
+                  {buildsWithAllocatedParts.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs text-gray-500 border-t border-gray-700 mt-1">
+                        Builds with allocated parts
+                      </div>
+                      {buildsWithAllocatedParts.map(build => (
+                        <SelectItem key={build.id} value={build.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white">{build.name}</span>
+                            {build.client_name && (
+                              <span className="text-gray-500 text-xs">({build.client_name})</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {buildsWithAllocatedParts.length === 0 && (
+                    <div className="px-2 py-3 text-xs text-gray-500 text-center">
+                      No builds with allocated inventory
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedBuild && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedBuildId(null)}
+                className="text-gray-400 hover:text-white h-9 px-3"
+              >
+                Clear filter
+              </Button>
+            )}
           </div>
         </div>
 
@@ -834,7 +995,10 @@ export default function InventoryLocations({ onPartClick }) {
                   "shrink-0 text-xs px-2 py-0.5 rounded-full",
                   selectedLocationId === null ? "bg-red-600 text-white" : "bg-gray-800 text-gray-400"
                 )}>
-                  {parts.filter(p => inventoryItems.some(i => i.part_id === p.id)).length}
+                  {partsAllocatedToBuild 
+                    ? parts.filter(p => partsAllocatedToBuild.has(p.id) && inventoryItems.some(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0)).length
+                    : parts.filter(p => inventoryItems.some(i => i.part_id === p.id)).length
+                  }
                 </span>
               </div>
 
@@ -896,10 +1060,22 @@ export default function InventoryLocations({ onPartClick }) {
                     No parts found
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {selectedLocationId 
-                      ? 'No parts stored at this location' 
-                      : 'No inventory items found'}
+                    {selectedBuild 
+                      ? `No allocated parts for "${selectedBuild.name}" at this location`
+                      : selectedLocationId 
+                        ? 'No parts stored at this location' 
+                        : 'No inventory items found'}
                   </p>
+                  {selectedBuild && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedBuildId(null)}
+                      className="mt-4 border-gray-700 text-gray-300"
+                    >
+                      Clear build filter
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
