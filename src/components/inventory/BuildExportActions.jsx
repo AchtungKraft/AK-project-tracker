@@ -625,7 +625,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           <title>Pick List - ${buildName}</title>
           <style>
             * { box-sizing: border-box; }
-            body { 
+            html, body { 
               font-family: Arial, sans-serif; 
               font-size: 14px; 
               line-height: 1.4;
@@ -645,7 +645,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
             
-            /* Location/Category Group - print-safe with borders */
+            /* Location/Category Group - atomic block */
             .location-group { 
               margin-bottom: 20px; 
               page-break-inside: avoid;
@@ -677,62 +677,87 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               border-bottom-color: #7b1fa2;
             }
             
-            /* Sub-location/Subcategory header - thinner rule, indented */
+            /* Sub-group - atomic block with header */
+            .sub-group {
+              page-break-inside: avoid;
+              break-inside: avoid;
+              margin-left: 6px;
+            }
             .sub-location-header { 
               border-left: 3px solid #888;
-              padding: 6px 12px 6px 28px; 
+              padding: 6px 12px 6px 22px; 
               font-size: 13px;
               font-weight: 600;
               color: #444;
-              margin-left: 6px;
               border-bottom: 1px solid #ddd;
               page-break-after: avoid;
               break-after: avoid;
             }
             
-            /* Sub-group container to keep header with first items */
-            .sub-group {
-              page-break-inside: avoid;
-              break-inside: avoid;
+            /* Parts list container */
+            .parts-list {
+              margin-bottom: 10px;
             }
             
-            .parts-table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 10px;
-              margin-left: 6px;
-            }
-            .parts-table th { 
-              text-align: left; 
-              padding: 8px 12px; 
+            /* Grid header row */
+            .parts-header {
+              display: grid;
+              grid-template-columns: 36px 1fr 70px ${showCostOnPickList ? '90px' : ''};
+              gap: 8px;
+              padding: 8px 12px;
               border-bottom: 1px solid #999;
               font-size: 11px;
               text-transform: uppercase;
               color: #666;
+              font-weight: 600;
             }
-            .parts-table td { 
-              padding: 10px 12px; 
+            .parts-header .col-qty,
+            .parts-header .col-cost { text-align: center; }
+            
+            /* Part row - atomic block using CSS Grid */
+            .part-row {
+              display: grid;
+              grid-template-columns: 36px 1fr 70px ${showCostOnPickList ? '90px' : ''};
+              gap: 8px;
+              padding: 10px 12px;
               border-bottom: 1px solid #ddd;
-              vertical-align: middle;
+              align-items: center;
+              min-height: 60px;
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
-            .parts-table tr:last-child td { border-bottom: none; }
-            .parts-table tr.non-physical td {
+            .part-row:last-child { border-bottom: none; }
+            .part-row.non-physical {
               color: #666;
               font-style: italic;
             }
             
-            /* Part row - keep together */
-            .parts-table tr {
-              page-break-inside: avoid;
-              break-inside: avoid;
+            /* Checkbox column */
+            .col-check {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .checkbox { 
+              width: 24px; 
+              height: 24px; 
+              min-width: 24px;
+              min-height: 24px;
+              border: 2px solid #000; 
+              display: block;
+              flex-shrink: 0;
+            }
+            .checkbox.disabled {
+              border: 1px dashed #999;
             }
             
-            .part-cell {
+            /* Part info column */
+            .col-part {
               display: flex;
               align-items: flex-start;
               gap: 10px;
+              min-width: 0;
             }
-            /* Fixed thumbnail sizes for consistent row heights */
             .part-thumb {
               width: 40px;
               height: 40px;
@@ -771,29 +796,22 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .part-number { font-family: monospace; }
             .part-vendor { font-style: italic; }
             .part-location { color: #444; }
-            .qty { 
+            
+            /* Qty column */
+            .col-qty { 
               font-size: 20px; 
               font-weight: bold; 
               text-align: center;
-              min-width: 50px;
             }
-            .checkbox { 
-              width: 24px; 
-              height: 24px; 
-              border: 2px solid #000; 
-              display: inline-block;
-              vertical-align: middle;
-            }
-            .checkbox.disabled {
-              border: 1px dashed #999;
-            }
-            .cost { 
+            
+            /* Cost column */
+            .col-cost { 
               text-align: right; 
               font-size: 12px; 
               color: #666; 
             }
             
-            /* Print-safe badges using borders instead of backgrounds */
+            /* Print-safe badges using borders */
             .badge {
               display: inline-block;
               font-size: 9px;
@@ -845,8 +863,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             }
             
             @media print {
-              body { 
+              html, body { 
                 padding: 10px; 
+                height: auto !important;
+                overflow: visible !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
@@ -858,15 +878,12 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 page-break-inside: avoid;
                 break-inside: avoid;
               }
-              .location-header {
-                page-break-after: avoid;
-                break-after: avoid;
-              }
+              .location-header,
               .sub-location-header {
                 page-break-after: avoid;
                 break-after: avoid;
               }
-              .parts-table tr {
+              .part-row {
                 page-break-inside: avoid;
                 break-inside: avoid;
               }
@@ -908,58 +925,52 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               ${sortedSubGroups.map(([subKey, items]) => `
                 <div class="sub-group">
                   ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
-                  <table class="parts-table">
-                    <thead>
-                      <tr>
-                        <th style="width: 30px;"></th>
-                        <th>Part</th>
-                        <th style="width: 80px; text-align: center;">Qty</th>
-                        ${showCostOnPickList ? '<th style="width: 100px; text-align: right;">Cost</th>' : ''}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${items.map(item => {
-                        const locationDisplay = item.mainLocation 
-                          ? (item.subLocation ? `${item.mainLocation} › ${item.subLocation}` : item.mainLocation)
-                          : '';
-                        
-                        return `
-                        <tr class="${!item.isPhysical ? 'non-physical' : ''}">
-                          <td>
-                            ${item.isPhysical && !item.isInstalled
-                              ? '<span class="checkbox"></span>' 
-                              : '<span class="checkbox disabled"></span>'
-                            }
-                          </td>
-                          <td>
-                            <div class="part-cell">
-                              ${item.partImage 
-                                ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
-                                : `<div class="part-thumb-placeholder">
-                                    <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
-                                  </div>`
-                              }
-                              <div class="part-info">
-                                <div class="part-name">
-                                  ${item.partName}
-                                  ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
-                                  ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
-                                  ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
-                                </div>
-                                <div class="part-meta">
-                                  ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
-                                  ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
-                                  ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
-                                </div>
-                              </div>
+                  <div class="parts-list">
+                    <div class="parts-header">
+                      <div></div>
+                      <div>Part</div>
+                      <div class="col-qty">Qty</div>
+                      ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
+                    </div>
+                    ${items.map(item => {
+                      const locationDisplay = item.mainLocation 
+                        ? (item.subLocation ? `${item.mainLocation} › ${item.subLocation}` : item.mainLocation)
+                        : '';
+                      
+                      return `
+                      <div class="part-row ${!item.isPhysical ? 'non-physical' : ''}">
+                        <div class="col-check">
+                          ${item.isPhysical && !item.isInstalled
+                            ? '<span class="checkbox"></span>' 
+                            : '<span class="checkbox disabled"></span>'
+                          }
+                        </div>
+                        <div class="col-part">
+                          ${item.partImage 
+                            ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
+                            : `<div class="part-thumb-placeholder">
+                                <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
+                              </div>`
+                          }
+                          <div class="part-info">
+                            <div class="part-name">
+                              ${item.partName}
+                              ${item.isInstalled ? '<span class="badge status-badge installed">INSTALLED</span>' : ''}
+                              ${!item.isInstalled && item.isPhysical && item.isReserved ? '<span class="badge status-badge in-stock">IN STOCK</span>' : ''}
+                              ${!item.isInstalled && item.status && item.status !== 'INSTALLED' ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
                             </div>
-                          </td>
-                          <td class="qty">${item.qtyToPick}</td>
-                          ${showCostOnPickList ? `<td class="cost">$${item.extendedCost.toFixed(2)}</td>` : ''}
-                        </tr>
-                      `}).join('')}
-                    </tbody>
-                  </table>
+                            <div class="part-meta">
+                              ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
+                              ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
+                              ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-qty">${item.qtyToPick}</div>
+                        ${showCostOnPickList ? `<div class="col-cost">$${item.extendedCost.toFixed(2)}</div>` : ''}
+                      </div>
+                    `}).join('')}
+                  </div>
                 </div>
               `).join('')}
             </div>
