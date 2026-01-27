@@ -6,6 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { FileSpreadsheet, Printer, Download, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 /**
@@ -24,6 +31,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const [isPrinting, setIsPrinting] = useState(false);
   const [showCostOnPickList, setShowCostOnPickList] = useState(false);
   const [showAllPartsOnPickList, setShowAllPartsOnPickList] = useState(false);
+  const [pickListGroupBy, setPickListGroupBy] = useState('location');
 
   // Fetch all required data
   const { data: parts = [] } = useQuery({
@@ -197,8 +205,48 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
     };
   };
 
+  // Helper to get location info for a part
+  const getLocationInfo = (inv) => {
+    const location = locations.find(l => l.id === inv?.location_id);
+    let mainLocation = '';
+    let subLocation = '';
+
+    if (location) {
+      if (location.parent_id) {
+        const parent = locations.find(l => l.id === location.parent_id);
+        mainLocation = parent?.location_area || '';
+        subLocation = location.location_area;
+      } else {
+        mainLocation = location.location_area;
+      }
+    } else {
+      mainLocation = 'Unassigned';
+    }
+
+    return { mainLocation, subLocation };
+  };
+
+  // Helper to get category info for a part
+  const getCategoryInfo = (part) => {
+    const category = categories.find(c => c.id === part.part_category_id);
+    let mainCategory = 'Uncategorized';
+    let subCategory = '';
+
+    if (category) {
+      if (category.parent_id) {
+        const parent = categories.find(c => c.id === category.parent_id);
+        mainCategory = parent?.name || 'Uncategorized';
+        subCategory = category.name;
+      } else {
+        mainCategory = category.name;
+      }
+    }
+
+    return { mainCategory, subCategory, sortOrder: category?.sort_order || 999 };
+  };
+
   // Generate pick list data
-  const generatePickListData = (includeAllParts = false) => {
+  const generatePickListData = (includeAllParts = false, groupBy = 'location') => {
     const pickItems = [];
     const nonPhysicalItems = [];
     const processedPartIds = new Set();
@@ -211,6 +259,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       if (!part) return;
 
       const partImage = part.featured_photo || (part.photos && part.photos[0]) || null;
+      const vendor = vendors.find(v => v.id === part.default_vendor_id);
+      const vendorName = vendor?.vendor_name || '';
+      const { mainCategory, subCategory, sortOrder } = getCategoryInfo(part);
 
       // Get inventory items with stock for this part
       const partInventory = inventoryItems.filter(i => 
@@ -225,21 +276,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       // Add physical inventory items
       if (allocatedQty > 0) {
         partInventory.forEach(inv => {
-          const location = locations.find(l => l.id === inv.location_id);
-          let mainLocation = '';
-          let subLocation = '';
-
-          if (location) {
-            if (location.parent_id) {
-              const parent = locations.find(l => l.id === location.parent_id);
-              mainLocation = parent?.location_area || '';
-              subLocation = location.location_area;
-            } else {
-              mainLocation = location.location_area;
-            }
-          } else {
-            mainLocation = 'Unassigned';
-          }
+          const { mainLocation, subLocation } = getLocationInfo(inv);
 
           const qtyToPick = Math.min(
             inv.quantity_on_hand || 0,
@@ -253,6 +290,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               partName: part.part_name,
               partNumber: part.vendor_part_number || '',
               partImage,
+              vendorName,
+              mainCategory,
+              subCategory,
+              categorySortOrder: sortOrder,
               qtyToPick,
               mainLocation,
               subLocation,
@@ -287,6 +328,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           partName: part.part_name,
           partNumber: part.vendor_part_number || '',
           partImage,
+          vendorName,
+          mainCategory,
+          subCategory,
+          categorySortOrder: sortOrder,
           qtyToPick: remainingToAllocate,
           mainLocation: '',
           subLocation: '',
@@ -311,6 +356,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       if (!part) return;
 
       const partImage = part.featured_photo || (part.photos && part.photos[0]) || null;
+      const vendor = vendors.find(v => v.id === part.default_vendor_id);
+      const vendorName = vendor?.vendor_name || '';
+      const { mainCategory, subCategory, sortOrder } = getCategoryInfo(part);
       const reservedQty = ba.qty_reserved || 0;
       const neededQty = ba.qty_needed || 0;
 
@@ -325,21 +373,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           );
           if (existing) return;
 
-          const location = locations.find(l => l.id === inv.location_id);
-          let mainLocation = '';
-          let subLocation = '';
-
-          if (location) {
-            if (location.parent_id) {
-              const parent = locations.find(l => l.id === location.parent_id);
-              mainLocation = parent?.location_area || '';
-              subLocation = location.location_area;
-            } else {
-              mainLocation = location.location_area;
-            }
-          } else {
-            mainLocation = 'Unassigned';
-          }
+          const { mainLocation, subLocation } = getLocationInfo(inv);
 
           const qtyToPick = Math.min(inv.quantity_on_hand || 0, reservedQty);
 
@@ -350,6 +384,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               partName: part.part_name,
               partNumber: part.vendor_part_number || '',
               partImage,
+              vendorName,
+              mainCategory,
+              subCategory,
+              categorySortOrder: sortOrder,
               qtyToPick,
               mainLocation,
               subLocation,
@@ -375,6 +413,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           partName: part.part_name,
           partNumber: part.vendor_part_number || '',
           partImage,
+          vendorName,
+          mainCategory,
+          subCategory,
+          categorySortOrder: sortOrder,
           qtyToPick: remainingQty,
           mainLocation: '',
           subLocation: '',
@@ -389,30 +431,58 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       }
     });
 
-    // Group physical items by location
+    // Group items based on groupBy parameter
     const grouped = {};
-    pickItems.forEach(item => {
-      const mainKey = item.mainLocation || 'Unassigned';
-      if (!grouped[mainKey]) {
-        grouped[mainKey] = { subLocations: {} };
-      }
-      const subKey = item.subLocation || '_direct';
-      if (!grouped[mainKey].subLocations[subKey]) {
-        grouped[mainKey].subLocations[subKey] = [];
-      }
-      grouped[mainKey].subLocations[subKey].push(item);
-    });
 
-    // Add non-physical items as separate group
-    if (nonPhysicalItems.length > 0) {
-      grouped['NOT IN INVENTORY'] = {
-        subLocations: {
-          '_direct': nonPhysicalItems
+    if (groupBy === 'location') {
+      // Group by location
+      pickItems.forEach(item => {
+        const mainKey = item.mainLocation || 'Unassigned';
+        if (!grouped[mainKey]) {
+          grouped[mainKey] = { subLocations: {}, sortOrder: 0 };
         }
-      };
+        const subKey = item.subLocation || '_direct';
+        if (!grouped[mainKey].subLocations[subKey]) {
+          grouped[mainKey].subLocations[subKey] = [];
+        }
+        grouped[mainKey].subLocations[subKey].push(item);
+      });
+
+      // Add non-physical items as separate group
+      if (nonPhysicalItems.length > 0) {
+        grouped['NOT IN INVENTORY'] = {
+          subLocations: { '_direct': nonPhysicalItems },
+          sortOrder: 9999,
+          isNonInventory: true
+        };
+      }
+    } else if (groupBy === 'category') {
+      // Group by category
+      const allItems = [...pickItems, ...nonPhysicalItems];
+      
+      allItems.forEach(item => {
+        const mainKey = item.mainCategory || 'Uncategorized';
+        if (!grouped[mainKey]) {
+          grouped[mainKey] = { 
+            subLocations: {}, 
+            sortOrder: item.categorySortOrder,
+            isNonInventory: false
+          };
+        }
+        const subKey = item.subCategory || '_direct';
+        if (!grouped[mainKey].subLocations[subKey]) {
+          grouped[mainKey].subLocations[subKey] = [];
+        }
+        grouped[mainKey].subLocations[subKey].push(item);
+      });
     }
 
-    return { items: [...pickItems, ...nonPhysicalItems], grouped, physicalCount: pickItems.length };
+    return { 
+      items: [...pickItems, ...nonPhysicalItems], 
+      grouped, 
+      physicalCount: pickItems.length,
+      groupBy 
+    };
   };
 
   // Export to CSV
@@ -478,10 +548,26 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const printPickList = () => {
     setIsPrinting(true);
     try {
-      const { items, grouped, physicalCount } = generatePickListData(showAllPartsOnPickList);
+      const { items, grouped, physicalCount, groupBy } = generatePickListData(showAllPartsOnPickList, pickListGroupBy);
       const physicalItems = items.filter(i => i.isPhysical);
       const totalCost = physicalItems.reduce((sum, i) => sum + i.extendedCost, 0);
       const totalPhysicalParts = physicalItems.reduce((sum, i) => sum + i.qtyToPick, 0);
+      const isGroupByCategory = groupBy === 'category';
+
+      // Sort groups
+      const sortedGroups = Object.entries(grouped).sort((a, b) => {
+        // NOT IN INVENTORY always last for location grouping
+        if (a[0] === 'NOT IN INVENTORY') return 1;
+        if (b[0] === 'NOT IN INVENTORY') return -1;
+        // Uncategorized last for category grouping
+        if (a[0] === 'Uncategorized') return 1;
+        if (b[0] === 'Uncategorized') return -1;
+        // Otherwise sort by sortOrder or alphabetically
+        const orderA = a[1].sortOrder ?? 0;
+        const orderB = b[1].sortOrder ?? 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return a[0].localeCompare(b[0]);
+      });
 
       // Generate print-friendly HTML
       const printContent = `
@@ -553,7 +639,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             }
             .part-cell {
               display: flex;
-              align-items: center;
+              align-items: flex-start;
               gap: 10px;
             }
             .part-thumb {
@@ -582,7 +668,11 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             }
             .part-info { flex: 1; min-width: 0; }
             .part-name { font-weight: bold; font-size: 14px; }
-            .part-number { font-size: 11px; color: #666; font-family: monospace; }
+            .part-meta { font-size: 11px; color: #666; margin-top: 2px; }
+            .part-meta span { margin-right: 12px; }
+            .part-number { font-family: monospace; }
+            .part-vendor { font-style: italic; }
+            .part-location { color: #444; }
             .qty { 
               font-size: 20px; 
               font-weight: bold; 
@@ -663,17 +753,26 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               ${clientName ? `<div><strong>Client:</strong> ${clientName}</div>` : ''}
               <div><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
               <div><strong>Parts to Pick:</strong> ${totalPhysicalParts}</div>
+              <div><strong>Grouped By:</strong> ${isGroupByCategory ? 'Category' : 'Location'}</div>
               ${showAllPartsOnPickList ? `<div><strong>Mode:</strong> All Parts (incl. non-physical)</div>` : ''}
             </div>
           </div>
 
-          ${Object.entries(grouped).map(([mainLoc, data]) => {
-            const isNonInventory = mainLoc === 'NOT IN INVENTORY';
+          ${sortedGroups.map(([mainKey, data]) => {
+            const isNonInventory = mainKey === 'NOT IN INVENTORY' || data.isNonInventory;
+            
+            // Sort sub-groups
+            const sortedSubGroups = Object.entries(data.subLocations).sort((a, b) => {
+              if (a[0] === '_direct') return -1;
+              if (b[0] === '_direct') return 1;
+              return a[0].localeCompare(b[0]);
+            });
+
             return `
             <div class="location-group">
-              <div class="location-header ${isNonInventory ? 'non-inventory' : ''}">${mainLoc}</div>
-              ${Object.entries(data.subLocations).map(([subLoc, items]) => `
-                ${subLoc !== '_direct' ? `<div class="sub-location-header">→ ${subLoc}</div>` : ''}
+              <div class="location-header ${isNonInventory ? 'non-inventory' : ''}">${mainKey}</div>
+              ${sortedSubGroups.map(([subKey, items]) => `
+                ${subKey !== '_direct' ? `<div class="sub-location-header">→ ${subKey}</div>` : ''}
                 <table class="parts-table">
                   <thead>
                     <tr>
@@ -684,7 +783,12 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                     </tr>
                   </thead>
                   <tbody>
-                    ${items.map(item => `
+                    ${items.map(item => {
+                      const locationDisplay = item.mainLocation 
+                        ? (item.subLocation ? `${item.mainLocation} > ${item.subLocation}` : item.mainLocation)
+                        : '';
+                      
+                      return `
                       <tr class="${!item.isPhysical ? 'non-physical' : ''}">
                         <td>
                           ${item.isPhysical 
@@ -706,14 +810,18 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                                 ${item.isReserved && item.isPhysical ? '<span class="badge reserved-badge">RSV</span>' : ''}
                                 ${item.status ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
                               </div>
-                              ${item.partNumber ? `<div class="part-number">${item.partNumber}</div>` : ''}
+                              <div class="part-meta">
+                                ${item.partNumber ? `<span class="part-number">${item.partNumber}</span>` : ''}
+                                ${item.vendorName ? `<span class="part-vendor">Vendor: ${item.vendorName}</span>` : ''}
+                                ${isGroupByCategory && locationDisplay && item.isPhysical ? `<span class="part-location">📍 ${locationDisplay}</span>` : ''}
+                              </div>
                             </div>
                           </div>
                         </td>
                         <td class="qty">${item.qtyToPick}</td>
                         ${showCostOnPickList ? `<td class="cost">$${item.extendedCost.toFixed(2)}</td>` : ''}
                       </tr>
-                    `).join('')}
+                    `}).join('')}
                   </tbody>
                 </table>
               `).join('')}
@@ -826,30 +934,44 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
           <div className="space-y-4 py-4">
             <p className="text-sm text-gray-400">
               Generate a printable pick list for <strong className="text-white">{buildName}</strong>.
-              Shows parts grouped by storage location.
             </p>
 
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="showAllParts"
-                  checked={showAllPartsOnPickList}
-                  onCheckedChange={setShowAllPartsOnPickList}
-                />
-                <Label htmlFor="showAllParts" className="text-sm text-gray-300 cursor-pointer">
-                  Include all build parts (on order / to buy)
-                </Label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm text-gray-300">Group Pick List By</Label>
+                <Select value={pickListGroupBy} onValueChange={setPickListGroupBy}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="location">Location</SelectItem>
+                    <SelectItem value="category">Part Category / Subcategory</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="showCost"
-                  checked={showCostOnPickList}
-                  onCheckedChange={setShowCostOnPickList}
-                />
-                <Label htmlFor="showCost" className="text-sm text-gray-300 cursor-pointer">
-                  Show cost values on pick list
-                </Label>
+              <div className="space-y-3 pt-2 border-t border-gray-700">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showAllParts"
+                    checked={showAllPartsOnPickList}
+                    onCheckedChange={setShowAllPartsOnPickList}
+                  />
+                  <Label htmlFor="showAllParts" className="text-sm text-gray-300 cursor-pointer">
+                    Include all build parts (on order / to buy)
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="showCost"
+                    checked={showCostOnPickList}
+                    onCheckedChange={setShowCostOnPickList}
+                  />
+                  <Label htmlFor="showCost" className="text-sm text-gray-300 cursor-pointer">
+                    Show cost values on pick list
+                  </Label>
+                </div>
               </div>
             </div>
 
