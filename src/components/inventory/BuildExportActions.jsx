@@ -650,9 +650,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               margin-bottom: 20px; 
               page-break-inside: avoid;
               break-inside: avoid;
-            }
-            .location-group:not(:first-of-type) {
+              /* Allow Chrome to place groups mid-page */
               page-break-before: auto;
+              break-before: auto;
             }
             .location-header { 
               border-left: 6px solid #333;
@@ -895,9 +895,11 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               .location-group { 
                 page-break-inside: avoid; 
                 break-inside: avoid;
-              }
-              .location-group:not(:first-of-type) {
+                /* Allow Chrome to place groups mid-page without forcing break */
                 page-break-before: auto;
+                break-before: auto;
+                /* Prevent speculative reflow that causes premature breaks */
+                contain: layout;
               }
               .print-block {
                 page-break-inside: avoid !important;
