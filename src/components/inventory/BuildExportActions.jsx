@@ -23,6 +23,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const [isExporting, setIsExporting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [showCostOnPickList, setShowCostOnPickList] = useState(false);
+  const [showAllPartsOnPickList, setShowAllPartsOnPickList] = useState(false);
 
   // Fetch all required data
   const { data: parts = [] } = useQuery({
@@ -196,126 +197,199 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
     };
   };
 
-  // Generate pick list data (only physically present, reserved, not installed)
-  const generatePickListData = () => {
+  // Generate pick list data
+  const generatePickListData = (includeAllParts = false) => {
     const pickItems = [];
+    const nonPhysicalItems = [];
     const processedPartIds = new Set();
 
-    // Get parts from requirements with allocations
-    const buildRequirements = requirements.filter(r => 
-      r.project_id === buildId && (r.qty_allocated || 0) > 0
-    );
+    // Get all build requirements
+    const buildRequirements = requirements.filter(r => r.project_id === buildId);
 
     buildRequirements.forEach(req => {
       const part = parts.find(p => p.id === req.part_id);
       if (!part) return;
 
-      // Get inventory items with reserved qty for this part
+      const partImage = part.featured_photo || (part.photos && part.photos[0]) || null;
+
+      // Get inventory items with stock for this part
       const partInventory = inventoryItems.filter(i => 
         i.part_id === part.id && (i.quantity_on_hand || 0) > 0
       );
 
-      partInventory.forEach(inv => {
-        const location = locations.find(l => l.id === inv.location_id);
-        let mainLocation = '';
-        let subLocation = '';
+      const allocatedQty = req.qty_allocated || 0;
+      const installedQty = req.qty_installed || 0;
+      const neededQty = req.qty_needed || 0;
+      const remainingToAllocate = neededQty - allocatedQty - installedQty;
 
-        if (location) {
-          if (location.parent_id) {
-            const parent = locations.find(l => l.id === location.parent_id);
-            mainLocation = parent?.location_area || '';
-            subLocation = location.location_area;
+      // Add physical inventory items
+      if (allocatedQty > 0) {
+        partInventory.forEach(inv => {
+          const location = locations.find(l => l.id === inv.location_id);
+          let mainLocation = '';
+          let subLocation = '';
+
+          if (location) {
+            if (location.parent_id) {
+              const parent = locations.find(l => l.id === location.parent_id);
+              mainLocation = parent?.location_area || '';
+              subLocation = location.location_area;
+            } else {
+              mainLocation = location.location_area;
+            }
           } else {
-            mainLocation = location.location_area;
+            mainLocation = 'Unassigned';
           }
-        } else {
-          mainLocation = 'Unassigned';
-        }
 
-        // Calculate qty to pick from this location
-        const qtyToPick = Math.min(
-          inv.quantity_on_hand || 0,
-          req.qty_allocated - (req.qty_installed || 0)
-        );
+          const qtyToPick = Math.min(
+            inv.quantity_on_hand || 0,
+            allocatedQty - installedQty
+          );
 
-        if (qtyToPick > 0) {
-          pickItems.push({
-            partId: part.id,
-            partName: part.part_name,
-            partNumber: part.vendor_part_number || '',
-            qtyToPick,
-            mainLocation,
-            subLocation,
-            locationId: inv.location_id,
-            unitCost: inv.purchase_cost || part.default_cost || 0,
-            extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
-            isReserved: (inv.quantity_reserved || 0) > 0,
-            notes: req.notes || '',
-          });
-        }
-      });
+          if (qtyToPick > 0) {
+            processedPartIds.add(part.id);
+            pickItems.push({
+              partId: part.id,
+              partName: part.part_name,
+              partNumber: part.vendor_part_number || '',
+              partImage,
+              qtyToPick,
+              mainLocation,
+              subLocation,
+              locationId: inv.location_id,
+              unitCost: inv.purchase_cost || part.default_cost || 0,
+              extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
+              isReserved: (inv.quantity_reserved || 0) > 0,
+              isPhysical: true,
+              status: null,
+              notes: req.notes || '',
+            });
+          }
+        });
+      }
+
+      // Add non-physical items if requested
+      if (includeAllParts && remainingToAllocate > 0) {
+        // Check if on order
+        const partLineItems = lineItems.filter(li => li.part_id === part.id);
+        const onOrderQty = partLineItems.reduce((sum, li) => {
+          const order = orders.find(o => o.id === li.order_id);
+          if (order && ['Ordered', 'Partial'].includes(order.status)) {
+            return sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0));
+          }
+          return sum;
+        }, 0);
+
+        const status = onOrderQty >= remainingToAllocate ? 'ON ORDER' : 'TO BUY';
+
+        nonPhysicalItems.push({
+          partId: part.id,
+          partName: part.part_name,
+          partNumber: part.vendor_part_number || '',
+          partImage,
+          qtyToPick: remainingToAllocate,
+          mainLocation: '',
+          subLocation: '',
+          locationId: null,
+          unitCost: part.default_cost || 0,
+          extendedCost: (part.default_cost || 0) * remainingToAllocate,
+          isReserved: false,
+          isPhysical: false,
+          status,
+          notes: req.notes || '',
+        });
+      }
     });
 
     // Also check build assignments
-    const buildAssigns = buildAssignments.filter(ba => 
-      ba.project_id === buildId && (ba.qty_reserved || 0) > 0
-    );
+    const buildAssigns = buildAssignments.filter(ba => ba.project_id === buildId);
 
     buildAssigns.forEach(ba => {
+      if (processedPartIds.has(ba.part_id)) return;
+
       const part = parts.find(p => p.id === ba.part_id);
       if (!part) return;
 
-      const partInventory = inventoryItems.filter(i => 
-        i.part_id === part.id && (i.quantity_on_hand || 0) > 0
-      );
+      const partImage = part.featured_photo || (part.photos && part.photos[0]) || null;
+      const reservedQty = ba.qty_reserved || 0;
+      const neededQty = ba.qty_needed || 0;
 
-      partInventory.forEach(inv => {
-        // Check if already added from requirements
-        const existing = pickItems.find(pi => 
-          pi.partId === part.id && pi.locationId === inv.location_id
+      if (reservedQty > 0) {
+        const partInventory = inventoryItems.filter(i => 
+          i.part_id === part.id && (i.quantity_on_hand || 0) > 0
         );
-        if (existing) return;
 
-        const location = locations.find(l => l.id === inv.location_id);
-        let mainLocation = '';
-        let subLocation = '';
+        partInventory.forEach(inv => {
+          const existing = pickItems.find(pi => 
+            pi.partId === part.id && pi.locationId === inv.location_id
+          );
+          if (existing) return;
 
-        if (location) {
-          if (location.parent_id) {
-            const parent = locations.find(l => l.id === location.parent_id);
-            mainLocation = parent?.location_area || '';
-            subLocation = location.location_area;
+          const location = locations.find(l => l.id === inv.location_id);
+          let mainLocation = '';
+          let subLocation = '';
+
+          if (location) {
+            if (location.parent_id) {
+              const parent = locations.find(l => l.id === location.parent_id);
+              mainLocation = parent?.location_area || '';
+              subLocation = location.location_area;
+            } else {
+              mainLocation = location.location_area;
+            }
           } else {
-            mainLocation = location.location_area;
+            mainLocation = 'Unassigned';
           }
-        } else {
-          mainLocation = 'Unassigned';
-        }
 
-        const qtyToPick = Math.min(
-          inv.quantity_on_hand || 0,
-          ba.qty_reserved || 0
-        );
+          const qtyToPick = Math.min(inv.quantity_on_hand || 0, reservedQty);
 
-        if (qtyToPick > 0) {
-          pickItems.push({
-            partId: part.id,
-            partName: part.part_name,
-            partNumber: part.vendor_part_number || '',
-            qtyToPick,
-            mainLocation,
-            subLocation,
-            locationId: inv.location_id,
-            unitCost: inv.purchase_cost || part.default_cost || 0,
-            extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
-            isReserved: true,
-            notes: ba.notes || '',
-          });
-        }
-      });
+          if (qtyToPick > 0) {
+            processedPartIds.add(part.id);
+            pickItems.push({
+              partId: part.id,
+              partName: part.part_name,
+              partNumber: part.vendor_part_number || '',
+              partImage,
+              qtyToPick,
+              mainLocation,
+              subLocation,
+              locationId: inv.location_id,
+              unitCost: inv.purchase_cost || part.default_cost || 0,
+              extendedCost: (inv.purchase_cost || part.default_cost || 0) * qtyToPick,
+              isReserved: true,
+              isPhysical: true,
+              status: null,
+              notes: ba.notes || '',
+            });
+          }
+        });
+      }
+
+      // Add non-physical if requested
+      if (includeAllParts && neededQty > reservedQty) {
+        const remainingQty = neededQty - reservedQty;
+        const status = ba.needed_status === 'On-Order' ? 'ON ORDER' : 'TO BUY';
+
+        nonPhysicalItems.push({
+          partId: part.id,
+          partName: part.part_name,
+          partNumber: part.vendor_part_number || '',
+          partImage,
+          qtyToPick: remainingQty,
+          mainLocation: '',
+          subLocation: '',
+          locationId: null,
+          unitCost: part.default_cost || 0,
+          extendedCost: (part.default_cost || 0) * remainingQty,
+          isReserved: false,
+          isPhysical: false,
+          status,
+          notes: ba.notes || '',
+        });
+      }
     });
 
-    // Group by location
+    // Group physical items by location
     const grouped = {};
     pickItems.forEach(item => {
       const mainKey = item.mainLocation || 'Unassigned';
@@ -329,7 +403,16 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       grouped[mainKey].subLocations[subKey].push(item);
     });
 
-    return { items: pickItems, grouped };
+    // Add non-physical items as separate group
+    if (nonPhysicalItems.length > 0) {
+      grouped['NOT IN INVENTORY'] = {
+        subLocations: {
+          '_direct': nonPhysicalItems
+        }
+      };
+    }
+
+    return { items: [...pickItems, ...nonPhysicalItems], grouped, physicalCount: pickItems.length };
   };
 
   // Export to CSV
@@ -395,9 +478,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
   const printPickList = () => {
     setIsPrinting(true);
     try {
-      const { items, grouped } = generatePickListData();
-      const totalCost = items.reduce((sum, i) => sum + i.extendedCost, 0);
-      const totalParts = items.reduce((sum, i) => sum + i.qtyToPick, 0);
+      const { items, grouped, physicalCount } = generatePickListData(showAllPartsOnPickList);
+      const physicalItems = items.filter(i => i.isPhysical);
+      const totalCost = physicalItems.reduce((sum, i) => sum + i.extendedCost, 0);
+      const totalPhysicalParts = physicalItems.reduce((sum, i) => sum + i.qtyToPick, 0);
 
       // Generate print-friendly HTML
       const printContent = `
@@ -421,7 +505,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               margin-bottom: 20px; 
             }
             .header h1 { margin: 0 0 5px 0; font-size: 24px; }
-            .header-info { display: flex; gap: 30px; margin-top: 10px; }
+            .header-info { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px; }
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
             .location-group { margin-bottom: 25px; page-break-inside: avoid; }
@@ -432,6 +516,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               font-weight: bold; 
               font-size: 16px;
               margin-bottom: 2px;
+            }
+            .location-header.non-inventory {
+              background: #999;
+              font-style: italic;
             }
             .sub-location-header { 
               background: #666; 
@@ -456,11 +544,45 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .parts-table td { 
               padding: 10px 12px; 
               border-bottom: 1px solid #ddd;
-              vertical-align: top;
+              vertical-align: middle;
             }
             .parts-table tr:last-child td { border-bottom: none; }
-            .part-name { font-weight: bold; font-size: 15px; }
-            .part-number { font-size: 12px; color: #666; font-family: monospace; }
+            .parts-table tr.non-physical td {
+              color: #888;
+              font-style: italic;
+            }
+            .part-cell {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            .part-thumb {
+              width: 40px;
+              height: 40px;
+              object-fit: cover;
+              border-radius: 4px;
+              border: 1px solid #ddd;
+              flex-shrink: 0;
+            }
+            .part-thumb-placeholder {
+              width: 40px;
+              height: 40px;
+              background: #f0f0f0;
+              border-radius: 4px;
+              border: 1px solid #ddd;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            }
+            .part-thumb-placeholder svg {
+              width: 20px;
+              height: 20px;
+              fill: #999;
+            }
+            .part-info { flex: 1; min-width: 0; }
+            .part-name { font-weight: bold; font-size: 14px; }
+            .part-number { font-size: 11px; color: #666; font-family: monospace; }
             .qty { 
               font-size: 20px; 
               font-weight: bold; 
@@ -474,19 +596,41 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               display: inline-block;
               vertical-align: middle;
             }
+            .checkbox.disabled {
+              border-color: #ccc;
+              background: #f5f5f5;
+            }
             .cost { 
               text-align: right; 
               font-size: 12px; 
               color: #666; 
             }
-            .reserved-badge {
+            .badge {
               display: inline-block;
-              background: #333;
-              color: #fff;
-              font-size: 10px;
+              font-size: 9px;
               padding: 2px 6px;
               border-radius: 3px;
               margin-left: 8px;
+              font-weight: bold;
+            }
+            .reserved-badge {
+              background: #333;
+              color: #fff;
+            }
+            .status-badge {
+              background: #f0f0f0;
+              color: #666;
+              border: 1px solid #ccc;
+            }
+            .status-badge.on-order {
+              background: #e3f2fd;
+              color: #1565c0;
+              border-color: #90caf9;
+            }
+            .status-badge.to-buy {
+              background: #fff3e0;
+              color: #e65100;
+              border-color: #ffcc80;
             }
             .summary { 
               margin-top: 30px; 
@@ -518,13 +662,16 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               <div><strong>Build:</strong> ${buildName}</div>
               ${clientName ? `<div><strong>Client:</strong> ${clientName}</div>` : ''}
               <div><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
-              <div><strong>Total Parts:</strong> ${totalParts}</div>
+              <div><strong>Parts to Pick:</strong> ${totalPhysicalParts}</div>
+              ${showAllPartsOnPickList ? `<div><strong>Mode:</strong> All Parts (incl. non-physical)</div>` : ''}
             </div>
           </div>
 
-          ${Object.entries(grouped).map(([mainLoc, data]) => `
+          ${Object.entries(grouped).map(([mainLoc, data]) => {
+            const isNonInventory = mainLoc === 'NOT IN INVENTORY';
+            return `
             <div class="location-group">
-              <div class="location-header">${mainLoc}</div>
+              <div class="location-header ${isNonInventory ? 'non-inventory' : ''}">${mainLoc}</div>
               ${Object.entries(data.subLocations).map(([subLoc, items]) => `
                 ${subLoc !== '_direct' ? `<div class="sub-location-header">→ ${subLoc}</div>` : ''}
                 <table class="parts-table">
@@ -538,14 +685,30 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                   </thead>
                   <tbody>
                     ${items.map(item => `
-                      <tr>
-                        <td><span class="checkbox"></span></td>
+                      <tr class="${!item.isPhysical ? 'non-physical' : ''}">
                         <td>
-                          <div class="part-name">
-                            ${item.partName}
-                            ${item.isReserved ? '<span class="reserved-badge">RSV</span>' : ''}
+                          ${item.isPhysical 
+                            ? '<span class="checkbox"></span>' 
+                            : '<span class="checkbox disabled"></span>'
+                          }
+                        </td>
+                        <td>
+                          <div class="part-cell">
+                            ${item.partImage 
+                              ? `<img src="${item.partImage}" class="part-thumb" alt="" />` 
+                              : `<div class="part-thumb-placeholder">
+                                  <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h12v2H6z"/></svg>
+                                </div>`
+                            }
+                            <div class="part-info">
+                              <div class="part-name">
+                                ${item.partName}
+                                ${item.isReserved && item.isPhysical ? '<span class="badge reserved-badge">RSV</span>' : ''}
+                                ${item.status ? `<span class="badge status-badge ${item.status === 'ON ORDER' ? 'on-order' : 'to-buy'}">${item.status}</span>` : ''}
+                              </div>
+                              ${item.partNumber ? `<div class="part-number">${item.partNumber}</div>` : ''}
+                            </div>
                           </div>
-                          ${item.partNumber ? `<div class="part-number">${item.partNumber}</div>` : ''}
                         </td>
                         <td class="qty">${item.qtyToPick}</td>
                         ${showCostOnPickList ? `<td class="cost">$${item.extendedCost.toFixed(2)}</td>` : ''}
@@ -555,16 +718,16 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 </table>
               `).join('')}
             </div>
-          `).join('')}
+          `}).join('')}
 
           <div class="summary">
             <div class="summary-item">
-              <div class="summary-label">Total Parts to Pick</div>
-              <div class="summary-value">${totalParts}</div>
+              <div class="summary-label">Parts to Pick (Physical)</div>
+              <div class="summary-value">${totalPhysicalParts}</div>
             </div>
             ${showCostOnPickList ? `
               <div class="summary-item">
-                <div class="summary-label">Total Pick Value</div>
+                <div class="summary-label">Physical Pick Value</div>
                 <div class="summary-value">$${totalCost.toFixed(2)}</div>
               </div>
             ` : ''}
@@ -666,15 +829,28 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               Shows parts grouped by storage location.
             </p>
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="showCost"
-                checked={showCostOnPickList}
-                onCheckedChange={setShowCostOnPickList}
-              />
-              <Label htmlFor="showCost" className="text-sm text-gray-300 cursor-pointer">
-                Show cost values on pick list
-              </Label>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="showAllParts"
+                  checked={showAllPartsOnPickList}
+                  onCheckedChange={setShowAllPartsOnPickList}
+                />
+                <Label htmlFor="showAllParts" className="text-sm text-gray-300 cursor-pointer">
+                  Include all build parts (on order / to buy)
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="showCost"
+                  checked={showCostOnPickList}
+                  onCheckedChange={setShowCostOnPickList}
+                />
+                <Label htmlFor="showCost" className="text-sm text-gray-300 cursor-pointer">
+                  Show cost values on pick list
+                </Label>
+              </div>
             </div>
 
             <Button
