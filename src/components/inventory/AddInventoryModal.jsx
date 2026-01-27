@@ -5,9 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import LocationSelect from "@/components/common/LocationSelect";
 
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
@@ -46,10 +46,7 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
     queryFn: () => base44.entities.Part.list()
   });
 
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list()
-  });
+
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.InventoryItem.create({
@@ -77,8 +74,6 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
     }
     createMutation.mutate(formData);
   };
-
-  const parentLocations = locations.filter(l => !l.parent_id && l.active);
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -119,33 +114,11 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
 
           <div>
             <Label className="text-gray-300">Location</Label>
-            <Select 
-              value={formData.location_id} 
+            <LocationSelect
+              value={formData.location_id}
               onValueChange={(v) => setFormData({...formData, location_id: v})}
-            >
-              <SelectTrigger className="bg-gray-800 border-gray-700">
-                <SelectValue placeholder="Select location..." />
-              </SelectTrigger>
-              <SelectContent>
-                {parentLocations.map(parent => {
-                  const children = locations.filter(l => l.parent_id === parent.id && l.active);
-                  return (
-                    <React.Fragment key={parent.id}>
-                      <SelectItem value={parent.id}>
-                        <span style={{ color: parent.color }}>{parent.location_area}</span>
-                      </SelectItem>
-                      {children.map(child => (
-                        <SelectItem key={child.id} value={child.id}>
-                          <span className="ml-4" style={{ color: child.color }}>
-                            → {child.location_area}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </React.Fragment>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+              className="bg-gray-800 border-gray-700"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
