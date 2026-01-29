@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
-import { applyRetailPricing } from "@/components/inventory/pricingUtils";
+
 
 export default function AddRequirementModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
@@ -33,15 +33,13 @@ export default function AddRequirementModal({ projectId, onClose }) {
     enabled: !!projectId
   });
 
-  const { data: matrixTiers = [] } = useQuery({
-    queryKey: ['retailMarkupMatrix'],
-    queryFn: () => base44.entities.RetailMarkupMatrix.list(),
-  });
+
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const part = parts.find(p => p.id === data.part_id);
       const qtyNeeded = Number(data.qty_needed) || 1;
+      const defaultCost = part?.default_cost || 0;
       
       // Create the requirement
       await base44.entities.PartProjectRequirement.create({
@@ -54,10 +52,7 @@ export default function AddRequirementModal({ projectId, onClose }) {
         status: 'Needed'
       });
 
-      // Also create PartBuildAssignment with pricing calculated
-      const defaultCost = part?.default_cost || 0;
-      const pricingFields = applyRetailPricing({}, defaultCost, matrixTiers);
-      
+      // Create PartBuildAssignment with default_cost - automation will apply pricing
       await base44.entities.PartBuildAssignment.create({
         part_id: data.part_id,
         project_id: projectId,
@@ -65,7 +60,8 @@ export default function AddRequirementModal({ projectId, onClose }) {
         qty_reserved: 0,
         needed_status: 'Need to Buy',
         notes: data.notes || null,
-        ...pricingFields
+        default_cost: defaultCost,
+        pricing_locked: false
       });
     },
     onSuccess: () => {
