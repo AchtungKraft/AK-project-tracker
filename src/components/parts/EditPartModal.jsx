@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartJournalSection from "./PartJournalSection";
+import PartPricingFields from "./PartPricingFields";
 
 export default function EditPartModal({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -456,30 +457,19 @@ export default function EditPartModal({ partId, onClose }) {
                 </div>
               </div>
 
-              {/* Pricing & Inventory */}
-              <div className="grid grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-gray-400 text-xs">Cost</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={editedPart.cost || ''}
-                    onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="text-gray-400 text-xs">Retail</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={editedPart.retail || ''}
-                    onChange={(e) => setEditedPart({ ...editedPart, retail: parseFloat(e.target.value) || 0 })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
+              {/* Pricing Section */}
+              <PartPricingFields
+                defaultCost={editedPart.default_cost}
+                defaultRetail={editedPart.default_retail}
+                pricingMode={editedPart.pricing_mode || 'matrix'}
+                appliedMarkupPct={editedPart.applied_markup_pct}
+                onCostChange={(cost) => setEditedPart({ ...editedPart, default_cost: cost })}
+                onRetailChange={(retail) => setEditedPart({ ...editedPart, default_retail: retail })}
+                onModeChange={(mode) => setEditedPart({ ...editedPart, pricing_mode: mode })}
+              />
 
+              {/* Inventory */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-gray-400 text-xs">Qty on Hand</Label>
                   <Input

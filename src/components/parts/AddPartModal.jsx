@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import PartPricingFields from "./PartPricingFields";
 
 export default function AddPartModal({ onClose }) {
   const queryClient = useQueryClient();
@@ -26,8 +27,9 @@ export default function AddPartModal({ onClose }) {
     car_model: "",
     part_category_id: "",
     location_id: "",
-    cost: 0,
-    retail: 0,
+    default_cost: 0,
+    default_retail: 0,
+    pricing_mode: "matrix",
     quantity_on_hand: 0,
     vendor_id: "",
     status: "On-Hand",
@@ -216,36 +218,25 @@ export default function AddPartModal({ onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="text-gray-400">Cost</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={formData.cost}
-                onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) || 0 })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-gray-400">Retail</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={formData.retail}
-                onChange={(e) => setFormData({ ...formData, retail: parseFloat(e.target.value) || 0 })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-gray-400">Qty On Hand</Label>
-              <Input
-                type="number"
-                value={formData.quantity_on_hand}
-                onChange={(e) => setFormData({ ...formData, quantity_on_hand: parseInt(e.target.value) || 0 })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+          {/* Pricing Section */}
+          <PartPricingFields
+            defaultCost={formData.default_cost}
+            defaultRetail={formData.default_retail}
+            pricingMode={formData.pricing_mode}
+            appliedMarkupPct={null}
+            onCostChange={(cost) => setFormData({ ...formData, default_cost: cost })}
+            onRetailChange={(retail) => setFormData({ ...formData, default_retail: retail })}
+            onModeChange={(mode) => setFormData({ ...formData, pricing_mode: mode })}
+          />
+
+          <div className="space-y-2">
+            <Label className="text-gray-400">Qty On Hand</Label>
+            <Input
+              type="number"
+              value={formData.quantity_on_hand}
+              onChange={(e) => setFormData({ ...formData, quantity_on_hand: parseInt(e.target.value) || 0 })}
+              className="bg-gray-800 border-gray-700 text-white"
+            />
           </div>
 
           <div className="space-y-2">
