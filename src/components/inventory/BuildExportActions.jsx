@@ -120,6 +120,11 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
     return buildParts;
   };
 
+  const { data: matrixTiers = [] } = useQuery({
+    queryKey: ['retailMarkupMatrix'],
+    queryFn: () => base44.entities.RetailMarkupMatrix.list(),
+  });
+
   const calculatePartData = (part, requirement = null, assignment = null) => {
     const category = categories.find(c => c.id === part.part_category_id);
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
@@ -182,7 +187,17 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
     }
 
     const unitCost = avgCost || part.default_cost || 0;
-    const unitRetail = part.default_retail || 0;
+    
+    // Get unit retail from assignment (materialized) or calculate
+    let unitRetail = 0;
+    if (assignment?.pricing_locked && assignment?.unit_retail_override) {
+      unitRetail = assignment.unit_retail_override;
+    } else if (assignment?.unit_retail) {
+      unitRetail = assignment.unit_retail;
+    } else {
+      // Fallback to part default_retail
+      unitRetail = part.default_retail || 0;
+    }
 
     return {
       buildName,
@@ -204,6 +219,8 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
       status,
       supplier: vendor?.vendor_name || '',
       notes: requirement?.notes || assignment?.notes || '',
+      pricingLocked: assignment?.pricing_locked || false,
+      pricingSource: assignment?.pricing_source || 'none',
     };
   };
 
