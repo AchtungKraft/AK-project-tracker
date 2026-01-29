@@ -12,6 +12,7 @@ import CarModelsConfig from "../components/admin/CarModelsConfig";
 import CarYearsConfig from "../components/admin/CarYearsConfig";
 import UsersConfig from "../components/admin/UsersConfig";
 import EmailTemplatesConfig from "../components/admin/EmailTemplatesConfig";
+import RetailMarkupMatrixConfig from "../components/admin/RetailMarkupMatrixConfig";
 
 export default function AdminConfig() {
   return (
@@ -38,6 +39,7 @@ export default function AdminConfig() {
             <TabsTrigger value="car-models">Car Models</TabsTrigger>
             <TabsTrigger value="car-years">Car Years</TabsTrigger>
             <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
+            <TabsTrigger value="pricing-matrix">Pricing Matrix</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
@@ -86,6 +88,10 @@ export default function AdminConfig() {
 
           <TabsContent value="email-templates" className="mt-6">
             <EmailTemplatesConfig />
+          </TabsContent>
+
+          <TabsContent value="pricing-matrix" className="mt-6">
+            <RetailMarkupMatrixConfig />
           </TabsContent>
         </Tabs>
       </div>
