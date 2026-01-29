@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 
@@ -309,14 +309,27 @@ export default function PartsGrid({
                     </p>
                   )}
 
-                  {/* Inventory Grid */}
-                  <div className="grid grid-cols-4 gap-1 mb-2 pt-2 border-t border-gray-800">
+                  {/* Cost + Inventory Grid */}
+                  <div className="grid grid-cols-5 gap-1 mb-2 pt-2 border-t border-gray-800">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Cost</p>
+                      <p className={`text-sm font-semibold flex items-center justify-center gap-0.5 ${(!part.default_cost || part.default_cost === 0) ? 'text-red-400' : 'text-white'}`}>
+                        {(!part.default_cost || part.default_cost === 0) ? (
+                          <>
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>$0</span>
+                          </>
+                        ) : (
+                          <>${part.default_cost.toFixed(2)}</>
+                        )}
+                      </p>
+                    </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Stock</p>
                       <p className="text-sm text-white font-semibold">{stats.onHand}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs text-gray-500">Available</p>
+                      <p className="text-xs text-gray-500">Avail</p>
                       <p className={`text-sm font-semibold ${stats.available > 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {stats.available}
                       </p>
@@ -328,7 +341,7 @@ export default function PartsGrid({
                       </p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs text-gray-500">On Order</p>
+                      <p className="text-xs text-gray-500">Order</p>
                       <p className={`text-sm font-semibold ${stats.onOrder > 0 ? 'text-orange-400' : 'text-gray-500'}`}>
                         {stats.onOrder}
                       </p>
