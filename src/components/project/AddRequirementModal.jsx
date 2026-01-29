@@ -52,7 +52,9 @@ export default function AddRequirementModal({ projectId, onClose }) {
         status: 'Needed'
       });
 
-      // Create PartBuildAssignment with default_cost - automation will apply pricing
+      // Create PartBuildAssignment - inherit pricing from Part
+      const defaultRetail = part?.default_retail || 0;
+      
       await base44.entities.PartBuildAssignment.create({
         part_id: data.part_id,
         project_id: projectId,
@@ -61,6 +63,9 @@ export default function AddRequirementModal({ projectId, onClose }) {
         needed_status: 'Need to Buy',
         notes: data.notes || null,
         default_cost: defaultCost,
+        unit_retail: defaultRetail,
+        applied_markup_pct: part?.applied_markup_pct || null,
+        pricing_source: part?.pricing_mode === 'manual' ? 'override' : 'matrix',
         pricing_locked: false
       });
     },

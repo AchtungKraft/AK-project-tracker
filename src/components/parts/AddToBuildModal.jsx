@@ -116,8 +116,9 @@ export default function AddToBuildModal({ part, onClose }) {
         notes: formData.notes || null,
       });
 
-      // Create PartBuildAssignment with default_cost - automation will apply pricing
+      // Create PartBuildAssignment - inherit pricing from Part
       const defaultCost = part.default_cost || 0;
+      const defaultRetail = part.default_retail || 0;
       
       await base44.entities.PartBuildAssignment.create({
         part_id: part.id,
@@ -127,6 +128,9 @@ export default function AddToBuildModal({ part, onClose }) {
         needed_status: qtyAllocated >= qtyNeeded ? 'On-Hand' : 'Need to Buy',
         notes: formData.notes || null,
         default_cost: defaultCost,
+        unit_retail: defaultRetail,
+        applied_markup_pct: part.applied_markup_pct || null,
+        pricing_source: part.pricing_mode === 'manual' ? 'override' : 'matrix',
         pricing_locked: false
       });
       
