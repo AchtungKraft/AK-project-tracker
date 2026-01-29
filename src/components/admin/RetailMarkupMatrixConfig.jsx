@@ -103,29 +103,20 @@ export default function RetailMarkupMatrixConfig() {
     [buildAssignments]
   );
 
-  // Recalculate all unlocked build parts
+  // Recalculate all unlocked build parts using backend function
   const recalculateAllPricing = async () => {
     setRecalculatingAll(true);
     try {
-      let updatedCount = 0;
+      const response = await base44.functions.invoke('recalculateUnlockedPricing', {});
       
-      for (const assignment of unlockedAssignments) {
-        const part = parts.find(p => p.id === assignment.part_id);
-        const defaultCost = assignment.default_cost || part?.default_cost || 0;
-        
-        if (defaultCost <= 0) continue;
-        
-        const pricingFields = applyRetailPricing(assignment, defaultCost, tiers);
-        
-        if (pricingFields) {
-          await base44.entities.PartBuildAssignment.update(assignment.id, pricingFields);
-          updatedCount++;
-        }
+      if (response.data?.error) {
+        toast.error(response.data.error);
+      } else if (response.data?.success) {
+        const { summary } = response.data;
+        queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
+        toast.success(`Updated ${summary.updated} parts. Skipped: ${summary.skipped_locked} locked, ${summary.skipped_no_cost} no cost, ${summary.skipped_no_tier} no tier match.`);
+        setShowRecalculateDialog(false);
       }
-
-      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
-      toast.success(`Recalculated pricing for ${updatedCount} build parts`);
-      setShowRecalculateDialog(false);
     } catch (error) {
       toast.error('Failed to recalculate: ' + error.message);
     } finally {
@@ -266,7 +257,7 @@ export default function RetailMarkupMatrixConfig() {
             className="border-amber-600 text-amber-400 hover:bg-amber-600/20"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Recalculate All ({unlockedAssignments.length})
+            Recalculate Unlocked ({unlockedAssignments.length})
           </Button>
           <Button onClick={() => setShowAddDialog(true)} className="bg-red-600 hover:bg-red-700">
             <Plus className="w-4 h-4 mr-2" />
