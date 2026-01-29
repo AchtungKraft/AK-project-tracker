@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import QuickBooksExport from "./QuickBooksExport";
 
 /**
  * BuildExportActions - Shared component for exporting build parts and printing pick lists
@@ -1131,6 +1132,7 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Export Parts
           </Button>
+          <QuickBooksExport buildId={buildId} buildName={buildName} clientName={clientName} />
           <Button
             size="sm"
             variant="outline"
