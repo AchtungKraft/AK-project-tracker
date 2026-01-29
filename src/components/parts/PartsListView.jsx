@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, MapPin, Box, ChevronDown, ChevronRight, AlertTriangle, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
@@ -274,8 +274,24 @@ export default function PartsListView({
           </div>
         </div>
 
-        {/* Inventory Stats - Mobile full width, desktop auto */}
+        {/* Cost + Inventory Stats - Mobile full width, desktop auto */}
         <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
+          <div className="text-center min-w-[50px]">
+            <div className="text-gray-500 mb-0.5">Cost</div>
+            <div className={cn(
+              "font-semibold flex items-center justify-center gap-0.5",
+              (!part.default_cost || part.default_cost === 0) ? "text-red-400" : "text-white"
+            )}>
+              {(!part.default_cost || part.default_cost === 0) ? (
+                <>
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>$0</span>
+                </>
+              ) : (
+                <>${part.default_cost.toFixed(2)}</>
+              )}
+            </div>
+          </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Stock</div>
             <div className="text-white font-semibold">{stats.onHand}</div>
