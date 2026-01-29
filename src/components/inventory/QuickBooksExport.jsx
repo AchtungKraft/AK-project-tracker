@@ -79,73 +79,7 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
     const items = [];
     const processedPartIds = new Set();
 
-    // Get parts from requirements
-    const buildRequirements = requirements.filter(r => r.project_id === buildId);
-    buildRequirements.forEach(req => {
-      if (processedPartIds.has(req.part_id)) return;
-      processedPartIds.add(req.part_id);
-
-      const part = parts.find(p => p.id === req.part_id);
-      if (!part) return;
-
-      const qtyNeeded = req.qty_needed || 0;
-      if (qtyNeeded <= 0) return;
-
-      // Get the build assignment for this part if it exists (for pricing)
-      const assignment = buildAssignments.find(ba => 
-        ba.part_id === req.part_id && ba.project_id === buildId
-      );
-
-      // Determine pricing
-      let unitRetail = 0;
-      let pricingSource = 'matrix';
-      let appliedMarkup = 0;
-      let needsPricingUpdate = false;
-
-      if (assignment?.pricing_locked && assignment?.unit_retail_override) {
-        // Use override
-        unitRetail = assignment.unit_retail_override;
-        pricingSource = 'override';
-        appliedMarkup = assignment.applied_markup_pct || 0;
-      } else if (assignment?.unit_retail && assignment?.pricing_source === 'matrix') {
-        // Use stored calculated value
-        unitRetail = assignment.unit_retail;
-        pricingSource = 'matrix';
-        appliedMarkup = assignment.applied_markup_pct || 0;
-      } else {
-        // Calculate from matrix
-        const cost = assignment?.default_cost || part.default_cost || 0;
-        const tier = getMarkupFromMatrix(cost, matrixTiers);
-        if (tier) {
-          unitRetail = calculateUnitRetail(cost, tier);
-          appliedMarkup = tier.markup_pct || 0;
-          needsPricingUpdate = true;
-        }
-        pricingSource = 'calculated';
-      }
-
-      const category = getCategoryName(part);
-      const description = `${category} / ${part.part_name} / ${part.vendor_part_number || 'N/A'}`;
-
-      items.push({
-        partId: part.id,
-        requirementId: req.id,
-        assignmentId: assignment?.id,
-        partName: part.part_name,
-        partNumber: part.vendor_part_number || '',
-        category,
-        description,
-        qtyNeeded,
-        defaultCost: assignment?.default_cost || part.default_cost || 0,
-        unitRetail,
-        pricingSource,
-        appliedMarkup,
-        pricingLocked: assignment?.pricing_locked || false,
-        needsPricingUpdate
-      });
-    });
-
-    // Also check build assignments without requirements
+    // Primary source: PartBuildAssignment (has pricing and qty_needed)
     const buildAssigns = buildAssignments.filter(ba => ba.project_id === buildId);
     buildAssigns.forEach(ba => {
       if (processedPartIds.has(ba.part_id)) return;
@@ -154,32 +88,24 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
       const part = parts.find(p => p.id === ba.part_id);
       if (!part) return;
 
+      // Use qty_needed from assignment
       const qtyNeeded = ba.qty_needed || 0;
       if (qtyNeeded <= 0) return;
 
-      // Determine pricing
+      // Get pricing ONLY from stored assignment values (no calculation during export)
       let unitRetail = 0;
-      let pricingSource = 'matrix';
-      let appliedMarkup = 0;
+      let pricingSource = ba.pricing_source || 'none';
+      let appliedMarkup = ba.applied_markup_pct || 0;
       let needsPricingUpdate = false;
 
-      if (ba.pricing_locked && ba.unit_retail_override) {
+      if (ba.pricing_locked && ba.unit_retail_override != null && ba.unit_retail_override > 0) {
         unitRetail = ba.unit_retail_override;
         pricingSource = 'override';
-        appliedMarkup = ba.applied_markup_pct || 0;
-      } else if (ba.unit_retail && ba.pricing_source === 'matrix') {
+      } else if (ba.unit_retail != null && ba.unit_retail > 0) {
         unitRetail = ba.unit_retail;
-        pricingSource = 'matrix';
-        appliedMarkup = ba.applied_markup_pct || 0;
       } else {
-        const cost = ba.default_cost || part.default_cost || 0;
-        const tier = getMarkupFromMatrix(cost, matrixTiers);
-        if (tier) {
-          unitRetail = calculateUnitRetail(cost, tier);
-          appliedMarkup = tier.markup_pct || 0;
-          needsPricingUpdate = true;
-        }
-        pricingSource = 'calculated';
+        // No stored pricing - flag for user to calculate first
+        needsPricingUpdate = true;
       }
 
       const category = getCategoryName(part);
@@ -200,6 +126,40 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
         appliedMarkup,
         pricingLocked: ba.pricing_locked || false,
         needsPricingUpdate
+      });
+    });
+
+    // Secondary: requirements without assignments (shouldn't happen but handle gracefully)
+    const buildRequirements = requirements.filter(r => r.project_id === buildId);
+    buildRequirements.forEach(req => {
+      if (processedPartIds.has(req.part_id)) return;
+      processedPartIds.add(req.part_id);
+
+      const part = parts.find(p => p.id === req.part_id);
+      if (!part) return;
+
+      const qtyNeeded = req.qty_needed || 0;
+      if (qtyNeeded <= 0) return;
+
+      const category = getCategoryName(part);
+      const description = `${category} / ${part.part_name} / ${part.vendor_part_number || 'N/A'}`;
+
+      // No assignment = no stored pricing, must flag
+      items.push({
+        partId: part.id,
+        requirementId: req.id,
+        assignmentId: null,
+        partName: part.part_name,
+        partNumber: part.vendor_part_number || '',
+        category,
+        description,
+        qtyNeeded,
+        defaultCost: part.default_cost || 0,
+        unitRetail: 0,
+        pricingSource: 'none',
+        appliedMarkup: 0,
+        pricingLocked: false,
+        needsPricingUpdate: true
       });
     });
 
