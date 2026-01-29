@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,32 +21,10 @@ import {
   Loader2, 
   AlertTriangle,
   RefreshCw,
-  DollarSign,
-  CheckCircle2
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
-
-/**
- * Helper function to get markup from matrix
- */
-export function getMarkupFromMatrix(defaultCost, matrixTiers) {
-  const activeTiers = matrixTiers
-    .filter(t => t.active !== false)
-    .sort((a, b) => (a.min_cost || 0) - (b.min_cost || 0));
-  
-  return activeTiers.find(t => 
-    defaultCost >= (t.min_cost || 0) && 
-    (t.max_cost === null || t.max_cost === undefined || defaultCost < t.max_cost)
-  );
-}
-
-/**
- * Helper function to calculate unit retail
- */
-export function calculateUnitRetail(defaultCost, matrixRow) {
-  if (!matrixRow || !defaultCost) return 0;
-  return Math.round(defaultCost * (1 + (matrixRow.markup_pct || 0)) * 100) / 100;
-}
+import { getMarkupFromMatrix, calculateUnitRetail, applyRetailPricing } from "./pricingUtils";
 
 /**
  * QuickBooksExport - Component for exporting build parts to QuickBooks CSV format
@@ -266,8 +244,17 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
     }
   };
 
+  // Items missing pricing (validation)
+  const itemsMissingPricing = exportData.filter(d => !d.unitRetail || d.unitRetail <= 0);
+
   // Export to QuickBooks CSV
   const exportToQuickBooks = () => {
+    // Block export if items missing pricing
+    if (itemsMissingPricing.length > 0) {
+      toast.error(`Cannot export: ${itemsMissingPricing.length} part(s) are missing retail pricing`);
+      return;
+    }
+
     setIsExporting(true);
     try {
       // QuickBooks CSV headers - only 4 fields
@@ -357,8 +344,35 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
               </Card>
             </div>
 
+            {/* Missing Pricing Error - Blocks Export */}
+            {itemsMissingPricing.length > 0 && (
+              <Card className="bg-red-900/20 border-red-500/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <XCircle className="w-5 h-5 text-red-400 mt-0.5" />
+                    <div>
+                      <h3 className="font-semibold text-red-400">
+                        {itemsMissingPricing.length} item(s) missing retail pricing
+                      </h3>
+                      <p className="text-sm text-red-300 mt-1">
+                        Export is blocked. These parts need pricing calculated before export.
+                      </p>
+                      <ul className="text-xs text-red-300/80 mt-2 space-y-1">
+                        {itemsMissingPricing.slice(0, 3).map((item, i) => (
+                          <li key={i}>• {item.partName} (cost: ${item.defaultCost?.toFixed(2) || '0.00'})</li>
+                        ))}
+                        {itemsMissingPricing.length > 3 && (
+                          <li>• ... and {itemsMissingPricing.length - 3} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Pricing Warning */}
-            {itemsNeedingPricing.length > 0 && (
+            {itemsNeedingPricing.length > 0 && itemsMissingPricing.length === 0 && (
               <Card className="bg-amber-900/20 border-amber-500/50">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
@@ -471,7 +485,7 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
             </Button>
             <Button
               onClick={exportToQuickBooks}
-              disabled={isExporting || exportData.length === 0}
+              disabled={isExporting || exportData.length === 0 || itemsMissingPricing.length > 0}
               className="bg-green-700 hover:bg-green-600"
             >
               {isExporting ? (
