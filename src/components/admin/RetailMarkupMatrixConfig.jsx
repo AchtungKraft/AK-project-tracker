@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { 
   Plus, 
@@ -31,9 +32,11 @@ import {
   DollarSign,
   Percent,
   CheckCircle2,
-  Loader2
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
+import { applyRetailPricing } from "@/components/inventory/pricingUtils";
 
 export default function RetailMarkupMatrixConfig() {
   const queryClient = useQueryClient();
@@ -47,6 +50,8 @@ export default function RetailMarkupMatrixConfig() {
     active: true
   });
   const [testCost, setTestCost] = useState('');
+  const [showRecalculateDialog, setShowRecalculateDialog] = useState(false);
+  const [recalculatingAll, setRecalculatingAll] = useState(false);
 
   const { data: tiers = [], isLoading } = useQuery({
     queryKey: ['retailMarkupMatrix'],
@@ -81,6 +86,52 @@ export default function RetailMarkupMatrixConfig() {
     },
     onError: (error) => toast.error('Failed to delete tier: ' + error.message)
   });
+
+  const { data: buildAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  });
+
+  const { data: parts = [] } = useQuery({
+    queryKey: ['parts'],
+    queryFn: () => base44.entities.Part.list(),
+  });
+
+  // Count unlocked assignments
+  const unlockedAssignments = useMemo(() => 
+    buildAssignments.filter(ba => !ba.pricing_locked),
+    [buildAssignments]
+  );
+
+  // Recalculate all unlocked build parts
+  const recalculateAllPricing = async () => {
+    setRecalculatingAll(true);
+    try {
+      let updatedCount = 0;
+      
+      for (const assignment of unlockedAssignments) {
+        const part = parts.find(p => p.id === assignment.part_id);
+        const defaultCost = assignment.default_cost || part?.default_cost || 0;
+        
+        if (defaultCost <= 0) continue;
+        
+        const pricingFields = applyRetailPricing(assignment, defaultCost, tiers);
+        
+        if (pricingFields) {
+          await base44.entities.PartBuildAssignment.update(assignment.id, pricingFields);
+          updatedCount++;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
+      toast.success(`Recalculated pricing for ${updatedCount} build parts`);
+      setShowRecalculateDialog(false);
+    } catch (error) {
+      toast.error('Failed to recalculate: ' + error.message);
+    } finally {
+      setRecalculatingAll(false);
+    }
+  };
 
   const activeTiers = useMemo(() => 
     tiers.filter(t => t.active).sort((a, b) => (a.min_cost || 0) - (b.min_cost || 0)),
@@ -208,10 +259,20 @@ export default function RetailMarkupMatrixConfig() {
           <h2 className="text-xl font-bold text-white">Retail Markup Matrix</h2>
           <p className="text-sm text-gray-400">Configure cost-based markup tiers for build parts pricing</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="bg-red-600 hover:bg-red-700">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Tier
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => setShowRecalculateDialog(true)} 
+            variant="outline"
+            className="border-amber-600 text-amber-400 hover:bg-amber-600/20"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Recalculate All ({unlockedAssignments.length})
+          </Button>
+          <Button onClick={() => setShowAddDialog(true)} className="bg-red-600 hover:bg-red-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Tier
+          </Button>
+        </div>
       </div>
 
       {/* Validation Status */}
@@ -372,6 +433,59 @@ export default function RetailMarkupMatrixConfig() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Recalculate Confirmation Dialog */}
+      <Dialog open={showRecalculateDialog} onOpenChange={setShowRecalculateDialog}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-amber-400" />
+              Recalculate Pricing
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              This will update pricing for all unlocked build parts using the current matrix.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-3">
+            <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+              <p className="text-amber-300 text-sm">
+                <strong>{unlockedAssignments.length}</strong> build part(s) will be recalculated
+              </p>
+              <p className="text-amber-400/70 text-xs mt-1">
+                Locked/custom pricing will not be affected
+              </p>
+            </div>
+            
+            <div className="p-3 bg-gray-800/50 rounded-lg text-sm text-gray-400">
+              <p>This action will:</p>
+              <ul className="list-disc ml-4 mt-1 space-y-1">
+                <li>Look up each part's default_cost</li>
+                <li>Find the matching markup tier</li>
+                <li>Calculate and store new unit_retail</li>
+              </ul>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRecalculateDialog(false)} className="border-gray-700">
+              Cancel
+            </Button>
+            <Button 
+              onClick={recalculateAllPricing} 
+              className="bg-amber-600 hover:bg-amber-700"
+              disabled={recalculatingAll}
+            >
+              {recalculatingAll ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Recalculate Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Dialog */}
       <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) resetForm(); else setShowAddDialog(true); }}>
