@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
+import { applyRetailPricing } from "@/components/inventory/pricingUtils";
 
 /**
  * AddToBuildModal - Add a part requirement to a project/build
@@ -43,6 +44,11 @@ export default function AddToBuildModal({ part, onClose }) {
     queryKey: ['inventoryItems', 'forPart', part?.id],
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: part?.id }),
     enabled: !!part?.id && allocateImmediately,
+  });
+
+  const { data: matrixTiers = [] } = useQuery({
+    queryKey: ['retailMarkupMatrix'],
+    queryFn: () => base44.entities.RetailMarkupMatrix.list(),
   });
 
   // Check for existing requirement
@@ -101,7 +107,7 @@ export default function AddToBuildModal({ part, onClose }) {
       }
 
       // Create the requirement
-      await base44.entities.PartProjectRequirement.create({
+      const requirement = await base44.entities.PartProjectRequirement.create({
         part_id: part.id,
         project_id: formData.project_id,
         qty_needed: qtyNeeded,
@@ -111,6 +117,20 @@ export default function AddToBuildModal({ part, onClose }) {
         status: status,
         priority: flagNeedToOrder ? 'High' : formData.priority,
         notes: formData.notes || null,
+      });
+
+      // Also create/update PartBuildAssignment with pricing
+      const defaultCost = part.default_cost || 0;
+      const pricingFields = applyRetailPricing({}, defaultCost, matrixTiers);
+      
+      await base44.entities.PartBuildAssignment.create({
+        part_id: part.id,
+        project_id: formData.project_id,
+        qty_needed: qtyNeeded,
+        qty_reserved: qtyAllocated,
+        needed_status: qtyAllocated >= qtyNeeded ? 'On-Hand' : 'Need to Buy',
+        notes: formData.notes || null,
+        ...pricingFields
       });
       
       return { qtyAllocated };

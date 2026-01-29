@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
+import { applyRetailPricing } from "@/components/inventory/pricingUtils";
 
 export default function AddRequirementModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
@@ -32,18 +33,44 @@ export default function AddRequirementModal({ projectId, onClose }) {
     enabled: !!projectId
   });
 
+  const { data: matrixTiers = [] } = useQuery({
+    queryKey: ['retailMarkupMatrix'],
+    queryFn: () => base44.entities.RetailMarkupMatrix.list(),
+  });
+
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.PartProjectRequirement.create({
-      ...data,
-      project_id: projectId,
-      qty_needed: Number(data.qty_needed) || 1,
-      qty_allocated: 0,
-      qty_ordered: 0,
-      qty_installed: 0,
-      status: 'Needed'
-    }),
+    mutationFn: async (data) => {
+      const part = parts.find(p => p.id === data.part_id);
+      const qtyNeeded = Number(data.qty_needed) || 1;
+      
+      // Create the requirement
+      await base44.entities.PartProjectRequirement.create({
+        ...data,
+        project_id: projectId,
+        qty_needed: qtyNeeded,
+        qty_allocated: 0,
+        qty_ordered: 0,
+        qty_installed: 0,
+        status: 'Needed'
+      });
+
+      // Also create PartBuildAssignment with pricing calculated
+      const defaultCost = part?.default_cost || 0;
+      const pricingFields = applyRetailPricing({}, defaultCost, matrixTiers);
+      
+      await base44.entities.PartBuildAssignment.create({
+        part_id: data.part_id,
+        project_id: projectId,
+        qty_needed: qtyNeeded,
+        qty_reserved: 0,
+        needed_status: 'Need to Buy',
+        notes: data.notes || null,
+        ...pricingFields
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
       toast.success('Part requirement added');
       onClose();
     },
