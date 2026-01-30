@@ -951,14 +951,27 @@ export default function ClientPortalHub() {
                     <Badge className="bg-red-500/20 text-red-400">{akNeedsReviewCount}</Badge>
                   </div>
                 )}
-                {waitingOnClientCount > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-300">Waiting on Client:</span>
-                    <Badge className="bg-gray-500/20 text-gray-400">{waitingOnClientCount}</Badge>
-                  </div>
-                )}
-              </div>
+{waitingOnClientCount > 0 && (
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center gap-2">
+      <Clock className="w-4 h-4 text-gray-400" />
+      <span className="text-sm text-gray-300">Waiting on Client:</span>
+      <Badge className="bg-gray-500/20 text-gray-400">
+        {waitingOnClientCount}
+      </Badge>
+    </div>
+
+    <a
+      href="https://akclient.base44.app/AnalyticsDashboard"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="ml-6 text-xs text-cyan-400 hover:text-cyan-300 hover:underline"
+    >
+      View client response analytics →
+    </a>
+  </div>
+)}
+
             );
 
             if (viewMode === 'list') {
