@@ -960,13 +960,11 @@ export default function ClientPortalHub() {
         {waitingOnClientCount}
       </Badge>
     </div>
-
-    <a
-      href="https://akclient.base44.app/AnalyticsDashboard"
+    <a href="https://akclient.base44.app/AnalyticsDashboard"
       target="_blank"
       rel="noopener noreferrer"
       className="ml-6 text-xs text-cyan-400 hover:text-cyan-300 hover:underline"
-    >
+ >
       View client response analytics →
     </a>
   </div>
