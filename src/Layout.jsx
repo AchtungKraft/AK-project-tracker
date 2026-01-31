@@ -73,11 +73,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Settings,
       },
       {
-  title: "Tech Docs",
-  url: "https://achtungkraft.com",
-  icon: ListChecks,
-  external: true,
-},
+        title: "Tech Docs",
+        url: "https://achtungkraft.com",
+       icon: ListChecks,
+        external: true,
+      },
     ];
   } else {
     return [
