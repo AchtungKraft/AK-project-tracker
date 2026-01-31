@@ -73,8 +73,8 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Settings,
       },
       {
-        title: "Tech Docs",
-        url: "https://achtungkraft.com",
+        title: "Portal Stats",
+        url: "https://akclient.base44.app/AnalyticsDashboard",
        icon: ListChecks,
         external: true,
       },
