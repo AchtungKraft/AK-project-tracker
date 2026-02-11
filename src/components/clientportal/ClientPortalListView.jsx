@@ -104,8 +104,8 @@ export default function ClientPortalListView({
 
   return (
     <div className="space-y-4">
-      {sortedGroupedData.map(({ project, requests }) => (
-        <div key={project?.id || 'unknown'} className="bg-black/40 backdrop-blur-xl border border-gray-700 rounded-lg overflow-hidden">
+      {sortedGroupedData.map(({ project, requests }, groupIndex) => (
+        <div key={`${project?.id || 'unknown'}-${groupIndex}`} className="bg-black/40 backdrop-blur-xl border border-gray-700 rounded-lg overflow-hidden">
           {/* Project Header */}
           <div className="flex items-center justify-between px-4 py-2 bg-gray-800/70 border-b border-gray-700">
             <div className="flex items-center gap-2 flex-wrap">
