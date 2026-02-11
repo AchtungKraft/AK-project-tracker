@@ -192,6 +192,13 @@ export function hasActiveCommitments(commitments, requirementId) {
 }
 
 /**
+ * Check if a requirement is managed by commitments (for UI lock indicator)
+ */
+export function isRequirementManagedByCommitments(commitments, requirementId) {
+  return commitments.some(c => c.requirement_id === requirementId);
+}
+
+/**
  * Get commitments for a specific requirement
  */
 export function getCommitmentsForRequirement(commitments, requirementId) {
@@ -203,4 +210,12 @@ export function getCommitmentsForRequirement(commitments, requirementId) {
  */
 export function getCommitmentsForProjectPart(commitments, projectId, partId) {
   return commitments.filter(c => c.project_id === projectId && c.part_id === partId);
+}
+
+/**
+ * Check if requirement fields can be directly edited
+ * Returns false if managed by commitments
+ */
+export function canEditRequirementFields(commitments, requirementId) {
+  return !isRequirementManagedByCommitments(commitments, requirementId);
 }
