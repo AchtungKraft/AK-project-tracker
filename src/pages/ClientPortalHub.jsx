@@ -433,12 +433,12 @@ export default function ClientPortalHub() {
 
     return (
       <div className="space-y-6">
-        {groupedData.map(({ project, requests }) => {
+        {groupedData.map(({ project, requests }, groupIndex) => {
           const groupedByType = groupRequestsByType(requests);
           
           return (
             <Card 
-              key={project?.id || 'unknown'} 
+              key={`${project?.id || 'unknown'}-${groupIndex}`} 
               className={`backdrop-blur-xl border-2 shadow-lg ${colors.isNeedsReview ? 'bg-[oklch(39.6%_0.141_25.723)]' : 'bg-black/40'}`}
               style={{ 
                 borderColor: colors.border,
