@@ -29,6 +29,9 @@ import ImageModal from "../ui/ImageModal";
 import MoveRequirementModal from "../parts/MoveRequirementModal";
 import CommitmentLockIndicator from "../parts/CommitmentLockIndicator";
 import { useCommitmentData, isRequirementManagedByCommitments, getCommitmentsForRequirement } from "../inventory/useCommitmentData";
+import { isRequirementLocked } from "../inventory/commitmentStateEngine";
+import CancelCommitmentModal from "../parts/CancelCommitmentModal";
+import CommitmentEditModal from "../parts/CommitmentEditModal";
 
 /**
  * Derives status badge from quantities (canonical logic)
@@ -75,6 +78,8 @@ export default function ProjectParts({ projectId }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [orderPart, setOrderPart] = useState(null);
   const [moveRequirement, setMoveRequirement] = useState(null);
+  const [cancellingCommitment, setCancellingCommitment] = useState(null);
+  const [editingCommitment, setEditingCommitment] = useState(null);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements', projectId],
@@ -279,6 +284,23 @@ export default function ProjectParts({ projectId }) {
   });
 
   const handleRemove = (requirement) => {
+    // Check if managed by commitments
+    const reqCommitments = getCommitmentsForRequirement(commitments, requirement.id);
+    const activeCommitments = reqCommitments.filter(c => c.commitment_status !== 'cancelled');
+    
+    if (activeCommitments.length > 0) {
+      // Has commitments - open cancel modal for first active commitment
+      const commitmentToCancel = activeCommitments[0];
+      if ((commitmentToCancel.qty_installed || 0) > 0) {
+        toast.error('Cannot remove: parts have been installed. Use commitment editor to reduce quantity.');
+        setEditingCommitment(commitmentToCancel);
+        return;
+      }
+      setCancellingCommitment(commitmentToCancel);
+      return;
+    }
+    
+    // Legacy path - no commitments
     if ((requirement.qty_installed || 0) > 0) {
       toast.error('Cannot remove: parts have been installed');
       return;
@@ -726,6 +748,22 @@ export default function ProjectParts({ projectId }) {
           part={getPartInfo(moveRequirement.part_id)}
           currentProject={project}
           onClose={() => setMoveRequirement(null)}
+        />
+      )}
+
+      {cancellingCommitment && (
+        <CancelCommitmentModal
+          commitment={cancellingCommitment}
+          part={getPartInfo(cancellingCommitment.part_id)}
+          project={project}
+          onClose={() => setCancellingCommitment(null)}
+        />
+      )}
+
+      {editingCommitment && (
+        <CommitmentEditModal
+          commitment={editingCommitment}
+          onClose={() => setEditingCommitment(null)}
         />
       )}
     </div>

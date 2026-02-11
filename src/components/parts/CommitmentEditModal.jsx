@@ -11,7 +11,7 @@ import {
 import CancelCommitmentModal from "./CancelCommitmentModal";
 import SplitCommitmentModal from "./SplitCommitmentModal";
 import CommitmentHistoryDrawer from "./CommitmentHistoryDrawer";
-import CommitmentStatusBadge from "./CommitmentStatusBadge";
+import { CommitmentStatusBadge } from "./CommitmentStatusBadge";
 
 /**
  * CommitmentEditModal - Main modal for editing/managing a commitment

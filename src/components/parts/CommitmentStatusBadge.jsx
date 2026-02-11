@@ -78,6 +78,9 @@ export function CommitmentStatusBadge({ status, showIcon = true, size = 'default
   );
 }
 
+// Named export alias for default
+const CommitmentStatusBadgeComponent = CommitmentStatusBadge;
+
 export function CommitmentBillingBadge({ status, size = 'default' }) {
   const config = BILLING_CONFIG[status] || BILLING_CONFIG.billable;
   
@@ -97,6 +100,10 @@ export function CommitmentSourceBadge({ source }) {
     manual_commitment: 'Manual',
     po_split: 'PO Split',
     stock_buffer: 'Stock Buffer',
+    requirement: 'Requirement',
+    manual_attachment: 'Manual',
+    order_attachment: 'Order Attached',
+    split_commitment: 'Split',
   };
   
   return (
@@ -105,5 +112,8 @@ export function CommitmentSourceBadge({ source }) {
     </Badge>
   );
 }
+
+// Default export for backwards compatibility
+export default CommitmentStatusBadge;
 
 export { STATUS_CONFIG, BILLING_CONFIG };
