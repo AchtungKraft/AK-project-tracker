@@ -267,32 +267,17 @@ Deno.serve(async (req) => {
     }
 });
 
-// Batched fetch by IDs - avoids N+1 while not fetching entire table
+// Batched fetch by IDs - uses $in operator for efficient batch queries (NOT N+1)
 async function fetchByIdsBatched(entity, ids) {
     if (!ids || ids.length === 0) return [];
     
     const uniqueIds = [...new Set(ids)];
-    const BATCH_SIZE = 25;
-    const CONCURRENCY = 10;
-    const results = [];
     
-    for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE * CONCURRENCY) {
-        const batchPromises = [];
-        
-        for (let j = 0; j < CONCURRENCY && (i + j * BATCH_SIZE) < uniqueIds.length; j++) {
-            const start = i + j * BATCH_SIZE;
-            const batchIds = uniqueIds.slice(start, start + BATCH_SIZE);
-            
-            batchPromises.push(
-                Promise.all(batchIds.map(id => 
-                    entity.filter({ id }).catch(() => [])
-                )).then(res => res.flat())
-            );
-        }
-        
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults.flat());
+    // Single query with $in operator - O(1) DB calls instead of O(n)
+    try {
+        return await entity.filter({ id: { $in: uniqueIds } });
+    } catch (error) {
+        console.error('fetchByIdsBatched error:', error);
+        return [];
     }
-    
-    return results;
 }
