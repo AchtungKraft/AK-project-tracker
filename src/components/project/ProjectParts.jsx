@@ -27,6 +27,8 @@ import OrderPartModal from "../parts/OrderPartModal";
 import EditPartDrawer from "../parts/EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 import MoveRequirementModal from "../parts/MoveRequirementModal";
+import CommitmentLockIndicator from "../parts/CommitmentLockIndicator";
+import { useCommitmentData, isRequirementManagedByCommitments, getCommitmentsForRequirement } from "../inventory/useCommitmentData";
 
 /**
  * Derives status badge from quantities (canonical logic)
@@ -120,8 +122,22 @@ export default function ProjectParts({ projectId }) {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
   });
+
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments', projectId],
+    queryFn: () => base44.entities.PartCommitment.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
   
   const project = projects.find(p => p.id === projectId);
+
+  // Dual-read hook for commitment-aware metrics
+  const commitmentMetrics = useCommitmentData({
+    commitments,
+    requirements,
+    lineItems,
+    projectId,
+  });
 
   // Calculate on-order quantity for each part (from open PO line items)
   const partOnOrder = useMemo(() => {
@@ -300,6 +316,11 @@ export default function ProjectParts({ projectId }) {
               <Badge variant="outline" className="border-gray-600 text-gray-400">
                 {requirements.length} items
               </Badge>
+              {commitmentMetrics.hasCommitments && (
+                <Badge variant="outline" className="border-purple-600 text-purple-400 text-xs">
+                  Commitment Tracking Active
+                </Badge>
+              )}
             </div>
             <Button
               onClick={() => setShowAddModal(true)}
@@ -539,7 +560,9 @@ export default function ProjectParts({ projectId }) {
                   const part = getPartInfo(req.part_id);
                   const status = req._status;
                   const StatusIcon = status.icon;
-                  const canAllocate = req._available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
+                  const isManagedByCommitments = isRequirementManagedByCommitments(commitments, req.id);
+                  const reqCommitments = getCommitmentsForRequirement(commitments, req.id);
+                  const canAllocate = !isManagedByCommitments && req._available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
                   const canInstall = (req.qty_allocated || 0) > (req.qty_installed || 0);
                   const hasInstalledParts = (req.qty_installed || 0) > 0;
 
@@ -556,7 +579,15 @@ export default function ProjectParts({ projectId }) {
                             </div>
                           )}
                           <div>
-                            <p className="text-white text-sm font-medium hover:text-red-400 transition-colors">{part.part_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-white text-sm font-medium hover:text-red-400 transition-colors">{part.part_name}</p>
+                              <CommitmentLockIndicator 
+                                isLocked={isManagedByCommitments} 
+                                commitmentCount={reqCommitments.length}
+                                size="sm"
+                                showLabel={false}
+                              />
+                            </div>
                             {part.vendor_part_number && (
                               <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>
                             )}
@@ -600,6 +631,11 @@ export default function ProjectParts({ projectId }) {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                              {isManagedByCommitments && (
+                                <DropdownMenuItem disabled className="text-purple-400 text-xs">
+                                  Managed by {reqCommitments.length} commitment(s)
+                                </DropdownMenuItem>
+                              )}
                               {canAllocate && (
                                 <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
                                   <Package className="w-4 h-4 mr-2" /> Allocate from Inventory
@@ -610,7 +646,7 @@ export default function ProjectParts({ projectId }) {
                                   <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
                                 </DropdownMenuItem>
                               )}
-                              {req._toOrder > 0 && (
+                              {req._toOrder > 0 && !isManagedByCommitments && (
                                 <DropdownMenuItem onClick={() => setOrderPart(part)}>
                                   <ShoppingCart className="w-4 h-4 mr-2" /> Order Part ({req._toOrder})
                                 </DropdownMenuItem>
@@ -624,7 +660,7 @@ export default function ProjectParts({ projectId }) {
                                 <ExternalLink className="w-4 h-4 mr-2" /> View Part Details
                               </DropdownMenuItem>
                               <DropdownMenuSeparator className="bg-gray-700" />
-                              {!hasInstalledParts && (
+                              {!hasInstalledParts && !isManagedByCommitments && (
                                 <DropdownMenuItem onClick={() => setMoveRequirement(req)}>
                                   Move to Project
                                 </DropdownMenuItem>
@@ -632,7 +668,7 @@ export default function ProjectParts({ projectId }) {
                               <DropdownMenuItem 
                                 onClick={() => handleRemove(req)}
                                 className="text-red-400"
-                                disabled={hasInstalledParts}
+                                disabled={hasInstalledParts || isManagedByCommitments}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" /> Remove
                               </DropdownMenuItem>
