@@ -664,23 +664,21 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info strong { font-weight: bold; }
             
             /* Location/Category Group - container only */
+            /* FIX: Removed all page-break-before rules that caused unnecessary breaks above group headers (e.g., MECHANICAL) */
             .location-group { 
               margin-bottom: 20px; 
-              /* Do NOT use break-inside: avoid here - let Chrome start mid-page */
-              page-break-before: auto;
-              break-before: auto;
+              /* CRITICAL: No break-before or break-inside rules - allows natural flow */
             }
             
             /* Soft-start zone: allows group to begin mid-page */
             .location-group-start {
-              page-break-inside: auto;
-              break-inside: auto;
+              /* No break rules - header + first items can start mid-page naturally */
             }
             
-            /* Hard atomic zone: contains the actual parts rows */
+            /* Hard atomic zone: contains the actual parts rows - keep together if possible but don't force breaks */
             .location-group-body {
-              page-break-inside: avoid;
-              break-inside: avoid;
+              /* Removed break-inside: avoid to prevent forcing page breaks before groups */
+              /* Individual part rows still have break-inside: avoid for atomicity */
             }
             .location-header { 
               border-left: 6px solid #333;
@@ -920,19 +918,15 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
+              /* FIX: Removed all forced page-break rules from location-group that caused unnecessary breaks above MECHANICAL and other sections */
               .location-group { 
-                /* Do NOT use break-inside: avoid - allows Chrome to start group mid-page */
-                page-break-before: auto;
-                break-before: auto;
+                /* No break rules - natural flow */
               }
               .location-group-start {
-                page-break-inside: auto;
-                break-inside: auto;
+                /* Natural flow - no break restrictions */
               }
               .location-group-body {
-                page-break-inside: avoid;
-                break-inside: avoid;
-                contain: layout;
+                /* Removed break-inside: avoid - was causing forced breaks before groups */
               }
               .print-block {
                 page-break-inside: avoid !important;
