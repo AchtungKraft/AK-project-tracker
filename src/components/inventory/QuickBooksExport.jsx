@@ -62,6 +62,12 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
     queryFn: () => base44.entities.RetailMarkupMatrix.list(),
   });
 
+  // Phase 2F: Fetch commitments for pricing authority
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.list(),
+  });
+
   // Get category name (with parent if applicable)
   const getCategoryName = (part) => {
     const category = categories.find(c => c.id === part.part_category_id);
@@ -74,10 +80,27 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
     return category.name;
   };
 
-  // Generate export data from build assignments
+  /**
+   * Phase 2F - Export pricing priority:
+   * 1. commitment.unit_retail_snapshot (PRIMARY - authoritative)
+   * 2. fallback PartBuildAssignment.unit_retail
+   * 3. fallback Part.default_retail
+   * 4. flag error
+   * 
+   * Cost priority:
+   * 1. commitment.actual_unit_cost (from vendor invoice)
+   * 2. fallback commitment.unit_cost_snapshot
+   * 3. fallback PO line item unit_cost
+   */
   const exportData = useMemo(() => {
     const items = [];
     const processedPartIds = new Set();
+
+    // Get commitments for this build
+    const buildCommitments = commitments.filter(c => 
+      c.project_id === buildId && 
+      c.commitment_status !== 'cancelled'
+    );
 
     // Primary source: PartBuildAssignment (has pricing and qty_needed)
     const buildAssigns = buildAssignments.filter(ba => ba.project_id === buildId);
@@ -92,20 +115,60 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
       const qtyNeeded = ba.qty_needed || 0;
       if (qtyNeeded <= 0) return;
 
-      // Get pricing ONLY from stored assignment values (no calculation during export)
+      // Find matching commitment(s) for this part
+      const partCommitments = buildCommitments.filter(c => c.part_id === ba.part_id);
+      
+      // Phase 2F: Pricing cascade
       let unitRetail = 0;
-      let pricingSource = ba.pricing_source || 'none';
+      let unitCost = 0;
+      let pricingSource = 'none';
       let appliedMarkup = ba.applied_markup_pct || 0;
       let needsPricingUpdate = false;
+      let pricingIntegrityStatus = null;
 
-      if (ba.pricing_locked && ba.unit_retail_override != null && ba.unit_retail_override > 0) {
-        unitRetail = ba.unit_retail_override;
-        pricingSource = 'override';
-      } else if (ba.unit_retail != null && ba.unit_retail > 0) {
-        unitRetail = ba.unit_retail;
-      } else {
-        // No stored pricing - flag for user to calculate first
+      // Step 1: Try commitment pricing (authoritative)
+      if (partCommitments.length > 0) {
+        const primaryCommitment = partCommitments[0];
+        pricingIntegrityStatus = primaryCommitment.pricing_integrity_status;
+        
+        if (primaryCommitment.unit_retail_snapshot && primaryCommitment.unit_retail_snapshot > 0) {
+          unitRetail = primaryCommitment.unit_retail_snapshot;
+          pricingSource = 'commitment';
+        }
+        
+        // Cost: actual > snapshot
+        if (primaryCommitment.actual_unit_cost && primaryCommitment.actual_unit_cost > 0) {
+          unitCost = primaryCommitment.actual_unit_cost;
+        } else if (primaryCommitment.unit_cost_snapshot && primaryCommitment.unit_cost_snapshot > 0) {
+          unitCost = primaryCommitment.unit_cost_snapshot;
+        }
+      }
+
+      // Step 2: Fallback to assignment pricing
+      if (unitRetail === 0) {
+        if (ba.pricing_locked && ba.unit_retail_override != null && ba.unit_retail_override > 0) {
+          unitRetail = ba.unit_retail_override;
+          pricingSource = 'override';
+        } else if (ba.unit_retail != null && ba.unit_retail > 0) {
+          unitRetail = ba.unit_retail;
+          pricingSource = 'assignment';
+        }
+      }
+
+      // Step 3: Fallback to part default retail
+      if (unitRetail === 0 && part.default_retail && part.default_retail > 0) {
+        unitRetail = part.default_retail;
+        pricingSource = 'part_default';
+      }
+
+      // Step 4: Flag error if still no pricing
+      if (unitRetail === 0) {
         needsPricingUpdate = true;
+      }
+
+      // Cost fallback
+      if (unitCost === 0) {
+        unitCost = ba.default_cost || part.default_cost || 0;
       }
 
       const category = getCategoryName(part);
@@ -115,14 +178,16 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
         partId: part.id,
         requirementId: null,
         assignmentId: ba.id,
+        commitmentIds: partCommitments.map(c => c.id),
         partName: part.part_name,
         partNumber: part.vendor_part_number || '',
         category,
         description,
         qtyNeeded,
-        defaultCost: ba.default_cost || part.default_cost || 0,
+        defaultCost: unitCost,
         unitRetail,
         pricingSource,
+        pricingIntegrityStatus,
         appliedMarkup,
         pricingLocked: ba.pricing_locked || false,
         needsPricingUpdate
@@ -141,30 +206,54 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
       const qtyNeeded = req.qty_needed || 0;
       if (qtyNeeded <= 0) return;
 
+      // Check for commitments even without assignment
+      const partCommitments = buildCommitments.filter(c => c.part_id === req.part_id);
+      
+      let unitRetail = 0;
+      let pricingSource = 'none';
+      let pricingIntegrityStatus = null;
+
+      if (partCommitments.length > 0) {
+        const primaryCommitment = partCommitments[0];
+        pricingIntegrityStatus = primaryCommitment.pricing_integrity_status;
+        
+        if (primaryCommitment.unit_retail_snapshot && primaryCommitment.unit_retail_snapshot > 0) {
+          unitRetail = primaryCommitment.unit_retail_snapshot;
+          pricingSource = 'commitment';
+        }
+      }
+
+      // Fallback to part default
+      if (unitRetail === 0 && part.default_retail && part.default_retail > 0) {
+        unitRetail = part.default_retail;
+        pricingSource = 'part_default';
+      }
+
       const category = getCategoryName(part);
       const description = `${category} / ${part.part_name} / ${part.vendor_part_number || 'N/A'}`;
 
-      // No assignment = no stored pricing, must flag
       items.push({
         partId: part.id,
         requirementId: req.id,
         assignmentId: null,
+        commitmentIds: partCommitments.map(c => c.id),
         partName: part.part_name,
         partNumber: part.vendor_part_number || '',
         category,
         description,
         qtyNeeded,
         defaultCost: part.default_cost || 0,
-        unitRetail: 0,
-        pricingSource: 'none',
+        unitRetail,
+        pricingSource,
+        pricingIntegrityStatus,
         appliedMarkup: 0,
         pricingLocked: false,
-        needsPricingUpdate: true
+        needsPricingUpdate: unitRetail === 0
       });
     });
 
     return items;
-  }, [buildId, parts, categories, requirements, buildAssignments, matrixTiers]);
+  }, [buildId, parts, categories, requirements, buildAssignments, commitments, matrixTiers]);
 
   const itemsNeedingPricing = exportData.filter(d => d.needsPricingUpdate);
   const totalRetail = exportData.reduce((sum, d) => sum + (d.unitRetail * d.qtyNeeded), 0);
@@ -403,12 +492,18 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
                               ${item.unitRetail.toFixed(2)}
                             </TableCell>
                             <TableCell className="text-center">
-                              {item.pricingLocked ? (
+                              {item.needsPricingUpdate ? (
+                                <Badge className="bg-red-500/20 text-red-400 text-xs">Missing</Badge>
+                              ) : item.pricingSource === 'commitment' ? (
+                                <Badge className="bg-green-500/20 text-green-400 text-xs">Commitment</Badge>
+                              ) : item.pricingSource === 'override' ? (
                                 <Badge className="bg-purple-500/20 text-purple-400 text-xs">Override</Badge>
-                              ) : item.needsPricingUpdate ? (
-                                <Badge className="bg-amber-500/20 text-amber-400 text-xs">Calc</Badge>
+                              ) : item.pricingSource === 'assignment' ? (
+                                <Badge className="bg-blue-500/20 text-blue-400 text-xs">Assignment</Badge>
+                              ) : item.pricingSource === 'part_default' ? (
+                                <Badge className="bg-yellow-500/20 text-yellow-400 text-xs">Part Default</Badge>
                               ) : (
-                                <Badge className="bg-green-500/20 text-green-400 text-xs">Matrix</Badge>
+                                <Badge className="bg-gray-500/20 text-gray-400 text-xs">Matrix</Badge>
                               )}
                             </TableCell>
                           </TableRow>
@@ -433,7 +528,14 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
                   <p>• <strong>Product/Service:</strong> "Build_Parts" (static)</p>
                   <p>• <strong>Description:</strong> Category / Part Name / Part Number</p>
                   <p>• <strong>Qty:</strong> Required quantity for this build</p>
-                  <p>• <strong>Rate:</strong> Unit retail price (from markup matrix)</p>
+                  <p>• <strong>Rate:</strong> Unit retail price</p>
+                </div>
+                <h4 className="text-sm font-semibold text-white mt-3 mb-2">Pricing Priority (Phase 2F)</h4>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p>1. <span className="text-green-400">Commitment</span> - unit_retail_snapshot (authoritative)</p>
+                  <p>2. <span className="text-blue-400">Assignment</span> - PartBuildAssignment.unit_retail</p>
+                  <p>3. <span className="text-yellow-400">Part Default</span> - Part.default_retail</p>
+                  <p>4. <span className="text-red-400">Error</span> - No pricing available</p>
                 </div>
               </CardContent>
             </Card>
