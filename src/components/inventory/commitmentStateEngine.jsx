@@ -5,6 +5,8 @@
  * - commitment_status calculation
  * - quantity validation
  * - lifecycle progression
+ * - cancellation validation
+ * - attachment validation
  * 
  * Mirror of server-side logic for UI consistency
  */
@@ -197,4 +199,121 @@ export function calculateInstallableQty(commitment) {
   } = commitment;
 
   return Math.max(0, qty_allocated - qty_installed);
+}
+
+/**
+ * Validate if commitment can be cancelled
+ * Cancellation allowed only if qty_installed = 0
+ */
+export function validateCancellation(commitment) {
+  const { qty_installed = 0 } = commitment;
+  
+  if (qty_installed > 0) {
+    return {
+      canCancel: false,
+      canReduce: true,
+      minQty: qty_installed,
+      reason: `Cannot fully cancel: ${qty_installed} unit(s) already installed`
+    };
+  }
+  
+  return {
+    canCancel: true,
+    canReduce: true,
+    minQty: 0,
+    reason: null
+  };
+}
+
+/**
+ * Validate if line item can be attached to a build
+ * Ensures: SUM(commitments.qty_committed WHERE line_item_id) <= line_item.qty_ordered
+ */
+export function validateAttachment(lineItem, existingCommitments, requestedQty) {
+  const alreadyCommitted = existingCommitments
+    .filter(c => 
+      (c.order_line_item_ids || []).includes(lineItem.id) &&
+      c.commitment_status !== 'cancelled'
+    )
+    .reduce((sum, c) => sum + (c.qty_committed || 0), 0);
+  
+  const available = Math.max(0, (lineItem.qty_ordered || 0) - alreadyCommitted);
+  
+  if (requestedQty > available) {
+    return {
+      valid: false,
+      available,
+      alreadyCommitted,
+      reason: `Only ${available} units available (${alreadyCommitted} already committed)`
+    };
+  }
+  
+  return {
+    valid: true,
+    available,
+    alreadyCommitted,
+    reason: null
+  };
+}
+
+/**
+ * Check if requirement fields should be locked
+ * Locked if: commitment exists AND (qty_ordered > 0 OR qty_received > 0)
+ */
+export function isRequirementLocked(commitments, requirementId) {
+  const reqCommitments = commitments.filter(c => 
+    c.requirement_id === requirementId && 
+    c.commitment_status !== 'cancelled'
+  );
+  
+  if (reqCommitments.length === 0) {
+    return { locked: false, reason: null };
+  }
+  
+  const hasOrdering = reqCommitments.some(c => 
+    (c.qty_ordered || 0) > 0 || (c.qty_received || 0) > 0
+  );
+  
+  if (hasOrdering) {
+    return {
+      locked: true,
+      reason: 'This part is managed by purchase commitments',
+      lockedFields: ['qty_needed', 'qty_allocated', 'qty_ordered']
+    };
+  }
+  
+  return {
+    locked: false,
+    reason: 'Commitments exist but no ordering activity yet'
+  };
+}
+
+/**
+ * Validate split operation
+ */
+export function validateSplit(commitment, splitQty) {
+  const { qty_committed = 0, qty_installed = 0 } = commitment;
+  const maxSplittable = qty_committed - qty_installed;
+  
+  if (splitQty <= 0) {
+    return { valid: false, reason: 'Split quantity must be positive' };
+  }
+  
+  if (splitQty > maxSplittable) {
+    return { 
+      valid: false, 
+      reason: `Cannot split more than ${maxSplittable} units (${qty_installed} installed)`,
+      maxSplittable
+    };
+  }
+  
+  if (splitQty >= qty_committed) {
+    return { 
+      valid: false, 
+      reason: 'Split quantity must be less than total committed',
+      maxSplittable
+    };
+  }
+  
+  return { valid: true, maxSplittable };
 }
