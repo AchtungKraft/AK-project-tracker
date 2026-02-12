@@ -85,6 +85,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
     
     // If removing priority, show confirmation dialog
     if (task.is_priority) {
+      console.log("PRIORITY CONFIRM SHOWN", task.name);
       setShowPriorityConfirm(true);
       return;
     }
