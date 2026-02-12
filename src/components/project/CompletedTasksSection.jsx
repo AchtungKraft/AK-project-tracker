@@ -35,6 +35,7 @@ export default function CompletedTasksSection({ projectId, sharedData = {} }) {
     categories: sharedCategories,
     teamMembers: sharedTeamMembers,
     projectTasks: sharedTasks,
+    tasks: sharedTasksAlt, // Alternative key
   } = sharedData;
 
   // Only fetch if not provided via sharedData
@@ -63,7 +64,7 @@ export default function CompletedTasksSection({ projectId, sharedData = {} }) {
   });
 
   // Use shared data if available, otherwise use fetched data
-  const allTasks = sharedTasks || fetchedTasks;
+  const allTasks = sharedTasks || sharedTasksAlt || fetchedTasks;
   const statuses = sharedStatuses || fetchedStatuses;
   const categories = sharedCategories || fetchedCategories;
   const teamMembers = sharedTeamMembers || fetchedTeamMembers;
