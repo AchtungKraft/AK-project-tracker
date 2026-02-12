@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
+import FinancialStatusBadge from "../financial/FinancialStatusBadge";
+import { useFinancialStatusBatch } from "../financial/useFinancialStatus";
 
 /**
  * PartsListView - Displays parts in a list format
@@ -73,6 +75,23 @@ export default function PartsListView({
     queryKey: ['partProjectRequirements'],
     queryFn: () => base44.entities.PartProjectRequirement.list(),
   });
+
+  // Batch resolve financial status for displayed parts
+  const financialContexts = useMemo(() => {
+    return parts.map(p => ({ part_id: p.id }));
+  }, [parts]);
+  
+  const { data: financialStatuses = [] } = useFinancialStatusBatch(financialContexts, {
+    enabled: parts.length > 0,
+  });
+  
+  const financialStatusMap = useMemo(() => {
+    const map = new Map();
+    financialStatuses.forEach(fs => {
+      map.set(fs.part_id, fs);
+    });
+    return map;
+  }, [financialStatuses]);
 
   const getInventoryStats = (partId) => {
     const items = inventoryItems.filter(i => i.part_id === partId);
@@ -332,6 +351,13 @@ export default function PartsListView({
             )}>
               {stats.onOrder}
             </div>
+          </div>
+          <div className="text-center min-w-[70px]">
+            <div className="text-gray-500 mb-0.5">Financial</div>
+            <FinancialStatusBadge 
+              financialStatus={financialStatusMap.get(part.id)} 
+              displayMode="compact" 
+            />
           </div>
         </div>
 
