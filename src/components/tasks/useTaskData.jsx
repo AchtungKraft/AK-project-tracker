@@ -95,9 +95,52 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     return filteredTasks.filter(t => t.status_id !== completedStatus?.id);
   }, [filteredTasks, completedStatus]);
 
-  // Update task mutation - invalidate ALL task-related queries
+  // Update task mutation - optimistic updates + invalidate ALL task-related queries
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onMutate: async ({ id, data }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['tasks'] });
+      await queryClient.cancelQueries({ queryKey: ['allTasks'] });
+      await queryClient.cancelQueries({ queryKey: ['priorityTasks'] });
+      if (projectId) {
+        await queryClient.cancelQueries({ queryKey: ['tasks', projectId] });
+        await queryClient.cancelQueries({ queryKey: ['projectTasks', projectId] });
+      }
+
+      // Snapshot previous values
+      const previousAllTasks = queryClient.getQueryData(['allTasks']);
+      const previousProjectTasks = projectId ? queryClient.getQueryData(['tasks', projectId]) : null;
+      const previousPriorityTasks = queryClient.getQueryData(['priorityTasks']);
+
+      // Optimistically update all caches
+      const updateCache = (old) => {
+        if (!old) return old;
+        return old.map(t => t.id === id ? { ...t, ...data } : t);
+      };
+
+      queryClient.setQueryData(['allTasks'], updateCache);
+      queryClient.setQueryData(['priorityTasks'], updateCache);
+      if (projectId) {
+        queryClient.setQueryData(['tasks', projectId], updateCache);
+        queryClient.setQueryData(['projectTasks', projectId], updateCache);
+      }
+
+      return { previousAllTasks, previousProjectTasks, previousPriorityTasks };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousAllTasks) {
+        queryClient.setQueryData(['allTasks'], context.previousAllTasks);
+      }
+      if (context?.previousProjectTasks && projectId) {
+        queryClient.setQueryData(['tasks', projectId], context.previousProjectTasks);
+      }
+      if (context?.previousPriorityTasks) {
+        queryClient.setQueryData(['priorityTasks'], context.previousPriorityTasks);
+      }
+      toast.error('Failed to update task');
+    },
     onSuccess: (updatedTask, variables) => {
       console.log("TASK UPDATED", variables.id, variables.data);
       
@@ -180,11 +223,17 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   // Direct priority update without confirmation (for use after confirm dialog)
   const handleConfirmRemovePriority = async (task) => {
+    console.log("PRIORITY REMOVED CONFIRMED", task.name);
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { is_priority: false }
     });
     toast.success('Removed from priority');
+  };
+
+  // Generic task update function for external use
+  const updateTask = async (taskId, data) => {
+    await updateTaskMutation.mutateAsync({ id: taskId, data });
   };
 
   return {
@@ -204,6 +253,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     
     // Mutation
     updateTaskMutation,
+    updateTask,
     
     // Handlers
     handleToggleComplete,
