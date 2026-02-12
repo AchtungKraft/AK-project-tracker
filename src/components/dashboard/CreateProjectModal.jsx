@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
-import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 export default function CreateProjectModal({ onClose }) {

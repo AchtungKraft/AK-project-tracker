@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
-import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 function ClientFeedbackLinks({ taskId }) {

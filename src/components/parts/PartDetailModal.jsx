@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Edit2, Trash2, X, Upload } from "lucide-react";
 import { toast } from "sonner";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
-import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import MobilePhotoActions, { MobilePhotoGrid } from "@/components/mobile/MobilePhotoActions";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 

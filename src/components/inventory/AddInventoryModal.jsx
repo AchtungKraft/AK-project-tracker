@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import LocationSelect from "@/components/common/LocationSelect";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
-import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
