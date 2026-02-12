@@ -24,8 +24,11 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import MobileCollapsibleComposer from "@/components/mobile/MobileCollapsibleComposer";
 
 export default function ClientFeedbackDetail() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
@@ -433,46 +436,52 @@ export default function ClientFeedbackDetail() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
-          {/* PHASE 1: Header - renders immediately with skeleton fallback */}
-          <div className="flex items-center gap-3">
+      <div className={cn(
+        "min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black",
+        isMobile ? "p-2" : "p-3 md:p-6"
+      )}>
+        <div className={cn("max-w-5xl mx-auto", isMobile ? "space-y-3" : "space-y-6")}>
+          {/* PHASE 1: Header - Compact on mobile */}
+          <div className={cn("flex items-start gap-2", isMobile ? "gap-2" : "gap-3")}>
             <Button
               variant="outline"
               size="icon"
               onClick={handleBack}
-              className="border-gray-700 text-white"
+              className={cn("border-gray-700 text-white shrink-0", isMobile ? "h-9 w-9" : "")}
             >
               <ArrowLeft className="w-4 h-4" />
             </Button>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               {isInitialLoad ? (
                 <>
-                  <div className="h-8 w-64 bg-gray-700 rounded animate-pulse" />
+                  <div className={cn("bg-gray-700 rounded animate-pulse", isMobile ? "h-6 w-48" : "h-8 w-64")} />
                   <div className="h-4 w-32 bg-gray-800 rounded animate-pulse mt-1" />
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-white">{request?.title}</h1>
+                  <div className="flex items-center gap-1.5">
+                    <h1 className={cn(
+                      "font-bold text-white",
+                      isMobile ? "text-lg leading-tight line-clamp-2" : "text-2xl"
+                    )}>{request?.title}</h1>
                     {request?.status !== 'archived' && (
                       <Button
                         size="icon"
                         variant="ghost"
                         onClick={() => setShowEditModal(true)}
-                        className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+                        className={cn("text-gray-400 hover:text-white hover:bg-gray-800 shrink-0", isMobile ? "h-7 w-7" : "h-8 w-8")}
                       >
-                        <Pencil className="w-4 h-4" />
+                        <Pencil className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
                       </Button>
                     )}
                   </div>
-                  {project && <p className="text-sm text-gray-400">{project.name}</p>}
+                  {project && <p className={cn("text-gray-400", isMobile ? "text-xs" : "text-sm")}>{project.name}</p>}
                 </>
               )}
             </div>
 
-            {/* Action buttons - only show when data is loaded */}
-            {!isInitialLoad && request?.status === 'posted' && request?.request_type !== 'design_review' && (
+            {/* Action buttons - only show when data is loaded, hidden on mobile (shown in metadata card) */}
+            {!isMobile && !isInitialLoad && request?.status === 'posted' && request?.request_type !== 'design_review' && (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -499,7 +508,7 @@ export default function ClientFeedbackDetail() {
               </div>
             )}
 
-            {!isInitialLoad && request?.status === 'posted' && request?.request_type === 'design_review' && (
+            {!isMobile && !isInitialLoad && request?.status === 'posted' && request?.request_type === 'design_review' && (
               <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
             )}
           </div>
@@ -516,64 +525,154 @@ export default function ClientFeedbackDetail() {
               {/* PHASE 3: Actual content - hydrated progressively */}
 
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-            <CardContent className="p-4 space-y-4">
-              {/* Client Links Section */}
+            <CardContent className={cn("space-y-3", isMobile ? "p-3" : "p-4 space-y-4")}>
+              {/* Client Links Section - Compact chips on mobile */}
               {primaryClientSlug && (
-                <div className="border-b border-gray-700/50 pb-3">
+                <div className={cn("border-b border-gray-700/50", isMobile ? "pb-2" : "pb-3")}>
                   <ClientLinksSection 
                     slug={primaryClientSlug} 
                     requestId={requestId} 
-                    projectName={project?.name} 
+                    projectName={project?.name}
+                    compact={isMobile}
                   />
                 </div>
               )}
               
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={cn("text-xs border", getRequestTypeInfo(request.request_type).color)}>
-                    {getRequestTypeInfo(request.request_type).label}
+              {/* Status badges - horizontal scroll on mobile */}
+              <div className={cn(
+                "flex items-center gap-2",
+                isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-3"
+              )}>
+                <Badge className={cn("text-xs border shrink-0", getRequestTypeInfo(request.request_type).color)}>
+                  {getRequestTypeInfo(request.request_type).label}
+                </Badge>
+                {requestState && (
+                  <Badge className={cn("flex items-center gap-1 shrink-0", requestState.color)}>
+                    <requestState.icon className="w-3 h-3" />
+                    {requestState.label}
                   </Badge>
-                  {requestState && (
-                    <Badge className={cn("flex items-center gap-1", requestState.color)}>
-                      <requestState.icon className="w-3 h-3" />
-                      {requestState.label}
-                    </Badge>
-                  )}
-                  {request.due_date &&
-                  <Badge variant="outline" className="border-gray-600 text-gray-200">
-                      Due: {format(new Date(request.due_date), 'MMM d, yyyy')}
-                    </Badge>
-                  }
-                </div>
+                )}
+                {request.due_date && (
+                  <Badge variant="outline" className="border-gray-600 text-gray-200 shrink-0">
+                    Due: {format(new Date(request.due_date), 'MMM d')}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Mobile: Approve/Changes buttons for non-design-review */}
+              {isMobile && request?.status === 'posted' && request?.request_type !== 'design_review' && (
                 <div className="flex gap-2">
-                  {request.status === 'draft' &&
-                  <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                  <Button
+                    size="sm"
+                    onClick={() => handleSubmitRequestDecision({
+                      requestId,
+                      decision: 'approved',
+                      note: '',
+                      targetAttachmentIds: null,
+                      newImages: reviewNewImages,
+                    })}
+                    className="flex-1 h-10 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    {approveLabel}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleRequestChangesRequest}
+                    className="flex-1 h-10 bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <AlertCircle className="w-4 h-4 mr-1" />
+                    Changes
+                  </Button>
+                </div>
+              )}
+
+              {isMobile && request?.status === 'posted' && request?.request_type === 'design_review' && (
+                <p className="text-xs text-gray-400 italic">Select images below to review</p>
+              )}
+
+              {/* Action buttons - restructured for mobile */}
+              {isMobile ? (
+                <div className="space-y-2">
+                  {/* Primary action row */}
+                  {request.status === 'draft' && (
+                    <Button size="sm" onClick={handlePostToClient} className="w-full h-10 bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
-                  }
-                  {['posted', 'changes_requested', 'approved'].includes(request.status) &&
-                  <>
-                    <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 hover:text-purple-950 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm h-8">
+                  )}
+                  {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                    <Button size="sm" onClick={handleResendForApproval} className="w-full h-10 bg-purple-600 hover:bg-purple-700 text-white">
                       <RotateCw className="w-4 h-4 mr-1" />
-                      Resend
+                      Resend for Review
                     </Button>
-                    <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-gray-600 hover:text-white h-8 border-gray-600">
-                      <Archive className="w-4 h-4 mr-1" />
-                      Archive
-                    </Button>
-                  </>
-                  }
+                  )}
                   {request.status === 'archived' && (
                     <Button size="sm" onClick={() => {
                       if (confirm('Move this request back to draft?')) {
-                        // Moving from archived to draft is internal-only - no client email
-                        updateRequestMutation.mutate({
-                          id: requestId,
-                          data: { status: 'draft' }
-                        });
+                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft' } });
                         toast.success('Moved to Drafts');
                       }
-                    }} variant="outline" className="bg-gray-100 text-gray-900 border-gray-200 hover:bg-gray-200 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors border h-8">
+                    }} className="w-full h-10 bg-gray-700 hover:bg-gray-600 text-white">
+                      <FileText className="w-4 h-4 mr-1" />
+                      Move to Draft
+                    </Button>
+                  )}
+                  
+                  {/* Secondary inline row */}
+                  <div className="flex gap-2">
+                    {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                      <Button 
+                        size="sm" 
+                        onClick={handleArchive} 
+                        variant="outline" 
+                        className="flex-1 h-9 border-gray-600 text-gray-300 text-xs"
+                      >
+                        <Archive className="w-3.5 h-3.5 mr-1" />
+                        Archive
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={handleDeleteRequest}
+                      disabled={deleteRequestMutation.isPending}
+                      variant="outline"
+                      className="flex-1 h-9 border-red-600/50 text-red-400 text-xs hover:bg-red-600/20"
+                    >
+                      {deleteRequestMutation.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Desktop action buttons */
+                <div className="flex gap-2 flex-wrap">
+                  {request.status === 'draft' && (
+                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                      Post to Client
+                    </Button>
+                  )}
+                  {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                    <>
+                      <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 hover:text-purple-950 px-3 text-xs font-medium rounded-md h-8">
+                        <RotateCw className="w-4 h-4 mr-1" />
+                        Resend
+                      </Button>
+                      <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md hover:bg-gray-600 hover:text-white h-8 border-gray-600">
+                        <Archive className="w-4 h-4 mr-1" />
+                        Archive
+                      </Button>
+                    </>
+                  )}
+                  {request.status === 'archived' && (
+                    <Button size="sm" onClick={() => {
+                      if (confirm('Move this request back to draft?')) {
+                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft' } });
+                        toast.success('Moved to Drafts');
+                      }
+                    }} variant="outline" className="bg-gray-100 text-gray-900 border-gray-200 hover:bg-gray-200 px-3 text-xs font-medium rounded-md h-8">
                       <FileText className="w-4 h-4 mr-1" />
                       Move to Draft
                     </Button>
@@ -582,17 +681,17 @@ export default function ClientFeedbackDetail() {
                     size="sm"
                     onClick={handleDeleteRequest}
                     disabled={deleteRequestMutation.isPending}
-                    className="bg-red-600 hover:bg-red-700 text-white border-red-600">
-
-                    {deleteRequestMutation.isPending ?
-                    <Loader2 className="w-4 h-4 animate-spin" /> :
-
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    }
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                  >
+                    {deleteRequestMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-1" />
+                    )}
                     Delete
                   </Button>
                 </div>
-              </div>
+              )}
 
               {request.body &&
               <div className="bg-gray-800/50 rounded-lg p-3">
@@ -716,177 +815,157 @@ export default function ClientFeedbackDetail() {
           )}
 
 
-          <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-white">Add Comment</h3>
+          {/* Comment Composer - Collapsible on mobile */}
+          {isMobile ? (
+            <MobileCollapsibleComposer
+              value={newComment}
+              onChange={setNewComment}
+              onSubmit={handleAddComment}
+              placeholder="Write a comment..."
+              isSubmitting={isAddingComment}
+              onImageUpload={handleImageUpload}
+              onFileUpload={handleFileUpload}
+              uploadingImages={uploadingImages}
+              uploadingFiles={uploadingFile}
+              uploadedPhotos={uploadedPhotos}
+              uploadedFiles={uploadedFiles}
+              onRemovePhoto={handleRemovePhoto}
+              onRemoveFile={handleRemoveFile}
+              links={newLinks}
+              onLinksChange={setNewLinks}
+              visibilitySelector={
                 <Select value={visibility} onValueChange={setVisibility}>
-                  <SelectTrigger className="w-40 bg-gray-800 border-gray-700 text-white h-8 text-xs">
+                  <SelectTrigger className="w-28 bg-gray-800 border-gray-700 text-white h-7 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client_visible">Client Visible</SelectItem>
-                    <SelectItem value="internal_only">Internal Only</SelectItem>
+                    <SelectItem value="client_visible">Client</SelectItem>
+                    <SelectItem value="internal_only">Internal</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              }
+            />
+          ) : (
+            <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-white">Add Comment</h3>
+                  <Select value={visibility} onValueChange={setVisibility}>
+                    <SelectTrigger className="w-40 bg-gray-800 border-gray-700 text-white h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="client_visible">Client Visible</SelectItem>
+                      <SelectItem value="internal_only">Internal Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <Textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write a comment..."
-                className="bg-gray-800 border-gray-700 text-white min-h-[100px]" />
+                <Textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Write a comment..."
+                  className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+                />
 
-
-              {uploadedPhotos.length > 0 &&
-              <div>
-                  <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
-                  <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                    {uploadedPhotos.map((url, idx) =>
-                  <div key={idx} className="relative group">
-                        <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
-                          <img
-                            src={url}
-                            alt={`Upload ${idx + 1}`}
-                            loading="lazy"
-                            className="max-w-full max-h-full object-contain" />
-
+                {uploadedPhotos.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                      {uploadedPhotos.map((url, idx) => (
+                        <div key={idx} className="relative group">
+                          <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                            <img src={url} alt={`Upload ${idx + 1}`} loading="lazy" className="max-w-full max-h-full object-contain" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(url)}
+                            className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
-                        <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(url)}
-                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                  )}
-                  </div>
-                </div>
-              }
-
-              {uploadedFiles.length > 0 &&
-              <div>
-                  <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
-                  <div className="space-y-2">
-                    {uploadedFiles.map((file, idx) =>
-                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
-                        <span className="text-white text-sm truncate">{file.name}</span>
-                        <button
-                      type="button"
-                      onClick={() => handleRemoveFile(file.url)}
-                      className="text-red-400 hover:text-red-300 p-1">
-
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                  )}
-                  </div>
-                </div>
-              }
-
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-400">Add Links (optional)</Label>
-                {newLinks.map((link, idx) =>
-                <div key={idx} className="flex gap-2">
-                    <Input
-                    value={link}
-                    onChange={(e) => {
-                      const updated = [...newLinks];
-                      updated[idx] = e.target.value;
-                      setNewLinks(updated);
-                    }}
-                    placeholder="https://..."
-                    className="bg-gray-800 border-gray-700 text-white" />
-
-                    {idx === newLinks.length - 1 &&
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => setNewLinks([...newLinks, ''])}
-                    className="border-gray-700">
-
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                  }
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  id="internal-image-upload"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="hidden" />
+                {uploadedFiles.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
+                    <div className="space-y-2">
+                      {uploadedFiles.map((file, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                          <span className="text-white text-sm truncate">{file.name}</span>
+                          <button type="button" onClick={() => handleRemoveFile(file.url)} className="text-red-400 hover:text-red-300 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                <label htmlFor="internal-image-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={uploadingImages} className="bg-red-700 text-slate-50 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700 cursor-pointer"
+                <div className="space-y-2">
+                  <Label className="text-xs text-gray-400">Add Links (optional)</Label>
+                  {newLinks.map((link, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Input
+                        value={link}
+                        onChange={(e) => {
+                          const updated = [...newLinks];
+                          updated[idx] = e.target.value;
+                          setNewLinks(updated);
+                        }}
+                        placeholder="https://..."
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                      {idx === newLinks.length - 1 && (
+                        <Button size="icon" variant="outline" onClick={() => setNewLinks([...newLinks, ''])} className="border-gray-700">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-                    onClick={() => document.getElementById('internal-image-upload').click()}>
+                <div className="flex items-center gap-2">
+                  <input id="internal-image-upload" type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                  <label htmlFor="internal-image-upload">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingImages}
+                      className="bg-red-700 text-slate-50 px-3 text-xs font-medium rounded-md h-8 border-gray-700 cursor-pointer"
+                      onClick={() => document.getElementById('internal-image-upload').click()}
+                    >
+                      {uploadingImages ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Uploading...</> : <><Upload className="w-4 h-4 mr-1" />Add Images</>}
+                    </Button>
+                  </label>
 
-                    {uploadingImages ?
-                    <>
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        Uploading...
-                      </> :
+                  <input id="internal-file-upload" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip" onChange={handleFileUpload} className="hidden" />
+                  <label htmlFor="internal-file-upload">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingFile}
+                      className="bg-amber-500 px-3 text-xs font-medium rounded-md h-8 border-gray-700 cursor-pointer"
+                      onClick={() => document.getElementById('internal-file-upload').click()}
+                    >
+                      {uploadingFile ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Uploading...</> : <><Paperclip className="w-4 h-4 mr-1" />Attach File</>}
+                    </Button>
+                  </label>
 
-                    <>
-                        <Upload className="w-4 h-4 mr-1" />
-                        Add Images
-                      </>
-                    }
+                  <Button onClick={handleAddComment} disabled={isAddingComment} className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
+                    {isAddingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
+                    Send
                   </Button>
-                </label>
-
-                <input
-                  id="internal-file-upload"
-                  type="file"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
-                  onChange={handleFileUpload}
-                  className="hidden" />
-
-                <label htmlFor="internal-file-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={uploadingFile} className="bg-amber-500 px-3 text-xs font-medium rounded-md inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:bg-accent hover:text-accent-foreground h-8 border-gray-700 cursor-pointer"
-
-                    onClick={() => document.getElementById('internal-file-upload').click()}>
-
-                    {uploadingFile ?
-                    <>
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        Uploading...
-                      </> :
-
-                    <>
-                        <Paperclip className="w-4 h-4 mr-1" />
-                        Attach File
-                      </>
-                    }
-                  </Button>
-                </label>
-
-
-                <Button
-                  onClick={handleAddComment}
-                  disabled={isAddingComment}
-                  className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
-
-                  {isAddingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
-                  Send
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
+          )}
             </>
           )}
         </div>
