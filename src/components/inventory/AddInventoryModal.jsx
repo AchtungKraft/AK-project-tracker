@@ -8,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import LocationSelect from "@/components/common/LocationSelect";
+import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   // Get default cost from part if preselected
   const { data: preselectedPart } = useQuery({
     queryKey: ['part', preselectedPartId],
@@ -75,14 +79,8 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
     createMutation.mutate(formData);
   };
 
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border border-red-900/30 text-white max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add Inventory</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label className="text-gray-300">Part *</Label>
             {preselectedPartId ? (
@@ -167,19 +165,60 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="border-gray-700">
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              className="bg-red-600 hover:bg-red-700"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? 'Adding...' : 'Add Inventory'}
-            </Button>
-          </div>
+          {!isMobile && (
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose} className="border-gray-700">
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="bg-red-600 hover:bg-red-700"
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? 'Adding...' : 'Add Inventory'}
+              </Button>
+            </div>
+          )}
         </form>
+  );
+
+  const mobileFooter = (
+    <MobilePrimaryActionStack
+      primaryAction={{
+        label: createMutation.isPending ? 'Adding...' : 'Add Inventory',
+        onClick: handleSubmit,
+        disabled: createMutation.isPending,
+        loading: createMutation.isPending,
+      }}
+      secondaryActions={[
+        { label: 'Cancel', onClick: onClose, variant: 'outline' }
+      ]}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="p-0 max-w-full h-full max-h-full bg-gray-900 border-red-900/30 text-white">
+          <MobileModalWrapper
+            title="Add Inventory"
+            onClose={onClose}
+            footer={mobileFooter}
+          >
+            {formContent}
+          </MobileModalWrapper>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border border-red-900/30 text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Inventory</DialogTitle>
+        </DialogHeader>
+        {formContent}
       </DialogContent>
     </Dialog>
   );

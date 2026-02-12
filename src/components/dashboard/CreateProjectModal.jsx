@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 export default function CreateProjectModal({ onClose }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [projectData, setProjectData] = useState({
     name: "",
     client_name: "",
@@ -76,14 +79,8 @@ export default function CreateProjectModal({ onClose }) {
     }
   };
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Create New Project</DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Project Name</Label>
@@ -213,26 +210,67 @@ export default function CreateProjectModal({ onClose }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-700">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              className="bg-red-600 hover:bg-red-700"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                'Create Project'
-              )}
-            </Button>
-          </div>
+          {!isMobile && (
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-700">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="bg-red-600 hover:bg-red-700"
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Project'
+                )}
+              </Button>
+            </div>
+          )}
         </form>
+  );
+
+  const mobileFooter = (
+    <MobilePrimaryActionStack
+      primaryAction={{
+        label: createMutation.isPending ? 'Creating...' : 'Create Project',
+        onClick: handleSubmit,
+        disabled: createMutation.isPending,
+        loading: createMutation.isPending,
+      }}
+      secondaryActions={[
+        { label: 'Cancel', onClick: onClose, variant: 'outline' }
+      ]}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="p-0 max-w-full h-full max-h-full bg-gray-900 border-red-900/30 text-white">
+          <MobileModalWrapper
+            title="Create New Project"
+            onClose={onClose}
+            footer={mobileFooter}
+          >
+            {formContent}
+          </MobileModalWrapper>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Create New Project</DialogTitle>
+        </DialogHeader>
+        {formContent}
       </DialogContent>
     </Dialog>
   );

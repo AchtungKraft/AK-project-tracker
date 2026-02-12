@@ -16,9 +16,14 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Edit2, Trash2, X, Upload } from "lucide-react";
 import { toast } from "sonner";
+import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import MobilePhotoActions, { MobilePhotoGrid } from "@/components/mobile/MobilePhotoActions";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 export default function PartDetailModal({ part, onClose }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({ ...part });
@@ -63,7 +68,7 @@ export default function PartDetailModal({ part, onClose }) {
   });
 
   const handlePhotoUpload = async (e) => {
-    const files = Array.from(e.target.files);
+    const files = e.target ? Array.from(e.target.files) : (Array.isArray(e) ? e : [e]);
     if (files.length === 0) return;
 
     setUploading(true);
@@ -83,6 +88,10 @@ export default function PartDetailModal({ part, onClose }) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleMobilePhotoCapture = async (file) => {
+    await handlePhotoUpload([file]);
   };
 
   const handleRemovePhoto = (urlToRemove) => {
@@ -111,41 +120,8 @@ export default function PartDetailModal({ part, onClose }) {
     'On-Order': '#F59E0B'
   };
 
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-white">{part.part_name}</DialogTitle>
-            <div className="flex gap-2">
-              {!editing && (
-                <>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setEditing(true)}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm('Delete this part?')) {
-                        deleteMutation.mutate();
-                      }
-                    }}
-                    className="text-gray-400 hover:text-red-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </DialogHeader>
-
+  const modalContent = (
+    <>
         {editing ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -310,69 +286,89 @@ export default function PartDetailModal({ part, onClose }) {
 
             <div className="space-y-2">
               <Label className="text-gray-400">Photos</Label>
-              <div className="flex flex-wrap gap-2">
-                {(formData.photos || []).map((url, idx) => (
-                  <div key={idx} className="relative w-24 h-24 bg-gray-800 rounded border border-gray-700">
-                    <img src={url} alt="" className="w-full h-full object-contain" />
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(url)}
-                      className="absolute -top-2 -right-2 bg-red-600 rounded-full p-1"
-                    >
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
-                ))}
-                <label className="w-24 h-24 bg-gray-800 rounded border border-gray-700 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-gray-700">
-                  {uploading ? (
-                    <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-                  ) : (
-                    <>
-                      <Upload className="w-6 h-6 text-gray-400" />
-                      <span className="text-xs text-gray-400 mt-1">Upload</span>
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
+              {isMobile ? (
+                <div className="space-y-3">
+                  <MobilePhotoGrid 
+                    photos={formData.photos || []} 
+                    onRemove={(idx) => {
+                      const photos = [...(formData.photos || [])];
+                      photos.splice(idx, 1);
+                      setFormData({ ...formData, photos });
+                    }}
+                  />
+                  <MobilePhotoActions
+                    onPhotosSelected={handlePhotoUpload}
+                    onCameraCapture={handleMobilePhotoCapture}
                     disabled={uploading}
                   />
-                </label>
-              </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {(formData.photos || []).map((url, idx) => (
+                    <div key={idx} className="relative w-24 h-24 bg-gray-800 rounded border border-gray-700">
+                      <img src={url} alt="" className="w-full h-full object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(url)}
+                        className="absolute -top-2 -right-2 bg-red-600 rounded-full p-1"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  <label className="w-24 h-24 bg-gray-800 rounded border border-gray-700 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-gray-700">
+                    {uploading ? (
+                      <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                    ) : (
+                      <>
+                        <Upload className="w-6 h-6 text-gray-400" />
+                        <span className="text-xs text-gray-400 mt-1">Upload</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between gap-3 pt-4 border-t border-gray-700">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="border-gray-700"
-              >
-                Close
-              </Button>
-              <div className="flex gap-2">
+            {!isMobile && (
+              <div className="flex justify-between gap-3 pt-4 border-t border-gray-700">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setEditing(false)}
+                  onClick={onClose}
                   className="border-gray-700"
                 >
-                  Cancel
+                  Close
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={updateMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Save Changes
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditing(false)}
+                    className="border-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={updateMutation.isPending}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Save Changes
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </form>
         ) : (
           <div className="space-y-4">
@@ -461,17 +457,101 @@ export default function PartDetailModal({ part, onClose }) {
               </Badge>
             )}
 
-            <div className="pt-4 border-t border-gray-700">
-              <Button
-                onClick={onClose}
-                variant="outline"
-                className="w-full border-gray-700 min-h-[44px]"
-              >
-                Close
-              </Button>
-            </div>
+            {!isMobile && (
+              <div className="pt-4 border-t border-gray-700">
+                <Button
+                  onClick={onClose}
+                  variant="outline"
+                  className="w-full border-gray-700 min-h-[44px]"
+                >
+                  Close
+                </Button>
+              </div>
+            )}
           </div>
         )}
+      </>
+  );
+
+  const mobileEditFooter = (
+    <MobilePrimaryActionStack
+      primaryAction={{
+        label: updateMutation.isPending ? 'Saving...' : 'Save Changes',
+        onClick: handleSubmit,
+        disabled: updateMutation.isPending,
+        loading: updateMutation.isPending,
+      }}
+      secondaryActions={[
+        { label: 'Cancel', onClick: () => setEditing(false), variant: 'outline' }
+      ]}
+    />
+  );
+
+  const mobileViewFooter = (
+    <MobilePrimaryActionStack
+      primaryAction={{
+        label: 'Edit Part',
+        onClick: () => setEditing(true),
+        icon: Edit2,
+      }}
+      secondaryActions={[
+        { label: 'Close', onClick: onClose, variant: 'outline' }
+      ]}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="p-0 max-w-full h-full max-h-full bg-gray-900 border-red-900/30">
+          <MobileModalWrapper
+            title={part.part_name}
+            description={part.vendor_part_number}
+            onClose={onClose}
+            footer={editing ? mobileEditFooter : mobileViewFooter}
+          >
+            {modalContent}
+          </MobileModalWrapper>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-white">{part.part_name}</DialogTitle>
+            <div className="flex gap-2">
+              {!editing && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setEditing(true)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      if (confirm('Delete this part?')) {
+                        deleteMutation.mutate();
+                      }
+                    }}
+                    className="text-gray-400 hover:text-red-400"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </DialogHeader>
+        {modalContent}
       </DialogContent>
     </Dialog>
   );

@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, ShoppingCart, ExternalLink } from "lucide-react";
+import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 /**
  * OrderPartModal - Create or add to an order for a specific part
@@ -18,6 +21,7 @@ import { Loader2, Plus, ShoppingCart, ExternalLink } from "lucide-react";
  */
 export default function OrderPartModal({ part, onClose, onPartClick }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -193,17 +197,8 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
 
   const activeVendors = vendors.filter(v => v.active);
 
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border border-red-900/30 text-white max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-red-400" />
-            Order Part
-          </DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-4">
           {/* Part Info */}
           <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
             <button
@@ -398,30 +393,76 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="border-gray-700">
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-red-600 hover:bg-red-700"
-              disabled={createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder)}
-            >
-              {createOrderMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add to Order
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Actions - Desktop Only */}
+          {!isMobile && (
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose} className="border-gray-700">
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-red-600 hover:bg-red-700"
+                disabled={createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder)}
+              >
+                {createOrderMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add to Order
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </form>
+  );
+
+  const mobileFooter = (
+    <MobilePrimaryActionStack
+      primaryAction={{
+        label: createOrderMutation.isPending ? 'Adding...' : 'Add to Order',
+        onClick: handleSubmit,
+        icon: Plus,
+        disabled: createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder),
+        loading: createOrderMutation.isPending,
+      }}
+      secondaryActions={[
+        { label: 'Cancel', onClick: onClose, variant: 'outline' }
+      ]}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="p-0 max-w-full h-full max-h-full bg-gray-900 border-red-900/30 text-white">
+          <MobileModalWrapper
+            title="Order Part"
+            description={part?.part_name}
+            onClose={onClose}
+            footer={mobileFooter}
+          >
+            {formContent}
+          </MobileModalWrapper>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border border-red-900/30 text-white max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-red-400" />
+            Order Part
+          </DialogTitle>
+        </DialogHeader>
+        {formContent}
       </DialogContent>
     </Dialog>
   );
