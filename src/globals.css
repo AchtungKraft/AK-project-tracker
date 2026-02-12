@@ -2,88 +2,257 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 0 84% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 0 84% 60%;
-    --radius: 0.5rem;
+/* ============================================
+   GLOBAL ACTION COLOR TOKENS
+   Centralized color system for all buttons
+   ============================================ */
+
+:root {
+  /* Primary Action Tokens */
+  --action-primary-bg: #dc2626;           /* red-600 */
+  --action-primary-bg-hover: #b91c1c;     /* red-700 - 8% darker */
+  --action-primary-bg-active: #991b1b;    /* red-800 */
+  --action-primary-text: #ffffff;
+  --action-primary-disabled-bg: #7f1d1d;  /* red-900 muted */
+  --action-primary-disabled-text: rgba(255, 255, 255, 0.7);
+
+  /* Secondary Action Tokens */
+  --action-secondary-bg: #374151;         /* gray-700 */
+  --action-secondary-bg-hover: #4b5563;   /* gray-600 */
+  --action-secondary-border: #6b7280;     /* gray-500 */
+  --action-secondary-text: #f3f4f6;       /* gray-100 */
+
+  /* Utility Action Tokens */
+  --action-utility-bg: #1f2937;           /* gray-800 */
+  --action-utility-bg-hover: #374151;     /* gray-700 */
+  --action-utility-border: #4b5563;       /* gray-600 */
+  --action-utility-text: #e5e7eb;         /* gray-200 */
+
+  /* Disabled State Tokens */
+  --action-disabled-bg: #1f2937;          /* gray-800 */
+  --action-disabled-text: #9ca3af;        /* gray-400 */
+  --action-disabled-border: #374151;      /* gray-700 */
+
+  /* Destructive Action Tokens */
+  --action-destructive-bg: #b91c1c;       /* red-700 */
+  --action-destructive-bg-hover: #991b1b; /* red-800 */
+  --action-destructive-text: #ffffff;
+
+  /* Success Action Tokens */
+  --action-success-bg: #059669;           /* emerald-600 */
+  --action-success-bg-hover: #047857;     /* emerald-700 */
+  --action-success-text: #ffffff;
+
+  /* Warning Action Tokens */
+  --action-warning-bg: #d97706;           /* amber-600 */
+  --action-warning-bg-hover: #b45309;     /* amber-700 */
+  --action-warning-text: #ffffff;
+
+  /* Sticky Footer Surface */
+  --action-surface-elevated: #111827;     /* gray-900 */
+  --action-surface-divider: rgba(127, 29, 29, 0.3); /* red-900/30 */
+}
+
+/* ============================================
+   MOBILE BUTTON CONTRAST ENFORCEMENT
+   Only applies at viewport < 768px
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* Primary buttons - solid fill, no transparency */
+  .btn-primary,
+  [data-variant="default"],
+  button[class*="bg-red-600"],
+  button[class*="bg-blue-600"],
+  button[class*="bg-green-600"],
+  button[class*="bg-purple-600"] {
+    background-color: var(--action-primary-bg) !important;
+    color: var(--action-primary-text) !important;
+    opacity: 1 !important;
+  }
+
+  .btn-primary:hover,
+  [data-variant="default"]:hover,
+  button[class*="bg-red-600"]:hover {
+    background-color: var(--action-primary-bg-hover) !important;
+  }
+
+  .btn-primary:active,
+  [data-variant="default"]:active {
+    background-color: var(--action-primary-bg-active) !important;
+  }
+
+  .btn-primary:disabled,
+  [data-variant="default"]:disabled,
+  button[class*="bg-red-600"]:disabled {
+    background-color: var(--action-primary-disabled-bg) !important;
+    color: var(--action-primary-disabled-text) !important;
+    opacity: 1 !important;
+    cursor: not-allowed;
+  }
+
+  /* Secondary buttons - visible on dark backgrounds */
+  .btn-secondary,
+  [data-variant="secondary"],
+  button[class*="bg-gray-700"] {
+    background-color: var(--action-secondary-bg) !important;
+    color: var(--action-secondary-text) !important;
+    border: 1px solid var(--action-secondary-border) !important;
+    opacity: 1 !important;
+  }
+
+  .btn-secondary:hover,
+  [data-variant="secondary"]:hover,
+  button[class*="bg-gray-700"]:hover {
+    background-color: var(--action-secondary-bg-hover) !important;
+  }
+
+  /* Outline buttons - solid background instead of transparent */
+  .btn-outline,
+  [data-variant="outline"],
+  button[class*="border-gray-600"][class*="bg-transparent"],
+  button[class*="border-gray-700"][class*="bg-transparent"] {
+    background-color: var(--action-utility-bg) !important;
+    color: var(--action-utility-text) !important;
+    border: 1px solid var(--action-utility-border) !important;
+    opacity: 1 !important;
+  }
+
+  .btn-outline:hover,
+  [data-variant="outline"]:hover {
+    background-color: var(--action-utility-bg-hover) !important;
+    color: #ffffff !important;
+  }
+
+  /* Ghost buttons - must have visible background on mobile */
+  .btn-ghost,
+  [data-variant="ghost"],
+  button[class*="hover:bg-gray-800"][class*="text-gray"] {
+    background-color: rgba(31, 41, 55, 0.8) !important; /* gray-800/80 */
+    color: var(--action-utility-text) !important;
+  }
+
+  .btn-ghost:hover,
+  [data-variant="ghost"]:hover {
+    background-color: var(--action-utility-bg-hover) !important;
+    color: #ffffff !important;
+  }
+
+  /* Disabled state enforcement - tone shift, not just opacity */
+  button:disabled,
+  button[disabled],
+  [aria-disabled="true"] {
+    background-color: var(--action-disabled-bg) !important;
+    color: var(--action-disabled-text) !important;
+    border-color: var(--action-disabled-border) !important;
+    opacity: 1 !important;
+    cursor: not-allowed !important;
+  }
+
+  /* Sticky footer elevated surface */
+  .mobile-sticky-footer,
+  .mobile-action-bar,
+  [class*="fixed"][class*="bottom-0"] {
+    background-color: var(--action-surface-elevated) !important;
+    border-top: 1px solid var(--action-surface-divider) !important;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  /* Icon contrast - match text contrast */
+  button svg,
+  [role="button"] svg {
+    opacity: 1 !important;
+  }
+
+  button:disabled svg,
+  button[disabled] svg {
+    opacity: 0.6 !important;
   }
 }
 
-/* Consistent Button Styles */
-@layer components {
-  /* Primary buttons - high contrast, always readable */
-  .btn-primary {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors shadow-sm;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900;
-  }
-  
-  /* Secondary buttons - outline style */
-  .btn-secondary {
-    @apply bg-transparent border border-gray-600 text-gray-200 hover:bg-gray-800 hover:border-gray-500 font-medium px-4 py-2 rounded-lg transition-colors;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900;
-  }
-  
-  /* Ghost buttons - minimal style */
-  .btn-ghost {
-    @apply bg-transparent text-gray-300 hover:bg-gray-800 hover:text-white font-medium px-4 py-2 rounded-lg transition-colors;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  
-  /* Destructive buttons */
-  .btn-destructive {
-    @apply bg-red-700 hover:bg-red-800 text-white font-medium px-4 py-2 rounded-lg transition-colors;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900;
-  }
-  
-  /* Small button variant */
-  .btn-sm {
-    @apply px-3 py-1.5 text-sm;
-  }
-  
-  /* Icon button variant */
-  .btn-icon {
-    @apply p-2 aspect-square;
-  }
+/* ============================================
+   BUTTON UTILITY CLASSES (ALL VIEWPORTS)
+   ============================================ */
+
+/* High-contrast utility buttons */
+.btn-utility {
+  background-color: var(--action-utility-bg);
+  color: var(--action-utility-text);
+  border: 1px solid var(--action-utility-border);
 }
 
-/* Ensure shadcn buttons have good contrast */
-@layer utilities {
-  /* Fix default button text visibility */
-  [data-slot="button"] {
-    font-weight: 500;
-  }
-  
-  /* Ensure outline buttons are visible on dark backgrounds */
-  .dark button[data-variant="outline"],
-  button[data-variant="outline"] {
-    border-color: rgb(75 85 99);
-    color: rgb(229 231 235);
-  }
-  
-  /* Better ghost button visibility */
-  .dark button[data-variant="ghost"],
-  button[data-variant="ghost"] {
-    color: rgb(209 213 219);
-  }
+.btn-utility:hover {
+  background-color: var(--action-utility-bg-hover);
+  color: #ffffff;
+}
+
+/* Success button */
+.btn-success {
+  background-color: var(--action-success-bg);
+  color: var(--action-success-text);
+}
+
+.btn-success:hover {
+  background-color: var(--action-success-bg-hover);
+}
+
+/* Warning button */
+.btn-warning {
+  background-color: var(--action-warning-bg);
+  color: var(--action-warning-text);
+}
+
+.btn-warning:hover {
+  background-color: var(--action-warning-bg-hover);
+}
+
+/* Destructive button */
+.btn-destructive {
+  background-color: var(--action-destructive-bg);
+  color: var(--action-destructive-text);
+}
+
+.btn-destructive:hover {
+  background-color: var(--action-destructive-bg-hover);
+}
+
+/* ============================================
+   MODAL ACTION BUTTON VISIBILITY
+   ============================================ */
+
+[role="dialog"] button,
+[data-state="open"] button,
+.modal-content button {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   DISABLED BUTTON ACCESSIBILITY
+   ============================================ */
+
+button:disabled,
+button[disabled],
+button[aria-disabled="true"] {
+  cursor: not-allowed;
+  pointer-events: auto; /* Allow hover for tooltip */
+}
+
+/* Hide pointer events for truly disabled */
+button:disabled:not([data-tooltip]),
+button[disabled]:not([data-tooltip]) {
+  pointer-events: none;
+}
+
+/* ============================================
+   SCROLLBAR HIDE UTILITY
+   ============================================ */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
