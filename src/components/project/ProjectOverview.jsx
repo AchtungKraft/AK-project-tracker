@@ -33,7 +33,10 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState('card'); // 'card' | 'calendar'
+  // Persist view mode per project
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'card';
+  });
   const [selectedTask, setSelectedTask] = useState(null);
   const [formData, setFormData] = useState({
     name: project?.name || "",
@@ -55,6 +58,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     categories = [],
     teamMembers = [],
     tasks = [],
+    projectBuckets = [],
   } = sharedData;
 
   // Use task data hook for calendar view handlers
@@ -64,6 +68,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     handleUpdateDueDate,
     handleUpdateStartDate,
     handleTogglePriority,
+    handleConfirmRemovePriority,
   } = useTaskData({ scope: 'project', projectId });
 
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
@@ -307,11 +312,14 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           </Card>
         </Collapsible>
 
-        {/* View Switcher */}
+        {/* View Switcher - persist to localStorage per project */}
         <div className={cn("flex items-center justify-between", isMobile && "px-1")}>
           <TaskViewSwitcher 
             viewMode={viewMode} 
-            onViewChange={setViewMode} 
+            onViewChange={(mode) => {
+              setViewMode(mode);
+              localStorage.setItem(`project_task_view_mode_${projectId}`, mode);
+            }} 
           />
         </div>
 
