@@ -54,6 +54,7 @@ export default function ProjectCalendarView({
 
   // Separate tasks - use start_date OR due_date for calendar placement
   const { tasksPastDue, tasksWithDueDate, tasksWithoutDueDate } = useMemo(() => {
+    console.log("CALENDAR RECOMPUTED");
     const pastDue = [];
     const withDate = [];
     const withoutDate = [];
