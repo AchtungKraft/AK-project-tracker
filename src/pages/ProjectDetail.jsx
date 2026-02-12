@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 import ProjectOverview from "../components/project/ProjectOverview";
 import ProjectTasks from "../components/project/ProjectTasks";
@@ -22,6 +23,7 @@ import ProjectClientPortal from "../components/project/ProjectClientPortal";
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('id');
   const tabParam = urlParams.get('tab') || 'overview';
@@ -142,30 +144,31 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : 'p-4 md:p-8'}`}>
+      <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-3' : 'space-y-6'}`}>
+        {/* Compact Mobile Header */}
+        <div className={`flex items-center justify-between ${isMobile ? 'gap-2' : ''}`}>
+          <div className={`flex items-center ${isMobile ? 'gap-2 flex-1 min-w-0' : 'gap-4'}`}>
             <Button
               variant="outline"
               size="icon"
               onClick={handleBack}
-              className="border-gray-700 text-white">
-
-              <ArrowLeft className="w-4 h-4" />
+              className={`border-gray-700 text-white shrink-0 ${isMobile ? 'h-9 w-9' : ''}`}
+            >
+              <ArrowLeft className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
             </Button>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white">{project.name}</h1>
-              <p className="text-gray-400">{project.client_name || 'No client'}</p>
+            <div className={isMobile ? 'min-w-0 flex-1' : ''}>
+              <h1 className={`font-bold text-white ${isMobile ? 'text-lg truncate' : 'text-2xl md:text-3xl'}`}>{project.name}</h1>
+              <p className={`text-gray-400 ${isMobile ? 'text-xs truncate' : ''}`}>{project.client_name || 'No client'}</p>
             </div>
           </div>
           <Button
             variant="outline"
             onClick={() => setShowEditModal(true)}
-            className="border-gray-700 text-white gap-2"
+            className={`border-gray-700 text-white shrink-0 ${isMobile ? 'h-9 px-2 gap-1' : 'gap-2'}`}
           >
-            <Edit2 className="w-4 h-4" />
-            Edit Project
+            <Edit2 className={isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+            {!isMobile && 'Edit Project'}
           </Button>
         </div>
 
@@ -259,23 +262,23 @@ export default function ProjectDetail() {
             </DropdownMenu>
           </div>
 
-          <TabsContent value="overview" className="mt-6">
+          <TabsContent value="overview" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectOverview project={project} projectId={projectId} sharedData={sharedData} />
           </TabsContent>
 
-          <TabsContent value="tasks" className="mt-6">
+          <TabsContent value="tasks" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectTasks projectId={projectId} sharedData={sharedData} />
           </TabsContent>
 
-          <TabsContent value="parts" className="mt-6">
+          <TabsContent value="parts" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectParts projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="journal" className="mt-6">
+          <TabsContent value="journal" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectJournal projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="clientportal" className="mt-6">
+          <TabsContent value="clientportal" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectClientPortal projectId={projectId} />
           </TabsContent>
         </Tabs>

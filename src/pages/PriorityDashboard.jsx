@@ -320,17 +320,17 @@ export default function PriorityDashboard() {
   return (
     <>
       <MobileSafeAreaContainer>
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : 'p-3 md:p-6'}`}>
+          <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-3' : 'space-y-6'}`}
           {/* Header */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-red-600/20 rounded-lg border-2 border-red-600">
-                <Flame className="w-5 h-5 md:w-6 md:h-6 text-red-500" />
+          <div className={`flex items-center justify-between ${isMobile ? 'gap-2 mb-2' : 'gap-2'}`}>
+            <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-2 md:gap-3'}`}>
+              <div className={`flex items-center justify-center bg-red-600/20 rounded-lg border-2 border-red-600 ${isMobile ? 'w-9 h-9' : 'w-10 h-10 md:w-12 md:h-12'}`}>
+                <Flame className={isMobile ? 'w-4 h-4 text-red-500' : 'w-5 h-5 md:w-6 md:h-6 text-red-500'} />
               </div>
               <div>
-                <h1 className="text-xl md:text-3xl font-bold text-white">PRIORITIES</h1>
-                <p className="text-xs md:text-sm text-gray-400">
+                <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl md:text-3xl'}`}>PRIORITIES</h1>
+                <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
                   <span className="md:hidden">{activePriorityTasks.length} tasks</span>
                   <span className="hidden md:inline">{activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(groupedTasks).length} {primaryGroupBy === 'project' ? (Object.keys(groupedTasks).length === 1 ? 'project' : 'projects') : (Object.keys(groupedTasks).length === 1 ? 'category' : 'categories')}</span>
                 </p>
@@ -343,8 +343,8 @@ export default function PriorityDashboard() {
                 setIsRefreshing(false);
               }}
               variant="outline"
-              size="sm"
-              className="border-gray-700 text-white gap-2"
+              className={`border-gray-700 text-white gap-2 ${isMobile ? 'h-[44px] text-sm px-3' : ''}`}
+              size={isMobile ? undefined : 'sm'}
               disabled={isRefreshing}
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />

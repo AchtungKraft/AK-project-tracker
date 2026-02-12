@@ -200,37 +200,39 @@ export default function Dashboard() {
 
   return (
     <MobileSafeAreaContainer>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
+      <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : 'p-3 md:p-6'}`}>
+        <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-2' : 'space-y-4'}`}
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+          <div className={`flex flex-col md:flex-row justify-between items-start md:items-center ${isMobile ? 'gap-2 mb-2' : 'gap-3'}`}>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
+              <h1 className={`font-bold text-white ${isMobile ? 'text-xl mb-0.5' : 'text-2xl md:text-3xl mb-1'}`}>
                 PROJECT DASHBOARD
               </h1>
-              <p className="text-sm text-gray-400">Ächtung Kraft Project Tracking Platform</p>
+              <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>Ächtung Kraft Project Tracking Platform</p>
             </div>
             {isMobile ? (
-              <MobilePrimaryActionStack
-                primaryAction={{
-                  label: 'New Project',
-                  onClick: () => setShowCreateModal(true),
-                  icon: Plus,
-                }}
-                secondaryActions={[
-                  {
-                    label: 'Refresh',
-                    onClick: async () => {
-                      setIsRefreshing(true);
-                      await queryClient.invalidateQueries();
-                      setIsRefreshing(false);
-                    },
-                    icon: RefreshCw,
-                    disabled: isRefreshing,
-                  }
-                ]}
-                className="w-full"
-              />
+              <div className="flex items-center gap-2 w-full">
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex-1 h-[44px] bg-red-600 hover:bg-red-700 gap-2 text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  New
+                </Button>
+                <Button
+                  onClick={async () => {
+                    setIsRefreshing(true);
+                    await queryClient.invalidateQueries();
+                    setIsRefreshing(false);
+                  }}
+                  variant="outline"
+                  className="flex-1 h-[44px] border-gray-700 text-white gap-2 text-sm"
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             ) : (
               <div className="flex gap-2">
                 <Button
@@ -441,30 +443,23 @@ export default function Dashboard() {
         </MobileFilterTriggerBar>
 
         {/* View Tabs */}
-        <div className="flex items-center gap-4">
+        <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-4'}`}>
           <Tabs value={viewMode} onValueChange={handleViewModeChange} className="w-auto">
-            <TabsList className="bg-gray-900/50 border border-gray-700">
-              <TabsTrigger value="cards" className="gap-2 data-[state=active]:bg-red-600">
-                <LayoutGrid className="w-4 h-4" />
+            <TabsList className={`bg-gray-900/50 border border-gray-700 ${isMobile ? 'h-9' : ''}`}>
+              <TabsTrigger value="cards" className={`gap-2 data-[state=active]:bg-red-600 ${isMobile ? 'h-7 px-2 text-xs' : ''}`}>
+                <LayoutGrid className={isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
                 <span className="hidden sm:inline">Cards</span>
               </TabsTrigger>
-              <TabsTrigger value="list" className="gap-2 data-[state=active]:bg-red-600">
-                <List className="w-4 h-4" />
+              <TabsTrigger value="list" className={`gap-2 data-[state=active]:bg-red-600 ${isMobile ? 'h-7 px-2 text-xs' : ''}`}>
+                <List className={isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
                 <span className="hidden sm:inline">List</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <span className="text-sm text-gray-500">
+          <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-sm'}`}>
             {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+            {isMobile && statusFilter !== 'all' && ` • ${projectStatuses.find(s => s.id === statusFilter)?.label || 'Filtered'}`}
           </span>
-        </div>
-
-        {/* Mobile Context Header */}
-        <div className="md:hidden bg-black/40 border border-gray-700 rounded-lg px-3 py-2">
-          <p className="text-sm text-gray-300">
-            {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
-            {statusFilter !== 'all' && ` • ${projectStatuses.find(s => s.id === statusFilter)?.label || 'Filtered'}`}
-          </p>
         </div>
 
         {/* Projects Content */}
@@ -489,7 +484,7 @@ export default function Dashboard() {
             onEdit={setEditingProject}
           />
         ) : (
-          <div className="space-y-6">
+          <div className={isMobile ? 'space-y-4' : 'space-y-6'}>
             {Object.entries(groupedProjects).sort((a, b) => {
               if (groupBy === 'projectType') {
                 const typeA = projectTypes.find(t => t.name === a[0]);
@@ -506,8 +501,8 @@ export default function Dashboard() {
               
               return (
                 <div key={groupLabel}>
-                  <div className="mb-4 pb-2 border-b-2 border-l-4 pl-3" style={{ borderColor: groupColor }}>
-                    <h2 className="text-xl font-bold" style={{ color: groupColor }}>
+                  <div className={`border-b-2 border-l-4 pl-3 ${isMobile ? 'mb-2 pb-1' : 'mb-4 pb-2'}`} style={{ borderColor: groupColor }}>
+                    <h2 className={`font-bold ${isMobile ? 'text-base' : 'text-xl'}`} style={{ color: groupColor }}>
                       {groupLabel} ({groupProjects.length})
                     </h2>
                   </div>

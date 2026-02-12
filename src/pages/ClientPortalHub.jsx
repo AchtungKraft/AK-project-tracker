@@ -710,14 +710,14 @@ export default function ClientPortalHub() {
 
   return (
     <MobileSafeAreaContainer>
-      <div className="p-3 md:p-6 space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className={isMobile ? 'p-2 space-y-2' : 'p-3 md:p-6 space-y-4 md:space-y-6'}>
+      <div className={`flex items-center justify-between flex-wrap ${isMobile ? 'gap-2 mb-1' : 'gap-3'}`}>
         <div>
-          <h1 className="text-xl md:text-3xl font-bold text-white flex items-center gap-2 md:gap-3">
-            <Users className="w-6 h-6 md:w-8 md:h-8 text-red-500" />
+          <h1 className={`font-bold text-white flex items-center ${isMobile ? 'text-lg gap-2' : 'text-xl md:text-3xl gap-2 md:gap-3'}`}>
+            <Users className={isMobile ? 'w-5 h-5 text-red-500' : 'w-6 h-6 md:w-8 md:h-8 text-red-500'} />
             Client Portal
           </h1>
-          <p className="text-gray-400 text-xs md:text-base mt-0.5 md:mt-1">
+          <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-base mt-0.5 md:mt-1'}`}>
             <span className="hidden md:inline">Manage client feedback requests and access</span>
             <span className="md:hidden">
               {needsAttentionCount > 0 
