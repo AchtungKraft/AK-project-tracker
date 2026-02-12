@@ -247,54 +247,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Task Details</h3>
-              {!editing ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditing(true)}
-                  className="border-gray-700 text-white"
-                >
-                  Edit Details
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setEditing(false);
-                      setFormData({
-                        name: task.name || "",
-                        description: task.description || "",
-                        project_id: task.project_id || projectId || "",
-                        category_id: task.category_id || "",
-                        assigned_team_member_id: task.assigned_team_member_id || "",
-                        status_id: task.status_id || "",
-                        start_date: task.start_date || "",
-                        due_date: task.due_date || "",
-                      });
-                    }}
-                    className="border-gray-700 text-white"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSubmit}
-                    disabled={updateMutation.isPending}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    {updateMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
             </div>
 
             {editing ? (
