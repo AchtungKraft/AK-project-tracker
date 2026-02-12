@@ -86,8 +86,12 @@ export default function TaskPartsSection({
   };
 
   // Available parts for this project (from commitments, not yet fully linked)
+  // Filter out archived parts from new linkages
   const availableParts = commitments
-    .filter((c) => partsMap[c.part_id])
+    .filter((c) => {
+      const part = partsMap[c.part_id];
+      return part && !part.is_archived;
+    })
     .map((c) => ({
       ...partsMap[c.part_id],
       commitment: c,
