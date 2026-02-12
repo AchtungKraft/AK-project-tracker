@@ -126,18 +126,24 @@ async function processMutation(base44, user, payload, startTime) {
       throw { status: 400, error: 'qty must be a positive number', code: 'INVALID_QTY' };
     }
 
-    // Fetch and validate part
-    const parts = await base44.asServiceRole.entities.Part.list();
-    const part = parts.find(p => p.id === part_id);
-    if (!part) throw { status: 404, error: 'Part not found', code: 'PART_NOT_FOUND' };
+    // For reversal, we'll get part details from the original mutation
+    let part = null;
+    let partBehavior = null;
+    
+    if (mutation_type !== 'reversal') {
+      // Fetch and validate part
+      const parts = await base44.asServiceRole.entities.Part.list();
+      part = parts.find(p => p.id === part_id);
+      if (!part) throw { status: 404, error: 'Part not found', code: 'PART_NOT_FOUND' };
 
-    // Check mutation permission
-    const permCheck = canMutatePart(part, mutation_type, { source_type });
-    if (!permCheck.allowed) {
-      throw { status: 400, error: permCheck.reason, code: permCheck.code };
+      // Check mutation permission
+      const permCheck = canMutatePart(part, mutation_type, { source_type });
+      if (!permCheck.allowed) {
+        throw { status: 400, error: permCheck.reason, code: permCheck.code };
+      }
+
+      partBehavior = permCheck.behavior || getPartTypeBehavior(part.part_type);
     }
-
-    const partBehavior = permCheck.behavior || getPartTypeBehavior(part.part_type);
     const result = {
       mutation_type,
       part_id,
