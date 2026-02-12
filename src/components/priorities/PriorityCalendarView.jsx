@@ -9,6 +9,8 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinI
 import { createPageUrl } from "@/utils";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { cn } from "@/lib/utils";
 
 export default function PriorityCalendarView({
   tasks,
@@ -25,8 +27,9 @@ export default function PriorityCalendarView({
   selectedTypes = [],
   statusFilter = 'all',
 }) {
+  const isMobile = useIsMobile();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [weeksToShow, setWeeksToShow] = useState(4);
+  const [weeksToShow, setWeeksToShow] = useState(isMobile ? 4 : 4);
   const [calendarPrimaryGroup, setCalendarPrimaryGroup] = useState(primaryGroupBy || 'project');
   const [calendarSecondaryGroup, setCalendarSecondaryGroup] = useState(secondaryGroupBy || 'assigned');
 
@@ -44,6 +47,7 @@ export default function PriorityCalendarView({
   }, [currentDate, weeksToShow]);
 
   // Separate tasks: past due, with due date (future), without due date
+  // Use start_date first, fall back to due_date for calendar placement
   const { tasksPastDue, tasksWithDueDate, tasksWithoutDueDate } = useMemo(() => {
     const pastDue = [];
     const withDate = [];
@@ -51,12 +55,15 @@ export default function PriorityCalendarView({
     const today = startOfWeek(new Date(), { weekStartsOn: 1 });
     
     tasks.forEach(task => {
-      if (task.due_date) {
-        const dueDate = parseISO(task.due_date);
-        if (isBefore(dueDate, today)) {
-          pastDue.push(task);
+      // Use start_date first, fall back to due_date
+      const dateToUse = task.start_date || task.due_date;
+      
+      if (dateToUse) {
+        const taskDate = parseISO(dateToUse);
+        if (isBefore(taskDate, today)) {
+          pastDue.push({ ...task, _calendarDate: dateToUse });
         } else {
-          withDate.push(task);
+          withDate.push({ ...task, _calendarDate: dateToUse });
         }
       } else {
         withoutDate.push(task);
@@ -66,14 +73,14 @@ export default function PriorityCalendarView({
     return { tasksPastDue: pastDue, tasksWithDueDate: withDate, tasksWithoutDueDate: withoutDate };
   }, [tasks]);
 
-  // Group tasks by week
+  // Group tasks by week - use _calendarDate which is start_date || due_date
   const tasksByWeek = useMemo(() => {
     const grouped = {};
     
     weekRanges.forEach((range, index) => {
       grouped[index] = tasksWithDueDate.filter(task => {
-        const dueDate = parseISO(task.due_date);
-        return isWithinInterval(dueDate, { start: range.start, end: range.end });
+        const taskDate = parseISO(task._calendarDate);
+        return isWithinInterval(taskDate, { start: range.start, end: range.end });
       });
     });
     
@@ -219,12 +226,18 @@ export default function PriorityCalendarView({
     toast.success(startDate ? 'Start date updated' : 'Start date removed');
   };
 
-  const handleTogglePriority = async (task) => {
+  const handleTogglePriority = async (task, skipConfirm = false) => {
+    // If removing priority and not skipping confirm, return flag (handled by TaskCard)
+    if (task.is_priority && !skipConfirm) {
+      return { needsConfirmation: true, task };
+    }
+    
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { is_priority: !task.is_priority }
     });
     toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
+    return { needsConfirmation: false };
   };
 
   const navigateWeeks = (direction) => {
@@ -329,6 +342,7 @@ export default function PriorityCalendarView({
                           onUpdateStartDate={handleUpdateStartDate}
                           onTogglePriority={handleTogglePriority}
                           commentCount={commentCountByTaskId[task.id] || 0}
+                          compact={isMobile}
                         />
                       ))}
                     </div>
