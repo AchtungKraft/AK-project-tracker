@@ -61,15 +61,20 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     projectBuckets = [],
   } = sharedData;
 
-  // Use task data hook for calendar view handlers
+  // Use task data hook for all task operations - single source of truth
   const {
+    tasks: taskDataTasks,
     commentCountByTaskId,
     handleToggleComplete,
     handleUpdateDueDate,
     handleUpdateStartDate,
     handleTogglePriority,
     handleConfirmRemovePriority,
+    updateTask,
   } = useTaskData({ scope: 'project', projectId });
+  
+  // Use tasks from useTaskData as source of truth (not stale sharedData)
+  const activeTasks = taskDataTasks;
 
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
   const projectType = projectTypes.find((t) => t.id === project?.project_type_id);
@@ -331,18 +336,21 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
               projectId={projectId} 
               sharedData={{
                 ...sharedData,
+                tasks: activeTasks,
+                commentCountByTaskId,
                 onUpdateDueDate: handleUpdateDueDate,
                 onUpdateStartDate: handleUpdateStartDate,
                 onTogglePriority: handleTogglePriority,
+                showInlineControls: true,
               }} 
             />
 
             {/* Completed Tasks Section */}
-            <CompletedTasksSection projectId={projectId} sharedData={sharedData} />
+            <CompletedTasksSection projectId={projectId} sharedData={{ ...sharedData, tasks: activeTasks }} />
           </>
         ) : (
           <ProjectCalendarView
-            tasks={tasks}
+            tasks={activeTasks}
             categories={categories}
             teamMembers={teamMembers}
             statuses={statuses}
