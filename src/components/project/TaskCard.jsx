@@ -23,7 +23,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, compact = false }) {
+export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, compact = false, showInlineControls = true }) {
   const isMobile = useIsMobile();
   const isCompact = compact || isMobile;
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
@@ -45,8 +45,8 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
   const [isUpdatingStartDate, setIsUpdatingStartDate] = useState(false);
   const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
   
-  // Determine if inline controls should be shown
-  const hasInlineControls = onUpdateDueDate || onUpdateStartDate || onTogglePriority;
+  // Determine if inline controls should be shown - require both prop AND handlers
+  const hasInlineControls = showInlineControls && (onUpdateDueDate || onUpdateStartDate || onTogglePriority);
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
