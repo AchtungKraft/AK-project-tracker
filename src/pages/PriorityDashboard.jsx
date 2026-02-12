@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
+import PriorityRemoveConfirm from "../components/tasks/PriorityRemoveConfirm";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
@@ -36,6 +37,7 @@ export default function PriorityDashboard() {
   const [primaryGroupBy, setPrimaryGroupBy] = useState('project');
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
   // Persist view mode in localStorage
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('priority_view_mode') || 'calendar-view';
@@ -49,7 +51,24 @@ export default function PriorityDashboard() {
     handleUpdateDueDate,
     handleUpdateStartDate,
     handleTogglePriority,
+    handleConfirmRemovePriority,
   } = useTaskData({ priorityOnly: true });
+
+  // Wrapped priority toggle that handles confirmation flow
+  const wrappedTogglePriority = useCallback(async (task, skipConfirm = false) => {
+    const result = await handleTogglePriority(task, skipConfirm);
+    if (result?.needsConfirmation) {
+      setPendingPriorityTask(task);
+    }
+    return result;
+  }, [handleTogglePriority]);
+
+  const handleConfirmPriorityRemoval = useCallback(async () => {
+    if (pendingPriorityTask) {
+      await handleConfirmRemovePriority(pendingPriorityTask);
+      setPendingPriorityTask(null);
+    }
+  }, [pendingPriorityTask, handleConfirmRemovePriority]);
 
   // Persist view mode changes
   const handleTabChange = (tab) => {
@@ -667,7 +686,7 @@ export default function PriorityDashboard() {
                                     commentCount={commentCountByTaskId[task.id] || 0}
                                     onUpdateDueDate={handleUpdateDueDate}
                                     onUpdateStartDate={handleUpdateStartDate}
-                                    onTogglePriority={handleTogglePriority}
+                                    onTogglePriority={wrappedTogglePriority}
                                     compact={isMobile}
                                     showInlineControls={true}
                                   />
@@ -871,6 +890,14 @@ export default function PriorityDashboard() {
           </div>
         </div>
       </MobileSortDrawer>
+
+      {/* Priority Removal Confirmation */}
+      <PriorityRemoveConfirm
+        isOpen={!!pendingPriorityTask}
+        onClose={() => setPendingPriorityTask(null)}
+        onConfirm={handleConfirmPriorityRemoval}
+        taskName={pendingPriorityTask?.name}
+      />
     </>
   );
 }
