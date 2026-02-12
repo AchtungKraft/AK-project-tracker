@@ -433,7 +433,18 @@ export default function FinancialExceptionDashboard() {
       {/* Invoice Workbench Mode */}
       {viewMode === 'workbench' && (
         <>
-          <InvoiceWorkbench onRowClick={handleRowClick} />
+          <InvoiceWorkbench onRowClick={(item) => {
+            setDrawerContext({
+              ...item,
+              lifecycleContext: {
+                lifecycle_category: item.lifecycle_category,
+                ordering_safety: item.ordering_safety,
+                order_reference: item.order_reference,
+                recommended_action: item.recommended_action,
+              }
+            });
+            setDrawerOpen(true);
+          }} />
           
           {/* Financial Detail Drawer */}
           <FinancialDetailDrawer
@@ -445,6 +456,7 @@ export default function FinancialExceptionDashboard() {
             partId={drawerContext?.part_id}
             projectId={drawerContext?.project_id}
             financialStatus={financialStatuses[0] || null}
+            lifecycleContext={drawerContext?.lifecycleContext}
           />
         </>
       )}
