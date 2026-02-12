@@ -1,7 +1,15 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
+import { normalizeTask, normalizeTasks } from './normalizeTask';
+import { 
+  incrementTaskVersion, 
+  emitTaskStateUpdated, 
+  setMutationTimestamp, 
+  shouldApplyMutation,
+  getTaskVersion
+} from './taskStateEvents';
 
 /**
  * TASK CACHE KEYS - Single source of truth for all task-related cache invalidation
@@ -23,6 +31,9 @@ export const TASK_CACHE_KEYS = [
 export function useTaskInteraction({ projectId = null, priorityOnly = false } = {}) {
   const queryClient = useQueryClient();
   
+  // Version tracking for mutation safety
+  const taskVersionRef = useRef(getTaskVersion());
+  
   // UI State
   const [activeTask, setActiveTask] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -34,14 +45,17 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const tasksQuery = useQuery({
     queryKey: projectId ? ['projectTasks', projectId] : (priorityOnly ? ['priorityTasks'] : ['tasks']),
-    queryFn: () => {
+    queryFn: async () => {
+      let rawTasks;
       if (projectId) {
-        return base44.entities.Task.filter({ project_id: projectId });
+        rawTasks = await base44.entities.Task.filter({ project_id: projectId });
+      } else if (priorityOnly) {
+        rawTasks = await base44.entities.Task.filter({ is_priority: true });
+      } else {
+        rawTasks = await base44.entities.Task.list();
       }
-      if (priorityOnly) {
-        return base44.entities.Task.filter({ is_priority: true });
-      }
-      return base44.entities.Task.list();
+      // Normalize tasks after fetch
+      return normalizeTasks(rawTasks);
     },
   });
 
@@ -102,19 +116,29 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     });
   }, [queryClient]);
 
-  const optimisticUpdateAllCaches = useCallback((taskId, updates) => {
+  const optimisticUpdateAllCaches = useCallback((taskId, updates, mutationTimestamp) => {
+    // Check if this mutation should be applied (race condition guard)
+    if (!shouldApplyMutation(taskId, mutationTimestamp)) {
+      console.warn(`[MUTATION GUARD] Stale mutation blocked for task ${taskId}`);
+      return false;
+    }
+    
+    // Record mutation timestamp
+    setMutationTimestamp(taskId, mutationTimestamp);
+    
     TASK_CACHE_KEYS.forEach(key => {
       queryClient.setQueryData(key, (old) => {
         if (!old) return old;
         if (Array.isArray(old)) {
-          return old.map(t => t.id === taskId ? { ...t, ...updates } : t);
+          return old.map(t => t.id === taskId ? normalizeTask({ ...t, ...updates }) : t);
         }
         if (old.id === taskId) {
-          return { ...old, ...updates };
+          return normalizeTask({ ...old, ...updates });
         }
         return old;
       });
     });
+    return true;
   }, [queryClient]);
 
   // ═══════════════════════════════════════════════════════════════
@@ -122,8 +146,8 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   // ═══════════════════════════════════════════════════════════════
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onMutate: async ({ id, data }) => {
+    mutationFn: ({ id, data, mutationTimestamp }) => base44.entities.Task.update(id, data),
+    onMutate: async ({ id, data, mutationTimestamp }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['tasks'] });
       
@@ -133,10 +157,10 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
         previousData[key.join('_')] = queryClient.getQueryData(key);
       });
 
-      // Optimistic update
-      optimisticUpdateAllCaches(id, data);
+      // Optimistic update with mutation guard
+      const applied = optimisticUpdateAllCaches(id, data, mutationTimestamp);
 
-      return { previousData };
+      return { previousData, applied };
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -149,7 +173,17 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
       }
       toast.error('Failed to update task');
     },
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
+      // Increment version on successful mutation
+      taskVersionRef.current = incrementTaskVersion();
+      
+      // Emit global state updated event
+      emitTaskStateUpdated({
+        taskId: variables.id,
+        updates: variables.data,
+        source: 'useTaskInteraction',
+      });
+      
       invalidateAllTaskCaches();
     },
   });
@@ -171,7 +205,8 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   // ═══════════════════════════════════════════════════════════════
 
   const updateTask = useCallback(async (taskId, updates) => {
-    return updateTaskMutation.mutateAsync({ id: taskId, data: updates });
+    const mutationTimestamp = Date.now();
+    return updateTaskMutation.mutateAsync({ id: taskId, data: updates, mutationTimestamp });
   }, [updateTaskMutation]);
 
   const deleteTask = useCallback(async (taskId) => {
