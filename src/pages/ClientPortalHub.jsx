@@ -24,6 +24,9 @@ import {
   X
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
+import MobileFilterDrawer, { MobileFilterSection } from "@/components/mobile/MobileFilterDrawer";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -96,7 +99,10 @@ const getRequestState = (request, decisions, attachments) => {
 
 export default function ClientPortalHub() {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [tempFilters, setTempFilters] = useState(null);
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, applyView, clearFilters } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
@@ -221,6 +227,32 @@ export default function ClientPortalHub() {
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+
+  // Calculate active filter count for mobile badge
+  const activeFilterCount = useActiveFilterCount(
+    { selectedTypes, statusFilter, assignedTo },
+    { selectedTypes: [], statusFilter: 'all', assignedTo: [] }
+  );
+
+  // Initialize temp filters when drawer opens
+  const handleOpenFilterDrawer = useCallback(() => {
+    setTempFilters({ selectedTypes, statusFilter, assignedTo });
+    setFilterDrawerOpen(true);
+  }, [selectedTypes, statusFilter, assignedTo]);
+
+  // Apply temp filters
+  const handleApplyFilters = useCallback(() => {
+    if (tempFilters) {
+      setFilter('selectedTypes', tempFilters.selectedTypes);
+      setFilter('statusFilter', tempFilters.statusFilter);
+      setFilter('assignedTo', tempFilters.assignedTo);
+    }
+  }, [tempFilters, setFilter]);
+
+  // Clear all filters
+  const handleClearAllFilters = useCallback(() => {
+    setTempFilters({ selectedTypes: [], statusFilter: 'all', assignedTo: [] });
+  }, []);
 
   // Get active team members sorted by sort_order for the Assigned To filter
   const activeTeamMembers = useMemo(() => {
@@ -784,6 +816,19 @@ export default function ClientPortalHub() {
         </div>
       </div>
 
+      {/* Mobile Filter Trigger Bar */}
+      {isMobile && (
+        <MobileFilterTriggerBar
+          activeFilterCount={activeFilterCount}
+          searchValue=""
+          onSearchChange={() => {}}
+          onFilterClick={handleOpenFilterDrawer}
+          showSort={false}
+        >
+          {null}
+        </MobileFilterTriggerBar>
+      )}
+
       {/* Mobile Saved Views - Below header */}
       <div className="md:hidden">
         <SavedViewsSelector
@@ -1042,6 +1087,102 @@ export default function ClientPortalHub() {
         </TabsContent>
       </Tabs>
       </div>
+
+      {/* Mobile Filter Drawer */}
+      <MobileFilterDrawer
+        isOpen={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        onApply={handleApplyFilters}
+        onClear={handleClearAllFilters}
+        title="Filter Client Portal"
+      >
+        <MobileFilterSection title="Project Status" badge={tempFilters?.statusFilter !== 'all' ? 1 : null}>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: 'all' }))}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                tempFilters?.statusFilter === 'all' 
+                  ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                  : 'bg-gray-800/50 text-gray-300'
+              }`}
+            >
+              All Status
+            </button>
+            {projectStatuses.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: s.id }))}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  tempFilters?.statusFilter === s.id 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+
+        <MobileFilterSection title="Project Type" badge={tempFilters?.selectedTypes?.length || null}>
+          <div className="space-y-2">
+            {projectTypes.filter(t => t.active).map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  const current = tempFilters?.selectedTypes || [];
+                  setTempFilters(prev => ({
+                    ...prev,
+                    selectedTypes: current.includes(t.id)
+                      ? current.filter(id => id !== t.id)
+                      : [...current, t.id]
+                  }));
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  tempFilters?.selectedTypes?.includes(t.id) 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+
+        <MobileFilterSection title="Assigned To" badge={tempFilters?.assignedTo?.length || null}>
+          <div className="space-y-2">
+            {activeTeamMembers.map(tm => (
+              <button
+                key={tm.id}
+                type="button"
+                onClick={() => {
+                  const current = tempFilters?.assignedTo || [];
+                  setTempFilters(prev => ({
+                    ...prev,
+                    assignedTo: current.includes(tm.id)
+                      ? current.filter(id => id !== tm.id)
+                      : [...current, tm.id]
+                  }));
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  tempFilters?.assignedTo?.includes(tm.id) 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                {tm.full_name}
+                {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+      </MobileFilterDrawer>
     </MobileSafeAreaContainer>
   );
 }
