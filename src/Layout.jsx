@@ -11,8 +11,12 @@ import {
   Plus,
   Package,
   Flame,
-  ListChecks
+  ListChecks,
+  X
 } from "lucide-react";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import MobileCollapsibleHeader from "@/components/mobile/MobileCollapsibleHeader";
 import {
   Sidebar,
   SidebarContent,
@@ -95,24 +99,44 @@ const getNavigationItems = (isAchtungKraft) => {
   }
 };
 
-// Mobile bottom nav
-const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
+// Mobile bottom nav with safe area support
+const MobileBottomNav = ({ currentPath, isAchtungKraft, onMenuOpen }) => {
   const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
     { title: "Clients", url: createPageUrl("ClientPortalHub"), icon: Building2 },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
+    { title: "More", icon: Menu, isMenu: true },
   ] : [
     { title: "Projects", url: createPageUrl("MyProjects"), icon: FolderKanban },
     { title: "Priorities", url: createPageUrl("MyPriorities"), icon: Flame },
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-xl border-t border-red-900/30 z-50">
+    <div 
+      className="md:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-red-900/30 z-50"
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
+    >
       <div className="flex justify-around items-center h-14 px-2">
         {mobileItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentPath === item.url;
+          const isActive = !item.isMenu && currentPath === item.url;
+          
+          if (item.isMenu) {
+            return (
+              <button
+                key={item.title}
+                onClick={onMenuOpen}
+                className="flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors text-gray-400 active:text-red-500"
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-xs">{item.title}</span>
+              </button>
+            );
+          }
+          
           return (
             <Link
               key={item.title}
@@ -132,6 +156,76 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft }) => {
   );
 };
 
+// Mobile off-canvas menu for secondary navigation
+const MobileOffCanvasMenu = ({ isOpen, onClose, navigationItems, currentPath }) => {
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+        onClick={onClose}
+      />
+      
+      {/* Menu Panel */}
+      <div 
+        className="fixed right-0 top-0 bottom-0 w-72 bg-gray-900 border-l border-red-900/30 z-[70] overflow-y-auto"
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-red-900/30">
+          <span className="text-white font-semibold">Menu</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <nav className="p-3 space-y-1">
+          {navigationItems.filter(item => !item.divider).map((item) => {
+            const Icon = item.icon;
+            const isActive = !item.external && currentPath === item.url;
+            
+            if (item.external) {
+              return (
+                <a
+                  key={item.title}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-3 py-3 rounded-lg text-gray-300 hover:bg-red-950/30 hover:text-white transition-colors"
+                  onClick={onClose}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.title}</span>
+                </a>
+              );
+            }
+            
+            return (
+              <Link
+                key={item.title}
+                to={item.url}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
+                  isActive 
+                    ? "bg-red-600 text-white" 
+                    : "text-gray-300 hover:bg-red-950/30 hover:text-white"
+                )}
+                onClick={onClose}
+              >
+                <Icon className="w-5 h-5" />
+                <span>{item.title}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    </>
+  );
+};
+
 export default function Layout({ children, currentPageName }) {
   // Hide layout for client portal pages (no auth required)
   const isClientPortalPage = ['ClientProjects', 'ClientProjectPortal', 'ClientFeedbackRequestDetail'].includes(currentPageName);
@@ -147,14 +241,8 @@ export default function Layout({ children, currentPageName }) {
   const [viewAsCompany, setViewAsCompany] = useState(() => {
     return localStorage.getItem('achtung_view_as_company') || null;
   });
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const fetchUserAndTeamMember = async () => {
@@ -212,7 +300,7 @@ export default function Layout({ children, currentPageName }) {
 
   if (isMobile) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black pb-14">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <style>{`
           :root {
             --background: 0 0% 7%;
@@ -300,30 +388,49 @@ export default function Layout({ children, currentPageName }) {
             background: hsl(0 0% 25%);
             color: hsl(0 0% 100%);
           }
+          
+          /* Mobile safe area support */
+          @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            .mobile-safe-bottom {
+              padding-bottom: calc(72px + env(safe-area-inset-bottom));
+            }
+          }
         `}</style>
         
-        {/* Mobile Header */}
-        <header className="sticky top-0 bg-black/80 backdrop-blur-xl border-b border-red-900/30 px-3 py-2 z-40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <img 
-                src="https://achtungkraft.com/cdn/shop/files/AchtungLogoSticker_39633eb9-a276-4e81-8376-b8fef51b08d6.png"
-                alt="Ächtung Kraft"
-                className="h-7"
-              />
-              <div>
-                <h1 className="text-xs font-bold text-white">ÄCHTUNG KRAFT</h1>
-                <p className="text-xs text-gray-400">Built. Not Bought.</p>
-              </div>
-            </div>
-          </div>
-        </header>
+        {/* Collapsible Mobile Header */}
+        <MobileCollapsibleHeader
+          logo={
+            <img 
+              src="https://achtungkraft.com/cdn/shop/files/AchtungLogoSticker_39633eb9-a276-4e81-8376-b8fef51b08d6.png"
+              alt="Ächtung Kraft"
+              className="h-7"
+            />
+          }
+          title="ÄCHTUNG KRAFT"
+          tagline="Built. Not Bought."
+        />
 
-        <main className="px-3 py-3">
-          {children}
-        </main>
+        {/* Main Content with Safe Area */}
+        <MobileSafeAreaContainer>
+          <main className="px-3 py-3 flex-1">
+            {children}
+          </main>
+        </MobileSafeAreaContainer>
 
-        <MobileBottomNav currentPath={location.pathname} isAchtungKraft={isAchtungKraft} />
+        {/* Bottom Navigation */}
+        <MobileBottomNav 
+          currentPath={location.pathname} 
+          isAchtungKraft={isAchtungKraft}
+          onMenuOpen={() => setMobileMenuOpen(true)}
+        />
+        
+        {/* Off-Canvas Menu */}
+        <MobileOffCanvasMenu
+          isOpen={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          navigationItems={navigationItems}
+          currentPath={location.pathname}
+        />
       </div>
     );
   }
