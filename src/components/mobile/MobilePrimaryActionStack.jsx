@@ -30,7 +30,8 @@ export default function MobilePrimaryActionStack({
         disabled={action.disabled || action.loading}
         variant={action.variant || (isPrimary ? 'default' : 'outline')}
         className={cn(
-          'min-h-[48px] font-medium',
+          isMobile ? 'h-[44px] min-h-[44px] text-sm' : 'min-h-[48px]',
+          'font-medium',
           isPrimary && isMobile && 'w-full',
           isPrimary && !isMobile && 'px-6',
           !isPrimary && isMobile && 'flex-1',
@@ -40,17 +41,17 @@ export default function MobilePrimaryActionStack({
         {action.loading ? (
           <span className="animate-spin mr-2">⟳</span>
         ) : Icon ? (
-          <Icon className="w-4 h-4 mr-2" />
+          <Icon className={cn(isMobile ? 'w-4 h-4 mr-1.5' : 'w-4 h-4 mr-2')} />
         ) : null}
         {action.label}
       </Button>
     );
   };
 
-  // Mobile Layout: Vertical stack with full-width primary
+  // Mobile Layout: Vertical stack with full-width primary, reduced gap
   if (isMobile) {
     return (
-      <div className={cn('flex flex-col gap-3', className)}>
+      <div className={cn('flex flex-col gap-2', className)}>
         {primaryAction && renderButton(primaryAction, true)}
         {secondaryActions.length > 0 && (
           <div className="flex gap-2">
@@ -81,7 +82,7 @@ export default function MobilePrimaryActionStack({
 
 /**
  * MobileActionButton
- * Standardized action button with proper touch targets
+ * Standardized action button with proper touch targets (44px on mobile)
  */
 export function MobileActionButton({ 
   children, 
@@ -97,13 +98,13 @@ export function MobileActionButton({
     <Button
       variant={variant}
       className={cn(
-        isMobile && 'min-h-[48px]',
+        isMobile ? 'h-[44px] min-h-[44px] text-sm' : 'min-h-[48px]',
         fullWidth && 'w-full',
         className
       )}
       {...props}
     >
-      {Icon && <Icon className="w-4 h-4 mr-2" />}
+      {Icon && <Icon className={cn(isMobile ? 'w-4 h-4 mr-1.5' : 'w-4 h-4 mr-2')} />}
       {children}
     </Button>
   );
