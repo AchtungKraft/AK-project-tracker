@@ -12,6 +12,7 @@ import InventoryExplorerLayout from "../components/inventory/InventoryExplorerLa
 import InventoryManagement from "../components/inventory/InventoryManagement";
 import PurchasingDashboard from "../components/purchasing/PurchasingDashboard";
 import EditPartDrawer from "../components/parts/EditPartDrawer";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 
 export default function PartsTracker() {
   const queryClient = useQueryClient();
@@ -24,8 +25,9 @@ export default function PartsTracker() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
+      <MobileSafeAreaContainer>
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+          <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
@@ -107,8 +109,9 @@ export default function PartsTracker() {
               <InventoryLocations onPartClick={handlePartClick} />
             </TabsContent>
           </Tabs>
+          </div>
         </div>
-      </div>
+      </MobileSafeAreaContainer>
 
       {selectedPartId && (
         <EditPartDrawer

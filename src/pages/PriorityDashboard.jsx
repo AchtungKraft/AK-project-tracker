@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User } from "lucide-react";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import MobileMetricPriorityGrid from "@/components/mobile/MobileMetricPriorityGrid";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -264,6 +267,14 @@ export default function PriorityDashboard() {
     }
   };
 
+  const isMobile = useIsMobile();
+  
+  // Metrics for mobile priority grid
+  const priorityMetrics = useMemo(() => [
+    { key: 'total', label: 'Priority Tasks', value: activePriorityTasks.length, icon: Flame, color: 'red' },
+    { key: 'projects', label: 'Projects', value: Object.keys(groupedTasks).length, icon: FolderKanban, color: 'blue' },
+  ], [activePriorityTasks.length, groupedTasks]);
+
   if (tasksLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6">
@@ -276,8 +287,9 @@ export default function PriorityDashboard() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <MobileSafeAreaContainer>
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 md:gap-3">
@@ -628,8 +640,9 @@ export default function PriorityDashboard() {
               />
             </TabsContent>
           </Tabs>
+          </div>
         </div>
-      </div>
+      </MobileSafeAreaContainer>
 
       {selectedTask && (
         <TaskDetailDrawer

@@ -23,6 +23,7 @@ import {
   User,
   X
 } from "lucide-react";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -676,7 +677,8 @@ export default function ClientPortalHub() {
   }).length;
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
+    <MobileSafeAreaContainer>
+      <div className="p-3 md:p-6 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl md:text-3xl font-bold text-white flex items-center gap-2 md:gap-3">
@@ -1039,6 +1041,7 @@ export default function ClientPortalHub() {
           <ClientPortalAdminTab />
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </MobileSafeAreaContainer>
   );
 }

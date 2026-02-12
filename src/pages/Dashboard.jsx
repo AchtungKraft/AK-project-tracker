@@ -4,6 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, RefreshCw, LayoutGrid, List, X, Check, User } from "lucide-react";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 import {
   Select,
   SelectContent,
@@ -29,6 +32,7 @@ import { useFilterState, DASHBOARD_DEFAULTS } from "@/components/common/useFilte
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,39 +165,63 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
-              PROJECT DASHBOARD
-            </h1>
-            <p className="text-sm text-gray-400">Ächtung Kraft Project Tracking Platform</p>
+    <MobileSafeAreaContainer>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                PROJECT DASHBOARD
+              </h1>
+              <p className="text-sm text-gray-400">Ächtung Kraft Project Tracking Platform</p>
+            </div>
+            {isMobile ? (
+              <MobilePrimaryActionStack
+                primaryAction={{
+                  label: 'New Project',
+                  onClick: () => setShowCreateModal(true),
+                  icon: Plus,
+                }}
+                secondaryActions={[
+                  {
+                    label: 'Refresh',
+                    onClick: async () => {
+                      setIsRefreshing(true);
+                      await queryClient.invalidateQueries();
+                      setIsRefreshing(false);
+                    },
+                    icon: RefreshCw,
+                    disabled: isRefreshing,
+                  }
+                ]}
+                className="w-full"
+              />
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  onClick={async () => {
+                    setIsRefreshing(true);
+                    await queryClient.invalidateQueries();
+                    setIsRefreshing(false);
+                  }}
+                  variant="outline"
+                  className="border-gray-700 text-white gap-2"
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  className="bg-red-600 hover:bg-red-700 gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Project
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={async () => {
-                setIsRefreshing(true);
-                await queryClient.invalidateQueries();
-                setIsRefreshing(false);
-              }}
-              variant="outline"
-              className="border-gray-700 text-white gap-2"
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-red-600 hover:bg-red-700 gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              New Project
-            </Button>
-          </div>
-        </div>
 
         {/* Filters */}
         <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
@@ -473,6 +501,7 @@ export default function Dashboard() {
           onClose={() => setEditingProject(null)}
         />
       )}
-    </div>
+      </div>
+    </MobileSafeAreaContainer>
   );
 }
