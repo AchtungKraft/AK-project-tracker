@@ -29,7 +29,7 @@ export default function MobileFilterTriggerBar({
     return <>{children}</>;
   }
 
-  // Mobile: compact trigger bar
+  // Mobile: compact trigger bar with reduced height
   return (
     <div className={cn('flex items-center gap-2', className)}>
       {/* Filter Button */}
@@ -37,14 +37,14 @@ export default function MobileFilterTriggerBar({
         variant="outline"
         onClick={onFilterClick}
         className={cn(
-          'min-h-[44px] border-gray-700 gap-2 flex-shrink-0',
+          'h-10 min-h-[40px] border-gray-700 gap-1.5 flex-shrink-0 text-sm px-2.5',
           activeFilterCount > 0 && 'border-red-500/50 text-red-400'
         )}
       >
-        <Filter className="w-4 h-4" />
+        <Filter className="w-3.5 h-3.5" />
         <span>Filter</span>
         {activeFilterCount > 0 && (
-          <span className="px-1.5 py-0.5 text-xs bg-red-600 text-white rounded-full min-w-[20px] text-center">
+          <span className="px-1.5 py-0.5 text-xs bg-red-600 text-white rounded-full min-w-[18px] text-center">
             {activeFilterCount}
           </span>
         )}
@@ -55,22 +55,22 @@ export default function MobileFilterTriggerBar({
         'relative flex-1 transition-all duration-200',
         searchExpanded ? 'flex-[2]' : ''
       )}>
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
         <Input
           placeholder={searchPlaceholder}
           value={searchValue}
           onChange={(e) => onSearchChange?.(e.target.value)}
           onFocus={() => setSearchExpanded(true)}
           onBlur={() => setSearchExpanded(false)}
-          className="pl-9 pr-8 min-h-[44px] bg-gray-900/50 border-gray-700 text-white"
+          className="pl-8 pr-7 h-10 min-h-[40px] bg-gray-900/50 border-gray-700 text-white text-sm"
         />
         {searchValue && (
           <button
             type="button"
             onClick={() => onSearchChange?.('')}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+            className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -81,9 +81,9 @@ export default function MobileFilterTriggerBar({
           variant="outline"
           size="icon"
           onClick={onSortClick}
-          className="min-h-[44px] min-w-[44px] border-gray-700 flex-shrink-0"
+          className="h-10 w-10 min-h-[40px] min-w-[40px] border-gray-700 flex-shrink-0"
         >
-          <SlidersHorizontal className="w-4 h-4" />
+          <SlidersHorizontal className="w-3.5 h-3.5" />
         </Button>
       )}
     </div>
