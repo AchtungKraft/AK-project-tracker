@@ -1,0 +1,392 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+
+/**
+ * Phase 7 — Billing & Procurement Lifecycle Engine
+ * 
+ * Returns grouped lifecycle categories:
+ * - assigned_needs_billing
+ * - billed_not_paid
+ * - paid_ready_to_order
+ * - ordered_waiting_receipt
+ * - installed_ready_to_bill
+ * 
+ * Uses resolveFinancialStatus patterns for financial state derivation.
+ */
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const ORDERING_SAFETY = {
+  RED: 'RED',       // Not billed
+  YELLOW: 'YELLOW', // Billed not paid
+  GREEN: 'GREEN',   // Client paid
+};
+
+const LIFECYCLE_CATEGORY = {
+  ASSIGNED_NEEDS_BILLING: 'ASSIGNED_NEEDS_BILLING',
+  BILLED_NOT_PAID: 'BILLED_NOT_PAID',
+  PAID_READY_TO_ORDER: 'PAID_READY_TO_ORDER',
+  ORDERED_WAITING_RECEIPT: 'ORDERED_WAITING_RECEIPT',
+  INSTALLED_READY_TO_BILL: 'INSTALLED_READY_TO_BILL',
+};
+
+const BILLABLE_PART_TYPES = [
+  'PURCHASED_VENDOR',
+  'AK_MANUFACTURED',
+  'STOCK_AK',
+  'CLIENT_SUPPLIED',
+  'TAKE_OFF',
+];
+
+// ============================================
+// FINANCIAL STATUS HELPERS (mirrors resolveFinancialStatus)
+// ============================================
+
+function normalizeClientBillingStatus(rawStatus, isBillable = true) {
+  if (!isBillable) return 'NOT_BILLABLE';
+  if (!rawStatus) return 'NOT_INVOICED';
+  
+  const statusMap = {
+    'not_billable': 'NOT_BILLABLE',
+    'not_invoiced': 'NOT_INVOICED',
+    'not invoiced': 'NOT_INVOICED',
+    'billable': 'NOT_INVOICED',
+    'invoiced': 'INVOICED',
+    'client invoiced': 'INVOICED',
+    'client_invoiced': 'INVOICED',
+    'partially_paid': 'PARTIALLY_PAID',
+    'partial': 'PARTIALLY_PAID',
+    'paid': 'PAID',
+    'client paid': 'PAID',
+    'client_paid': 'PAID',
+  };
+  
+  return statusMap[rawStatus.toLowerCase()] || 'NOT_INVOICED';
+}
+
+function deriveClientPaymentStatus(billingStatus) {
+  if (billingStatus === 'PAID') return 'PAID';
+  if (billingStatus === 'PARTIALLY_PAID') return 'PARTIAL';
+  return 'UNPAID';
+}
+
+function getFinancialRole(part) {
+  if (!part) return 'VENDOR_MARGIN';
+  if (part.requires_client_billing === false) return 'NON_BILLABLE';
+  
+  const roleMap = {
+    'PURCHASED_VENDOR': 'VENDOR_MARGIN',
+    'AK_MANUFACTURED': 'INTERNAL_MANUFACTURING',
+    'CLIENT_SUPPLIED': 'LABOR_ONLY',
+    'TAKE_OFF': 'ASSET_RECOVERY',
+    'STOCK_AK': 'VENDOR_MARGIN',
+    'WARRANTY_REPLACEMENT': 'NON_BILLABLE',
+  };
+  
+  return roleMap[part.part_type] || 'VENDOR_MARGIN';
+}
+
+function getOrderingSafety(billingStatus, paymentStatus) {
+  if (paymentStatus === 'PAID') return ORDERING_SAFETY.GREEN;
+  if (billingStatus === 'INVOICED' || billingStatus === 'PARTIALLY_PAID') return ORDERING_SAFETY.YELLOW;
+  return ORDERING_SAFETY.RED;
+}
+
+function requiresVendorPurchase(part) {
+  if (!part) return false;
+  if (part.requires_vendor_purchase === false) return false;
+  
+  // Part types that don't need vendor purchase
+  const noVendorTypes = ['CLIENT_SUPPLIED', 'TAKE_OFF', 'WARRANTY_REPLACEMENT'];
+  return !noVendorTypes.includes(part.part_type);
+}
+
+// ============================================
+// MAIN LOGIC
+// ============================================
+
+async function getBillingAndProcurementStates(base44, filters = {}) {
+  // Batch fetch all required data
+  const [
+    commitments,
+    parts,
+    projects,
+    orders,
+    lineItems,
+    installedParts,
+    vendorInvoices,
+    batchLines,
+  ] = await Promise.all([
+    base44.entities.PartCommitment.filter({}),
+    base44.entities.Part.filter({}),
+    base44.entities.Project.filter({}),
+    base44.entities.Order.filter({}),
+    base44.entities.PartPurchaseLineItem.filter({}),
+    base44.entities.InstalledPart.filter({}),
+    base44.entities.VendorInvoice.filter({}),
+    base44.entities.InvoiceBatchLine.filter({ qb_status: 'queued' }),
+  ]);
+
+  // Build lookup maps
+  const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
+  const projectsMap = Object.fromEntries(projects.map(p => [p.id, p]));
+  const ordersMap = Object.fromEntries(orders.map(o => [o.id, o]));
+  
+  // Build line items by commitment
+  const lineItemsByCommitment = {};
+  const lineItemsByPart = {};
+  lineItems.forEach(li => {
+    if (li.requirement_id) {
+      if (!lineItemsByCommitment[li.requirement_id]) lineItemsByCommitment[li.requirement_id] = [];
+      lineItemsByCommitment[li.requirement_id].push(li);
+    }
+    if (!lineItemsByPart[li.part_id]) lineItemsByPart[li.part_id] = [];
+    lineItemsByPart[li.part_id].push(li);
+  });
+
+  // Build installed parts by commitment
+  const installedByCommitment = {};
+  installedParts.forEach(ip => {
+    if (ip.commitment_id) {
+      if (!installedByCommitment[ip.commitment_id]) installedByCommitment[ip.commitment_id] = [];
+      installedByCommitment[ip.commitment_id].push(ip);
+    }
+  });
+
+  // Track already-queued items
+  const queuedSourceIds = new Set(batchLines.map(bl => bl.source_id));
+
+  // Result categories
+  const results = {
+    assigned_needs_billing: [],
+    billed_not_paid: [],
+    paid_ready_to_order: [],
+    ordered_waiting_receipt: [],
+    installed_ready_to_bill: [],
+  };
+
+  // KPI accumulators
+  const kpis = {
+    needs_billing_count: 0,
+    needs_billing_revenue: 0,
+    awaiting_payment_count: 0,
+    awaiting_payment_revenue: 0,
+    ready_to_order_count: 0,
+    ready_to_order_cost: 0,
+    orders_in_progress_count: 0,
+    installed_billing_count: 0,
+    installed_billing_revenue: 0,
+  };
+
+  // Process commitments as primary source
+  for (const commitment of commitments) {
+    const part = partsMap[commitment.part_id];
+    if (!part) continue;
+    
+    const project = projectsMap[commitment.project_id];
+    if (!project) continue;
+
+    // Apply filters
+    if (filters.project_id && commitment.project_id !== filters.project_id) continue;
+    if (filters.part_type && part.part_type !== filters.part_type) continue;
+
+    const financialRole = getFinancialRole(part);
+    
+    // Skip non-billable
+    if (financialRole === 'NON_BILLABLE') continue;
+    if (!BILLABLE_PART_TYPES.includes(part.part_type)) continue;
+
+    // Determine billing status from commitment or order
+    let clientBillingStatus = 'NOT_INVOICED';
+    let billingSource = 'NONE';
+    
+    if (commitment.billing_status) {
+      clientBillingStatus = normalizeClientBillingStatus(commitment.billing_status, true);
+      billingSource = 'COMMITMENT';
+    }
+    
+    // Check orders via line items if not set
+    if (clientBillingStatus === 'NOT_INVOICED') {
+      const partLineItems = lineItemsByPart[commitment.part_id] || [];
+      for (const li of partLineItems) {
+        if (li.billing_override && li.billing_status_override) {
+          clientBillingStatus = normalizeClientBillingStatus(li.billing_status_override, true);
+          billingSource = 'LINE_OVERRIDE';
+          break;
+        }
+        const order = ordersMap[li.order_id];
+        if (order?.billing_status) {
+          clientBillingStatus = normalizeClientBillingStatus(order.billing_status, true);
+          billingSource = 'ORDER';
+          break;
+        }
+      }
+    }
+
+    const clientPaymentStatus = deriveClientPaymentStatus(clientBillingStatus);
+    const orderingSafety = getOrderingSafety(clientBillingStatus, clientPaymentStatus);
+
+    // Determine vendor order status
+    let vendorOrderStatus = 'NOT_ORDERED';
+    let orderedQty = 0;
+    let receivedQty = 0;
+    let orderReference = null;
+
+    const commitmentLineItems = lineItemsByCommitment[commitment.id] || lineItemsByPart[commitment.part_id] || [];
+    for (const li of commitmentLineItems) {
+      const order = ordersMap[li.order_id];
+      if (order) {
+        orderReference = order.po_number || order.id;
+        if (order.status === 'Ordered' || order.status === 'Partial' || order.status === 'Received') {
+          vendorOrderStatus = 'ORDERED';
+          orderedQty += li.qty_ordered || 0;
+          receivedQty += li.qty_received || 0;
+        }
+      }
+    }
+
+    // Calculate installed qty
+    const installedRecords = installedByCommitment[commitment.id] || [];
+    const installedQty = installedRecords.reduce((sum, ip) => sum + (ip.qty_consumed || 0), 0);
+
+    // Get pricing
+    const unitRetail = commitment.unit_retail_snapshot || part.default_retail || 0;
+    const unitCost = commitment.unit_cost_snapshot || part.default_cost || 0;
+    const assignedQty = commitment.qty_committed || 1;
+
+    // Build row object
+    const row = {
+      id: commitment.id,
+      commitment_id: commitment.id,
+      project_id: commitment.project_id,
+      project_name: project.name,
+      client_name: project.client_name,
+      part_id: commitment.part_id,
+      part_name: part.part_name,
+      part_number: part.vendor_part_number,
+      part_type: part.part_type,
+      financial_role: financialRole,
+      client_billing_status: clientBillingStatus,
+      client_payment_status: clientPaymentStatus,
+      vendor_order_status: vendorOrderStatus,
+      order_reference: orderReference,
+      assigned_qty: assignedQty,
+      ordered_qty: orderedQty,
+      received_qty: receivedQty,
+      installed_qty: installedQty,
+      unit_retail: unitRetail,
+      unit_cost: unitCost,
+      line_total: assignedQty * unitRetail,
+      cost_total: assignedQty * unitCost,
+      ordering_safety: orderingSafety,
+      requires_vendor_purchase: requiresVendorPurchase(part),
+      is_queued: queuedSourceIds.has(commitment.id),
+      billing_source: billingSource,
+      source_type: 'commitment',
+      source_id: commitment.id,
+    };
+
+    // Categorize based on lifecycle state
+    // Priority order matters - check most specific first
+
+    // 1. INSTALLED_READY_TO_BILL: Has installations, not fully paid
+    if (installedQty > 0 && clientPaymentStatus !== 'PAID') {
+      row.lifecycle_category = LIFECYCLE_CATEGORY.INSTALLED_READY_TO_BILL;
+      row.recommended_action = 'Invoice Remaining Balance';
+      results.installed_ready_to_bill.push(row);
+      kpis.installed_billing_count++;
+      kpis.installed_billing_revenue += row.line_total;
+      continue;
+    }
+
+    // 2. ORDERED_WAITING_RECEIPT: Has orders, waiting for full receipt
+    if (vendorOrderStatus === 'ORDERED' && receivedQty < orderedQty) {
+      row.lifecycle_category = LIFECYCLE_CATEGORY.ORDERED_WAITING_RECEIPT;
+      row.recommended_action = 'Track Shipment / Receive Inventory';
+      results.ordered_waiting_receipt.push(row);
+      kpis.orders_in_progress_count++;
+      continue;
+    }
+
+    // 3. PAID_READY_TO_ORDER: Client paid, needs vendor order
+    if (clientPaymentStatus === 'PAID' && requiresVendorPurchase(part) && vendorOrderStatus !== 'ORDERED') {
+      row.lifecycle_category = LIFECYCLE_CATEGORY.PAID_READY_TO_ORDER;
+      row.recommended_action = 'Create Purchase Order';
+      results.paid_ready_to_order.push(row);
+      kpis.ready_to_order_count++;
+      kpis.ready_to_order_cost += row.cost_total;
+      continue;
+    }
+
+    // 4. BILLED_NOT_PAID: Invoiced but not paid
+    if ((clientBillingStatus === 'INVOICED' || clientBillingStatus === 'PARTIALLY_PAID') && clientPaymentStatus !== 'PAID') {
+      row.lifecycle_category = LIFECYCLE_CATEGORY.BILLED_NOT_PAID;
+      row.recommended_action = 'Await Client Payment';
+      results.billed_not_paid.push(row);
+      kpis.awaiting_payment_count++;
+      kpis.awaiting_payment_revenue += row.line_total;
+      continue;
+    }
+
+    // 5. ASSIGNED_NEEDS_BILLING: Not invoiced yet
+    if (clientBillingStatus === 'NOT_INVOICED') {
+      row.lifecycle_category = LIFECYCLE_CATEGORY.ASSIGNED_NEEDS_BILLING;
+      row.recommended_action = 'Invoice Client';
+      results.assigned_needs_billing.push(row);
+      kpis.needs_billing_count++;
+      kpis.needs_billing_revenue += row.line_total;
+      continue;
+    }
+  }
+
+  // Apply financial role filter if specified
+  if (filters.financial_role) {
+    for (const key of Object.keys(results)) {
+      results[key] = results[key].filter(r => r.financial_role === filters.financial_role);
+    }
+  }
+
+  // Apply ordering safety filter if specified
+  if (filters.ordering_safety) {
+    for (const key of Object.keys(results)) {
+      results[key] = results[key].filter(r => r.ordering_safety === filters.ordering_safety);
+    }
+  }
+
+  return {
+    ...results,
+    kpis,
+    last_scan_at: new Date().toISOString(),
+  };
+}
+
+// ============================================
+// HTTP ENDPOINT
+// ============================================
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const payload = await req.json().catch(() => ({}));
+    const result = await getBillingAndProcurementStates(base44, payload.filters || {});
+    
+    return Response.json({
+      success: true,
+      ...result,
+    });
+    
+  } catch (error) {
+    console.error('Billing & Procurement States error:', error);
+    return Response.json({ 
+      error: error.message,
+      code: 'LIFECYCLE_ERROR'
+    }, { status: 500 });
+  }
+});
