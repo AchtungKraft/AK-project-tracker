@@ -445,6 +445,7 @@ async function processMutation(base44, user, payload, startTime) {
 
       mutationLog.reversed_mutation_id = reversed_mutation_id;
       mutationLog.part_id = originalMutation.part_id; // Override from original
+      mutationLog.qty = originalMutation.qty; // Copy qty from original for logging
       const origQty = originalMutation.qty;
 
       // Reverse based on original mutation type
