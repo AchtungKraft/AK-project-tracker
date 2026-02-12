@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { Button } from "@/components/ui/button";
 import PriorityRemoveConfirm from "@/components/tasks/PriorityRemoveConfirm";
+import CompleteTaskConfirm from "@/components/tasks/CompleteTaskConfirm";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -44,14 +45,34 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
   const [isUpdatingDueDate, setIsUpdatingDueDate] = useState(false);
   const [isUpdatingStartDate, setIsUpdatingStartDate] = useState(false);
   const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [isCompletingTask, setIsCompletingTask] = useState(false);
   
   // Determine if inline controls should be shown - require both prop AND handlers
   const hasInlineControls = showInlineControls && (onUpdateDueDate || onUpdateStartDate || onTogglePriority);
 
   const handleCheckboxClick = (e) => {
     e.stopPropagation();
-    if (onToggleComplete) {
-      onToggleComplete(task);
+    if (!onToggleComplete) return;
+    
+    // If task is NOT completed, show confirmation before completing
+    if (!isCompleted) {
+      setShowCompleteConfirm(true);
+      return;
+    }
+    
+    // If already completed, reopen immediately (no confirmation needed)
+    onToggleComplete(task);
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!onToggleComplete) return;
+    setIsCompletingTask(true);
+    try {
+      await onToggleComplete(task);
+    } finally {
+      setIsCompletingTask(false);
+      setShowCompleteConfirm(false);
     }
   };
 
@@ -308,6 +329,15 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
         onConfirm={handleConfirmRemovePriority}
         taskName={task.name}
         isLoading={isUpdatingPriority}
+      />
+
+      {/* Complete Task Confirmation */}
+      <CompleteTaskConfirm
+        isOpen={showCompleteConfirm}
+        onClose={() => setShowCompleteConfirm(false)}
+        onConfirm={handleConfirmComplete}
+        taskName={task.name}
+        isLoading={isCompletingTask}
       />
     </div>
   );

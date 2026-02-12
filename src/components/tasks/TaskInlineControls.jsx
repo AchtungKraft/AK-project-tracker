@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Flag, PlayCircle, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Flag, PlayCircle, Loader2, CheckCircle2, Circle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import PriorityRemoveConfirm from "./PriorityRemoveConfirm";
+import CompleteTaskConfirm from "./CompleteTaskConfirm";
 
 /**
  * TaskInlineControls
@@ -18,17 +19,21 @@ export default function TaskInlineControls({
   onUpdateDueDate,
   onUpdateStartDate,
   onTogglePriority,
+  onToggleComplete,
+  isCompleted = false,
   showDueDate = true,
   showStartDate = true,
   showPriority = true,
+  showComplete = false,
   compact = false,
   disabled = false,
 }) {
   const isMobile = useIsMobile();
   const [dueDateOpen, setDueDateOpen] = useState(false);
   const [startDateOpen, setStartDateOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(null); // 'due' | 'start' | 'priority'
+  const [isUpdating, setIsUpdating] = useState(null); // 'due' | 'start' | 'priority' | 'complete'
   const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   const handleDueDateChange = async (date) => {
     if (!onUpdateDueDate) return;
@@ -78,6 +83,31 @@ export default function TaskInlineControls({
     } finally {
       setIsUpdating(null);
       setShowPriorityConfirm(false);
+    }
+  };
+
+  const handleToggleComplete = (e) => {
+    e.stopPropagation();
+    if (!onToggleComplete) return;
+    
+    // If completing (not already complete), show confirmation
+    if (!isCompleted) {
+      setShowCompleteConfirm(true);
+      return;
+    }
+    
+    // If reopening, do immediately
+    setIsUpdating('complete');
+    onToggleComplete(task).finally(() => setIsUpdating(null));
+  };
+
+  const handleConfirmComplete = async () => {
+    setIsUpdating('complete');
+    try {
+      await onToggleComplete(task);
+    } finally {
+      setIsUpdating(null);
+      setShowCompleteConfirm(false);
     }
   };
 
@@ -225,6 +255,30 @@ export default function TaskInlineControls({
         </Button>
       )}
 
+      {/* Complete Toggle */}
+      {showComplete && onToggleComplete && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled || isUpdating === 'complete'}
+          onClick={handleToggleComplete}
+          className={cn(
+            buttonSize,
+            "p-0",
+            isCompleted ? "text-green-500 hover:text-green-400" : "text-gray-500 hover:text-green-400"
+          )}
+          title={isCompleted ? 'Reopen task' : 'Complete task'}
+        >
+          {isUpdating === 'complete' ? (
+            <Loader2 className={cn(iconSize, "animate-spin")} />
+          ) : isCompleted ? (
+            <CheckCircle2 className={iconSize} />
+          ) : (
+            <Circle className={iconSize} />
+          )}
+        </Button>
+      )}
+
       {/* Priority Removal Confirmation */}
       <PriorityRemoveConfirm
         isOpen={showPriorityConfirm}
@@ -232,6 +286,15 @@ export default function TaskInlineControls({
         onConfirm={handleConfirmRemovePriority}
         taskName={task.name}
         isLoading={isUpdating === 'priority'}
+      />
+
+      {/* Complete Task Confirmation */}
+      <CompleteTaskConfirm
+        isOpen={showCompleteConfirm}
+        onClose={() => setShowCompleteConfirm(false)}
+        onConfirm={handleConfirmComplete}
+        taskName={task.name}
+        isLoading={isUpdating === 'complete'}
       />
     </div>
   );
