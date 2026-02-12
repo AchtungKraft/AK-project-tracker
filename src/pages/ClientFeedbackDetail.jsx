@@ -693,44 +693,43 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
 
-              {request.body &&
-              <div className="bg-gray-800/50 rounded-lg p-3">
-                  <p className="text-gray-300 whitespace-pre-wrap">{request.body}</p>
+              {request.body && (
+                <div className={cn("bg-gray-800/50 rounded-lg", isMobile ? "p-2" : "p-3")}>
+                  <p className={cn("text-gray-300 whitespace-pre-wrap", isMobile ? "text-sm" : "")}>{request.body}</p>
                 </div>
-              }
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-400">Linked Tasks</h3>
+                  <h3 className={cn("font-semibold text-gray-400", isMobile ? "text-xs" : "text-sm")}>Linked Tasks</h3>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setShowCreateLinkedTaskModal(true)}
-                    className="border-gray-600 text-gray-200 hover:bg-gray-700 h-7 text-xs"
+                    className={cn("border-gray-600 text-gray-200 hover:bg-gray-700 text-xs", isMobile ? "h-7 px-2" : "h-7")}
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Add Task
+                    Add
                   </Button>
                 </div>
                 {linkedTaskDetails.length > 0 ? (
-                  <div className="space-y-2">
-                    {linkedTaskDetails.map(({ task }) =>
-                      <div key={task.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
-                        <span className="text-white text-sm">{task.name}</span>
+                  <div className={cn(isMobile ? "space-y-1.5" : "space-y-2")}>
+                    {linkedTaskDetails.map(({ task }) => (
+                      <div key={task.id} className={cn("bg-gray-800/50 rounded-lg flex items-center justify-between", isMobile ? "p-1.5" : "p-2")}>
+                        <span className={cn("text-white", isMobile ? "text-xs" : "text-sm")}>{task.name}</span>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks");
-                          }}
-                          className="text-blue-400 hover:text-blue-300">
-                          <ExternalLink className="w-4 h-4" />
+                          onClick={() => navigate(createPageUrl("ProjectDetail") + "?id=" + projectId + "&tab=tasks")}
+                          className={cn("text-blue-400 hover:text-blue-300", isMobile ? "h-6 w-6 p-0" : "")}
+                        >
+                          <ExternalLink className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
                         </Button>
                       </div>
-                    )}
+                    ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">No linked tasks yet</p>
+                  <p className={cn("text-gray-500 italic", isMobile ? "text-xs" : "text-sm")}>No linked tasks</p>
                 )}
               </div>
             </CardContent>

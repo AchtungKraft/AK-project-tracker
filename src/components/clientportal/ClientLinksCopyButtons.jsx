@@ -81,15 +81,55 @@ function CopyButton({ url, label, size = "sm", variant = "outline", className = 
 
 /**
  * Client Links section for the feedback detail page
+ * @param {boolean} compact - Use compact chip layout for mobile
  */
-export function ClientLinksSection({ slug, requestId, projectName }) {
+export function ClientLinksSection({ slug, requestId, projectName, compact = false }) {
   const portalUrl = getClientPortalUrl(slug);
   const requestUrl = getClientRequestUrl(slug, requestId);
 
   if (!slug) {
     return (
       <div className="text-xs text-gray-500 italic">
-        No client slug configured for this project
+        No client slug configured
+      </div>
+    );
+  }
+
+  // Compact chip layout for mobile
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-500">Links:</span>
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            try {
+              await navigator.clipboard.writeText(portalUrl);
+              toast.success("Portal link copied");
+            } catch {
+              toast.error("Failed to copy");
+            }
+          }}
+          className="inline-flex items-center gap-1 px-2 py-1 bg-gray-800/60 hover:bg-gray-700 rounded text-xs text-gray-300 transition-colors"
+        >
+          <ExternalLink className="w-3 h-3" />
+          Portal
+        </button>
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            try {
+              await navigator.clipboard.writeText(requestUrl);
+              toast.success("Request link copied");
+            } catch {
+              toast.error("Failed to copy");
+            }
+          }}
+          className="inline-flex items-center gap-1 px-2 py-1 bg-gray-800/60 hover:bg-gray-700 rounded text-xs text-gray-300 transition-colors"
+        >
+          <Link2 className="w-3 h-3" />
+          Request
+        </button>
       </div>
     );
   }
