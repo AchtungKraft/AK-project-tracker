@@ -1,16 +1,19 @@
-
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, MessageSquare, Send, Upload, X } from "lucide-react";
+import { Loader2, MessageSquare, Send, Paperclip, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { getMobileTextareaClass } from "@/components/mobile/MobileFormStyles";
 
 export default function TaskCommentsSection({ taskId }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const fileInputRef = useRef(null);
   const [newComment, setNewComment] = useState("");
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -83,20 +86,20 @@ export default function TaskCommentsSection({ taskId }) {
         </div>
 
         {/* Add Comment Form */}
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className={isMobile ? "space-y-2" : "space-y-3"}>
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment or note for the team..."
-            className="bg-gray-800 border-gray-700 text-white min-h-[80px]"
+            placeholder="Add a comment or note..."
+            className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[60px]")}
           />
           
           {/* Photo Upload & Preview */}
           {uploadedPhotos.length > 0 && (
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
               {uploadedPhotos.map((url, idx) => (
                 <div key={idx} className="relative group">
-                  <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                  <div className={`w-full bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden ${isMobile ? 'h-16' : 'h-20'}`}>
                     <img
                       src={url}
                       alt={`Upload ${idx + 1}`}
@@ -106,7 +109,7 @@ export default function TaskCommentsSection({ taskId }) {
                   <button
                     type="button"
                     onClick={() => handleRemovePhoto(url)}
-                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -115,22 +118,64 @@ export default function TaskCommentsSection({ taskId }) {
             </div>
           )}
 
-          <div className="flex gap-2">
-            <input
-              type="file"
-              id="comment-photo-upload"
-              multiple
-              accept="image/*"
-              onChange={handlePhotoUpload}
-              className="hidden"
-            />
-            <label htmlFor="comment-photo-upload">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            className="hidden"
+          />
+
+          {/* Action Bar - Compact on mobile */}
+          {isMobile ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                {uploading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Paperclip className="w-5 h-5" />
+                )}
+              </Button>
+              
+              {uploadedPhotos.length > 0 && (
+                <span className="text-xs text-gray-400">{uploadedPhotos.length} attached</span>
+              )}
+              
+              <div className="flex-1" />
+              
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createCommentMutation.isPending || !newComment.trim()}
+                className="h-10 px-4 bg-red-600 hover:bg-red-700"
+              >
+                {createCommentMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="border-gray-700 cursor-pointer"
                 disabled={uploading}
-                onClick={() => document.getElementById('comment-photo-upload').click()}
+                onClick={() => fileInputRef.current?.click()}
               >
                 {uploading ? (
                   <>
@@ -139,31 +184,31 @@ export default function TaskCommentsSection({ taskId }) {
                   </>
                 ) : (
                   <>
-                    <Upload className="w-4 h-4 mr-2" />
+                    <Paperclip className="w-4 h-4 mr-2" />
                     Add Images
                   </>
                 )}
               </Button>
-            </label>
-            
-            <Button
-              type="submit"
-              disabled={createCommentMutation.isPending || !newComment.trim()}
-              className="bg-red-600 hover:bg-red-700 gap-2"
-            >
-              {createCommentMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Posting...
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Add Comment
-                </>
-              )}
-            </Button>
-          </div>
+              
+              <Button
+                type="submit"
+                disabled={createCommentMutation.isPending || !newComment.trim()}
+                className="bg-red-600 hover:bg-red-700 gap-2"
+              >
+                {createCommentMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Posting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Add Comment
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </form>
 
         {/* Comments List */}
