@@ -11,16 +11,17 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CalendarIcon, Loader2, Trash2, UserPlus, Save, ExternalLink } from "lucide-react";
+import { CalendarIcon, Loader2, UserPlus, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
-import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import DeleteTaskConfirm from "./DeleteTaskConfirm";
+import TaskActionFooter from "./TaskActionFooter";
+import { TASK_CACHE_KEYS } from "./useTaskInteraction";
 
 function ClientFeedbackLinks({ taskId }) {
   const navigate = useNavigate();
@@ -172,11 +173,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.update(task.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Use centralized cache keys
+      TASK_CACHE_KEYS.forEach(key => {
+        queryClient.invalidateQueries({ queryKey: key });
+      });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       setEditing(false);
       toast.success('Task updated successfully');
     },
@@ -188,11 +190,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Task.delete(task.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Use centralized cache keys
+      TASK_CACHE_KEYS.forEach(key => {
+        queryClient.invalidateQueries({ queryKey: key });
+      });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       toast.success('Task deleted successfully');
       onClose();
     },
@@ -509,85 +512,29 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           isLoading={deleteMutation.isPending}
         />
 
-        {/* Unified Sticky Footer - DELETE | CLOSE | EDIT/SAVE */}
-        <div 
-          className="sticky bottom-0 left-0 right-0 bg-gray-900 border-t border-red-900/30"
-          style={{
-            padding: isMobile ? '12px 16px' : '16px',
-            paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom, 0px))' : '16px',
+        {/* Unified Sticky Footer - Using TaskActionFooter */}
+        <TaskActionFooter
+          mode={editing ? 'edit' : 'view'}
+          onEdit={() => setEditing(true)}
+          onSave={handleSubmit}
+          onClose={onClose}
+          onDelete={handleDeleteClick}
+          onCancel={() => {
+            setEditing(false);
+            setFormData({
+              name: task.name || "",
+              description: task.description || "",
+              project_id: task.project_id || projectId || "",
+              category_id: task.category_id || "",
+              assigned_team_member_id: task.assigned_team_member_id || "",
+              status_id: task.status_id || "",
+              start_date: task.start_date || "",
+              due_date: task.due_date || "",
+            });
           }}
-        >
-          <div className="flex gap-2 items-center">
-            {/* DELETE - icon button with confirm */}
-            <Button
-              variant="ghost"
-              onClick={handleDeleteClick}
-              disabled={deleteMutation.isPending}
-              className="h-11 w-11 p-0 text-red-400 hover:text-red-300 hover:bg-red-950/30"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Trash2 className="w-5 h-5" />
-              )}
-            </Button>
-
-            {/* CLOSE */}
-            <Button
-              onClick={onClose}
-              variant="outline"
-              className="flex-1 h-11 border-gray-700"
-            >
-              Close
-            </Button>
-
-            {/* EDIT/SAVE primary action */}
-            {editing ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditing(false);
-                    setFormData({
-                      name: task.name || "",
-                      description: task.description || "",
-                      project_id: task.project_id || projectId || "",
-                      category_id: task.category_id || "",
-                      assigned_team_member_id: task.assigned_team_member_id || "",
-                      status_id: task.status_id || "",
-                      start_date: task.start_date || "",
-                      due_date: task.due_date || "",
-                    });
-                  }}
-                  className="h-11 px-4 border-gray-700"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={updateMutation.isPending}
-                  className="flex-1 h-11 bg-red-600 hover:bg-red-700"
-                >
-                  {updateMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save
-                    </>
-                  )}
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={() => setEditing(true)}
-                className="flex-1 h-11 bg-red-600 hover:bg-red-700"
-              >
-                Edit Task
-              </Button>
-            )}
-          </div>
-        </div>
+          isSaving={updateMutation.isPending}
+          isDeleting={deleteMutation.isPending}
+        />
       </SheetContent>
     </Sheet>
   );

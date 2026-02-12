@@ -343,6 +343,7 @@ export default function PriorityCalendarView({
                           onTogglePriority={handleTogglePriority}
                           commentCount={commentCountByTaskId[task.id] || 0}
                           compact={isMobile}
+                          showInlineControls={true}
                         />
                       ))}
                     </div>
