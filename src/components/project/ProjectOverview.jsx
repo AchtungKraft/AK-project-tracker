@@ -22,9 +22,12 @@ import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
 import ProjectCalendarView from "./ProjectCalendarView";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { cn } from "@/lib/utils";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
 
@@ -122,9 +125,13 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
+  // Debug logging for task data flow
+  console.log('[ProjectOverview] Tasks from sharedData:', tasks.length, 'projectId:', projectId);
+  console.log('[ProjectOverview] viewMode:', viewMode, 'isMobile:', isMobile);
+
   return (
     <>
-      <div className="space-y-4">
+      <div className={cn("space-y-4", isMobile && "space-y-3")}>
         {/* Project Info & Images - Collapsible */}
         <Collapsible open={infoExpanded} onOpenChange={setInfoExpanded}>
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -303,10 +310,13 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         </Collapsible>
 
         {/* View Switcher */}
-        <div className="flex items-center justify-between">
+        <div className={cn("flex items-center justify-between", isMobile && "px-1")}>
           <TaskViewSwitcher 
             viewMode={viewMode} 
-            onViewChange={setViewMode} 
+            onViewChange={(mode) => {
+              console.log('[ProjectOverview] View mode changed to:', mode);
+              setViewMode(mode);
+            }} 
           />
         </div>
 
