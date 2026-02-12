@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box, Wrench } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box, Wrench, Archive, RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
@@ -18,6 +19,9 @@ import AddInventoryModal from "../inventory/AddInventoryModal";
 import { InventoryLocationsList } from "../inventory/InventoryLocationEditor";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
+import PartTypeSelector, { PartTypeBadge } from "./PartTypeSelector";
+import ArchivePartModal from "./ArchivePartModal";
+import { getPartTypeBehavior, getPartTypeFieldVisibility, canOrderPart, canReceiveInventory } from "./partTypeBehavior";
 
 export default function EditPartDrawer({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -28,6 +32,8 @@ export default function EditPartDrawer({ partId, onClose }) {
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showBuildModal, setShowBuildModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [deletabilityCheck, setDeletabilityCheck] = useState(null);
 
   const { data: part, isLoading } = useQuery({
     queryKey: ['part', partId],
@@ -92,10 +98,20 @@ export default function EditPartDrawer({ partId, onClose }) {
         ...part,
         photos: part.photos || [],
         featured_photo: part.featured_photo || '',
-        order_url: part.order_url || ''
+        order_url: part.order_url || '',
+        part_type: part.part_type || 'PURCHASED_VENDOR',
       });
     }
   }, [part]);
+
+  // Check deletability when part loads
+  useEffect(() => {
+    if (partId) {
+      base44.functions.invoke('checkPartDeletability', { part_id: partId })
+        .then(res => setDeletabilityCheck(res.data))
+        .catch(() => setDeletabilityCheck(null));
+    }
+  }, [partId]);
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(partId, data),
@@ -106,6 +122,56 @@ export default function EditPartDrawer({ partId, onClose }) {
       setEditing(false);
     },
   });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async () => {
+      await base44.entities.Part.update(partId, {
+        is_archived: false,
+        archived_at: null,
+        archived_by: null,
+        archive_reason: null,
+        archived_context: null,
+      });
+      const user = await base44.auth.me();
+      await base44.entities.InventoryAuditLog.create({
+        part_id: partId,
+        action_type: 'unarchive',
+        old_value: 'archived',
+        new_value: 'active',
+        performed_by: user?.id,
+        performed_at: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['part', partId] });
+      toast.success('Part restored');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => base44.entities.Part.delete(partId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      toast.success('Part deleted');
+      onClose();
+    },
+  });
+
+  const handleDelete = async () => {
+    if (!deletabilityCheck?.canDelete) {
+      toast.error(deletabilityCheck?.message || 'Cannot delete this part');
+      return;
+    }
+    if (confirm('Are you sure you want to permanently delete this part?')) {
+      deleteMutation.mutate();
+    }
+  };
+
+  // Get field visibility based on part type
+  const fieldVisibility = getPartTypeFieldVisibility(editedPart?.part_type || 'PURCHASED_VENDOR');
+  const canOrder = part ? canOrderPart(part) : true;
+  const canReceive = part ? canReceiveInventory(part) : true;
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -286,12 +352,47 @@ export default function EditPartDrawer({ partId, onClose }) {
           </SheetHeader>
 
           <div className="py-6 space-y-6">
+            {/* Part Type and Archive Status */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {part?.part_type && <PartTypeBadge partType={part.part_type} />}
+              {part?.is_archived && (
+                <Badge className="bg-amber-600 text-white">
+                  <Archive className="w-3 h-3 mr-1" />
+                  Archived
+                </Badge>
+              )}
+            </div>
+
+            {/* Archive Warning */}
+            {part?.is_archived && (
+              <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-3 flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="text-amber-200 font-medium">This part is archived</p>
+                  <p className="text-amber-300/70 text-xs mt-1">
+                    Cannot be ordered or receive new inventory.
+                  </p>
+                  <Button
+                    onClick={() => unarchiveMutation.mutate()}
+                    disabled={unarchiveMutation.isPending}
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 border-amber-600 text-amber-400 hover:bg-amber-900/30"
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    {unarchiveMutation.isPending ? 'Restoring...' : 'Restore Part'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Quick Actions */}
             <div className="flex gap-2 flex-wrap">
               <Button
                 onClick={() => setShowInventoryModal(true)}
                 variant="outline"
                 className="flex-1 border-green-700 text-green-400 hover:bg-green-900/30"
+                disabled={part?.is_archived || !canReceive}
               >
                 <Package className="w-4 h-4 mr-2" />
                 Add Inventory
@@ -300,6 +401,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                 onClick={() => setShowOrderModal(true)}
                 variant="outline"
                 className="flex-1 border-blue-700 text-blue-400 hover:bg-blue-900/30"
+                disabled={part?.is_archived || !canOrder}
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
                 Order Part
@@ -308,6 +410,7 @@ export default function EditPartDrawer({ partId, onClose }) {
                 onClick={() => setShowBuildModal(true)}
                 variant="outline"
                 className="flex-1 border-orange-700 text-orange-400 hover:bg-orange-900/30"
+                disabled={part?.is_archived}
               >
                 <Wrench className="w-4 h-4 mr-2" />
                 Add to Build
@@ -612,6 +715,17 @@ export default function EditPartDrawer({ partId, onClose }) {
                     />
                   </div>
 
+                  {/* Part Type Selector */}
+                  <PartTypeSelector
+                    value={editedPart.part_type}
+                    onChange={(type) => {
+                      const defaults = getPartTypeBehavior(type);
+                      setEditedPart({ ...editedPart, part_type: type, ...defaults });
+                    }}
+                    showDescription={true}
+                    showBehaviorFlags={true}
+                  />
+
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -826,8 +940,32 @@ export default function EditPartDrawer({ partId, onClose }) {
             <PartJournalSection partId={partId} />
           </div>
 
-          {/* Bottom Close Button for Mobile */}
-          <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700">
+          {/* Bottom Actions */}
+          <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700 space-y-2">
+            {!part?.is_archived && (
+              <div className="flex gap-2">
+                {deletabilityCheck?.canDelete ? (
+                  <Button
+                    onClick={handleDelete}
+                    variant="outline"
+                    className="flex-1 border-red-700 text-red-400 hover:bg-red-900/30"
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setShowArchiveModal(true)}
+                    variant="outline"
+                    className="flex-1 border-amber-700 text-amber-400 hover:bg-amber-900/30"
+                  >
+                    <Archive className="w-4 h-4 mr-2" />
+                    Archive
+                  </Button>
+                )}
+              </div>
+            )}
             <Button
               onClick={onClose}
               variant="outline"
@@ -870,6 +1008,19 @@ export default function EditPartDrawer({ partId, onClose }) {
         <AddToBuildModal
           part={part}
           onClose={() => setShowBuildModal(false)}
+        />
+      )}
+
+      {showArchiveModal && part && (
+        <ArchivePartModal
+          isOpen={showArchiveModal}
+          onClose={() => setShowArchiveModal(false)}
+          part={part}
+          onSuccess={() => {
+            setShowArchiveModal(false);
+            queryClient.invalidateQueries({ queryKey: ['parts'] });
+            queryClient.invalidateQueries({ queryKey: ['part', partId] });
+          }}
         />
       )}
     </>
