@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
+import { MobilePrimaryActionStack } from "@/components/mobile/MobilePrimaryActionStack";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 function ClientFeedbackLinks({ taskId }) {
   const navigate = useNavigate();
@@ -84,6 +86,7 @@ const getCategoryPath = (categoryId, categories) => {
 
 export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -515,15 +518,42 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           </div>
         </div>
 
-        {/* Bottom Close Button for Mobile */}
-        <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="w-full border-gray-700 min-h-[44px]"
-          >
-            Close
-          </Button>
+        {/* Bottom Actions with Safe Area */}
+        <div 
+          className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700"
+          style={{
+            paddingBottom: isMobile ? 'calc(16px + env(safe-area-inset-bottom, 0px))' : '16px',
+          }}
+        >
+          {isMobile ? (
+            <MobilePrimaryActionStack
+              primaryAction={
+                editing 
+                  ? {
+                      label: updateMutation.isPending ? 'Saving...' : 'Save Changes',
+                      onClick: handleSubmit,
+                      icon: Save,
+                      disabled: updateMutation.isPending,
+                      loading: updateMutation.isPending,
+                    }
+                  : {
+                      label: 'Edit Task',
+                      onClick: () => setEditing(true),
+                    }
+              }
+              secondaryActions={[
+                { label: 'Close', onClick: onClose, variant: 'outline' }
+              ]}
+            />
+          ) : (
+            <Button
+              onClick={onClose}
+              variant="outline"
+              className="w-full border-gray-700 min-h-[44px]"
+            >
+              Close
+            </Button>
+          )}
         </div>
       </SheetContent>
     </Sheet>
