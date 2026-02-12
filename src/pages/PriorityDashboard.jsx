@@ -720,6 +720,10 @@ export default function PriorityDashboard() {
                 commentCountByTaskId={commentCountByTaskId}
                 selectedTypes={selectedTypes}
                 statusFilter={statusFilter}
+                onToggleComplete={handleToggleComplete}
+                onUpdateDueDate={handleUpdateDueDate}
+                onUpdateStartDate={handleUpdateStartDate}
+                onTogglePriority={wrappedTogglePriority}
               />
             </TabsContent>
           </Tabs>
