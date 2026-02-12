@@ -56,6 +56,7 @@ import ClientProjectPortal from './pages/ClientProjectPortal';
 import ClientProjects from './pages/ClientProjects';
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
+import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
 import MyPriorities from './pages/MyPriorities';
 import MyProjects from './pages/MyProjects';
 import MyTasks from './pages/MyTasks';
@@ -67,7 +68,7 @@ import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
+import FinancialExceptionDashboard from './pages/FinancialExceptionDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -81,6 +82,7 @@ export const PAGES = {
     "ClientProjects": ClientProjects,
     "Dashboard": Dashboard,
     "Home": Home,
+    "InventoryMutationMonitor": InventoryMutationMonitor,
     "MyPriorities": MyPriorities,
     "MyProjects": MyProjects,
     "MyTasks": MyTasks,
@@ -92,7 +94,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "InventoryMutationMonitor": InventoryMutationMonitor,
+    "FinancialExceptionDashboard": FinancialExceptionDashboard,
 }
 
 export const pagesConfig = {
