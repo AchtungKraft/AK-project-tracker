@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { startOfWeek, endOfWeek, addWeeks, isWithinInterval, isBefore, startOfDay, format } from 'date-fns';
+import { subscribeToTaskStateUpdates, getTaskVersion } from './taskStateEvents';
+import { hasCalendarDate } from './normalizeTask';
 
 /**
  * useTaskGrouping - Centralized task grouping logic
@@ -10,6 +12,8 @@ import { startOfWeek, endOfWeek, addWeeks, isWithinInterval, isBefore, startOfDa
  * - start_date ?? due_date date selection
  * - Week range generation
  * - All grouping rules
+ * 
+ * VERSION TRACKING: Re-computes when taskVersion changes (via event subscription)
  */
 
 /**
@@ -52,6 +56,17 @@ export function useTaskGrouping({
   teamMembers = [],
   weeksToShow = 6,
 }) {
+  // Version tracking - forces recalculation when tasks mutate
+  const [taskVersion, setTaskVersion] = useState(getTaskVersion());
+  
+  // Subscribe to global task state updates
+  useEffect(() => {
+    const unsubscribe = subscribeToTaskStateUpdates((detail) => {
+      console.log('TASK GROUPING: Received state update event', detail);
+      setTaskVersion(detail.version);
+    });
+    return unsubscribe;
+  }, []);
   // Get completed status for filtering
   const completedStatus = useMemo(() => {
     return statuses.find(s => {
@@ -70,20 +85,27 @@ export function useTaskGrouping({
     return generateWeekRanges(weeksToShow);
   }, [weeksToShow]);
 
+  // Tasks with calendar dates (for calendar view exclusion rule)
+  const calendarTasks = useMemo(() => {
+    return activeTasks.filter(hasCalendarDate);
+  }, [activeTasks]);
+
   // Group by week (using effective date: start_date ?? due_date)
+  // Depends on taskVersion to force recalculation
   const groupedByWeek = useMemo(() => {
-    console.log('TASK GROUPING: groupedByWeek recomputed', activeTasks.length, 'tasks');
+    console.log('TASK GROUPING: groupedByWeek recomputed', calendarTasks.length, 'tasks, version:', taskVersion);
     
     const pastDue = [];
     const byWeek = weekRanges.map(() => []);
     const noDueDate = [];
     const today = startOfDay(new Date());
 
-    activeTasks.forEach(task => {
+    // Only include tasks that have calendar dates
+    calendarTasks.forEach(task => {
       const effectiveDate = getTaskEffectiveDate(task);
       
+      // This shouldn't happen since we filtered, but safety check
       if (!effectiveDate) {
-        noDueDate.push(task);
         return;
       }
 
@@ -113,6 +135,13 @@ export function useTaskGrouping({
         // Future tasks beyond our range are ignored for now
       }
     });
+    
+    // Tasks WITHOUT dates (excluded from calendar, shown in card/kanban)
+    activeTasks.forEach(task => {
+      if (!hasCalendarDate(task)) {
+        noDueDate.push(task);
+      }
+    });
 
     return {
       pastDue,
@@ -120,9 +149,9 @@ export function useTaskGrouping({
       noDueDate,
       weekRanges,
     };
-  }, [activeTasks, weekRanges]);
+  }, [calendarTasks, activeTasks, weekRanges, taskVersion]);
 
-  // Group by status
+  // Group by status - depends on taskVersion
   const groupedByStatus = useMemo(() => {
     const groups = {};
     
@@ -142,9 +171,9 @@ export function useTaskGrouping({
     });
 
     return groups;
-  }, [activeTasks, statuses]);
+  }, [activeTasks, statuses, taskVersion]);
 
-  // Group by project
+  // Group by project - depends on taskVersion
   const groupedByProject = useMemo(() => {
     const groups = {};
     
@@ -164,9 +193,9 @@ export function useTaskGrouping({
     });
 
     return groups;
-  }, [activeTasks, projects]);
+  }, [activeTasks, projects, taskVersion]);
 
-  // Group by category
+  // Group by category - depends on taskVersion
   const groupedByCategory = useMemo(() => {
     const groups = {};
     
@@ -186,9 +215,9 @@ export function useTaskGrouping({
     });
 
     return groups;
-  }, [activeTasks, categories]);
+  }, [activeTasks, categories, taskVersion]);
 
-  // Group by assigned team member
+  // Group by assigned team member - depends on taskVersion
   const groupedByAssignee = useMemo(() => {
     const groups = {};
     
@@ -208,12 +237,16 @@ export function useTaskGrouping({
     });
 
     return groups;
-  }, [activeTasks, teamMembers]);
+  }, [activeTasks, teamMembers, taskVersion]);
 
   return {
     // Filtered tasks
     activeTasks,
+    calendarTasks, // Tasks with dates (for calendar views)
     completedStatus,
+    
+    // Version for dependency tracking
+    taskVersion,
     
     // Grouping results
     groupedByWeek,
