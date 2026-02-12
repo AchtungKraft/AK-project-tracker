@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import CreateInlineModal from "../common/CreateInlineModal";
+import PartTypeSelector from "./PartTypeSelector";
+import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
 
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
@@ -34,8 +36,25 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     is_active: true,
     notes: "",
     photos: [],
-    featured_photo: ""
+    featured_photo: "",
+    part_type: PART_TYPES.PURCHASED_VENDOR,
+    production_cost: "",
+    handling_fee: "",
+    resale_value: "",
   });
+
+  // Get field visibility based on part type
+  const fieldVisibility = getPartTypeFieldVisibility(formData.part_type);
+
+  // Handle part type change - apply defaults
+  const handlePartTypeChange = (newType) => {
+    const defaults = getPartTypeBehavior(newType);
+    setFormData({
+      ...formData,
+      part_type: newType,
+      ...defaults,
+    });
+  };
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
@@ -204,13 +223,20 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    // Apply part type behavior defaults
+    const behaviorDefaults = getPartTypeBehavior(formData.part_type);
+    
     const partData = {
       ...formData,
+      ...behaviorDefaults,
       default_cost: formData.default_cost ? parseFloat(formData.default_cost) : undefined,
       default_retail: formData.default_retail ? parseFloat(formData.default_retail) : undefined,
+      production_cost: formData.production_cost ? parseFloat(formData.production_cost) : undefined,
+      handling_fee: formData.handling_fee ? parseFloat(formData.handling_fee) : undefined,
+      resale_value: formData.resale_value ? parseFloat(formData.resale_value) : undefined,
       reorder_point: parseInt(formData.reorder_point) || 0,
       reorder_quantity: parseInt(formData.reorder_quantity) || 1,
-      };
+    };
 
     // Remove empty IDs
     if (!partData.car_make_id) delete partData.car_make_id;
@@ -294,6 +320,14 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Part Type Selector - First */}
+            <PartTypeSelector
+              value={formData.part_type}
+              onChange={handlePartTypeChange}
+              showDescription={true}
+              showBehaviorFlags={true}
+            />
+
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label className="text-gray-400">Part Name *</Label>
@@ -477,30 +511,77 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
             </div>
 
+            {/* Dynamic Pricing Fields based on Part Type */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-gray-400">Default Cost</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.default_cost}
-                  onChange={(e) => setFormData({ ...formData, default_cost: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                  placeholder="0.00"
-                />
-              </div>
+              {fieldVisibility.showDefaultCost && (
+                <div className="space-y-2">
+                  <Label className="text-gray-400">Default Cost</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.default_cost}
+                    onChange={(e) => setFormData({ ...formData, default_cost: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
               
-              <div className="space-y-2">
-                <Label className="text-gray-400">Default Retail</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.default_retail}
-                  onChange={(e) => setFormData({ ...formData, default_retail: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white"
-                  placeholder="0.00"
-                />
-              </div>
+              {fieldVisibility.showDefaultRetail && (
+                <div className="space-y-2">
+                  <Label className="text-gray-400">Default Retail</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.default_retail}
+                    onChange={(e) => setFormData({ ...formData, default_retail: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+
+              {fieldVisibility.showProductionCost && (
+                <div className="space-y-2">
+                  <Label className="text-gray-400">Production Cost</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.production_cost}
+                    onChange={(e) => setFormData({ ...formData, production_cost: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                    placeholder="Internal production cost"
+                  />
+                </div>
+              )}
+
+              {fieldVisibility.showHandlingFee && (
+                <div className="space-y-2">
+                  <Label className="text-gray-400">Handling Fee</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.handling_fee}
+                    onChange={(e) => setFormData({ ...formData, handling_fee: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                    placeholder="Service/handling fee"
+                  />
+                </div>
+              )}
+
+              {fieldVisibility.showResaleValue && (
+                <div className="space-y-2">
+                  <Label className="text-gray-400">Resale Value</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.resale_value}
+                    onChange={(e) => setFormData({ ...formData, resale_value: e.target.value })}
+                    className="bg-gray-800 border-gray-700 text-white"
+                    placeholder="Estimated resale value"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
