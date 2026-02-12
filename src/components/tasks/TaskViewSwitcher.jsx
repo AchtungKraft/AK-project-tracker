@@ -17,7 +17,7 @@ export default function TaskViewSwitcher({
   const isMobile = useIsMobile();
 
   return (
-    <Tabs value={viewMode} onValueChange={onViewChange} className={cn("w-auto", className)}>
+    <Tabs value={viewMode} onValueChange={(mode) => onViewChange(mode)} className={cn("w-auto", className)}>
       <TabsList className={cn(
         "bg-gray-800/80 border border-gray-700 p-1",
         isMobile ? "h-9" : ""

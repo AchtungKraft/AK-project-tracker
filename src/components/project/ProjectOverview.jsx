@@ -311,10 +311,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         <div className={cn("flex items-center justify-between", isMobile && "px-1")}>
           <TaskViewSwitcher 
             viewMode={viewMode} 
-            onViewChange={(mode) => {
-              console.log('[ProjectOverview] View mode changed to:', mode);
-              setViewMode(mode);
-            }} 
+            onViewChange={setViewMode} 
           />
         </div>
 
