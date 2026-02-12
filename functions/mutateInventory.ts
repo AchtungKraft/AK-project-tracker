@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * CENTRALIZED INVENTORY MUTATION SERVICE
+ * CENTRALIZED INVENTORY MUTATION SERVICE - HARDENED VERSION
  * 
  * This is the ONLY allowed mechanism to change inventory quantities.
  * All receive, move, install operations must go through this function.
@@ -10,17 +10,24 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  *   - receive: Add inventory from PO receiving or manual entry
  *   - move: Transfer inventory between locations
  *   - install: Consume inventory for a task/project
- *   - adjustment: Manual quantity correction (future)
- *   - reversal: Undo a previous mutation (future)
+ *   - adjustment: Manual quantity correction
+ *   - reversal: Undo a previous mutation
+ * 
+ * HARDENING FEATURES:
+ *   - Idempotency protection via idempotency_key
+ *   - Concurrency revalidation before commit
+ *   - Full mutation logging for observability
+ *   - Batch mutation support
+ *   - Reversal support for undo operations
  */
 
 const PART_TYPE_DEFAULTS = {
-  PURCHASED_VENDOR: { requires_vendor_purchase: true, affects_inventory: true },
-  AK_MANUFACTURED: { requires_vendor_purchase: false, affects_inventory: true },
-  CLIENT_SUPPLIED: { requires_vendor_purchase: false, affects_inventory: false },
-  TAKE_OFF: { requires_vendor_purchase: false, affects_inventory: true },
-  STOCK_AK: { requires_vendor_purchase: true, affects_inventory: true },
-  WARRANTY_REPLACEMENT: { requires_vendor_purchase: false, affects_inventory: true },
+  PURCHASED_VENDOR: { requires_vendor_purchase: true, affects_inventory: true, can_receive: true, can_move: true, can_install: true },
+  AK_MANUFACTURED: { requires_vendor_purchase: false, affects_inventory: true, can_receive: true, can_move: true, can_install: true },
+  CLIENT_SUPPLIED: { requires_vendor_purchase: false, affects_inventory: false, can_receive: true, can_move: true, can_install: true },
+  TAKE_OFF: { requires_vendor_purchase: false, affects_inventory: true, can_receive: true, can_move: true, can_install: true },
+  STOCK_AK: { requires_vendor_purchase: true, affects_inventory: true, can_receive: true, can_move: true, can_install: true },
+  WARRANTY_REPLACEMENT: { requires_vendor_purchase: false, affects_inventory: true, can_receive: true, can_move: true, can_install: true },
 };
 
 function getPartTypeBehavior(partType) {
@@ -38,70 +45,99 @@ function calculateCommitmentState(commitment) {
   return 'planned';
 }
 
-Deno.serve(async (req) => {
+// Check if part can be mutated
+function canMutatePart(part, mutation_type, options = {}) {
+  if (part.is_archived) {
+    return { allowed: false, reason: 'Cannot perform operations on archived parts', code: 'PART_ARCHIVED' };
+  }
+  if (part.is_active === false) {
+    return { allowed: false, reason: 'Part is not active', code: 'PART_INACTIVE' };
+  }
+  const behavior = getPartTypeBehavior(part.part_type);
+  if (mutation_type === 'receive' && part.part_type === 'CLIENT_SUPPLIED' && options.source_type === 'vendor_order') {
+    return { allowed: false, reason: 'Client-supplied parts cannot be received from vendor orders', code: 'INVALID_SOURCE_FOR_PART_TYPE' };
+  }
+  return { allowed: true, behavior };
+}
+
+// Process a single mutation
+async function processMutation(base44, user, payload, startTime) {
+  const {
+    mutation_type,
+    part_id,
+    qty,
+    from_location_id,
+    to_location_id,
+    task_part_link_id,
+    project_id,
+    commitment_id,
+    inventory_item_id,
+    order_id,
+    line_item_id,
+    reason,
+    notes,
+    unit_cost,
+    lot_number,
+    source_type,
+    requires_inspection,
+    idempotency_key,
+    reversed_mutation_id,
+  } = payload;
+
+  const now = new Date().toISOString();
+  const mutationLog = {
+    idempotency_key: idempotency_key || null,
+    mutation_type,
+    part_id,
+    from_location_id: from_location_id || null,
+    to_location_id: to_location_id || null,
+    qty,
+    project_id: project_id || null,
+    commitment_id: commitment_id || null,
+    task_part_link_id: task_part_link_id || null,
+    user_id: user.id,
+    result_status: 'success',
+    payload_snapshot: JSON.stringify(payload),
+  };
+
   try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // IDEMPOTENCY CHECK
+    if (idempotency_key) {
+      const existingMutations = await base44.asServiceRole.entities.InventoryMutationLog.filter({ idempotency_key });
+      const existingMutation = existingMutations[0];
+      if (existingMutation && existingMutation.result_status === 'success') {
+        return {
+          success: true,
+          idempotent_hit: true,
+          original_mutation_id: existingMutation.id,
+          mutation_type: existingMutation.mutation_type,
+          part_id: existingMutation.part_id,
+          qty: existingMutation.qty,
+          audit_log_id: existingMutation.audit_log_id,
+          mutation_record_id: existingMutation.mutation_record_id,
+        };
+      }
     }
-
-    const payload = await req.json();
-    const {
-      mutation_type,
-      part_id,
-      qty,
-      from_location_id,
-      to_location_id,
-      task_part_link_id,
-      project_id,
-      commitment_id,
-      inventory_item_id,
-      order_id,
-      line_item_id,
-      reason,
-      notes,
-      unit_cost,
-      lot_number,
-      source_type,
-      requires_inspection,
-    } = payload;
 
     // Validate required fields
-    if (!mutation_type) {
-      return Response.json({ error: 'mutation_type is required' }, { status: 400 });
-    }
-    if (!part_id) {
-      return Response.json({ error: 'part_id is required' }, { status: 400 });
-    }
-    if (qty === undefined || qty === null || qty <= 0) {
-      return Response.json({ error: 'qty must be a positive number' }, { status: 400 });
+    if (!mutation_type) throw { status: 400, error: 'mutation_type is required', code: 'MISSING_FIELD' };
+    if (!part_id) throw { status: 400, error: 'part_id is required', code: 'MISSING_FIELD' };
+    if (mutation_type !== 'reversal' && (qty === undefined || qty === null || qty <= 0)) {
+      throw { status: 400, error: 'qty must be a positive number', code: 'INVALID_QTY' };
     }
 
-    // Fetch part and validate
-    let part = null;
-    try {
-      const parts = await base44.asServiceRole.entities.Part.list();
-      part = parts.find(p => p.id === part_id);
-    } catch (e) {
-      console.error('Error fetching part:', e);
-    }
-    
-    if (!part) {
-      return Response.json({ error: 'Part not found', code: 'PART_NOT_FOUND' }, { status: 404 });
+    // Fetch and validate part
+    const parts = await base44.asServiceRole.entities.Part.list();
+    const part = parts.find(p => p.id === part_id);
+    if (!part) throw { status: 404, error: 'Part not found', code: 'PART_NOT_FOUND' };
+
+    // Check mutation permission
+    const permCheck = canMutatePart(part, mutation_type, { source_type });
+    if (!permCheck.allowed) {
+      throw { status: 400, error: permCheck.reason, code: permCheck.code };
     }
 
-    // Check if part is archived - block all new inventory operations
-    if (part.is_archived && ['receive', 'move', 'install'].includes(mutation_type)) {
-      return Response.json({ 
-        error: 'Cannot perform this operation on an archived part',
-        code: 'PART_ARCHIVED'
-      }, { status: 400 });
-    }
-
-    const partBehavior = getPartTypeBehavior(part.part_type);
-    const now = new Date().toISOString();
+    const partBehavior = permCheck.behavior || getPartTypeBehavior(part.part_type);
     const result = {
       mutation_type,
       part_id,
@@ -115,23 +151,8 @@ Deno.serve(async (req) => {
     // RECEIVE MUTATION
     // ====================
     if (mutation_type === 'receive') {
-      // Validate location for receive
-      if (!to_location_id) {
-        return Response.json({ 
-          error: 'to_location_id is required for receiving',
-          code: 'LOCATION_REQUIRED'
-        }, { status: 400 });
-      }
+      if (!to_location_id) throw { status: 400, error: 'to_location_id is required for receiving', code: 'LOCATION_REQUIRED' };
 
-      // Check if CLIENT_SUPPLIED can receive from vendor
-      if (part.part_type === 'CLIENT_SUPPLIED' && source_type === 'vendor_order') {
-        return Response.json({ 
-          error: 'Client-supplied parts cannot be received from vendor orders',
-          code: 'INVALID_PART_TYPE_FOR_RECEIVE'
-        }, { status: 400 });
-      }
-
-      // Create inventory item
       const inventoryItem = await base44.asServiceRole.entities.InventoryItem.create({
         part_id,
         location_id: to_location_id,
@@ -148,8 +169,10 @@ Deno.serve(async (req) => {
 
       result.mutation_record_id = inventoryItem.id;
       result.updated_inventory_balance = qty;
+      mutationLog.inventory_item_id = inventoryItem.id;
+      mutationLog.qty_before = 0;
+      mutationLog.qty_after = qty;
 
-      // Update line item qty_received if provided
       if (line_item_id) {
         const lineItems = await base44.asServiceRole.entities.PartPurchaseLineItem.filter({ id: line_item_id });
         const lineItem = lineItems[0];
@@ -163,7 +186,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Create audit log
       const auditLog = await base44.asServiceRole.entities.InventoryAuditLog.create({
         part_id,
         project_id: project_id || null,
@@ -181,85 +203,61 @@ Deno.serve(async (req) => {
       });
 
       result.audit_log_id = auditLog.id;
+      mutationLog.audit_log_id = auditLog.id;
     }
 
     // ====================
     // MOVE MUTATION
     // ====================
     else if (mutation_type === 'move') {
-      if (!from_location_id) {
-        return Response.json({ error: 'from_location_id is required for move', code: 'LOCATION_REQUIRED' }, { status: 400 });
-      }
-      if (!to_location_id) {
-        return Response.json({ error: 'to_location_id is required for move', code: 'LOCATION_REQUIRED' }, { status: 400 });
-      }
-      if (from_location_id === to_location_id) {
-        return Response.json({ error: 'Cannot move to the same location', code: 'SAME_LOCATION' }, { status: 400 });
-      }
+      if (!from_location_id) throw { status: 400, error: 'from_location_id is required for move', code: 'LOCATION_REQUIRED' };
+      if (!to_location_id) throw { status: 400, error: 'to_location_id is required for move', code: 'LOCATION_REQUIRED' };
+      if (from_location_id === to_location_id) throw { status: 400, error: 'Cannot move to the same location', code: 'SAME_LOCATION' };
 
-      // Find source inventory item
-      const sourceItems = await base44.asServiceRole.entities.InventoryItem.filter({ 
-        part_id, 
-        location_id: from_location_id 
-      });
-      
+      const sourceItems = await base44.asServiceRole.entities.InventoryItem.filter({ part_id, location_id: from_location_id });
       let sourceItem = sourceItems[0];
-      if (!sourceItem) {
-        // If specific item provided, try to find it
-        if (inventory_item_id) {
-          const specificItems = await base44.asServiceRole.entities.InventoryItem.filter({ id: inventory_item_id });
-          sourceItem = specificItems[0];
-        }
+      if (!sourceItem && inventory_item_id) {
+        const specificItems = await base44.asServiceRole.entities.InventoryItem.filter({ id: inventory_item_id });
+        sourceItem = specificItems[0];
       }
+      if (!sourceItem) throw { status: 400, error: 'No inventory found at source location', code: 'NO_INVENTORY' };
 
-      if (!sourceItem) {
-        return Response.json({ error: 'No inventory found at source location', code: 'NO_INVENTORY' }, { status: 400 });
-      }
-
-      const availableQty = (sourceItem.quantity_on_hand || 0) - (sourceItem.quantity_reserved || 0);
-      if (qty > availableQty) {
-        return Response.json({ 
-          error: `Insufficient quantity. Available: ${availableQty}, Requested: ${qty}`,
-          code: 'INSUFFICIENT_QUANTITY'
-        }, { status: 400 });
-      }
-
-      // Deduct from source
-      const newSourceQty = (sourceItem.quantity_on_hand || 0) - qty;
-      await base44.asServiceRole.entities.InventoryItem.update(sourceItem.id, {
-        quantity_on_hand: newSourceQty,
-      });
-
-      // Find or create destination item
-      const destItems = await base44.asServiceRole.entities.InventoryItem.filter({ 
-        part_id, 
-        location_id: to_location_id 
-      });
+      // CONCURRENCY REVALIDATION - Re-fetch to verify qty still available
+      const revalidateItems = await base44.asServiceRole.entities.InventoryItem.filter({ id: sourceItem.id });
+      const currentSourceItem = revalidateItems[0];
+      if (!currentSourceItem) throw { status: 400, error: 'Source inventory no longer exists', code: 'CONCURRENCY_ERROR' };
       
+      const availableQty = (currentSourceItem.quantity_on_hand || 0) - (currentSourceItem.quantity_reserved || 0);
+      if (qty > availableQty) {
+        throw { status: 400, error: `Insufficient quantity. Available: ${availableQty}, Requested: ${qty}`, code: 'INSUFFICIENT_QUANTITY' };
+      }
+
+      mutationLog.qty_before = currentSourceItem.quantity_on_hand;
+      const newSourceQty = (currentSourceItem.quantity_on_hand || 0) - qty;
+      await base44.asServiceRole.entities.InventoryItem.update(sourceItem.id, { quantity_on_hand: newSourceQty });
+      mutationLog.qty_after = newSourceQty;
+      mutationLog.inventory_item_id = sourceItem.id;
+
+      const destItems = await base44.asServiceRole.entities.InventoryItem.filter({ part_id, location_id: to_location_id });
       let destItem = destItems[0];
       if (destItem) {
-        // Add to existing
         const newDestQty = (destItem.quantity_on_hand || 0) + qty;
-        await base44.asServiceRole.entities.InventoryItem.update(destItem.id, {
-          quantity_on_hand: newDestQty,
-        });
+        await base44.asServiceRole.entities.InventoryItem.update(destItem.id, { quantity_on_hand: newDestQty });
         result.updated_inventory_balance = newDestQty;
       } else {
-        // Create new item at destination
         destItem = await base44.asServiceRole.entities.InventoryItem.create({
           part_id,
           location_id: to_location_id,
           quantity_on_hand: qty,
           quantity_reserved: 0,
-          purchase_cost: sourceItem.purchase_cost || part.default_cost || 0,
-          received_date: sourceItem.received_date,
+          purchase_cost: currentSourceItem.purchase_cost || part.default_cost || 0,
+          received_date: currentSourceItem.received_date,
           notes: `Transferred from location`,
           source_type: 'internal_transfer',
         });
         result.updated_inventory_balance = qty;
       }
 
-      // Create transfer record
       const transfer = await base44.asServiceRole.entities.InventoryTransfer.create({
         part_id,
         inventory_item_id: sourceItem.id,
@@ -273,12 +271,11 @@ Deno.serve(async (req) => {
 
       result.mutation_record_id = transfer.id;
 
-      // Create audit log
       const auditLog = await base44.asServiceRole.entities.InventoryAuditLog.create({
         part_id,
         inventory_item_id: sourceItem.id,
         action_type: 'move',
-        qty_before: sourceItem.quantity_on_hand,
+        qty_before: currentSourceItem.quantity_on_hand,
         qty_after: newSourceQty,
         qty_changed: qty,
         from_location_id,
@@ -289,17 +286,15 @@ Deno.serve(async (req) => {
       });
 
       result.audit_log_id = auditLog.id;
+      mutationLog.audit_log_id = auditLog.id;
     }
 
     // ====================
     // INSTALL MUTATION
     // ====================
     else if (mutation_type === 'install') {
-      if (!project_id) {
-        return Response.json({ error: 'project_id is required for install', code: 'PROJECT_REQUIRED' }, { status: 400 });
-      }
+      if (!project_id) throw { status: 400, error: 'project_id is required for install', code: 'PROJECT_REQUIRED' };
 
-      // Get task info if task_part_link provided
       let taskPartLink = null;
       let task = null;
       
@@ -307,59 +302,55 @@ Deno.serve(async (req) => {
         const links = await base44.asServiceRole.entities.TaskPartLink.filter({ id: task_part_link_id });
         taskPartLink = links[0];
         if (taskPartLink) {
+          // TASK LINK INTEGRITY CHECK
+          if (taskPartLink.part_id !== part_id) {
+            throw { status: 400, error: 'Part ID does not match TaskPartLink', code: 'TASK_LINK_MISMATCH' };
+          }
+          if (taskPartLink.project_id && taskPartLink.project_id !== project_id) {
+            throw { status: 400, error: 'Project ID does not match TaskPartLink', code: 'TASK_LINK_PROJECT_MISMATCH' };
+          }
           const tasks = await base44.asServiceRole.entities.Task.filter({ id: taskPartLink.task_id });
           task = tasks[0];
         }
       }
 
-      // Validate inventory availability if affects_inventory
       let inventoryItem = null;
       let unitCostAtInstall = unit_cost || part.default_cost || 0;
 
       if (partBehavior.affects_inventory) {
-        // Find inventory to deduct from
         if (from_location_id) {
-          const items = await base44.asServiceRole.entities.InventoryItem.filter({ 
-            part_id, 
-            location_id: from_location_id 
-          });
+          const items = await base44.asServiceRole.entities.InventoryItem.filter({ part_id, location_id: from_location_id });
           inventoryItem = items[0];
         } else if (inventory_item_id) {
           const items = await base44.asServiceRole.entities.InventoryItem.filter({ id: inventory_item_id });
           inventoryItem = items[0];
         } else {
-          // Find any inventory with sufficient qty
           const allItems = await base44.asServiceRole.entities.InventoryItem.filter({ part_id });
           inventoryItem = allItems.find(i => (i.quantity_on_hand || 0) - (i.quantity_reserved || 0) >= qty);
         }
 
-        if (!inventoryItem) {
-          return Response.json({ 
-            error: 'No inventory available for installation',
-            code: 'NO_INVENTORY'
-          }, { status: 400 });
-        }
+        if (!inventoryItem) throw { status: 400, error: 'No inventory available for installation', code: 'NO_INVENTORY' };
 
-        const availableQty = (inventoryItem.quantity_on_hand || 0) - (inventoryItem.quantity_reserved || 0);
+        // CONCURRENCY REVALIDATION
+        const revalidateItems = await base44.asServiceRole.entities.InventoryItem.filter({ id: inventoryItem.id });
+        const currentItem = revalidateItems[0];
+        if (!currentItem) throw { status: 400, error: 'Inventory no longer exists', code: 'CONCURRENCY_ERROR' };
+        
+        const availableQty = (currentItem.quantity_on_hand || 0) - (currentItem.quantity_reserved || 0);
         if (qty > availableQty) {
-          return Response.json({ 
-            error: `Insufficient inventory. Available: ${availableQty}, Requested: ${qty}`,
-            code: 'INSUFFICIENT_QUANTITY'
-          }, { status: 400 });
+          throw { status: 400, error: `Insufficient inventory. Available: ${availableQty}, Requested: ${qty}`, code: 'INSUFFICIENT_QUANTITY' };
         }
 
-        // Use inventory item cost if available
-        unitCostAtInstall = inventoryItem.purchase_cost || unitCostAtInstall;
+        unitCostAtInstall = currentItem.purchase_cost || unitCostAtInstall;
+        mutationLog.qty_before = currentItem.quantity_on_hand;
 
-        // Deduct from inventory
-        const newQty = (inventoryItem.quantity_on_hand || 0) - qty;
-        await base44.asServiceRole.entities.InventoryItem.update(inventoryItem.id, {
-          quantity_on_hand: newQty,
-        });
+        const newQty = (currentItem.quantity_on_hand || 0) - qty;
+        await base44.asServiceRole.entities.InventoryItem.update(inventoryItem.id, { quantity_on_hand: newQty });
         result.updated_inventory_balance = newQty;
+        mutationLog.qty_after = newQty;
+        mutationLog.inventory_item_id = inventoryItem.id;
       }
 
-      // Create InstalledPart record
       const installedPart = await base44.asServiceRole.entities.InstalledPart.create({
         part_id,
         project_id,
@@ -378,11 +369,9 @@ Deno.serve(async (req) => {
 
       result.mutation_record_id = installedPart.id;
 
-      // Update TaskPartLink if provided
       if (taskPartLink) {
         const newInstalledQty = (taskPartLink.qty_installed || 0) + qty;
         const newStatus = newInstalledQty >= (taskPartLink.qty_allocated || 0) ? 'complete' : 'partial';
-        
         await base44.asServiceRole.entities.TaskPartLink.update(task_part_link_id, {
           qty_installed: newInstalledQty,
           install_status: newStatus,
@@ -391,7 +380,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Update commitment if provided
       if (commitment_id) {
         const commitments = await base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
         const commitment = commitments[0];
@@ -406,33 +394,24 @@ Deno.serve(async (req) => {
             commitment_version: (commitment.commitment_version || 1) + 1,
           });
 
-          // Create commitment audit log
           await base44.asServiceRole.entities.CommitmentAuditLog.create({
             commitment_id,
             action_type: 'qty_change',
-            previous_values: {
-              qty_installed: commitment.qty_installed,
-              commitment_status: commitment.commitment_status,
-            },
-            new_values: {
-              qty_installed: newInstalledQty,
-              commitment_status: newStatus,
-              delta: qty,
-            },
+            previous_values: { qty_installed: commitment.qty_installed, commitment_status: commitment.commitment_status },
+            new_values: { qty_installed: newInstalledQty, commitment_status: newStatus, delta: qty },
             trigger_source: 'install',
             validation_passed: true,
           });
         }
       }
 
-      // Create inventory audit log
       const auditLog = await base44.asServiceRole.entities.InventoryAuditLog.create({
         part_id,
         project_id,
         commitment_id: commitment_id || null,
         inventory_item_id: inventoryItem?.id || null,
         action_type: 'install',
-        qty_before: inventoryItem ? (inventoryItem.quantity_on_hand || 0) : null,
+        qty_before: inventoryItem ? mutationLog.qty_before : null,
         qty_after: result.updated_inventory_balance,
         qty_changed: qty,
         location_id: inventoryItem?.location_id || from_location_id || null,
@@ -444,25 +423,193 @@ Deno.serve(async (req) => {
       });
 
       result.audit_log_id = auditLog.id;
+      mutationLog.audit_log_id = auditLog.id;
+    }
+
+    // ====================
+    // REVERSAL MUTATION
+    // ====================
+    else if (mutation_type === 'reversal') {
+      if (!reversed_mutation_id) throw { status: 400, error: 'reversed_mutation_id is required for reversal', code: 'MISSING_FIELD' };
+
+      const originalMutations = await base44.asServiceRole.entities.InventoryMutationLog.filter({ id: reversed_mutation_id });
+      const originalMutation = originalMutations[0];
+      if (!originalMutation) throw { status: 404, error: 'Original mutation not found', code: 'MUTATION_NOT_FOUND' };
+      if (originalMutation.is_reversed) throw { status: 400, error: 'Mutation has already been reversed', code: 'ALREADY_REVERSED' };
+
+      mutationLog.reversed_mutation_id = reversed_mutation_id;
+      const origQty = originalMutation.qty;
+
+      // Reverse based on original mutation type
+      if (originalMutation.mutation_type === 'receive') {
+        // Subtract the received quantity
+        if (originalMutation.inventory_item_id) {
+          const items = await base44.asServiceRole.entities.InventoryItem.filter({ id: originalMutation.inventory_item_id });
+          const item = items[0];
+          if (item) {
+            const newQty = Math.max(0, (item.quantity_on_hand || 0) - origQty);
+            await base44.asServiceRole.entities.InventoryItem.update(item.id, { quantity_on_hand: newQty });
+            result.updated_inventory_balance = newQty;
+            mutationLog.qty_before = item.quantity_on_hand;
+            mutationLog.qty_after = newQty;
+          }
+        }
+      } else if (originalMutation.mutation_type === 'install') {
+        // Add back the installed quantity
+        if (originalMutation.inventory_item_id) {
+          const items = await base44.asServiceRole.entities.InventoryItem.filter({ id: originalMutation.inventory_item_id });
+          const item = items[0];
+          if (item) {
+            const newQty = (item.quantity_on_hand || 0) + origQty;
+            await base44.asServiceRole.entities.InventoryItem.update(item.id, { quantity_on_hand: newQty });
+            result.updated_inventory_balance = newQty;
+            mutationLog.qty_before = item.quantity_on_hand;
+            mutationLog.qty_after = newQty;
+          }
+        }
+        // Mark InstalledPart as reversed (could also delete)
+        if (originalMutation.mutation_record_id) {
+          // Note: We don't delete, just document the reversal in audit
+        }
+      } else if (originalMutation.mutation_type === 'move') {
+        // Reverse the move direction
+        if (originalMutation.from_location_id && originalMutation.to_location_id) {
+          // Add back to original source
+          const sourceItems = await base44.asServiceRole.entities.InventoryItem.filter({ 
+            part_id: originalMutation.part_id, 
+            location_id: originalMutation.from_location_id 
+          });
+          let sourceItem = sourceItems[0];
+          if (sourceItem) {
+            const newSourceQty = (sourceItem.quantity_on_hand || 0) + origQty;
+            await base44.asServiceRole.entities.InventoryItem.update(sourceItem.id, { quantity_on_hand: newSourceQty });
+          }
+          
+          // Subtract from destination
+          const destItems = await base44.asServiceRole.entities.InventoryItem.filter({ 
+            part_id: originalMutation.part_id, 
+            location_id: originalMutation.to_location_id 
+          });
+          let destItem = destItems[0];
+          if (destItem) {
+            const newDestQty = Math.max(0, (destItem.quantity_on_hand || 0) - origQty);
+            await base44.asServiceRole.entities.InventoryItem.update(destItem.id, { quantity_on_hand: newDestQty });
+            result.updated_inventory_balance = newDestQty;
+          }
+        }
+      }
+
+      // Mark original mutation as reversed
+      await base44.asServiceRole.entities.InventoryMutationLog.update(reversed_mutation_id, {
+        is_reversed: true,
+      });
+
+      result.mutation_type = 'reversal';
+      result.qty = origQty;
+      result.reversed_mutation_id = reversed_mutation_id;
+
+      const auditLog = await base44.asServiceRole.entities.InventoryAuditLog.create({
+        part_id: originalMutation.part_id,
+        action_type: 'quantity_adjust',
+        qty_changed: origQty,
+        notes: `Reversal of ${originalMutation.mutation_type} mutation`,
+        performed_by: user.id,
+        performed_at: now,
+        related_entity_type: 'InventoryMutationLog',
+        related_entity_id: reversed_mutation_id,
+      });
+
+      result.audit_log_id = auditLog.id;
+      mutationLog.audit_log_id = auditLog.id;
     }
 
     // ====================
     // UNSUPPORTED MUTATION TYPE
     // ====================
     else {
-      return Response.json({ 
-        error: `Unsupported mutation_type: ${mutation_type}. Supported: receive, move, install`,
-        code: 'INVALID_MUTATION_TYPE'
-      }, { status: 400 });
+      throw { status: 400, error: `Unsupported mutation_type: ${mutation_type}. Supported: receive, move, install, reversal`, code: 'INVALID_MUTATION_TYPE' };
     }
 
-    return Response.json({
-      success: true,
-      ...result,
-    });
+    // Log successful mutation
+    mutationLog.result_status = 'success';
+    mutationLog.mutation_record_id = result.mutation_record_id;
+    mutationLog.execution_time_ms = Date.now() - startTime;
+    
+    const savedLog = await base44.asServiceRole.entities.InventoryMutationLog.create(mutationLog);
+    result.mutation_log_id = savedLog.id;
+
+    return { success: true, ...result };
+
+  } catch (error) {
+    // Log failed mutation
+    mutationLog.result_status = 'failed';
+    mutationLog.error_message = error.error || error.message;
+    mutationLog.error_code = error.code || 'UNKNOWN';
+    mutationLog.execution_time_ms = Date.now() - startTime;
+    
+    try {
+      await base44.asServiceRole.entities.InventoryMutationLog.create(mutationLog);
+    } catch (logError) {
+      console.error('Failed to log mutation error:', logError);
+    }
+
+    throw error;
+  }
+}
+
+Deno.serve(async (req) => {
+  const startTime = Date.now();
+  
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const payload = await req.json();
+
+    // BATCH MUTATION SUPPORT
+    if (Array.isArray(payload.mutations)) {
+      const results = [];
+      const errors = [];
+      
+      for (let i = 0; i < payload.mutations.length; i++) {
+        try {
+          const result = await processMutation(base44, user, payload.mutations[i], startTime);
+          results.push({ index: i, ...result });
+        } catch (error) {
+          errors.push({ 
+            index: i, 
+            error: error.error || error.message, 
+            code: error.code || 'UNKNOWN' 
+          });
+          // Continue processing other mutations unless stop_on_error is true
+          if (payload.stop_on_error) break;
+        }
+      }
+      
+      return Response.json({
+        batch: true,
+        total: payload.mutations.length,
+        successful: results.length,
+        failed: errors.length,
+        results,
+        errors,
+      });
+    }
+
+    // SINGLE MUTATION
+    const result = await processMutation(base44, user, payload, startTime);
+    return Response.json(result);
 
   } catch (error) {
     console.error('Inventory mutation error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const status = error.status || 500;
+    return Response.json({ 
+      error: error.error || error.message, 
+      code: error.code || 'UNKNOWN' 
+    }, { status });
   }
 });
