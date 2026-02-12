@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import CommitmentCard from "./CommitmentCard";
 import { useCommitmentData } from "../inventory/useCommitmentData";
+import FinancialStatusBadge from "../financial/FinancialStatusBadge";
+import { useFinancialStatusBatch } from "../financial/useFinancialStatus";
 
 /**
  * ProjectCommitmentsView - Shows all commitments for a project
@@ -58,6 +60,27 @@ export default function ProjectCommitmentsView({ projectId }) {
     lineItems,
     projectId,
   });
+
+  // Batch resolve financial status for all commitments
+  const financialContexts = useMemo(() => {
+    return commitments.map(c => ({
+      part_id: c.part_id,
+      project_id: projectId,
+      commitment_id: c.id,
+    }));
+  }, [commitments, projectId]);
+  
+  const { data: financialStatuses = [] } = useFinancialStatusBatch(financialContexts, {
+    enabled: commitments.length > 0,
+  });
+  
+  const financialStatusMap = useMemo(() => {
+    const map = new Map();
+    financialStatuses.forEach(fs => {
+      map.set(fs.commitment_id, fs);
+    });
+    return map;
+  }, [financialStatuses]);
 
   const cancelMutation = useMutation({
     mutationFn: async (commitment) => {
@@ -236,6 +259,7 @@ export default function ProjectCommitmentsView({ projectId }) {
                       part={getPartInfo(c.part_id)}
                       orders={orders}
                       onCancel={() => cancelMutation.mutate(c)}
+                      financialStatus={financialStatusMap.get(c.id)}
                     />
                   ))}
                 </CardContent>
@@ -269,6 +293,7 @@ export default function ProjectCommitmentsView({ projectId }) {
                       commitment={c}
                       part={getPartInfo(c.part_id)}
                       compact
+                      financialStatus={financialStatusMap.get(c.id)}
                     />
                   ))}
                 </CardContent>
@@ -302,6 +327,7 @@ export default function ProjectCommitmentsView({ projectId }) {
                       commitment={c}
                       part={getPartInfo(c.part_id)}
                       compact
+                      financialStatus={financialStatusMap.get(c.id)}
                     />
                   ))}
                 </CardContent>
