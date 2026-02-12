@@ -6,6 +6,7 @@ import { Calendar as CalendarIcon, Flag, PlayCircle, Loader2 } from "lucide-reac
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import PriorityRemoveConfirm from "./PriorityRemoveConfirm";
 
 /**
  * TaskInlineControls
@@ -27,6 +28,7 @@ export default function TaskInlineControls({
   const [dueDateOpen, setDueDateOpen] = useState(false);
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(null); // 'due' | 'start' | 'priority'
+  const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
 
   const handleDueDateChange = async (date) => {
     if (!onUpdateDueDate) return;
@@ -53,11 +55,29 @@ export default function TaskInlineControls({
   const handleTogglePriority = async (e) => {
     e.stopPropagation();
     if (!onTogglePriority) return;
+    
+    // If removing priority, show confirmation dialog
+    if (task.is_priority) {
+      setShowPriorityConfirm(true);
+      return;
+    }
+    
+    // Adding priority - execute immediately
     setIsUpdating('priority');
     try {
-      await onTogglePriority(task);
+      await onTogglePriority(task, true); // skipConfirm = true
     } finally {
       setIsUpdating(null);
+    }
+  };
+
+  const handleConfirmRemovePriority = async () => {
+    setIsUpdating('priority');
+    try {
+      await onTogglePriority(task, true); // skipConfirm = true
+    } finally {
+      setIsUpdating(null);
+      setShowPriorityConfirm(false);
     }
   };
 
@@ -204,6 +224,15 @@ export default function TaskInlineControls({
           )}
         </Button>
       )}
+
+      {/* Priority Removal Confirmation */}
+      <PriorityRemoveConfirm
+        isOpen={showPriorityConfirm}
+        onClose={() => setShowPriorityConfirm(false)}
+        onConfirm={handleConfirmRemovePriority}
+        taskName={task.name}
+        isLoading={isUpdating === 'priority'}
+      />
     </div>
   );
 }
