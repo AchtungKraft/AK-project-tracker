@@ -1,8 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import { normalizeTask, normalizeTasks } from "./normalizeTask";
+import { 
+  incrementTaskVersion, 
+  emitTaskStateUpdated, 
+  setMutationTimestamp, 
+  shouldApplyMutation,
+  getTaskVersion
+} from "./taskStateEvents";
 
 /**
  * useTaskData
@@ -15,23 +23,30 @@ import { TASK_CACHE_KEYS } from "./useTaskInteraction";
  */
 export function useTaskData({ scope = 'all', projectId = null, priorityOnly = false } = {}) {
   const queryClient = useQueryClient();
+  const taskVersionRef = useRef(getTaskVersion());
 
-  // Fetch tasks based on scope
+  // Fetch tasks based on scope - normalize after fetch
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: scope === 'project' ? ['tasks', projectId] : ['allTasks'],
     queryFn: async () => {
+      let rawTasks;
       if (scope === 'project' && projectId) {
-        return base44.entities.Task.filter({ project_id: projectId });
+        rawTasks = await base44.entities.Task.filter({ project_id: projectId });
+      } else {
+        rawTasks = await base44.entities.Task.list();
       }
-      return base44.entities.Task.list();
+      return normalizeTasks(rawTasks);
     },
     enabled: scope === 'all' || !!projectId,
   });
 
-  // Fetch priority tasks separately for priority filtering
+  // Fetch priority tasks separately for priority filtering - normalize after fetch
   const { data: priorityTasks = [] } = useQuery({
     queryKey: ['priorityTasks'],
-    queryFn: () => base44.entities.Task.filter({ is_priority: true }),
+    queryFn: async () => {
+      const rawTasks = await base44.entities.Task.filter({ is_priority: true });
+      return normalizeTasks(rawTasks);
+    },
     enabled: priorityOnly,
   });
 
@@ -98,8 +113,8 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   // Update task mutation - optimistic updates + invalidate ALL task-related queries
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onMutate: async ({ id, data }) => {
+    mutationFn: ({ id, data, mutationTimestamp }) => base44.entities.Task.update(id, data),
+    onMutate: async ({ id, data, mutationTimestamp }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['tasks'] });
       await queryClient.cancelQueries({ queryKey: ['allTasks'] });
@@ -109,15 +124,24 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         await queryClient.cancelQueries({ queryKey: ['projectTasks', projectId] });
       }
 
+      // Mutation version guard - prevent stale overwrites
+      if (!shouldApplyMutation(id, mutationTimestamp)) {
+        console.warn(`[MUTATION GUARD] Stale mutation blocked for task ${id}`);
+        return { blocked: true };
+      }
+      
+      // Record mutation timestamp
+      setMutationTimestamp(id, mutationTimestamp);
+
       // Snapshot previous values
       const previousAllTasks = queryClient.getQueryData(['allTasks']);
       const previousProjectTasks = projectId ? queryClient.getQueryData(['tasks', projectId]) : null;
       const previousPriorityTasks = queryClient.getQueryData(['priorityTasks']);
 
-      // Optimistically update all caches
+      // Optimistically update all caches with normalization
       const updateCache = (old) => {
         if (!old) return old;
-        return old.map(t => t.id === id ? { ...t, ...data } : t);
+        return old.map(t => t.id === id ? normalizeTask({ ...t, ...data }) : t);
       };
 
       queryClient.setQueryData(['allTasks'], updateCache);
@@ -144,6 +168,16 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     },
     onSuccess: (updatedTask, variables) => {
       console.log("TASK UPDATED", variables.id, variables.data);
+      
+      // Increment version on successful mutation
+      taskVersionRef.current = incrementTaskVersion();
+      
+      // Emit global state updated event for all subscribed components
+      emitTaskStateUpdated({
+        taskId: variables.id,
+        updates: variables.data,
+        source: 'useTaskData',
+      });
       
       // Use centralized cache keys
       TASK_CACHE_KEYS.forEach(key => {
@@ -195,17 +229,21 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   };
 
   const handleUpdateDueDate = async (task, dueDate) => {
+    const mutationTimestamp = Date.now();
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { due_date: dueDate }
+      data: { due_date: dueDate },
+      mutationTimestamp
     });
     toast.success(dueDate ? 'Due date updated' : 'Due date removed');
   };
 
   const handleUpdateStartDate = async (task, startDate) => {
+    const mutationTimestamp = Date.now();
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { start_date: startDate }
+      data: { start_date: startDate },
+      mutationTimestamp
     });
     toast.success(startDate ? 'Start date updated' : 'Start date removed');
   };
@@ -216,9 +254,11 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       return { needsConfirmation: true, task };
     }
     
+    const mutationTimestamp = Date.now();
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { is_priority: !task.is_priority }
+      data: { is_priority: !task.is_priority },
+      mutationTimestamp
     });
     toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
     return { needsConfirmation: false };
@@ -227,16 +267,19 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   // Direct priority update without confirmation (for use after confirm dialog)
   const handleConfirmRemovePriority = async (task) => {
     console.log("PRIORITY REMOVED CONFIRMED", task.name);
+    const mutationTimestamp = Date.now();
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { is_priority: false }
+      data: { is_priority: false },
+      mutationTimestamp
     });
     toast.success('Removed from priority');
   };
 
   // Generic task update function for external use
   const updateTask = async (taskId, data) => {
-    await updateTaskMutation.mutateAsync({ id: taskId, data });
+    const mutationTimestamp = Date.now();
+    await updateTaskMutation.mutateAsync({ id: taskId, data, mutationTimestamp });
   };
 
   return {
