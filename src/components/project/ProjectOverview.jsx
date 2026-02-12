@@ -323,8 +323,16 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         {/* Task Views */}
         {viewMode === 'card' ? (
           <>
-            {/* Main Task Groups Board */}
-            <ProjectKanban projectId={projectId} sharedData={sharedData} />
+            {/* Main Task Groups Board - pass inline control handlers */}
+            <ProjectKanban 
+              projectId={projectId} 
+              sharedData={{
+                ...sharedData,
+                onUpdateDueDate: handleUpdateDueDate,
+                onUpdateStartDate: handleUpdateStartDate,
+                onTogglePriority: handleTogglePriority,
+              }} 
+            />
 
             {/* Completed Tasks Section */}
             <CompletedTasksSection projectId={projectId} sharedData={sharedData} />
