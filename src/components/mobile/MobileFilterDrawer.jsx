@@ -95,26 +95,26 @@ export default function MobileFilterDrawer({
           </div>
         </div>
 
-        {/* Sticky Footer */}
+        {/* Sticky Footer - 56px max */}
         <div 
-          className="flex-shrink-0 border-t border-gray-700 bg-gray-900 px-4 py-3"
+          className="flex-shrink-0 border-t border-gray-700 bg-gray-900 px-4 py-2"
           style={{
-            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
           }}
         >
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               onClick={handleClear}
-              className="flex-1 min-h-[48px] border-gray-600"
+              className="flex-1 h-11 border-gray-600"
             >
-              Clear Filters
+              Clear
             </Button>
             <Button
               onClick={handleApply}
-              className="flex-1 min-h-[48px] bg-red-600 hover:bg-red-700"
+              className="flex-1 h-11 bg-red-600 hover:bg-red-700"
             >
-              Apply Filters
+              Apply
             </Button>
           </div>
         </div>
@@ -141,25 +141,25 @@ export function MobileFilterSection({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-800 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800/50 hover:bg-gray-800 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-white">{title}</span>
+          <span className="font-medium text-white text-sm">{title}</span>
           {badge && (
-            <span className="px-2 py-0.5 text-xs bg-red-600 text-white rounded-full">
+            <span className="px-1.5 py-0.5 text-xs bg-red-600 text-white rounded-full">
               {badge}
             </span>
           )}
         </div>
         {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-gray-400" />
+          <ChevronDown className="w-4 h-4 text-gray-400" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-gray-400" />
+          <ChevronRight className="w-4 h-4 text-gray-400" />
         )}
       </button>
       
       {isOpen && (
-        <div className="p-4 bg-gray-900/50">
+        <div className="p-3 bg-gray-900/50">
           {children}
         </div>
       )}
