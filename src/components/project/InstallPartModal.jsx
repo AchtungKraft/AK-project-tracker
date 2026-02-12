@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wrench, Package } from "lucide-react";
+import { Wrench, Package, MapPin, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
+import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 
 export default function InstallPartModal({ requirement, onClose }) {
   const queryClient = useQueryClient();
@@ -17,6 +20,8 @@ export default function InstallPartModal({ requirement, onClose }) {
     Math.min((requirement.qty_allocated || 0) - (requirement.qty_installed || 0), 1)
   );
   const [notes, setNotes] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
@@ -28,73 +33,79 @@ export default function InstallPartModal({ requirement, onClose }) {
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: requirement.part_id })
   });
 
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => base44.entities.Location.list()
+  });
+
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: () => base44.entities.PartCategory.list()
   });
 
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments', requirement.project_id],
+    queryFn: () => base44.entities.PartCommitment.filter({ project_id: requirement.project_id }),
+    enabled: !!requirement.project_id,
+  });
+
   const part = parts.find(p => p.id === requirement.part_id) || {};
   const maxInstallable = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
+  const activeLocations = locations.filter(l => l.active);
+  
+  // Get available inventory with location info
+  const availableInventory = inventoryItems
+    .map(item => {
+      const location = locations.find(l => l.id === item.location_id);
+      const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
+      return { ...item, location, available };
+    })
+    .filter(i => i.available > 0);
+  
+  // Find commitment for this requirement
+  const commitment = commitments.find(c => c.requirement_id === requirement.id && c.commitment_status !== 'cancelled');
+  
+  // Check if part type affects inventory
+  const affectsInventory = part.affects_inventory !== false;
 
+  // Use centralized mutation service
   const installMutation = useMutation({
     mutationFn: async () => {
-      // Find reserved inventory to consume
-      let remaining = qtyToInstall;
-      const updates = [];
+      const response = await base44.functions.invoke('mutateInventory', {
+        mutation_type: 'install',
+        part_id: requirement.part_id,
+        qty: qtyToInstall,
+        project_id: requirement.project_id,
+        commitment_id: commitment?.id || null,
+        from_location_id: selectedLocationId || null,
+        unit_cost: part.default_cost || 0,
+        notes: notes || `Installed for requirement`,
+      });
       
-      for (const item of inventoryItems) {
-        if (remaining <= 0) break;
-        
-        const reservedHere = Math.min(item.quantity_reserved || 0, remaining);
-        if (reservedHere > 0) {
-          // Reduce on_hand and reserved
-          updates.push(
-            base44.entities.InventoryItem.update(item.id, {
-              quantity_on_hand: Math.max(0, (item.quantity_on_hand || 0) - reservedHere),
-              quantity_reserved: Math.max(0, (item.quantity_reserved || 0) - reservedHere)
-            })
-          );
-          
-          // Create installed part record
-          const unitCost = item.purchase_cost || part.default_cost || 0;
-          updates.push(
-            base44.entities.InstalledPart.create({
-              part_id: requirement.part_id,
-              project_id: requirement.project_id,
-              requirement_id: requirement.id,
-              inventory_item_id: item.id,
-              qty_consumed: reservedHere,
-              unit_cost_at_install: unitCost,
-              extended_cost: reservedHere * unitCost,
-              installed_date: new Date().toISOString(),
-              category_id: part.part_category_id,
-              notes: notes
-            })
-          );
-          
-          remaining -= reservedHere;
-        }
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
-      // Update requirement
+      // Update requirement qty_installed separately (mutation service handles InstalledPart)
       const newInstalled = (requirement.qty_installed || 0) + qtyToInstall;
       const newStatus = newInstalled >= requirement.qty_needed ? 'Installed' : 
                        newInstalled > 0 ? 'Partially Installed' : requirement.status;
       
-      updates.push(
-        base44.entities.PartProjectRequirement.update(requirement.id, {
-          qty_installed: newInstalled,
-          status: newStatus
-        })
-      );
-
-      await Promise.all(updates);
+      await base44.entities.PartProjectRequirement.update(requirement.id, {
+        qty_installed: newInstalled,
+        status: newStatus
+      });
+      
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
       queryClient.invalidateQueries({ queryKey: ['installedParts'] });
+      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryAuditLogs'] });
       toast.success(`${qtyToInstall} unit(s) marked as installed`);
+      setShowConfirmModal(false);
       onClose();
     },
     onError: (error) => {
@@ -107,6 +118,18 @@ export default function InstallPartModal({ requirement, onClose }) {
       toast.error('Invalid quantity');
       return;
     }
+    
+    // Validate location selection if part affects inventory
+    if (affectsInventory && !selectedLocationId && availableInventory.length > 0) {
+      toast.error('Please select a source location');
+      return;
+    }
+    
+    // Show confirmation modal
+    setShowConfirmModal(true);
+  };
+  
+  const handleConfirmedInstall = () => {
     installMutation.mutate();
   };
 
@@ -156,6 +179,36 @@ export default function InstallPartModal({ requirement, onClose }) {
                 />
               </div>
 
+              {/* Source Location Selection */}
+              {affectsInventory && (
+                <div>
+                  <Label className="text-gray-300 flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    Source Location *
+                  </Label>
+                  {availableInventory.length === 0 ? (
+                    <div className="bg-red-900/30 border border-red-600 rounded-lg p-3 flex items-center gap-2 mt-1">
+                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                      <span className="text-red-200 text-sm">No inventory available for this part</span>
+                    </div>
+                  ) : (
+                    <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                        <SelectValue placeholder="Select inventory location..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableInventory.map((inv) => (
+                          <SelectItem key={inv.id} value={inv.location_id || inv.id}>
+                            {inv.location?.name || inv.location?.location_area || 'Unassigned'} 
+                            {' '}({inv.available} available)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
               <div>
                 <Label className="text-gray-300">Installation Notes (optional)</Label>
                 <Textarea
@@ -191,13 +244,26 @@ export default function InstallPartModal({ requirement, onClose }) {
             <Button 
               onClick={handleInstall}
               className="bg-green-600 hover:bg-green-700"
-              disabled={installMutation.isPending || maxInstallable <= 0}
+              disabled={installMutation.isPending || maxInstallable <= 0 || (affectsInventory && availableInventory.length === 0)}
             >
               {installMutation.isPending ? 'Installing...' : `Install ${qtyToInstall} Unit(s)`}
             </Button>
           </div>
         </div>
       </DialogContent>
+      
+      {/* Confirmation Modal */}
+      <ConfirmInventoryActionModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmedInstall}
+        actionType="install"
+        part={part}
+        quantity={qtyToInstall}
+        fromLocation={activeLocations.find(l => l.id === selectedLocationId)}
+        commitment={commitment}
+        isLoading={installMutation.isPending}
+      />
     </Dialog>
   );
 }
