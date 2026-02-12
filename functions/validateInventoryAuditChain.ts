@@ -10,6 +10,16 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  */
 
 Deno.serve(async (req) => {
+  // Handle empty body for test/health checks
+  let payload = {};
+  try {
+    const text = await req.text();
+    if (text) {
+      payload = JSON.parse(text);
+    }
+  } catch (e) {
+    // Empty body is OK
+  }
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
@@ -23,7 +33,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const payload = await req.json();
     const { part_id, location_id, full_scan = false } = payload;
 
     const discrepancies = [];
