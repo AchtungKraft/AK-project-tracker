@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import FinancialStatusBadge from "../financial/FinancialStatusBadge";
 
 /**
  * CommitmentCard - Displays a single PartCommitment record
@@ -27,7 +28,8 @@ export default function CommitmentCard({
   onEdit,
   onCancel,
   onViewPO,
-  compact = false 
+  compact = false,
+  financialStatus = null,
 }) {
   const linkedOrders = orders.filter(o => 
     (commitment.order_line_item_ids || []).some(liId => 
@@ -56,7 +58,7 @@ export default function CommitmentCard({
               {commitment.qty_received || 0}/{commitment.qty_ordered} recv
             </span>
           )}
-          <CommitmentBillingBadge status={commitment.billing_status} size="sm" />
+          <FinancialStatusBadge financialStatus={financialStatus} displayMode="compact" />
         </div>
       </div>
     );
@@ -68,10 +70,14 @@ export default function CommitmentCard({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             {/* Header */}
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <CommitmentStatusBadge status={commitment.commitment_status} />
-              <CommitmentBillingBadge status={commitment.billing_status} />
               <CommitmentSourceBadge source={commitment.allocation_source} />
+            </div>
+            
+            {/* Financial Status */}
+            <div className="mb-2">
+              <FinancialStatusBadge financialStatus={financialStatus} displayMode="full" />
             </div>
 
             {/* Part Info */}
