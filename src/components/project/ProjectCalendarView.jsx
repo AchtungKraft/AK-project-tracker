@@ -180,6 +180,7 @@ export default function ProjectCalendarView({
                   onTogglePriority={onTogglePriority}
                   commentCount={commentCountByTaskId[task.id] || 0}
                   compact={isMobile}
+                  showInlineControls={true}
                 />
               ))}
             </div>
