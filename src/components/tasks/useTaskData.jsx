@@ -98,10 +98,13 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   // Update task mutation - invalidate ALL task-related queries
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: (_, variables) => {
+    onSuccess: (updatedTask, variables) => {
+      console.log("TASK UPDATED", variables.id, variables.data);
+      
       // Invalidate all possible task query keys used across the app
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['allTasksForCalendar'] });
       queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       
@@ -111,10 +114,11 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
       }
       
-      // Also invalidate for any project ID in the task data
-      if (variables?.data?.project_id) {
-        queryClient.invalidateQueries({ queryKey: ['tasks', variables.data.project_id] });
-        queryClient.invalidateQueries({ queryKey: ['projectTasks', variables.data.project_id] });
+      // Also invalidate for any project ID in the task data or the updated task
+      const taskProjectId = variables?.data?.project_id || updatedTask?.project_id;
+      if (taskProjectId && taskProjectId !== projectId) {
+        queryClient.invalidateQueries({ queryKey: ['tasks', taskProjectId] });
+        queryClient.invalidateQueries({ queryKey: ['projectTasks', taskProjectId] });
       }
     },
   });
