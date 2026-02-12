@@ -669,6 +669,7 @@ export default function PriorityDashboard() {
                                     onUpdateStartDate={handleUpdateStartDate}
                                     onTogglePriority={handleTogglePriority}
                                     compact={isMobile}
+                                    showInlineControls={true}
                                   />
                                 ))}
                               </div>
