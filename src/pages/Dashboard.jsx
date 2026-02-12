@@ -201,7 +201,7 @@ export default function Dashboard() {
   return (
     <MobileSafeAreaContainer>
       <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : 'p-3 md:p-6'}`}>
-        <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-2' : 'space-y-4'}`}
+        <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-2' : 'space-y-4'}`}>
           {/* Header */}
           <div className={`flex flex-col md:flex-row justify-between items-start md:items-center ${isMobile ? 'gap-2 mb-2' : 'gap-3'}`}>
             <div>
