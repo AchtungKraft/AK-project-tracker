@@ -12,7 +12,8 @@ import {
   Package,
   Flame,
   ListChecks,
-  X
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -64,6 +65,11 @@ const getNavigationItems = (isAchtungKraft) => {
         title: "Parts Tracker",
         url: createPageUrl("PartsTracker"),
         icon: Package,
+      },
+      {
+        title: "Financial Exceptions",
+        url: createPageUrl("FinancialExceptionDashboard"),
+        icon: AlertTriangle,
       },
       { divider: true },
       {
