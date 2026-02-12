@@ -108,12 +108,14 @@ export default function ProjectDetail() {
   }, [allTaskComments]);
 
   // Shared data object to pass to child components
+  // NOTE: Use 'tasks' as key - ProjectOverview expects this name
   const sharedData = {
     statuses,
     projectTypes,
     categories,
     teamMembers,
-    projectTasks,
+    tasks: projectTasks, // ProjectOverview expects 'tasks', not 'projectTasks'
+    projectTasks, // Keep for backward compatibility with other components
     projectBuckets,
     journalEntries,
     commentCountByTaskId,
