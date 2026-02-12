@@ -43,8 +43,13 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
     categories: sharedCategories,
     teamMembers: sharedTeamMembers,
     projectTasks: sharedTasks,
+    tasks: sharedTasksAlt, // Alternative key for backward compatibility
     projectBuckets: sharedBuckets,
     commentCountByTaskId: sharedCommentCount,
+    // Inline control handlers
+    onUpdateDueDate,
+    onUpdateStartDate,
+    onTogglePriority,
   } = sharedData;
 
   // Only fetch if not provided via sharedData
@@ -86,7 +91,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
 
   // Use shared data if available, otherwise use fetched data
   const buckets = sharedBuckets || fetchedBuckets;
-  const allTasks = sharedTasks || fetchedTasks;
+  const allTasks = sharedTasks || sharedTasksAlt || fetchedTasks;
   const categories = sharedCategories || fetchedCategories;
   const teamMembers = sharedTeamMembers || fetchedTeamMembers;
   const statuses = sharedStatuses || fetchedStatuses;
@@ -495,6 +500,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                   onClick={() => setSelectedTask(task)}
                                                   commentCount={commentCountByTaskId[task.id] || 0}
                                                   compact={isMobile}
+                                                  onUpdateDueDate={onUpdateDueDate}
+                                                  onUpdateStartDate={onUpdateStartDate}
+                                                  onTogglePriority={onTogglePriority}
                                                 />
                                         </div>
                                       )}
@@ -599,6 +607,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                     onClick={() => setSelectedTask(task)}
                                                     commentCount={commentCountByTaskId[task.id] || 0}
                                                     compact={isMobile}
+                                                    onUpdateDueDate={onUpdateDueDate}
+                                                    onUpdateStartDate={onUpdateStartDate}
+                                                    onTogglePriority={onTogglePriority}
                                                   />
                                                 </div>
                                               )}
@@ -663,6 +674,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                         onClick={() => setSelectedTask(task)}
                                         commentCount={commentCountByTaskId[task.id] || 0}
                                         compact={isMobile}
+                                        onUpdateDueDate={onUpdateDueDate}
+                                        onUpdateStartDate={onUpdateStartDate}
+                                        onTogglePriority={onTogglePriority}
                                       />
                                     </div>
                                   )}
@@ -746,6 +760,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                 onClick={() => setSelectedTask(task)}
                                                 commentCount={commentCountByTaskId[task.id] || 0}
                                                 compact={isMobile}
+                                                onUpdateDueDate={onUpdateDueDate}
+                                                onUpdateStartDate={onUpdateStartDate}
+                                                onTogglePriority={onTogglePriority}
                                               />
                                             </div>
                                           )}
@@ -778,6 +795,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                       onClick={() => setSelectedTask(task)}
                                       commentCount={commentCountByTaskId[task.id] || 0}
                                       compact={isMobile}
+                                      onUpdateDueDate={onUpdateDueDate}
+                                      onUpdateStartDate={onUpdateStartDate}
+                                      onTogglePriority={onTogglePriority}
                                     />
                                   ))}
                                 </div>
