@@ -590,6 +590,13 @@ async function processMutation(base44, user, payload, startTime) {
     
     const savedLog = await base44.asServiceRole.entities.InventoryMutationLog.create(mutationLog);
     result.mutation_log_id = savedLog.id;
+    
+    // For reversals, link the reversal mutation back to the original
+    if (mutation_type === 'reversal' && reversed_mutation_id) {
+      await base44.asServiceRole.entities.InventoryMutationLog.update(reversed_mutation_id, {
+        reversed_by_mutation_id: savedLog.id,
+      });
+    }
 
     return { success: true, ...result };
 
