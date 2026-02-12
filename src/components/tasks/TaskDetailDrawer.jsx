@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
+import TaskPartsSection from "./TaskPartsSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import DeleteTaskConfirm from "./DeleteTaskConfirm";
@@ -449,6 +450,9 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* Client Feedback Links */}
           <ClientFeedbackLinks taskId={task?.id} />
+
+          {/* Associated Parts Section */}
+          <TaskPartsSection task={task} project={project} />
 
           {/* Comments Section */}
           <TaskCommentsSection taskId={task?.id} />
