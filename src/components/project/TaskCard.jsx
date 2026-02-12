@@ -112,7 +112,7 @@ export default function TaskCard({ task, teamMembers, categories, statuses, onTo
               </div>
             )}
             
-            <div className={cn("flex items-center", isCompact ? "gap-0" : "gap-1")}
+            <div className={cn("flex items-center", isCompact ? "gap-0" : "gap-1")}>
               {onTogglePriority && (
                 <button
                   onClick={(e) => {
