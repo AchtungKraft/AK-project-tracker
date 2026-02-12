@@ -31,9 +31,7 @@ export default function ProjectCalendarView({
   const [weeksToShow, setWeeksToShow] = useState(isMobile ? 4 : 4);
   const [groupBy, setGroupBy] = useState('assigned');
 
-  // Debug logging
-  console.log('[ProjectCalendarView] Received tasks:', tasks.length);
-  console.log('[ProjectCalendarView] Tasks sample:', tasks.slice(0, 3).map(t => ({ id: t.id, name: t.name, due_date: t.due_date, start_date: t.start_date })));
+
 
   // Generate week ranges
   const weekRanges = useMemo(() => {
@@ -68,7 +66,6 @@ export default function ProjectCalendarView({
     });
     
     const activeTasks = tasks.filter(t => t.status_id !== completedStatus?.id);
-    console.log('[ProjectCalendarView] Active tasks after filtering:', activeTasks.length);
     
     activeTasks.forEach(task => {
       // Use start_date first, fall back to due_date
@@ -86,7 +83,6 @@ export default function ProjectCalendarView({
       }
     });
     
-    console.log('[ProjectCalendarView] Categorized - pastDue:', pastDue.length, 'withDate:', withDate.length, 'withoutDate:', withoutDate.length);
     return { tasksPastDue: pastDue, tasksWithDueDate: withDate, tasksWithoutDueDate: withoutDate };
   }, [tasks, statuses]);
 
@@ -102,7 +98,6 @@ export default function ProjectCalendarView({
       });
     });
     
-    console.log('[ProjectCalendarView] Tasks by week:', Object.entries(grouped).map(([k, v]) => `Week ${k}: ${v.length}`).join(', '));
     return grouped;
   }, [tasksWithDueDate, weekRanges]);
 

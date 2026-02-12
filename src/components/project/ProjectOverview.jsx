@@ -125,9 +125,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
-  // Debug logging for task data flow
-  console.log('[ProjectOverview] Tasks from sharedData:', tasks.length, 'projectId:', projectId);
-  console.log('[ProjectOverview] viewMode:', viewMode, 'isMobile:', isMobile);
+
 
   return (
     <>
