@@ -7,6 +7,9 @@ import { Plus, Search, RefreshCw, LayoutGrid, List, X, Check, User } from "lucid
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
+import MobileFilterDrawer, { MobileFilterSection } from "@/components/mobile/MobileFilterDrawer";
+import MobileSortDrawer, { MobileSortOption } from "@/components/mobile/MobileSortDrawer";
 import {
   Select,
   SelectContent,
@@ -37,6 +40,11 @@ export default function Dashboard() {
   const [editingProject, setEditingProject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [sortDrawerOpen, setSortDrawerOpen] = useState(false);
+  
+  // Temporary filter state for drawer (applied on "Apply")
+  const [tempFilters, setTempFilters] = useState(null);
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, clearFilters: clearFilterState, applyView } = useFilterState('dashboard', DASHBOARD_DEFAULTS);
@@ -119,6 +127,32 @@ export default function Dashboard() {
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  // Calculate active filter count for mobile badge
+  const activeFilterCount = useActiveFilterCount(
+    { selectedTypes, statusFilter, assignedTo },
+    { selectedTypes: [], statusFilter: 'all', assignedTo: [] }
+  );
+
+  // Initialize temp filters when drawer opens
+  const handleOpenFilterDrawer = useCallback(() => {
+    setTempFilters({ selectedTypes, statusFilter, assignedTo });
+    setFilterDrawerOpen(true);
+  }, [selectedTypes, statusFilter, assignedTo]);
+
+  // Apply temp filters
+  const handleApplyFilters = useCallback(() => {
+    if (tempFilters) {
+      setFilter('selectedTypes', tempFilters.selectedTypes);
+      setFilter('statusFilter', tempFilters.statusFilter);
+      setFilter('assignedTo', tempFilters.assignedTo);
+    }
+  }, [tempFilters, setFilter]);
+
+  // Clear all filters
+  const handleClearAllFilters = useCallback(() => {
+    setTempFilters({ selectedTypes: [], statusFilter: 'all', assignedTo: [] });
+  }, []);
 
   // Get active team members sorted by sort_order for the Assigned To filter
   const activeTeamMembers = useMemo(() => {
@@ -223,178 +257,188 @@ export default function Dashboard() {
             )}
           </div>
 
-        {/* Filters */}
-        <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
-          <div className="flex flex-wrap items-center gap-3 mb-3">
-            <SavedViewsSelector
-              savedViews={savedViews}
-              activeViewName={activeViewName}
-              onSelectView={handleSelectView}
-              onSaveView={saveView}
-              onDeleteView={deleteView}
-              onRenameView={renameView}
-              currentSelectedTypes={selectedTypes}
-              currentStatusFilter={statusFilter}
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {/* Search */}
-            <div className="md:col-span-4 lg:col-span-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input
-                  placeholder="Search projects..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-gray-900/50 border-gray-700 text-white"
-                />
+        {/* Mobile Filter Trigger Bar */}
+        <MobileFilterTriggerBar
+          activeFilterCount={activeFilterCount}
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
+          onFilterClick={handleOpenFilterDrawer}
+          onSortClick={() => setSortDrawerOpen(true)}
+          searchPlaceholder="Search projects..."
+        >
+          {/* Desktop Filters */}
+          <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-4">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <SavedViewsSelector
+                savedViews={savedViews}
+                activeViewName={activeViewName}
+                onSelectView={handleSelectView}
+                onSaveView={saveView}
+                onDeleteView={deleteView}
+                onRenameView={renameView}
+                currentSelectedTypes={selectedTypes}
+                currentStatusFilter={statusFilter}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {/* Search */}
+              <div className="md:col-span-4 lg:col-span-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search projects..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Group By */}
-            <div>
-              <Select value={groupBy} onValueChange={handleGroupByChange}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="Group By" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="projectType">Group by Type</SelectItem>
-                  <SelectItem value="status">Group by Status</SelectItem>
-                  <SelectItem value="client">Group by Client</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Group By */}
+              <div>
+                <Select value={groupBy} onValueChange={handleGroupByChange}>
+                  <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue placeholder="Group By" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="projectType">Group by Type</SelectItem>
+                    <SelectItem value="status">Group by Status</SelectItem>
+                    <SelectItem value="client">Group by Client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Status Filter */}
-            <div>
-              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {projectStatuses.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Status Filter */}
+              <div>
+                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                  <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {projectStatuses.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Type Filter - Multi-select */}
-            <div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800"
-                  >
-                    <span className="truncate">
-                      {selectedTypes.length === 0 
-                        ? 'All Types' 
-                        : selectedTypes.length === 1 
-                          ? projectTypes.find(t => t.id === selectedTypes[0])?.name || 'Type'
-                          : `${selectedTypes.length} Types`}
-                    </span>
-                    {selectedTypes.length > 0 && (
-                      <X 
-                        className="w-4 h-4 ml-2 hover:text-red-400" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectedTypesChange([]);
-                        }}
-                      />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56">
-                  {projectTypes.filter(t => t.active).map(t => (
-                    <DropdownMenuCheckboxItem
-                      key={t.id}
-                      checked={selectedTypes.includes(t.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          handleSelectedTypesChange([...selectedTypes, t.id]);
-                        } else {
-                          handleSelectedTypesChange(selectedTypes.filter(id => id !== t.id));
-                        }
-                      }}
-                    >
-                      <span 
-                        className="w-2 h-2 rounded-full mr-2" 
-                        style={{ backgroundColor: t.color }}
-                      />
-                      {t.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Assigned To Multi-Select */}
-            <div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className={`w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                      <User className="w-4 h-4 shrink-0" />
-                      {assignedTo.length === 0 
-                        ? 'All Assignees' 
-                        : assignedTo.length === 1 
-                          ? activeTeamMembers.find(tm => tm.id === assignedTo[0])?.full_name || 'Assignee'
-                          : `${assignedTo.length} Assignees`}
-                    </span>
-                    {assignedTo.length > 0 && (
-                      <X 
-                        className="w-4 h-4 ml-2 hover:text-red-400 shrink-0" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAssignedToChange([]);
-                        }}
-                      />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56 max-h-80 overflow-y-auto">
-                  {activeTeamMembers.map(tm => (
-                    <DropdownMenuCheckboxItem
-                      key={tm.id}
-                      checked={assignedTo.includes(tm.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          handleAssignedToChange([...assignedTo, tm.id]);
-                        } else {
-                          handleAssignedToChange(assignedTo.filter(id => id !== tm.id));
-                        }
-                      }}
+              {/* Type Filter - Multi-select */}
+              <div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800"
                     >
                       <span className="truncate">
-                        {tm.full_name}
-                        {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+                        {selectedTypes.length === 0 
+                          ? 'All Types' 
+                          : selectedTypes.length === 1 
+                            ? projectTypes.find(t => t.id === selectedTypes[0])?.name || 'Type'
+                            : `${selectedTypes.length} Types`}
                       </span>
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Clear Filters */}
-            {(searchTerm || statusFilter !== 'all' || selectedTypes.length > 0 || assignedTo.length > 0 || groupBy !== 'projectType') && (
-              <div>
-                <Button
-                  variant="ghost"
-                  onClick={clearFilters}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Clear
-                </Button>
+                      {selectedTypes.length > 0 && (
+                        <X 
+                          className="w-4 h-4 ml-2 hover:text-red-400" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectedTypesChange([]);
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    {projectTypes.filter(t => t.active).map(t => (
+                      <DropdownMenuCheckboxItem
+                        key={t.id}
+                        checked={selectedTypes.includes(t.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            handleSelectedTypesChange([...selectedTypes, t.id]);
+                          } else {
+                            handleSelectedTypesChange(selectedTypes.filter(id => id !== t.id));
+                          }
+                        }}
+                      >
+                        <span 
+                          className="w-2 h-2 rounded-full mr-2" 
+                          style={{ backgroundColor: t.color }}
+                        />
+                        {t.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            )}
+
+              {/* Assigned To Multi-Select */}
+              <div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className={`w-full justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <User className="w-4 h-4 shrink-0" />
+                        {assignedTo.length === 0 
+                          ? 'All Assignees' 
+                          : assignedTo.length === 1 
+                            ? activeTeamMembers.find(tm => tm.id === assignedTo[0])?.full_name || 'Assignee'
+                            : `${assignedTo.length} Assignees`}
+                      </span>
+                      {assignedTo.length > 0 && (
+                        <X 
+                          className="w-4 h-4 ml-2 hover:text-red-400 shrink-0" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAssignedToChange([]);
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56 max-h-80 overflow-y-auto">
+                    {activeTeamMembers.map(tm => (
+                      <DropdownMenuCheckboxItem
+                        key={tm.id}
+                        checked={assignedTo.includes(tm.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            handleAssignedToChange([...assignedTo, tm.id]);
+                          } else {
+                            handleAssignedToChange(assignedTo.filter(id => id !== tm.id));
+                          }
+                        }}
+                      >
+                        <span className="truncate">
+                          {tm.full_name}
+                          {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Clear Filters */}
+              {(searchTerm || statusFilter !== 'all' || selectedTypes.length > 0 || assignedTo.length > 0 || groupBy !== 'projectType') && (
+                <div>
+                  <Button
+                    variant="ghost"
+                    onClick={clearFilters}
+                    className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </MobileFilterTriggerBar>
 
         {/* View Tabs */}
         <div className="flex items-center gap-4">
@@ -502,6 +546,130 @@ export default function Dashboard() {
         />
       )}
       </div>
+
+      {/* Mobile Filter Drawer */}
+      <MobileFilterDrawer
+        isOpen={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        onApply={handleApplyFilters}
+        onClear={handleClearAllFilters}
+        title="Filter Projects"
+      >
+        <MobileFilterSection title="Project Status" badge={tempFilters?.statusFilter !== 'all' ? 1 : null}>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: 'all' }))}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                tempFilters?.statusFilter === 'all' 
+                  ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                  : 'bg-gray-800/50 text-gray-300'
+              }`}
+            >
+              All Status
+            </button>
+            {projectStatuses.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: s.id }))}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  tempFilters?.statusFilter === s.id 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+
+        <MobileFilterSection title="Project Type" badge={tempFilters?.selectedTypes?.length || null}>
+          <div className="space-y-2">
+            {projectTypes.filter(t => t.active).map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  const current = tempFilters?.selectedTypes || [];
+                  setTempFilters(prev => ({
+                    ...prev,
+                    selectedTypes: current.includes(t.id)
+                      ? current.filter(id => id !== t.id)
+                      : [...current, t.id]
+                  }));
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  tempFilters?.selectedTypes?.includes(t.id) 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+
+        <MobileFilterSection title="Assigned To" badge={tempFilters?.assignedTo?.length || null}>
+          <div className="space-y-2">
+            {activeTeamMembers.map(tm => (
+              <button
+                key={tm.id}
+                type="button"
+                onClick={() => {
+                  const current = tempFilters?.assignedTo || [];
+                  setTempFilters(prev => ({
+                    ...prev,
+                    assignedTo: current.includes(tm.id)
+                      ? current.filter(id => id !== tm.id)
+                      : [...current, tm.id]
+                  }));
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  tempFilters?.assignedTo?.includes(tm.id) 
+                    ? 'bg-red-600/20 border border-red-500/50 text-white' 
+                    : 'bg-gray-800/50 text-gray-300'
+                }`}
+              >
+                {tm.full_name}
+                {tm.team_role && <span className="text-gray-400 ml-1">({tm.team_role})</span>}
+              </button>
+            ))}
+          </div>
+        </MobileFilterSection>
+      </MobileFilterDrawer>
+
+      {/* Mobile Sort Drawer */}
+      <MobileSortDrawer
+        isOpen={sortDrawerOpen}
+        onClose={() => setSortDrawerOpen(false)}
+        title="Group By"
+      >
+        <div className="space-y-2">
+          <MobileSortOption
+            label="Group by Type"
+            value="projectType"
+            selected={groupBy === 'projectType'}
+            onSelect={handleGroupByChange}
+          />
+          <MobileSortOption
+            label="Group by Status"
+            value="status"
+            selected={groupBy === 'status'}
+            onSelect={handleGroupByChange}
+          />
+          <MobileSortOption
+            label="Group by Client"
+            value="client"
+            selected={groupBy === 'client'}
+            onSelect={handleGroupByChange}
+          />
+        </div>
+      </MobileSortDrawer>
     </MobileSafeAreaContainer>
   );
 }
