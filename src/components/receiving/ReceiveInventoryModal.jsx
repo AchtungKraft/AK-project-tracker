@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Package, MapPin, AlertTriangle, Plus } from "lucide-react";
+import { Package, MapPin, AlertTriangle, Plus, Archive } from "lucide-react";
+import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
+import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 
 /**
  * Enhanced Receiving Modal with mandatory location selection and provenance tracking
@@ -38,6 +40,7 @@ export default function ReceiveInventoryModal({
   const [showLocationWarning, setShowLocationWarning] = useState(false);
   const [showCreateLocation, setShowCreateLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
@@ -58,26 +61,34 @@ export default function ReceiveInventoryModal({
     }
   });
 
+  // Use centralized mutation service
   const createInventoryMutation = useMutation({
     mutationFn: async (data) => {
-      return base44.entities.InventoryItem.create({
+      const response = await base44.functions.invoke('mutateInventory', {
+        mutation_type: 'receive',
         part_id: part.id,
-        location_id: data.location_id || null,
-        quantity_on_hand: data.quantity,
-        quantity_reserved: 0,
-        purchase_cost: data.purchase_cost,
-        purchase_order_id: orderId || null,
-        received_date: format(new Date(), "yyyy-MM-dd"),
+        qty: data.quantity,
+        to_location_id: data.location_id || null,
+        unit_cost: data.purchase_cost,
+        order_id: orderId || null,
+        line_item_id: null, // Can be passed if receiving from specific line item
         lot_number: data.lot_number || null,
         notes: data.notes || null,
-        receipt_id: receiptId || null,
         source_type: data.source_type,
         requires_inspection: data.requires_inspection,
       });
+      
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+      
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryAuditLogs'] });
       toast.success(`${formData.quantity} units added to inventory`);
+      setShowConfirmModal(false);
       onOpenChange(false);
     },
     onError: (error) => {
@@ -86,14 +97,32 @@ export default function ReceiveInventoryModal({
   });
 
   const handleSubmit = () => {
+    // Check if part is archived
+    if (part?.is_archived) {
+      toast.error("Cannot receive inventory for archived parts");
+      return;
+    }
+    
+    // Check if CLIENT_SUPPLIED receiving from vendor
+    if (part?.part_type === 'CLIENT_SUPPLIED' && formData.source_type === 'vendor_order') {
+      toast.error("Client-supplied parts cannot be received from vendor orders");
+      return;
+    }
+    
     if (!formData.location_id && !showLocationWarning) {
       setShowLocationWarning(true);
       return;
     }
-    createInventoryMutation.mutate(formData);
+    
+    // Show confirmation modal
+    setShowConfirmModal(true);
   };
 
   const handleConfirmWithoutLocation = () => {
+    setShowConfirmModal(true);
+  };
+  
+  const handleConfirmedReceive = () => {
     createInventoryMutation.mutate(formData);
   };
 
@@ -109,6 +138,16 @@ export default function ReceiveInventoryModal({
           </DialogTitle>
         </DialogHeader>
 
+        {/* Archived Warning */}
+        {part?.is_archived && (
+          <Alert className="bg-red-900/30 border-red-600">
+            <Archive className="h-4 w-4 text-red-500" />
+            <AlertDescription className="text-red-200">
+              <strong>This part is archived.</strong> You cannot receive inventory for archived parts.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Part Info */}
         {part && (
           <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
@@ -121,7 +160,10 @@ export default function ReceiveInventoryModal({
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-white font-medium truncate">{part.part_name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-white font-medium truncate">{part.part_name}</p>
+                  {part.part_type && <PartTypeBadge partType={part.part_type} size="sm" />}
+                </div>
                 {part.vendor_part_number && (
                   <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
                 )}
@@ -314,13 +356,25 @@ export default function ReceiveInventoryModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={createInventoryMutation.isPending || !formData.quantity}
+            disabled={createInventoryMutation.isPending || !formData.quantity || part?.is_archived}
             className="bg-green-600 hover:bg-green-700"
           >
             {createInventoryMutation.isPending ? "Adding..." : "Add to Inventory"}
           </Button>
         </DialogFooter>
       </DialogContent>
+      
+      {/* Confirmation Modal */}
+      <ConfirmInventoryActionModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmedReceive}
+        actionType="receive"
+        part={part}
+        quantity={formData.quantity}
+        toLocation={activeLocations.find(l => l.id === formData.location_id)}
+        isLoading={createInventoryMutation.isPending}
+      />
     </Dialog>
   );
 }
