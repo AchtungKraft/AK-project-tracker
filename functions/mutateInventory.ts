@@ -92,8 +92,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Part not found', code: 'PART_NOT_FOUND' }, { status: 404 });
     }
 
-    // Check if part is archived
-    if (part.is_archived && ['receive', 'move'].includes(mutation_type)) {
+    // Check if part is archived - block all new inventory operations
+    if (part.is_archived && ['receive', 'move', 'install'].includes(mutation_type)) {
       return Response.json({ 
         error: 'Cannot perform this operation on an archived part',
         code: 'PART_ARCHIVED'
