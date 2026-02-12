@@ -35,6 +35,8 @@ import CancelCommitmentModal from "../parts/CancelCommitmentModal";
 import CommitmentEditModal from "../parts/CommitmentEditModal";
 import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
 import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
+import FinancialStatusBadge from "../financial/FinancialStatusBadge";
+import { useFinancialStatusBatch, buildFinancialContexts, mergeFinancialStatus } from "../financial/useFinancialStatus";
 
 /**
  * Derives status badge from quantities (canonical logic)

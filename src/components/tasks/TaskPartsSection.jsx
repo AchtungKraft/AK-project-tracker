@@ -18,6 +18,8 @@ import { Package, Plus, Wrench, Trash2, CheckCircle, MapPin, AlertTriangle } fro
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { toast } from "sonner";
+import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
+import { useFinancialStatusBatch, buildFinancialContexts } from "@/components/financial/useFinancialStatus";
 
 /**
  * TaskPartsSection
