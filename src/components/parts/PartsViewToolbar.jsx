@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, List, Filter } from "lucide-react";
+import { LayoutGrid, List, Filter, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function PartsViewToolbar({ 
@@ -8,7 +8,9 @@ export default function PartsViewToolbar({
   onViewModeChange,
   showGrouping,
   onToggleGrouping,
-  partsCount 
+  partsCount,
+  showArchived,
+  onToggleArchived,
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -17,6 +19,20 @@ export default function PartsViewToolbar({
       </div>
       
       <div className="flex items-center gap-2">
+        {/* Show Archived Toggle */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleArchived}
+          className={cn(
+            "h-8 text-xs gap-2",
+            showArchived ? "text-amber-400 bg-amber-950/30" : "text-gray-400"
+          )}
+        >
+          <Archive className="w-4 h-4" />
+          Archived
+        </Button>
+
         {/* Grouping Toggle */}
         <Button
           variant="ghost"

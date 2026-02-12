@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box, ChevronDown, ChevronRight, AlertTriangle, DollarSign } from "lucide-react";
+import { Package, MapPin, Box, ChevronDown, ChevronRight, AlertTriangle, DollarSign, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
+import { PartTypeBadge } from "./PartTypeSelector";
 
 /**
  * PartsListView - Displays parts in a list format
@@ -237,14 +238,23 @@ export default function PartsListView({
 
           {/* Part Info */}
           <div className="flex-1 min-w-0 space-y-1.5">
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 flex-wrap">
               <h4 className="text-white text-sm font-medium line-clamp-2 flex-1 group-hover:text-red-400 transition-colors">
                 {part.part_name}
               </h4>
-              {part.is_active === false && (
+              {part.is_archived && (
+                <Badge className="bg-amber-600 text-white text-xs shrink-0">
+                  <Archive className="w-3 h-3 mr-1" />
+                  Archived
+                </Badge>
+              )}
+              {part.is_active === false && !part.is_archived && (
                 <Badge variant="outline" className="border-red-500 text-red-400 text-xs shrink-0">
                   Inactive
                 </Badge>
+              )}
+              {part.part_type && part.part_type !== 'PURCHASED_VENDOR' && (
+                <PartTypeBadge partType={part.part_type} size="sm" />
               )}
             </div>
             
