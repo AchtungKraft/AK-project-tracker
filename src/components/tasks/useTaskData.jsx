@@ -160,12 +160,27 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     toast.success(startDate ? 'Start date updated' : 'Start date removed');
   };
 
-  const handleTogglePriority = async (task) => {
+  const handleTogglePriority = async (task, skipConfirm = false) => {
+    // If removing priority and skipConfirm is false, return a flag to show confirmation
+    if (task.is_priority && !skipConfirm) {
+      return { needsConfirmation: true, task };
+    }
+    
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { is_priority: !task.is_priority }
     });
     toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
+    return { needsConfirmation: false };
+  };
+
+  // Direct priority update without confirmation (for use after confirm dialog)
+  const handleConfirmRemovePriority = async (task) => {
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: { is_priority: false }
+    });
+    toast.success('Removed from priority');
   };
 
   return {
@@ -191,6 +206,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     handleUpdateDueDate,
     handleUpdateStartDate,
     handleTogglePriority,
+    handleConfirmRemovePriority,
   };
 }
 
