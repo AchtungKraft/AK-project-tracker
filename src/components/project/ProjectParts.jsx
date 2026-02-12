@@ -154,6 +154,28 @@ export default function ProjectParts({ projectId }) {
   
   const project = projects.find(p => p.id === projectId);
 
+  // Batch resolve financial status for all requirements
+  const financialContexts = useMemo(() => {
+    return requirements.map(req => ({
+      part_id: req.part_id,
+      project_id: projectId,
+      commitment_id: commitments.find(c => c.requirement_id === req.id && c.commitment_status !== 'cancelled')?.id,
+    }));
+  }, [requirements, projectId, commitments]);
+  
+  const { data: financialStatuses = [] } = useFinancialStatusBatch(financialContexts, {
+    enabled: requirements.length > 0,
+  });
+  
+  // Build financial status lookup map
+  const financialStatusMap = useMemo(() => {
+    const map = new Map();
+    financialStatuses.forEach(fs => {
+      map.set(fs.part_id, fs);
+    });
+    return map;
+  }, [financialStatuses]);
+
   // Dual-read hook for commitment-aware metrics
   const commitmentMetrics = useCommitmentData({
     commitments,
@@ -307,9 +329,10 @@ export default function ProjectParts({ projectId }) {
         _vendor: vendor,
         _commitment: commitment,
         _part: part,
+        _financialStatus: financialStatusMap.get(req.part_id) || null,
       };
     });
-  }, [requirements, partOnOrder, inventoryItems, parts, commitments, buildAssignments, lineItems, categories, vendors]);
+  }, [requirements, partOnOrder, inventoryItems, parts, commitments, buildAssignments, lineItems, categories, vendors, financialStatusMap]);
 
   // Group requirements based on groupBy selection
   const groupedRequirements = useMemo(() => {
@@ -497,6 +520,9 @@ export default function ProjectParts({ projectId }) {
         </TableCell>
         <TableCell>
           <PricingIntegrityCell integrity={req._pricingIntegrity} compact />
+        </TableCell>
+        <TableCell>
+          <FinancialStatusBadge financialStatus={req._financialStatus} displayMode="compact" />
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-1">
@@ -831,6 +857,7 @@ export default function ProjectParts({ projectId }) {
                   <TableHead className="text-gray-400 text-xs text-center">On Order</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Available</TableHead>
                   <TableHead className="text-gray-400 text-xs">Pricing</TableHead>
+                  <TableHead className="text-gray-400 text-xs">Financial</TableHead>
                   <TableHead className="text-gray-400 text-xs">Actions</TableHead>
                 </TableRow>
               </TableHeader>
