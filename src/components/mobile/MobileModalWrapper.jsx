@@ -36,8 +36,8 @@ export default function MobileModalWrapper({
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      {/* Sticky Header */}
-      <div className="flex-shrink-0 border-b border-gray-700 bg-gray-900 px-4 py-3">
+      {/* Sticky Header - compact */}
+      <div className="flex-shrink-0 border-b border-gray-700 bg-gray-900 px-4 py-2">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             {title && (
@@ -73,13 +73,14 @@ export default function MobileModalWrapper({
         {children}
       </div>
 
-      {/* Sticky Footer */}
+      {/* Sticky Footer - max 56px */}
       {footer && (
         <div 
           className="flex-shrink-0 border-t border-gray-700 bg-gray-900"
           style={{
-            padding: '12px 16px',
-            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+            padding: '8px 16px',
+            paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+            maxHeight: '56px',
           }}
         >
           {footer}
