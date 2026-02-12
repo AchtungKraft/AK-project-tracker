@@ -21,10 +21,14 @@ import {
   Loader2, 
   AlertTriangle,
   RefreshCw,
-  XCircle
+  XCircle,
+  CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
 import { getMarkupFromMatrix, calculateUnitRetail, applyRetailPricing } from "./pricingUtils";
+import { getPricingIntegrity, validateBuildPricing, PRICING_STATUS } from "./pricingIntegrityUtils";
+import { PricingStatusBadge, PricingSourceBadge } from "./PricingStatusBadge";
+import ExportValidationModal from "./ExportValidationModal";
 
 /**
  * QuickBooksExport - Component for exporting build parts to QuickBooks CSV format
@@ -33,6 +37,7 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [recalculatingPricing, setRecalculatingPricing] = useState(false);
 
@@ -258,6 +263,30 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
   const itemsNeedingPricing = exportData.filter(d => d.needsPricingUpdate);
   const totalRetail = exportData.reduce((sum, d) => sum + (d.unitRetail * d.qtyNeeded), 0);
 
+  // Build validation data using new pricing integrity system
+  const validationResult = useMemo(() => {
+    const validationItems = exportData.map(item => {
+      const commitment = commitments.find(c => 
+        c.project_id === buildId && 
+        c.part_id === item.partId && 
+        c.commitment_status !== 'cancelled'
+      );
+      const assignment = buildAssignments.find(ba => ba.id === item.assignmentId);
+      const part = parts.find(p => p.id === item.partId);
+      
+      return {
+        commitment,
+        assignment,
+        part,
+        lineItem: null,
+        qty: item.qtyNeeded,
+        ...item
+      };
+    });
+    
+    return validateBuildPricing(validationItems);
+  }, [exportData, commitments, buildAssignments, parts, buildId]);
+
   // Recalculate and save pricing for items that need it
   const recalculatePricing = async () => {
     setRecalculatingPricing(true);
@@ -296,27 +325,50 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
   // Items missing pricing (validation)
   const itemsMissingPricing = exportData.filter(d => !d.unitRetail || d.unitRetail <= 0);
 
-  // Export to QuickBooks CSV
-  const exportToQuickBooks = () => {
-    // Block export if items missing pricing
-    if (itemsMissingPricing.length > 0) {
-      toast.error(`Cannot export: ${itemsMissingPricing.length} part(s) are missing retail pricing`);
-      return;
-    }
+  // Open validation modal instead of direct export
+  const handleExportClick = () => {
+    setShowValidationModal(true);
+  };
 
+  // Export to QuickBooks CSV (clean - no warnings columns)
+  const exportToQuickBooksClean = () => {
+    performExport(false);
+  };
+
+  // Export with warning metadata columns
+  const exportToQuickBooksWithWarnings = () => {
+    performExport(true);
+  };
+
+  const performExport = (includeWarnings = false) => {
     setIsExporting(true);
     try {
-      // QuickBooks CSV headers - only 4 fields
-      const headers = ['Product/Service', 'Description', 'Qty', 'Rate'];
+      // QuickBooks CSV headers
+      const headers = includeWarnings 
+        ? ['Product/Service', 'Description', 'Qty', 'Rate', 'pricing_integrity_status', 'pricing_source', 'export_warning_flag']
+        : ['Product/Service', 'Description', 'Qty', 'Rate'];
 
       const rows = exportData
-        .filter(item => item.qtyNeeded > 0)
-        .map(item => [
-          'Build_Parts',
-          item.description,
-          item.qtyNeeded,
-          item.unitRetail.toFixed(2)
-        ]);
+        .filter(item => item.qtyNeeded > 0 && item.unitRetail > 0)
+        .map(item => {
+          const baseRow = [
+            'Build_Parts',
+            item.description,
+            item.qtyNeeded,
+            item.unitRetail.toFixed(2)
+          ];
+          
+          if (includeWarnings) {
+            const warningFlag = item.needsPricingUpdate || item.pricingSource === 'part_default' ? 'REVIEW' : '';
+            baseRow.push(
+              item.pricingIntegrityStatus || 'ok',
+              item.pricingSource || 'none',
+              warningFlag
+            );
+          }
+          
+          return baseRow;
+        });
 
       const csvContent = [
         headers.join(','),
@@ -333,7 +385,17 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
+      // Log export metrics to console
+      console.log('=== QuickBooks Export Metrics ===');
+      console.log(`Build: ${buildName}`);
+      console.log(`Total Items: ${validationResult.metrics.total}`);
+      console.log(`Commitment Pricing: ${validationResult.metrics.commitmentPricingPct}%`);
+      console.log(`Fallback Pricing: ${validationResult.metrics.fallbackPricingPct}%`);
+      console.log(`Missing Pricing: ${validationResult.metrics.missingPricingPct}%`);
+      console.log('================================');
+
       toast.success('QuickBooks CSV exported successfully');
+      setShowValidationModal(false);
       setShowDialog(false);
     } catch (error) {
       toast.error('Failed to export: ' + error.message);
@@ -393,52 +455,48 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
               </Card>
             </div>
 
-            {/* Missing Pricing Error - Blocks Export */}
-            {itemsMissingPricing.length > 0 && (
-              <Card className="bg-red-900/20 border-red-500/50">
-                <CardContent className="p-4">
+            {/* Validation Summary Card */}
+            <Card className={`border ${
+              validationResult.hasErrors 
+                ? 'bg-red-900/20 border-red-500/50' 
+                : validationResult.hasWarnings 
+                  ? 'bg-amber-900/20 border-amber-500/50'
+                  : 'bg-green-900/20 border-green-500/50'
+            }`}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
                   <div className="flex items-start gap-3">
-                    <XCircle className="w-5 h-5 text-red-400 mt-0.5" />
+                    {validationResult.hasErrors ? (
+                      <XCircle className="w-5 h-5 text-red-400 mt-0.5" />
+                    ) : validationResult.hasWarnings ? (
+                      <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-green-400 mt-0.5" />
+                    )}
                     <div>
-                      <h3 className="font-semibold text-red-400">
-                        {itemsMissingPricing.length} item(s) missing retail pricing
+                      <h3 className={`font-semibold ${
+                        validationResult.hasErrors ? 'text-red-400' : 
+                        validationResult.hasWarnings ? 'text-amber-400' : 'text-green-400'
+                      }`}>
+                        {validationResult.hasErrors 
+                          ? `${validationResult.missingRetail.length + validationResult.missingBoth.length} items blocking export`
+                          : validationResult.hasWarnings
+                            ? `${validationResult.zeroValue.length + validationResult.missingCost.length} items with warnings`
+                            : 'All pricing validated'
+                        }
                       </h3>
-                      <p className="text-sm text-red-300 mt-1">
-                        Export is blocked. These parts need pricing calculated before export.
+                      <p className="text-sm text-gray-400 mt-1">
+                        {validationResult.metrics.commitmentPricingPct}% commitment pricing • 
+                        {validationResult.metrics.fallbackPricingPct}% fallback • 
+                        {validationResult.metrics.missingPricingPct}% missing
                       </p>
-                      <ul className="text-xs text-red-300/80 mt-2 space-y-1">
-                        {itemsMissingPricing.slice(0, 3).map((item, i) => (
-                          <li key={i}>• {item.partName} (cost: ${item.defaultCost?.toFixed(2) || '0.00'})</li>
-                        ))}
-                        {itemsMissingPricing.length > 3 && (
-                          <li>• ... and {itemsMissingPricing.length - 3} more</li>
-                        )}
-                      </ul>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Pricing Warning */}
-            {itemsNeedingPricing.length > 0 && itemsMissingPricing.length === 0 && (
-              <Card className="bg-amber-900/20 border-amber-500/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5" />
-                      <div>
-                        <h3 className="font-semibold text-amber-400">
-                          {itemsNeedingPricing.length} items need pricing calculation
-                        </h3>
-                        <p className="text-sm text-amber-300 mt-1">
-                          These items don't have stored unit_retail values. Click to calculate and save using the markup matrix.
-                        </p>
-                      </div>
-                    </div>
+                  {itemsNeedingPricing.length > 0 && (
                     <Button
                       onClick={recalculatePricing}
                       disabled={recalculatingPricing}
+                      size="sm"
                       className="bg-amber-600 hover:bg-amber-700"
                     >
                       {recalculatingPricing ? (
@@ -446,12 +504,12 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
                       ) : (
                         <RefreshCw className="w-4 h-4 mr-2" />
                       )}
-                      Calculate & Save
+                      Recalculate
                     </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Preview Toggle */}
             <div className="flex items-center space-x-2">
@@ -546,8 +604,8 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
               Cancel
             </Button>
             <Button
-              onClick={exportToQuickBooks}
-              disabled={isExporting || exportData.length === 0 || itemsMissingPricing.length > 0}
+              onClick={handleExportClick}
+              disabled={isExporting || exportData.length === 0}
               className="bg-green-700 hover:bg-green-600"
             >
               {isExporting ? (
@@ -555,11 +613,22 @@ export default function QuickBooksExport({ buildId, buildName, clientName }) {
               ) : (
                 <Download className="w-4 h-4 mr-2" />
               )}
-              Export to QuickBooks
+              Validate & Export
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Pre-export Validation Modal */}
+      <ExportValidationModal
+        isOpen={showValidationModal}
+        onClose={() => setShowValidationModal(false)}
+        validationResult={validationResult}
+        buildName={buildName}
+        onExportWithWarnings={exportToQuickBooksWithWarnings}
+        onExportClean={exportToQuickBooksClean}
+        isExporting={isExporting}
+      />
     </>
   );
 }
