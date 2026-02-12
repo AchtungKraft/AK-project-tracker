@@ -22,6 +22,7 @@ import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
 import ProjectCalendarView from "./ProjectCalendarView";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
+import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'card';
   });
   const [selectedTask, setSelectedTask] = useState(null);
+  const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
   const [formData, setFormData] = useState({
     name: project?.name || "",
     client_name: project?.client_name || "",
@@ -75,6 +77,22 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   
   // Use tasks from useTaskData as source of truth (not stale sharedData)
   const activeTasks = taskDataTasks;
+
+  // Wrapped priority toggle that handles confirmation flow
+  const wrappedTogglePriority = async (task, skipConfirm = false) => {
+    const result = await handleTogglePriority(task, skipConfirm);
+    if (result?.needsConfirmation) {
+      setPendingPriorityTask(task);
+    }
+    return result;
+  };
+
+  const handleConfirmPriorityRemoval = async () => {
+    if (pendingPriorityTask) {
+      await handleConfirmRemovePriority(pendingPriorityTask);
+      setPendingPriorityTask(null);
+    }
+  };
 
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
   const projectType = projectTypes.find((t) => t.id === project?.project_type_id);
@@ -340,7 +358,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                 commentCountByTaskId,
                 onUpdateDueDate: handleUpdateDueDate,
                 onUpdateStartDate: handleUpdateStartDate,
-                onTogglePriority: handleTogglePriority,
+                onTogglePriority: wrappedTogglePriority,
                 showInlineControls: true,
               }} 
             />
@@ -358,7 +376,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             onToggleComplete={handleToggleComplete}
             onUpdateDueDate={handleUpdateDueDate}
             onUpdateStartDate={handleUpdateStartDate}
-            onTogglePriority={handleTogglePriority}
+            onTogglePriority={wrappedTogglePriority}
             commentCountByTaskId={commentCountByTaskId}
           />
         )}
@@ -449,6 +467,14 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           onClose={() => setSelectedTask(null)}
         />
       )}
+
+      {/* Priority Removal Confirmation */}
+      <PriorityRemoveConfirm
+        isOpen={!!pendingPriorityTask}
+        onClose={() => setPendingPriorityTask(null)}
+        onConfirm={handleConfirmPriorityRemoval}
+        taskName={pendingPriorityTask?.name}
+      />
     </>
   );
 }
