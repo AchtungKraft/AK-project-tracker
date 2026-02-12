@@ -10,6 +10,17 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  */
 
 Deno.serve(async (req) => {
+  // Handle empty body for test/health checks
+  let payload = {};
+  try {
+    const text = await req.text();
+    if (text) {
+      payload = JSON.parse(text);
+    }
+  } catch (e) {
+    // Empty body is OK
+  }
+
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
@@ -18,7 +29,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await req.json();
     const { task_id, project_id, dry_run = true, auto_correct = false } = payload;
 
     const results = {

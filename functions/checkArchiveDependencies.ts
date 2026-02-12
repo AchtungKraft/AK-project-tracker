@@ -22,6 +22,10 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
     const { part_id } = payload;
+    
+    if (!part_id) {
+      return Response.json({ error: 'part_id is required' }, { status: 400 });
+    }
 
     if (!part_id) {
       return Response.json({ error: 'part_id is required' }, { status: 400 });

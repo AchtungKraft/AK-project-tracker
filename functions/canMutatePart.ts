@@ -151,7 +151,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await req.json();
+    let payload = {};
+    try {
+      payload = await req.json();
+    } catch (e) {
+      return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    
     const { part_id, mutation_type, options = {} } = payload;
 
     if (!part_id) {
