@@ -80,10 +80,16 @@ Deno.serve(async (req) => {
     }
 
     // Fetch part and validate
-    const parts = await base44.asServiceRole.entities.Part.filter({ id: part_id });
-    const part = parts[0];
+    let part = null;
+    try {
+      const parts = await base44.asServiceRole.entities.Part.list();
+      part = parts.find(p => p.id === part_id);
+    } catch (e) {
+      console.error('Error fetching part:', e);
+    }
+    
     if (!part) {
-      return Response.json({ error: 'Part not found' }, { status: 404 });
+      return Response.json({ error: 'Part not found', code: 'PART_NOT_FOUND' }, { status: 404 });
     }
 
     // Check if part is archived
