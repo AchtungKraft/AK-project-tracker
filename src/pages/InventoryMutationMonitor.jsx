@@ -268,10 +268,10 @@ export default function InventoryMutationMonitor() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-gray-300 text-sm max-w-[200px] truncate">
-                              {part?.part_name || log.part_id?.slice(0, 8)}
+                              {part?.part_name || log.part_id?.slice(0, 8) || '-'}
                             </TableCell>
                             <TableCell className="text-white font-medium">
-                              {log.qty}
+                              {log.qty ?? '-'}
                             </TableCell>
                             <TableCell>
                               <div className={`flex items-center gap-1 ${statusConfig.color}`}>
@@ -282,8 +282,18 @@ export default function InventoryMutationMonitor() {
                             <TableCell className="text-gray-400 text-sm">
                               {log.execution_time_ms}ms
                             </TableCell>
+                            <TableCell className="text-gray-400 text-sm max-w-[200px] truncate">
+                              {log.user_id?.slice(0, 8) || '-'}
+                            </TableCell>
                             <TableCell className="text-red-400 text-sm max-w-[200px] truncate">
                               {log.error_message || '-'}
+                            </TableCell>
+                            <TableCell className="text-gray-400 text-xs">
+                              {log.is_reversed ? (
+                                <Badge className="bg-orange-600 text-white text-xs">Reversed</Badge>
+                              ) : log.mutation_type === 'reversal' ? (
+                                <span className="text-orange-400">↩ {log.reversed_mutation_id?.slice(0, 6)}</span>
+                              ) : null}
                             </TableCell>
                           </TableRow>
                         );
