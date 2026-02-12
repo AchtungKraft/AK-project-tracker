@@ -36,6 +36,9 @@ import CommitmentEditModal from "../parts/CommitmentEditModal";
 import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
 import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
 import FinancialStatusBadge from "../financial/FinancialStatusBadge";
+import FinancialDetailDrawer from "../financial/FinancialDetailDrawer";
+import ProjectFinancialWarningBanner from "../financial/ProjectFinancialWarningBanner";
+import ProjectFinancialSummaryWidget from "../financial/ProjectFinancialSummaryWidget";
 import { useFinancialStatusBatch, buildFinancialContexts, mergeFinancialStatus } from "../financial/useFinancialStatus";
 
 /**
@@ -87,6 +90,9 @@ export default function ProjectParts({ projectId }) {
   const [cancellingCommitment, setCancellingCommitment] = useState(null);
   const [editingCommitment, setEditingCommitment] = useState(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [financialDrawerOpen, setFinancialDrawerOpen] = useState(false);
+  const [financialDrawerContext, setFinancialDrawerContext] = useState(null);
+  const [financialQuickFilter, setFinancialQuickFilter] = useState(null);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements', projectId],
@@ -175,6 +181,30 @@ export default function ProjectParts({ projectId }) {
     });
     return map;
   }, [financialStatuses]);
+
+  // Handle financial badge click - open drawer
+  const handleFinancialBadgeClick = ({ financialStatus, partId, projectId }) => {
+    setFinancialDrawerContext({ financialStatus, partId, projectId });
+    setFinancialDrawerOpen(true);
+  };
+
+  // Handle warning banner filter click
+  const handleFinancialFilterClick = (filterKey) => {
+    setFinancialQuickFilter(filterKey);
+    // Clear status filter to show financial filtered results
+    setStatusFilter('all');
+  };
+
+  // Handle summary widget metric click
+  const handleMetricClick = (filterKey) => {
+    setFinancialQuickFilter(filterKey);
+    setStatusFilter('all');
+  };
+
+  // Clear financial quick filter
+  const clearFinancialQuickFilter = () => {
+    setFinancialQuickFilter(null);
+  };
 
   // Dual-read hook for commitment-aware metrics
   const commitmentMetrics = useCommitmentData({
@@ -398,6 +428,32 @@ export default function ProjectParts({ projectId }) {
     const matchesSearch = part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || req._status.key === statusFilter;
+    
+    // Apply financial quick filter if set
+    if (financialQuickFilter && req._financialStatus) {
+      const fs = req._financialStatus;
+      switch (financialQuickFilter) {
+        case 'unbilled':
+          if (fs.client_billing_status !== 'NOT_INVOICED') return false;
+          break;
+        case 'billed':
+          if (!['INVOICED', 'PARTIALLY_PAID', 'PAID'].includes(fs.client_billing_status)) return false;
+          break;
+        case 'vendor_unpaid':
+          if (!['UNPAID', 'PARTIAL'].includes(fs.vendor_payment_status)) return false;
+          break;
+        case 'vendor_paid':
+          if (fs.vendor_payment_status !== 'PAID') return false;
+          break;
+        case 'margin_complete':
+          if (fs.margin_state !== 'COMPLETE') return false;
+          break;
+        case 'margin_incomplete':
+          if (fs.margin_state === 'COMPLETE' || fs.margin_state === 'UNKNOWN') return false;
+          break;
+      }
+    }
+    
     return matchesSearch && matchesStatus;
   });
 
@@ -522,7 +578,13 @@ export default function ProjectParts({ projectId }) {
           <PricingIntegrityCell integrity={req._pricingIntegrity} compact />
         </TableCell>
         <TableCell>
-          <FinancialStatusBadge financialStatus={req._financialStatus} displayMode="compact" />
+          <FinancialStatusBadge 
+            financialStatus={req._financialStatus} 
+            displayMode="compact"
+            onClick={handleFinancialBadgeClick}
+            partId={req.part_id}
+            projectId={projectId}
+          />
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-1">
@@ -596,6 +658,12 @@ export default function ProjectParts({ projectId }) {
 
   return (
     <div className="space-y-4">
+      {/* Financial Warning Banner */}
+      <ProjectFinancialWarningBanner 
+        financialStatuses={financialStatuses}
+        onFilterClick={handleFinancialFilterClick}
+      />
+
       {/* Summary Card */}
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
         <CardHeader className="border-b border-red-900/30 p-4">
@@ -650,6 +718,33 @@ export default function ProjectParts({ projectId }) {
               <p className="text-lg font-bold text-yellow-400">${projectCost.toFixed(2)}</p>
             </div>
           </div>
+
+          {/* Financial Summary Widget (Compact) */}
+          {financialStatuses.length > 0 && (
+            <ProjectFinancialSummaryWidget
+              financialStatuses={financialStatuses}
+              onMetricClick={handleMetricClick}
+              compact
+              className="mb-4"
+            />
+          )}
+
+          {/* Quick Filter Indicator */}
+          {financialQuickFilter && (
+            <div className="flex items-center gap-2 mb-4 p-2 bg-blue-900/30 border border-blue-700/50 rounded-lg">
+              <span className="text-blue-300 text-sm">
+                Filtering by: <span className="font-medium">{financialQuickFilter.replace('_', ' ')}</span>
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-blue-400 hover:text-blue-300"
+                onClick={clearFinancialQuickFilter}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -978,6 +1073,18 @@ export default function ProjectParts({ projectId }) {
           onClose={() => setEditingCommitment(null)}
         />
       )}
+
+      {/* Financial Detail Drawer */}
+      <FinancialDetailDrawer
+        isOpen={financialDrawerOpen}
+        onClose={() => {
+          setFinancialDrawerOpen(false);
+          setFinancialDrawerContext(null);
+        }}
+        partId={financialDrawerContext?.partId}
+        projectId={financialDrawerContext?.projectId || projectId}
+        financialStatus={financialDrawerContext?.financialStatus}
+      />
     </div>
   );
 }

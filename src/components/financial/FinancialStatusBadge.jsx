@@ -220,6 +220,9 @@ export default function FinancialStatusBadge({
   financialStatus, 
   displayMode = "compact",
   showTooltip = true,
+  onClick = null,
+  partId = null,
+  projectId = null,
 }) {
   if (!financialStatus) {
     return (
@@ -232,8 +235,22 @@ export default function FinancialStatusBadge({
   
   const compact = displayMode === "compact";
   
+  const handleClick = (e) => {
+    if (onClick) {
+      e.stopPropagation();
+      onClick({ financialStatus, partId, projectId });
+    }
+  };
+  
   const content = (
-    <div className={cn("flex items-center", compact ? "gap-1" : "gap-2 flex-wrap")}>
+    <div 
+      className={cn(
+        "flex items-center", 
+        compact ? "gap-1" : "gap-2 flex-wrap",
+        onClick && "cursor-pointer"
+      )}
+      onClick={handleClick}
+    >
       <ClientBillingBadge 
         status={financialStatus.client_billing_status} 
         compact={compact} 
@@ -258,7 +275,7 @@ export default function FinancialStatusBadge({
     <TooltipProvider>
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
-          <div className="cursor-pointer">{content}</div>
+          <div className={cn(onClick && "cursor-pointer")} onClick={handleClick}>{content}</div>
         </TooltipTrigger>
         <TooltipContent 
           side="bottom" 
