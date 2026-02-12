@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Search, Plus, Package, Trash2, FileText, DollarSign, ChevronDown, ChevronUp,
-  CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal, Download, ExternalLink
+  CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal, Download, ExternalLink,
+  RefreshCw, Loader2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,6 +33,8 @@ import { useCommitmentData, isRequirementManagedByCommitments, getCommitmentsFor
 import { isRequirementLocked } from "../inventory/commitmentStateEngine";
 import CancelCommitmentModal from "../parts/CancelCommitmentModal";
 import CommitmentEditModal from "../parts/CommitmentEditModal";
+import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
+import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
 
 /**
  * Derives status badge from quantities (canonical logic)
@@ -69,7 +72,8 @@ export default function ProjectParts({ projectId }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [groupMode, setGroupMode] = useState('status'); // 'status', 'order', 'part'
+  const [groupBy, setGroupBy] = useState('none'); // 'none', 'category', 'status', 'vendor', 'pricing', 'commitment'
+  const [groupMode, setGroupMode] = useState('status'); // legacy tabs: 'status', 'order', 'part'
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [showAddModal, setShowAddModal] = useState(false);
   const [allocatingRequirement, setAllocatingRequirement] = useState(null);
@@ -80,6 +84,7 @@ export default function ProjectParts({ projectId }) {
   const [moveRequirement, setMoveRequirement] = useState(null);
   const [cancellingCommitment, setCancellingCommitment] = useState(null);
   const [editingCommitment, setEditingCommitment] = useState(null);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements', projectId],
@@ -126,6 +131,17 @@ export default function ProjectParts({ projectId }) {
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+  });
+
+  const { data: buildAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments', projectId],
+    queryFn: () => base44.entities.PartBuildAssignment.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+
+  const { data: matrixTiers = [] } = useQuery({
+    queryKey: ['retailMarkupMatrix'],
+    queryFn: () => base44.entities.RetailMarkupMatrix.list(),
   });
 
   const { data: commitments = [] } = useQuery({
@@ -256,14 +272,26 @@ export default function ProjectParts({ projectId }) {
 
   const projectCost = installedParts.reduce((sum, ip) => sum + (ip.extended_cost || 0), 0);
 
-  // Enrich requirements with computed fields
+  // Enrich requirements with computed fields + pricing integrity
   const enrichedRequirements = useMemo(() => {
     return requirements.map(req => {
       const onOrder = partOnOrder[req.part_id] || 0;
-      // toOrder = qty_needed - qty_installed - qty_allocated - qty_ordered
       const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_installed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
       const available = getInventoryAvailable(req.part_id);
       const status = deriveStatus(req, onOrder);
+      
+      // Get pricing integrity
+      const part = parts.find(p => p.id === req.part_id);
+      const commitment = commitments.find(c => c.requirement_id === req.id && c.commitment_status !== 'cancelled');
+      const assignment = buildAssignments.find(ba => ba.part_id === req.part_id);
+      const lineItem = lineItems.find(li => li.requirement_id === req.id);
+      
+      const pricingIntegrity = getPricingIntegrity({ commitment, assignment, part, lineItem });
+      
+      // Get category info for grouping
+      const category = categories.find(c => c.id === part?.part_category_id);
+      const parentCategory = category?.parent_id ? categories.find(c => c.id === category.parent_id) : null;
+      const vendor = vendors.find(v => v.id === part?.default_vendor_id);
       
       return {
         ...req,
@@ -271,9 +299,74 @@ export default function ProjectParts({ projectId }) {
         _toOrder: toOrder,
         _available: available,
         _status: status,
+        _pricingIntegrity: pricingIntegrity,
+        _category: category,
+        _parentCategory: parentCategory,
+        _vendor: vendor,
+        _commitment: commitment,
+        _part: part,
       };
     });
-  }, [requirements, partOnOrder, inventoryItems]);
+  }, [requirements, partOnOrder, inventoryItems, parts, commitments, buildAssignments, lineItems, categories, vendors]);
+
+  // Group requirements based on groupBy selection
+  const groupedRequirements = useMemo(() => {
+    if (groupBy === 'none') return null;
+    
+    const groups = {};
+    
+    enrichedRequirements.forEach(req => {
+      let groupKey = 'Other';
+      let sortOrder = 999;
+      
+      switch (groupBy) {
+        case 'category':
+          if (req._parentCategory) {
+            groupKey = `${req._parentCategory.name} › ${req._category?.name || 'Uncategorized'}`;
+            sortOrder = (req._parentCategory.sort_order || 0) * 100 + (req._category?.sort_order || 0);
+          } else if (req._category) {
+            groupKey = req._category.name;
+            sortOrder = req._category.sort_order || 0;
+          } else {
+            groupKey = 'Uncategorized';
+          }
+          break;
+        case 'status':
+          groupKey = req._status.label;
+          sortOrder = ['Installed', 'Partial Install', 'Allocated', 'Partial Alloc', 'On Order', 'Alloc + Order', 'Need To Order', 'Needed'].indexOf(req._status.label);
+          break;
+        case 'vendor':
+          groupKey = req._vendor?.vendor_name || 'No Vendor';
+          sortOrder = req._vendor?.sort_order || 999;
+          break;
+        case 'pricing':
+          groupKey = req._pricingIntegrity.status === PRICING_STATUS.OK ? 'OK' :
+                     req._pricingIntegrity.status === PRICING_STATUS.ESTIMATED_COST ? 'Estimated Cost' :
+                     req._pricingIntegrity.status === PRICING_STATUS.MISSING_RETAIL ? 'Missing Retail' :
+                     req._pricingIntegrity.status === PRICING_STATUS.MISSING_COST ? 'Missing Cost' :
+                     req._pricingIntegrity.status === PRICING_STATUS.MISSING_BOTH ? 'Missing Both' :
+                     req._pricingIntegrity.status === PRICING_STATUS.ZERO_VALUE ? '$0 Value' : 'Unknown';
+          sortOrder = [PRICING_STATUS.MISSING_BOTH, PRICING_STATUS.MISSING_RETAIL, PRICING_STATUS.ZERO_VALUE, PRICING_STATUS.MISSING_COST, PRICING_STATUS.ESTIMATED_COST, PRICING_STATUS.OK].indexOf(req._pricingIntegrity.status);
+          break;
+        case 'commitment':
+          groupKey = req._commitment ? `${req._commitment.commitment_status}` : 'No Commitment';
+          sortOrder = ['installed', 'allocated', 'received', 'partially_received', 'ordered', 'planned', 'cancelled', 'closed'].indexOf(req._commitment?.commitment_status || '') || 99;
+          break;
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = { items: [], sortOrder, totalRetail: 0, totalCost: 0 };
+      }
+      groups[groupKey].items.push(req);
+      groups[groupKey].totalRetail += (req._pricingIntegrity.retailValue || 0) * (req.qty_needed || 0);
+      groups[groupKey].totalCost += (req._pricingIntegrity.costValue || 0) * (req.qty_needed || 0);
+    });
+    
+    // Sort groups
+    return Object.entries(groups)
+      .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+      .map(([key, data]) => ({ key, ...data }));
+  }, [enrichedRequirements, groupBy]);
 
   const filteredRequirements = enrichedRequirements.filter(req => {
     const part = getPartInfo(req.part_id);
@@ -282,6 +375,24 @@ export default function ProjectParts({ projectId }) {
     const matchesStatus = statusFilter === 'all' || req._status.key === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // Bulk recalculate pricing from matrix
+  const handleBulkRecalculatePricing = async () => {
+    setIsRecalculating(true);
+    try {
+      const response = await base44.functions.invoke('backfillCommitmentPricing', { 
+        project_id: projectId,
+        dry_run: false 
+      });
+      queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments', projectId] });
+      toast.success(`Pricing recalculated for ${response.data?.updated || 0} items`);
+    } catch (error) {
+      toast.error('Failed to recalculate pricing: ' + error.message);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
 
   const handleRemove = (requirement) => {
     // Check if managed by commitments
@@ -325,6 +436,135 @@ export default function ProjectParts({ projectId }) {
     { key: 'Need To Order', label: 'Need To Order' },
     { key: 'Needed', label: 'Needed' },
   ];
+
+  // Render a single part row (used in both grouped and flat views)
+  const renderPartRow = (req) => {
+    const part = getPartInfo(req.part_id);
+    const status = req._status;
+    const StatusIcon = status.icon;
+    const isManagedByCommitments = isRequirementManagedByCommitments(commitments, req.id);
+    const reqCommitments = getCommitmentsForRequirement(commitments, req.id);
+    const canAllocate = !isManagedByCommitments && req._available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
+    const canInstall = (req.qty_allocated || 0) > (req.qty_installed || 0);
+    const hasInstalledParts = (req.qty_installed || 0) > 0;
+    const rowHighlight = getPricingRowHighlight(req._pricingIntegrity?.status);
+
+    return (
+      <TableRow key={req.id} className={`border-b border-red-900/10 hover:bg-red-950/20 ${rowHighlight}`}>
+        <TableCell>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedPart(part.id)}>
+            {part.featured_photo && (
+              <div 
+                className="w-10 h-10 bg-gray-800 rounded flex items-center justify-center overflow-hidden"
+                onClick={(e) => { e.stopPropagation(); setSelectedImage(part.featured_photo); }}
+              >
+                <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-white text-sm font-medium hover:text-red-400 transition-colors">{part.part_name}</p>
+                <CommitmentLockIndicator 
+                  isLocked={isManagedByCommitments} 
+                  commitmentCount={reqCommitments.length}
+                  size="sm"
+                  showLabel={false}
+                />
+                <PricingWarningIcon status={req._pricingIntegrity?.status} />
+              </div>
+              {part.vendor_part_number && (
+                <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>
+              )}
+            </div>
+          </div>
+        </TableCell>
+        <TableCell>
+          <Badge style={{ backgroundColor: status.color }} className="text-white text-xs gap-1">
+            <StatusIcon className="w-3 h-3" />
+            {status.label}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-center text-white font-medium">{req.qty_needed || 0}</TableCell>
+        <TableCell className="text-center text-blue-400">{req.qty_allocated || 0}</TableCell>
+        <TableCell className="text-center text-green-400">{req.qty_installed || 0}</TableCell>
+        <TableCell className="text-center">
+          <span className={req._onOrder > 0 ? 'text-orange-400' : 'text-gray-500'}>{req._onOrder}</span>
+        </TableCell>
+        <TableCell className="text-center">
+          <span className={req._available > 0 ? 'text-green-400' : 'text-gray-500'}>{req._available}</span>
+        </TableCell>
+        <TableCell>
+          <PricingIntegrityCell integrity={req._pricingIntegrity} compact />
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            {canInstall && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
+                onClick={() => setInstallingRequirement(req)}
+              >
+                <Download className="w-3 h-3 mr-1" />
+                Install
+              </Button>
+            )}
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                {isManagedByCommitments && (
+                  <DropdownMenuItem disabled className="text-purple-400 text-xs">
+                    Managed by {reqCommitments.length} commitment(s)
+                  </DropdownMenuItem>
+                )}
+                {canAllocate && (
+                  <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
+                    <Package className="w-4 h-4 mr-2" /> Allocate from Inventory
+                  </DropdownMenuItem>
+                )}
+                {canInstall && (
+                  <DropdownMenuItem onClick={() => setInstallingRequirement(req)}>
+                    <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
+                  </DropdownMenuItem>
+                )}
+                {req._toOrder > 0 && !isManagedByCommitments && (
+                  <DropdownMenuItem onClick={() => setOrderPart(part)}>
+                    <ShoppingCart className="w-4 h-4 mr-2" /> Order Part ({req._toOrder})
+                  </DropdownMenuItem>
+                )}
+                {req._onOrder > 0 && (
+                  <DropdownMenuItem onClick={() => {/* Could link to On Order view */}}>
+                    <Truck className="w-4 h-4 mr-2" /> View On Order ({req._onOrder})
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => setSelectedPart(part.id)}>
+                  <ExternalLink className="w-4 h-4 mr-2" /> View Part Details
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-gray-700" />
+                {!hasInstalledParts && !isManagedByCommitments && (
+                  <DropdownMenuItem onClick={() => setMoveRequirement(req)}>
+                    Move to Project
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem 
+                  onClick={() => handleRemove(req)}
+                  className="text-red-400"
+                  disabled={hasInstalledParts || isManagedByCommitments}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" /> Remove
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -384,7 +624,7 @@ export default function ProjectParts({ projectId }) {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="relative md:col-span-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
               <Input
@@ -405,19 +645,33 @@ export default function ProjectParts({ projectId }) {
                 ))}
               </SelectContent>
             </Select>
-            <Tabs value={groupMode} onValueChange={setGroupMode}>
-              <TabsList className="bg-gray-900/50 border border-gray-700 w-full">
-                <TabsTrigger value="status" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
-                  Status
-                </TabsTrigger>
-                <TabsTrigger value="order" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
-                  Order
-                </TabsTrigger>
-                <TabsTrigger value="part" className="data-[state=active]:bg-red-900/30 flex-1 text-xs">
-                  Part
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <Select value={groupBy} onValueChange={setGroupBy}>
+              <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
+                <SelectValue placeholder="Group By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Grouping</SelectItem>
+                <SelectItem value="category">Category</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="vendor">Vendor</SelectItem>
+                <SelectItem value="pricing">Pricing Status</SelectItem>
+                <SelectItem value="commitment">Commitment Status</SelectItem>
+              </SelectContent>
+            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="border-gray-700 text-gray-300">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Bulk Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                <DropdownMenuItem onClick={handleBulkRecalculatePricing} disabled={isRecalculating}>
+                  {isRecalculating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Recalculate Pricing From Matrix
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardContent>
       </Card>
@@ -574,133 +828,62 @@ export default function ProjectParts({ projectId }) {
                   <TableHead className="text-gray-400 text-xs text-center">Installed</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">On Order</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Available</TableHead>
+                  <TableHead className="text-gray-400 text-xs">Pricing</TableHead>
                   <TableHead className="text-gray-400 text-xs">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRequirements.map(req => {
-                  const part = getPartInfo(req.part_id);
-                  const status = req._status;
-                  const StatusIcon = status.icon;
-                  const isManagedByCommitments = isRequirementManagedByCommitments(commitments, req.id);
-                  const reqCommitments = getCommitmentsForRequirement(commitments, req.id);
-                  const canAllocate = !isManagedByCommitments && req._available > 0 && (req.qty_allocated || 0) < (req.qty_needed || 0);
-                  const canInstall = (req.qty_allocated || 0) > (req.qty_installed || 0);
-                  const hasInstalledParts = (req.qty_installed || 0) > 0;
-
+                {/* Grouped View */}
+                {groupBy !== 'none' && groupedRequirements?.map(group => {
+                  const isExpanded = expandedGroups.has(group.key) || expandedGroups.has('all');
+                  const filteredGroupItems = group.items.filter(req => {
+                    const part = getPartInfo(req.part_id);
+                    const matchesSearch = part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                         part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesStatus = statusFilter === 'all' || req._status.key === statusFilter;
+                    return matchesSearch && matchesStatus;
+                  });
+                  
+                  if (filteredGroupItems.length === 0) return null;
+                  
                   return (
-                    <TableRow key={req.id} className="border-b border-red-900/10 hover:bg-red-950/20">
-                      <TableCell>
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedPart(part.id)}>
-                          {part.featured_photo && (
-                            <div 
-                              className="w-10 h-10 bg-gray-800 rounded flex items-center justify-center overflow-hidden"
-                              onClick={(e) => { e.stopPropagation(); setSelectedImage(part.featured_photo); }}
-                            >
-                              <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
-                            </div>
-                          )}
-                          <div>
+                    <React.Fragment key={group.key}>
+                      {/* Group Header Row */}
+                      <TableRow 
+                        className="bg-gray-800/50 border-b border-red-900/20 cursor-pointer hover:bg-gray-800/70"
+                        onClick={() => toggleGroup(group.key)}
+                      >
+                        <TableCell colSpan={9} className="py-2">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <p className="text-white text-sm font-medium hover:text-red-400 transition-colors">{part.part_name}</p>
-                              <CommitmentLockIndicator 
-                                isLocked={isManagedByCommitments} 
-                                commitmentCount={reqCommitments.length}
-                                size="sm"
-                                showLabel={false}
-                              />
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                              <span className="font-medium text-white">{group.key}</span>
+                              <Badge variant="outline" className="border-gray-600 text-gray-400 text-xs">
+                                {filteredGroupItems.length} parts
+                              </Badge>
                             </div>
-                            {part.vendor_part_number && (
-                              <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>
-                            )}
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="text-gray-400">
+                                Retail: <span className="text-green-400">${group.totalRetail.toFixed(2)}</span>
+                              </span>
+                              <span className="text-gray-400">
+                                Cost: <span className="text-yellow-400">${group.totalCost.toFixed(2)}</span>
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge style={{ backgroundColor: status.color }} className="text-white text-xs gap-1">
-                          <StatusIcon className="w-3 h-3" />
-                          {status.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-white font-medium">{req.qty_needed || 0}</TableCell>
-                      <TableCell className="text-center text-blue-400">{req.qty_allocated || 0}</TableCell>
-                      <TableCell className="text-center text-green-400">{req.qty_installed || 0}</TableCell>
-                      <TableCell className="text-center">
-                        <span className={req._onOrder > 0 ? 'text-orange-400' : 'text-gray-500'}>{req._onOrder}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={req._available > 0 ? 'text-green-400' : 'text-gray-500'}>{req._available}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {/* Quick Install button when installable */}
-                          {canInstall && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
-                              onClick={() => setInstallingRequirement(req)}
-                            >
-                              <Download className="w-3 h-3 mr-1" />
-                              Install
-                            </Button>
-                          )}
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                              {isManagedByCommitments && (
-                                <DropdownMenuItem disabled className="text-purple-400 text-xs">
-                                  Managed by {reqCommitments.length} commitment(s)
-                                </DropdownMenuItem>
-                              )}
-                              {canAllocate && (
-                                <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
-                                  <Package className="w-4 h-4 mr-2" /> Allocate from Inventory
-                                </DropdownMenuItem>
-                              )}
-                              {canInstall && (
-                                <DropdownMenuItem onClick={() => setInstallingRequirement(req)}>
-                                  <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
-                                </DropdownMenuItem>
-                              )}
-                              {req._toOrder > 0 && !isManagedByCommitments && (
-                                <DropdownMenuItem onClick={() => setOrderPart(part)}>
-                                  <ShoppingCart className="w-4 h-4 mr-2" /> Order Part ({req._toOrder})
-                                </DropdownMenuItem>
-                              )}
-                              {req._onOrder > 0 && (
-                                <DropdownMenuItem onClick={() => {/* Could link to On Order view */}}>
-                                  <Truck className="w-4 h-4 mr-2" /> View On Order ({req._onOrder})
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem onClick={() => setSelectedPart(part.id)}>
-                                <ExternalLink className="w-4 h-4 mr-2" /> View Part Details
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-gray-700" />
-                              {!hasInstalledParts && !isManagedByCommitments && (
-                                <DropdownMenuItem onClick={() => setMoveRequirement(req)}>
-                                  Move to Project
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem 
-                                onClick={() => handleRemove(req)}
-                                className="text-red-400"
-                                disabled={hasInstalledParts || isManagedByCommitments}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Remove
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                      </TableRow>
+                      
+                      {/* Group Items */}
+                      {isExpanded && filteredGroupItems.map(req => renderPartRow(req))}
+                    </React.Fragment>
                   );
                 })}
+                
+                {/* Flat View (no grouping) */}
+                {groupBy === 'none' &&
+                  filteredRequirements.map(req => renderPartRow(req))
+                }
               </TableBody>
             </Table>
           </CardContent>
