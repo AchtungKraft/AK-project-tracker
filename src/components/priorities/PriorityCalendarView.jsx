@@ -26,6 +26,11 @@ export default function PriorityCalendarView({
   commentCountByTaskId = {},
   selectedTypes = [],
   statusFilter = 'all',
+  // New props from parent using useTaskData
+  onToggleComplete: parentToggleComplete,
+  onUpdateDueDate: parentUpdateDueDate,
+  onUpdateStartDate: parentUpdateStartDate,
+  onTogglePriority: parentTogglePriority,
 }) {
   const isMobile = useIsMobile();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -181,7 +186,8 @@ export default function PriorityCalendarView({
     return primaryGroups;
   };
 
-  const handleToggleComplete = async (task) => {
+  // Use parent handlers if provided, otherwise fallback to local implementation
+  const handleToggleComplete = parentToggleComplete || (async (task) => {
     const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
     const completedStatus = taskStatuses.find(s => {
       const label = s.label.toLowerCase();
@@ -208,25 +214,25 @@ export default function PriorityCalendarView({
         toast.success('Task completed');
       }
     }
-  };
+  });
 
-  const handleUpdateDueDate = async (task, dueDate) => {
+  const handleUpdateDueDate = parentUpdateDueDate || (async (task, dueDate) => {
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { due_date: dueDate }
     });
     toast.success(dueDate ? 'Due date updated' : 'Due date removed');
-  };
+  });
 
-  const handleUpdateStartDate = async (task, startDate) => {
+  const handleUpdateStartDate = parentUpdateStartDate || (async (task, startDate) => {
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { start_date: startDate }
     });
     toast.success(startDate ? 'Start date updated' : 'Start date removed');
-  };
+  });
 
-  const handleTogglePriority = async (task, skipConfirm = false) => {
+  const handleTogglePriority = parentTogglePriority || (async (task, skipConfirm = false) => {
     // If removing priority and not skipping confirm, return flag (handled by TaskCard)
     if (task.is_priority && !skipConfirm) {
       return { needsConfirmation: true, task };
@@ -238,7 +244,7 @@ export default function PriorityCalendarView({
     });
     toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
     return { needsConfirmation: false };
-  };
+  });
 
   const navigateWeeks = (direction) => {
     if (direction === 'prev') {
