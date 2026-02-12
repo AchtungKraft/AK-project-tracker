@@ -498,31 +498,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* Comments Section */}
           <TaskCommentsSection taskId={task?.id} />
 
-          <Separator className="bg-gray-700" />
-
-          {/* Delete Action - Desktop only, mobile shows in footer */}
-          {!isMobile && (
-            <div className="pt-4 space-y-3">
-              <Button
-                variant="destructive"
-                onClick={handleDeleteClick}
-                disabled={deleteMutation.isPending}
-                className="w-full"
-              >
-                {deleteMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Task
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Delete Confirmation Dialog */}
@@ -534,85 +509,84 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           isLoading={deleteMutation.isPending}
         />
 
-        {/* Sticky Footer - Mobile: compact with Save + Delete, Desktop: Close only */}
+        {/* Unified Sticky Footer - DELETE | CLOSE | EDIT/SAVE */}
         <div 
-          className="sticky bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700"
+          className="sticky bottom-0 left-0 right-0 bg-gray-900 border-t border-red-900/30"
           style={{
             padding: isMobile ? '12px 16px' : '16px',
             paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom, 0px))' : '16px',
-            maxHeight: isMobile ? '56px' : 'auto',
           }}
         >
-          {isMobile ? (
-            <div className="flex gap-2">
-              {editing ? (
-                <>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={updateMutation.isPending}
-                    className="flex-1 h-11 bg-red-600 hover:bg-red-700"
-                  >
-                    {updateMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setEditing(false);
-                      setFormData({
-                        name: task.name || "",
-                        description: task.description || "",
-                        project_id: task.project_id || projectId || "",
-                        category_id: task.category_id || "",
-                        assigned_team_member_id: task.assigned_team_member_id || "",
-                        status_id: task.status_id || "",
-                        start_date: task.start_date || "",
-                        due_date: task.due_date || "",
-                      });
-                    }}
-                    className="h-11 px-4 border-gray-700"
-                  >
-                    Cancel
-                  </Button>
-                </>
+          <div className="flex gap-2 items-center">
+            {/* DELETE - icon button with confirm */}
+            <Button
+              variant="ghost"
+              onClick={handleDeleteClick}
+              disabled={deleteMutation.isPending}
+              className="h-11 w-11 p-0 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <>
-                  <Button
-                    onClick={() => setEditing(true)}
-                    className="flex-1 h-11 bg-red-600 hover:bg-red-700"
-                  >
-                    Edit Task
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={handleDeleteClick}
-                    disabled={deleteMutation.isPending}
-                    className="h-11 px-4"
-                  >
-                    {deleteMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                  </Button>
-                </>
+                <Trash2 className="w-5 h-5" />
               )}
-            </div>
-          ) : (
+            </Button>
+
+            {/* CLOSE */}
             <Button
               onClick={onClose}
               variant="outline"
-              className="w-full border-gray-700 min-h-[44px]"
+              className="flex-1 h-11 border-gray-700"
             >
               Close
             </Button>
-          )}
+
+            {/* EDIT/SAVE primary action */}
+            {editing ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(false);
+                    setFormData({
+                      name: task.name || "",
+                      description: task.description || "",
+                      project_id: task.project_id || projectId || "",
+                      category_id: task.category_id || "",
+                      assigned_team_member_id: task.assigned_team_member_id || "",
+                      status_id: task.status_id || "",
+                      start_date: task.start_date || "",
+                      due_date: task.due_date || "",
+                    });
+                  }}
+                  className="h-11 px-4 border-gray-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={updateMutation.isPending}
+                  className="flex-1 h-11 bg-red-600 hover:bg-red-700"
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => setEditing(true)}
+                className="flex-1 h-11 bg-red-600 hover:bg-red-700"
+              >
+                Edit Task
+              </Button>
+            )}
+          </div>
         </div>
       </SheetContent>
     </Sheet>
