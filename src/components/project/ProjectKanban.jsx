@@ -487,14 +487,15 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                           className={snapshot.isDragging ? 'opacity-50' : ''}
                                         >
                                           <TaskCard
-                                            task={task}
-                                            categories={categories}
-                                            teamMembers={teamMembers}
-                                            statuses={statuses}
-                                            onToggleComplete={handleToggleComplete}
-                                            onClick={() => setSelectedTask(task)}
-                                            commentCount={commentCountByTaskId[task.id] || 0}
-                                          />
+                                                  task={task}
+                                                  categories={categories}
+                                                  teamMembers={teamMembers}
+                                                  statuses={statuses}
+                                                  onToggleComplete={handleToggleComplete}
+                                                  onClick={() => setSelectedTask(task)}
+                                                  commentCount={commentCountByTaskId[task.id] || 0}
+                                                  compact={isMobile}
+                                                />
                                         </div>
                                       )}
                                     </Draggable>
@@ -597,6 +598,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                     onToggleComplete={handleToggleComplete}
                                                     onClick={() => setSelectedTask(task)}
                                                     commentCount={commentCountByTaskId[task.id] || 0}
+                                                    compact={isMobile}
                                                   />
                                                 </div>
                                               )}
@@ -660,6 +662,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                         onToggleComplete={handleToggleComplete}
                                         onClick={() => setSelectedTask(task)}
                                         commentCount={commentCountByTaskId[task.id] || 0}
+                                        compact={isMobile}
                                       />
                                     </div>
                                   )}
@@ -742,6 +745,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                 onToggleComplete={handleToggleComplete}
                                                 onClick={() => setSelectedTask(task)}
                                                 commentCount={commentCountByTaskId[task.id] || 0}
+                                                compact={isMobile}
                                               />
                                             </div>
                                           )}
@@ -773,6 +777,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                       onToggleComplete={handleToggleComplete}
                                       onClick={() => setSelectedTask(task)}
                                       commentCount={commentCountByTaskId[task.id] || 0}
+                                      compact={isMobile}
                                     />
                                   ))}
                                 </div>
