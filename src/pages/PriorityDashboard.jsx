@@ -28,6 +28,7 @@ import PriorityCalendarView from "../components/priorities/PriorityCalendarView"
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
+import { useTaskData } from "../components/tasks/useTaskData";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -35,10 +36,26 @@ export default function PriorityDashboard() {
   const [primaryGroupBy, setPrimaryGroupBy] = useState('project');
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('calendar-view');
+  // Persist view mode in localStorage
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('priority_view_mode') || 'calendar-view';
+  });
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [sortDrawerOpen, setSortDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
+  
+  // Use centralized task data hook for inline controls
+  const {
+    handleUpdateDueDate,
+    handleUpdateStartDate,
+    handleTogglePriority,
+  } = useTaskData({ priorityOnly: true });
+
+  // Persist view mode changes
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    localStorage.setItem('priority_view_mode', tab);
+  };
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, applyView, clearFilters } = useFilterState('priority', PRIORITY_DEFAULTS);
@@ -505,7 +522,7 @@ export default function PriorityDashboard() {
           </MobileFilterTriggerBar>
 
           {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <TabsList className="bg-gray-800/80 border border-gray-700 p-1">
                 <TabsTrigger 
@@ -648,6 +665,10 @@ export default function PriorityDashboard() {
                                     onToggleComplete={handleToggleComplete}
                                     onClick={() => setSelectedTask(task)}
                                     commentCount={commentCountByTaskId[task.id] || 0}
+                                    onUpdateDueDate={handleUpdateDueDate}
+                                    onUpdateStartDate={handleUpdateStartDate}
+                                    onTogglePriority={handleTogglePriority}
+                                    compact={isMobile}
                                   />
                                 ))}
                               </div>
