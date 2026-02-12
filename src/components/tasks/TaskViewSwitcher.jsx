@@ -26,25 +26,21 @@ export default function TaskViewSwitcher({
           value="card" 
           className={cn(
             "data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5",
-            isMobile ? "px-2.5 text-xs" : "gap-2"
+            isMobile ? "px-2 py-1 text-xs h-7" : "gap-2"
           )}
         >
           <LayoutGrid className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
-          <span className={isMobile ? "" : "hidden sm:inline"}>
-            {isMobile ? "" : "Card View"}
-          </span>
+          {!isMobile && <span className="hidden sm:inline">Card View</span>}
         </TabsTrigger>
         <TabsTrigger 
           value="calendar" 
           className={cn(
             "data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5",
-            isMobile ? "px-2.5 text-xs" : "gap-2"
+            isMobile ? "px-2 py-1 text-xs h-7" : "gap-2"
           )}
         >
           <Calendar className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
-          <span className={isMobile ? "" : "hidden sm:inline"}>
-            {isMobile ? "" : "Calendar View"}
-          </span>
+          {!isMobile && <span className="hidden sm:inline">Calendar View</span>}
         </TabsTrigger>
       </TabsList>
     </Tabs>
