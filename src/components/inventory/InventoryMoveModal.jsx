@@ -74,41 +74,36 @@ export default function InventoryMoveModal({
     }
   }, [isOpen, maxQuantity]);
 
-  // Create transfer mutation
+  // Create transfer mutation using centralized service
   const transferMutation = useMutation({
     mutationFn: async (data) => {
-      // Create transfer record
-      const transfer = await base44.entities.InventoryTransfer.create({
+      const response = await base44.functions.invoke('mutateInventory', {
+        mutation_type: 'move',
         part_id: part?.id,
-        inventory_item_id: inventoryItem?.id,
+        qty: data.quantity,
         from_location_id: currentLocationId,
         to_location_id: data.toLocationId,
-        qty_moved: data.quantity,
-        transfer_reason: data.reason,
-        notes: data.notes,
-        transfer_status: "completed",
-      });
-
-      // Create audit log
-      await base44.entities.InventoryAuditLog.create({
-        part_id: part?.id,
         inventory_item_id: inventoryItem?.id,
-        action_type: "move",
-        qty_changed: data.quantity,
-        from_location_id: currentLocationId,
-        to_location_id: data.toLocationId,
+        reason: data.reason,
         notes: data.notes,
-        performed_by: (await base44.auth.me())?.id,
-        performed_at: new Date().toISOString(),
       });
-
-      return transfer;
+      
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+      
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventoryItems"] });
       queryClient.invalidateQueries({ queryKey: ["inventoryTransfers"] });
+      queryClient.invalidateQueries({ queryKey: ["inventoryAuditLogs"] });
       onSuccess?.();
       onClose();
+    },
+    onError: (error) => {
+      // Error is handled by the mutation service
+      console.error('Transfer failed:', error);
     },
   });
 
