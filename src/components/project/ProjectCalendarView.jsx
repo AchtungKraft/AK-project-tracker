@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
  * Scoped version of PriorityCalendarView
  */
 export default function ProjectCalendarView({
-  tasks,
-  categories,
-  teamMembers,
-  statuses,
+  tasks = [],
+  categories = [],
+  teamMembers = [],
+  statuses = [],
   onTaskClick,
   onToggleComplete,
   onUpdateDueDate,
@@ -30,6 +30,10 @@ export default function ProjectCalendarView({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [weeksToShow, setWeeksToShow] = useState(isMobile ? 4 : 4);
   const [groupBy, setGroupBy] = useState('assigned');
+
+  // Debug logging
+  console.log('[ProjectCalendarView] Received tasks:', tasks.length);
+  console.log('[ProjectCalendarView] Tasks sample:', tasks.slice(0, 3).map(t => ({ id: t.id, name: t.name, due_date: t.due_date, start_date: t.start_date })));
 
   // Generate week ranges
   const weekRanges = useMemo(() => {
@@ -50,7 +54,7 @@ export default function ProjectCalendarView({
     return ranges;
   }, [currentDate, weeksToShow, isMobile]);
 
-  // Separate tasks
+  // Separate tasks - use start_date OR due_date for calendar placement
   const { tasksPastDue, tasksWithDueDate, tasksWithoutDueDate } = useMemo(() => {
     const pastDue = [];
     const withDate = [];
@@ -63,33 +67,42 @@ export default function ProjectCalendarView({
       return s.scope === 'Task' && (label.includes('complete') || label.includes('done'));
     });
     
-    tasks.filter(t => t.status_id !== completedStatus?.id).forEach(task => {
-      if (task.due_date) {
-        const dueDate = parseISO(task.due_date);
-        if (isBefore(dueDate, today)) {
-          pastDue.push(task);
+    const activeTasks = tasks.filter(t => t.status_id !== completedStatus?.id);
+    console.log('[ProjectCalendarView] Active tasks after filtering:', activeTasks.length);
+    
+    activeTasks.forEach(task => {
+      // Use start_date first, fall back to due_date
+      const dateToUse = task.start_date || task.due_date;
+      
+      if (dateToUse) {
+        const taskDate = parseISO(dateToUse);
+        if (isBefore(taskDate, today)) {
+          pastDue.push({ ...task, _calendarDate: dateToUse });
         } else {
-          withDate.push(task);
+          withDate.push({ ...task, _calendarDate: dateToUse });
         }
       } else {
         withoutDate.push(task);
       }
     });
     
+    console.log('[ProjectCalendarView] Categorized - pastDue:', pastDue.length, 'withDate:', withDate.length, 'withoutDate:', withoutDate.length);
     return { tasksPastDue: pastDue, tasksWithDueDate: withDate, tasksWithoutDueDate: withoutDate };
   }, [tasks, statuses]);
 
-  // Group tasks by week
+  // Group tasks by week - use _calendarDate which is already computed
   const tasksByWeek = useMemo(() => {
     const grouped = {};
     
     weekRanges.forEach((range, index) => {
       grouped[index] = tasksWithDueDate.filter(task => {
-        const dueDate = parseISO(task.due_date);
-        return isWithinInterval(dueDate, { start: range.start, end: range.end });
+        // Use the pre-computed calendar date
+        const taskDate = parseISO(task._calendarDate);
+        return isWithinInterval(taskDate, { start: range.start, end: range.end });
       });
     });
     
+    console.log('[ProjectCalendarView] Tasks by week:', Object.entries(grouped).map(([k, v]) => `Week ${k}: ${v.length}`).join(', '));
     return grouped;
   }, [tasksWithDueDate, weekRanges]);
 
