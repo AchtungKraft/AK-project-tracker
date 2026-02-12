@@ -663,22 +663,23 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             .header-info div { font-size: 12px; }
             .header-info strong { font-weight: bold; }
             
-            /* Location/Category Group - container only */
-            /* FIX: Removed all page-break-before rules that caused unnecessary breaks above group headers (e.g., MECHANICAL) */
+            /* Location/Category Group - container only, NO break rules here */
             .location-group { 
               margin-bottom: 20px; 
-              /* CRITICAL: No break-before or break-inside rules - allows natural flow */
+              /* NO break-before, break-after, or break-inside rules - allows natural page flow */
             }
             
-            /* Soft-start zone: allows group to begin mid-page */
-            .location-group-start {
-              /* No break rules - header + first items can start mid-page naturally */
+            /* ATOMIC PRINT BLOCK: Header + first 2 rows kept together to prevent orphaned headers */
+            /* This is the KEY fix: only this small unit is atomic, not the entire group */
+            .print-atomic {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
             }
             
-            /* Hard atomic zone: contains the actual parts rows - keep together if possible but don't force breaks */
-            .location-group-body {
-              /* Removed break-inside: avoid to prevent forcing page breaks before groups */
-              /* Individual part rows still have break-inside: avoid for atomicity */
+            /* Overflow rows container - allows normal page breaks for large groups */
+            .print-overflow {
+              break-inside: auto !important;
+              page-break-inside: auto !important;
             }
             .location-header { 
               border-left: 6px solid #333;
@@ -690,8 +691,10 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               margin-bottom: 0;
               text-transform: uppercase;
               letter-spacing: 0.5px;
-              page-break-after: avoid !important;
+              /* Prevent header from appearing alone at bottom of page */
               break-after: avoid !important;
+              page-break-after: avoid !important;
+              /* NO break-before rules - allows header to start mid-page naturally */
             }
             .location-header.non-inventory {
               border-left-color: #999;
@@ -706,16 +709,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               border-bottom-color: #7b1fa2;
             }
             
-            /* Sub-group container */
+            /* Sub-group container - no break rules, natural flow */
             .sub-group {
               margin-left: 6px;
-            }
-            
-            /* Print-block: atomic unit containing header + first rows */
-            .print-block {
-              page-break-inside: avoid;
-              break-inside: avoid;
-              min-height: 140px;
             }
             
             .sub-location-header { 
@@ -725,8 +721,9 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
               font-weight: 600;
               color: #444;
               border-bottom: 1px solid #ddd;
-              page-break-after: avoid !important;
+              /* Prevent subheader from appearing alone at bottom of page */
               break-after: avoid !important;
+              page-break-after: avoid !important;
             }
             
             /* Parts list container */
@@ -918,36 +915,35 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
-              /* FIX: Removed all forced page-break rules from location-group that caused unnecessary breaks above MECHANICAL and other sections */
+              /* CRITICAL: No break rules on group container - prevents forced breaks before MECHANICAL etc */
               .location-group { 
-                /* No break rules - natural flow */
+                /* Intentionally empty - natural flow */
               }
-              .location-group-start {
-                /* Natural flow - no break restrictions */
-              }
-              .location-group-body {
-                /* Removed break-inside: avoid - was causing forced breaks before groups */
-              }
-              .print-block {
-                page-break-inside: avoid !important;
+              /* ATOMIC BLOCK: Header + first 2 rows - prevents orphaned headers */
+              .print-atomic {
                 break-inside: avoid !important;
+                page-break-inside: avoid !important;
               }
+              /* OVERFLOW: Remaining rows can break naturally for large groups */
+              .print-overflow {
+                break-inside: auto !important;
+                page-break-inside: auto !important;
+              }
+              /* Headers cannot orphan (appear alone at page bottom) */
               .location-header,
               .sub-location-header,
               .parts-header {
-                page-break-after: avoid !important;
                 break-after: avoid !important;
+                page-break-after: avoid !important;
               }
+              /* Individual rows are atomic */
               .part-row {
-                page-break-inside: avoid !important;
                 break-inside: avoid !important;
-              }
-              .part-row.allow-break {
-                page-break-before: auto;
+                page-break-inside: avoid !important;
               }
               .summary {
-                page-break-inside: avoid;
                 break-inside: avoid;
+                page-break-inside: avoid;
               }
             }
           </style>
@@ -1023,70 +1019,38 @@ export default function BuildExportActions({ buildId, buildName, clientName, tri
             
             return `
             <div class="location-group">
-              <!-- Soft-start zone: header + first sub-group header (allows mid-page start) -->
-              <div class="location-group-start">
-                <div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>
-                ${firstSubGroup ? (() => {
-                  const [subKey, items] = firstSubGroup;
-                  const printBlockItems = items.slice(0, 2);
-                  const overflowItems = items.slice(2);
-                  const hasOverflow = overflowItems.length > 0;
-                  
-                  return `
-                  <div class="sub-group">
-                    <div class="print-block">
-                      ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
-                      <div class="parts-list">
-                        <div class="parts-header">
-                          <div></div>
-                          <div>Part</div>
-                          <div class="col-qty">Qty</div>
-                          ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
-                        </div>
-                        ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
-                      </div>
-                    </div>
-                    ${hasOverflow ? `
+              ${sortedSubGroups.map(([subKey, items], subIdx) => {
+                const atomicItems = items.slice(0, 2);
+                const overflowItems = items.slice(2);
+                const isFirstSubGroup = subIdx === 0;
+                
+                return `
+                <div class="sub-group">
+                  <!-- ATOMIC: Header + first 2 rows kept together to prevent orphaned headers -->
+                  <div class="print-atomic">
+                    ${isFirstSubGroup ? `<div class="location-header ${isNonInventory ? 'non-inventory' : ''} ${isInstalledGroup ? 'installed-group' : ''}">${mainKey}</div>` : ''}
+                    ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
                     <div class="parts-list">
-                      ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
-                    </div>
-                    ` : ''}
-                  </div>
-                  `;
-                })() : ''}
-              </div>
-              
-              <!-- Hard atomic zone: remaining sub-groups -->
-              ${remainingSubGroups.length > 0 ? `
-              <div class="location-group-body">
-                ${remainingSubGroups.map(([subKey, items]) => {
-                  const printBlockItems = items.slice(0, 2);
-                  const overflowItems = items.slice(2);
-                  const hasOverflow = overflowItems.length > 0;
-                  
-                  return `
-                  <div class="sub-group">
-                    <div class="print-block">
-                      ${subKey !== '_direct' ? `<div class="sub-location-header">› ${subKey}</div>` : ''}
-                      <div class="parts-list">
-                        <div class="parts-header">
-                          <div></div>
-                          <div>Part</div>
-                          <div class="col-qty">Qty</div>
-                          ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
-                        </div>
-                        ${printBlockItems.map(item => renderPartRow(item, false)).join('')}
+                      <div class="parts-header">
+                        <div></div>
+                        <div>Part</div>
+                        <div class="col-qty">Qty</div>
+                        ${showCostOnPickList ? '<div class="col-cost">Cost</div>' : ''}
                       </div>
+                      ${atomicItems.map(item => renderPartRow(item, false)).join('')}
                     </div>
-                    ${hasOverflow ? `
-                    <div class="parts-list">
-                      ${overflowItems.map((item, idx) => renderPartRow(item, idx > 0 && overflowItems.length > 10)).join('')}
-                    </div>
-                    ` : ''}
                   </div>
-                `}).join('')}
-              </div>
-              ` : ''}
+                  ${overflowItems.length > 0 ? `
+                  <!-- OVERFLOW: Remaining rows can break naturally across pages -->
+                  <div class="print-overflow">
+                    <div class="parts-list">
+                      ${overflowItems.map(item => renderPartRow(item, false)).join('')}
+                    </div>
+                  </div>
+                  ` : ''}
+                </div>
+                `;
+              }).join('')}
             </div>
           `}).join('')}
 
