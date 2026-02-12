@@ -19,8 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, CalendarIcon, Upload, X as XIcon, Star } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import { getMobileInputClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 
 export default function EditProjectModal({ project, onClose }) {
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [projectData, setProjectData] = useState({
@@ -151,101 +155,100 @@ export default function EditProjectModal({ project, onClose }) {
     }));
   };
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
+  const formContent = (
+    <form onSubmit={handleSubmit} className={isMobile ? "space-y-4" : "space-y-6"}>
+      {!isMobile && (
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
         </DialogHeader>
+      )}
+      {/* Basic Info */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
+        <div>
+          <Label>Project Name *</Label>
+          <Input
+            value={projectData.name}
+            onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
+            placeholder="Project name"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+            required
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
-          {/* Basic Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Project Name *</Label>
-              <Input
-                value={projectData.name}
-                onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
-                placeholder="Project name"
-                className="bg-gray-800 border-gray-700 text-white"
-                required
-              />
-            </div>
+        <div>
+          <Label>VIN / Chassis Number</Label>
+          <Input
+            value={projectData.vin}
+            onChange={(e) => setProjectData({ ...projectData, vin: e.target.value })}
+            placeholder="VIN or chassis number"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+          />
+        </div>
 
-            <div>
-              <Label>VIN / Chassis Number</Label>
-              <Input
-                value={projectData.vin}
-                onChange={(e) => setProjectData({ ...projectData, vin: e.target.value })}
-                placeholder="VIN or chassis number"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+        <div>
+          <Label>Client Name</Label>
+          <Input
+            value={projectData.client_name}
+            onChange={(e) => setProjectData({ ...projectData, client_name: e.target.value })}
+            placeholder="Client name"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+          />
+        </div>
 
-            <div>
-              <Label>Client Name</Label>
-              <Input
-                value={projectData.client_name}
-                onChange={(e) => setProjectData({ ...projectData, client_name: e.target.value })}
-                placeholder="Client name"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+        <div>
+          <Label>Client Email</Label>
+          <Input
+            type="email"
+            value={projectData.client_email}
+            onChange={(e) => setProjectData({ ...projectData, client_email: e.target.value })}
+            placeholder="client@example.com"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+          />
+        </div>
 
-            <div>
-              <Label>Client Email</Label>
-              <Input
-                type="email"
-                value={projectData.client_email}
-                onChange={(e) => setProjectData({ ...projectData, client_email: e.target.value })}
-                placeholder="client@example.com"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+        <div>
+          <Label>Client Phone</Label>
+          <Input
+            value={projectData.client_phone}
+            onChange={(e) => setProjectData({ ...projectData, client_phone: e.target.value })}
+            placeholder="Phone number"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+          />
+        </div>
 
-            <div>
-              <Label>Client Phone</Label>
-              <Input
-                value={projectData.client_phone}
-                onChange={(e) => setProjectData({ ...projectData, client_phone: e.target.value })}
-                placeholder="Phone number"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+        <div>
+          <Label>Project Type</Label>
+          <Select
+            value={projectData.project_type_id}
+            onValueChange={(value) => setProjectData({ ...projectData, project_type_id: value })}
+          >
+            <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeTypes.map(type => (
+                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-            <div>
-              <Label>Project Type</Label>
-              <Select
-                value={projectData.project_type_id}
-                onValueChange={(value) => setProjectData({ ...projectData, project_type_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeTypes.map(type => (
-                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Status</Label>
-              <Select
-                value={projectData.status_id}
-                onValueChange={(value) => setProjectData({ ...projectData, status_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projectStatuses.map(status => (
-                    <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <div>
+          <Label>Status</Label>
+          <Select
+            value={projectData.status_id}
+            onValueChange={(value) => setProjectData({ ...projectData, status_id: value })}
+          >
+            <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              {projectStatuses.map(status => (
+                <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
             <div>
               <Label>Start Date</Label>
@@ -293,19 +296,19 @@ export default function EditProjectModal({ project, onClose }) {
               </Popover>
             </div>
 
-            <div>
-              <Label>Progress %</Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={projectData.progress_percent}
-                onChange={(e) => setProjectData({ ...projectData, progress_percent: parseInt(e.target.value) || 0 })}
-                placeholder="0-100"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-          </div>
+        <div>
+          <Label>Progress %</Label>
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            value={projectData.progress_percent}
+            onChange={(e) => setProjectData({ ...projectData, progress_percent: parseInt(e.target.value) || 0 })}
+            placeholder="0-100"
+            className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+          />
+        </div>
+      </div>
 
           {/* Shareable Toggle */}
           <div className="flex items-center space-x-3 py-2">
@@ -431,27 +434,71 @@ export default function EditProjectModal({ project, onClose }) {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              className="bg-red-600 hover:bg-red-700"
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-          </div>
-        </form>
+      {/* Action Buttons - Desktop only, mobile uses sticky footer */}
+      {!isMobile && (
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            className="bg-red-600 hover:bg-red-700"
+            disabled={updateMutation.isPending}
+          >
+            {updateMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
+        </div>
+      )}
+    </form>
+  );
+
+  // Mobile sticky footer
+  const mobileFooter = (
+    <Button 
+      type="submit"
+      form="edit-project-form"
+      onClick={handleSubmit}
+      className="w-full h-11 bg-red-600 hover:bg-red-700"
+      disabled={updateMutation.isPending}
+    >
+      {updateMutation.isPending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Saving...
+        </>
+      ) : (
+        'Save Changes'
+      )}
+    </Button>
+  );
+
+  if (isMobile) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="p-0 max-w-full h-[100dvh] max-h-[100dvh] bg-gray-900 border-red-900/30 text-white">
+          <MobileModalWrapper
+            title="Edit Project"
+            onClose={onClose}
+            footer={mobileFooter}
+          >
+            {formContent}
+          </MobileModalWrapper>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
+        {formContent}
       </DialogContent>
     </Dialog>
   );

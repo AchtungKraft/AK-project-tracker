@@ -19,6 +19,7 @@ import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 
 function ClientFeedbackLinks({ taskId }) {
   const navigate = useNavigate();
@@ -290,14 +291,14 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             </div>
 
             {editing ? (
-              <form className="space-y-4">
+              <form className={isMobile ? "space-y-3" : "space-y-4"}>
                 <div>
                   <Label className="text-gray-400">Task Name</Label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Task name"
-                    className="bg-gray-800 border-gray-700 text-white"
+                    className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
                     required
                   />
                 </div>
@@ -308,18 +309,18 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Task description"
-                    className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+                    className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[80px]")}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
                   <div>
                     <Label className="text-gray-400">Category</Label>
                     <Select
                       value={formData.category_id}
                       onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                     >
-                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -350,7 +351,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                       value={formData.status_id}
                       onValueChange={(value) => setFormData({ ...formData, status_id: value })}
                     >
-                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -382,7 +383,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     value={formData.assigned_team_member_id}
                     onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
                   >
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
                       <SelectValue placeholder="Assign to team member" />
                     </SelectTrigger>
                     <SelectContent>
@@ -395,7 +396,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
                   <div>
                     <Label className="text-gray-400">Start Date</Label>
                     <Popover>
@@ -495,56 +496,101 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           <Separator className="bg-gray-700" />
 
-          {/* Delete Action */}
-          <div className="pt-4 space-y-3">
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="w-full"
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Task
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Delete Action - Desktop only, mobile shows in footer */}
+          {!isMobile && (
+            <div className="pt-4 space-y-3">
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="w-full"
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Task
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Bottom Actions with Safe Area */}
+        {/* Sticky Footer - Mobile: compact with Save + Delete, Desktop: Close only */}
         <div 
-          className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-700"
+          className="sticky bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700"
           style={{
-            paddingBottom: isMobile ? 'calc(16px + env(safe-area-inset-bottom, 0px))' : '16px',
+            padding: isMobile ? '12px 16px' : '16px',
+            paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom, 0px))' : '16px',
+            maxHeight: isMobile ? '56px' : 'auto',
           }}
         >
           {isMobile ? (
-            <MobilePrimaryActionStack
-              primaryAction={
-                editing 
-                  ? {
-                      label: updateMutation.isPending ? 'Saving...' : 'Save Changes',
-                      onClick: handleSubmit,
-                      icon: Save,
-                      disabled: updateMutation.isPending,
-                      loading: updateMutation.isPending,
-                    }
-                  : {
-                      label: 'Edit Task',
-                      onClick: () => setEditing(true),
-                    }
-              }
-              secondaryActions={[
-                { label: 'Close', onClick: onClose, variant: 'outline' }
-              ]}
-            />
+            <div className="flex gap-2">
+              {editing ? (
+                <>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={updateMutation.isPending}
+                    className="flex-1 h-11 bg-red-600 hover:bg-red-700"
+                  >
+                    {updateMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(false);
+                      setFormData({
+                        name: task.name || "",
+                        description: task.description || "",
+                        project_id: task.project_id || projectId || "",
+                        category_id: task.category_id || "",
+                        assigned_team_member_id: task.assigned_team_member_id || "",
+                        status_id: task.status_id || "",
+                        start_date: task.start_date || "",
+                        due_date: task.due_date || "",
+                      });
+                    }}
+                    className="h-11 px-4 border-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => setEditing(true)}
+                    className="flex-1 h-11 bg-red-600 hover:bg-red-700"
+                  >
+                    Edit Task
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={deleteMutation.isPending}
+                    className="h-11 px-4"
+                  >
+                    {deleteMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
           ) : (
             <Button
               onClick={onClose}
