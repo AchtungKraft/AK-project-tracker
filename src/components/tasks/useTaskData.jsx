@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import { TASK_CACHE_KEYS } from "./useTaskInteraction";
 
 /**
  * useTaskData
@@ -144,12 +145,14 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     onSuccess: (updatedTask, variables) => {
       console.log("TASK UPDATED", variables.id, variables.data);
       
-      // Invalidate all possible task query keys used across the app
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasksForCalendar'] });
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
+      // Use centralized cache keys
+      TASK_CACHE_KEYS.forEach(key => {
+        queryClient.invalidateQueries({ queryKey: key });
+      });
+      
+      // Additional keys not in centralized list
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       
       // Project-specific queries
       if (projectId) {
