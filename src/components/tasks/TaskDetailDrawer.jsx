@@ -20,6 +20,7 @@ import TaskCommentsSection from "./TaskCommentsSection";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
+import DeleteTaskConfirm from "./DeleteTaskConfirm";
 
 function ClientFeedbackLinks({ taskId }) {
   const navigate = useNavigate();
@@ -90,6 +91,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const isMobile = useIsMobile();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -204,10 +206,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     updateMutation.mutate(formData);
   }, [formData, updateMutation]);
 
-  const handleDelete = useCallback(() => {
-    if (confirm('Are you sure you want to delete this task?')) {
-      deleteMutation.mutate();
-    }
+  const handleDeleteClick = useCallback(() => {
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    deleteMutation.mutate();
   }, [deleteMutation]);
 
   const handleAssignToMe = useCallback(() => {
@@ -501,7 +505,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             <div className="pt-4 space-y-3">
               <Button
                 variant="destructive"
-                onClick={handleDelete}
+                onClick={handleDeleteClick}
                 disabled={deleteMutation.isPending}
                 className="w-full"
               >
@@ -520,6 +524,15 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <DeleteTaskConfirm
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={handleConfirmDelete}
+          taskName={task?.name}
+          isLoading={deleteMutation.isPending}
+        />
 
         {/* Sticky Footer - Mobile: compact with Save + Delete, Desktop: Close only */}
         <div 
