@@ -295,33 +295,28 @@ export default function NeedsAttentionSection({
 
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
-      <CardHeader className="border-b border-red-500/30 p-3 md:p-4">
+      <CardHeader className="border-b border-red-500/30 px-3 py-2 md:p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="p-1.5 md:p-2 bg-red-500/20 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="p-1 md:p-2 bg-red-500/20 rounded-lg">
               <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400" />
             </div>
-            <div>
-              <CardTitle className="text-base md:text-lg text-red-400">
-                🚨 Needs Attention
-              </CardTitle>
-              <p className="text-xs text-gray-400 hidden md:block">
-                Items clear once reviewed or archived
-              </p>
-            </div>
+            <CardTitle className="text-sm md:text-lg text-red-400">
+              🚨 Needs Attention
+            </CardTitle>
           </div>
-          <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-base md:text-lg px-2 md:px-3 py-0.5 md:py-1">
+          <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-sm md:text-lg px-2 py-0.5 md:py-1">
             {needsAttention.length}
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+      <CardContent className="p-2 md:p-4 space-y-2 md:space-y-4">
         {/* Action Required Section */}
         {actionRequired.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-2 md:mb-3">
+            <div className="flex items-center gap-2 mb-2">
               <div className="h-px flex-1 bg-red-500/30" />
-              <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">
+              <span className="text-[10px] md:text-xs font-semibold text-red-400 uppercase tracking-wider whitespace-nowrap">
                 Action Required ({actionRequired.length})
               </span>
               <div className="h-px flex-1 bg-red-500/30" />
@@ -342,9 +337,9 @@ export default function NeedsAttentionSection({
         {/* Pending Closure Section */}
         {pendingClosure.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-2 md:mb-3">
+            <div className="flex items-center gap-2 mb-2">
               <div className="h-px flex-1 bg-green-500/20" />
-              <span className="text-xs font-semibold text-green-400/70 uppercase tracking-wider">
+              <span className="text-[10px] md:text-xs font-semibold text-green-400/70 uppercase tracking-wider whitespace-nowrap">
                 Pending Closure ({pendingClosure.length})
               </span>
               <div className="h-px flex-1 bg-green-500/20" />

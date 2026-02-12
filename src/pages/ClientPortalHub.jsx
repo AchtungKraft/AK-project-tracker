@@ -712,16 +712,16 @@ export default function ClientPortalHub() {
     <MobileSafeAreaContainer>
       <div className={isMobile ? 'p-2 space-y-2' : 'p-3 md:p-6 space-y-4 md:space-y-6'}>
       <div className={`flex items-center justify-between flex-wrap ${isMobile ? 'gap-2 mb-1' : 'gap-3'}`}>
-        <div>
-          <h1 className={`font-bold text-white flex items-center ${isMobile ? 'text-lg gap-2' : 'text-xl md:text-3xl gap-2 md:gap-3'}`}>
-            <Users className={isMobile ? 'w-5 h-5 text-red-500' : 'w-6 h-6 md:w-8 md:h-8 text-red-500'} />
+        <div className="flex-1 min-w-0">
+          <h1 className={`font-bold text-white flex items-center ${isMobile ? 'text-base gap-2' : 'text-xl md:text-3xl gap-2 md:gap-3'}`}>
+            <Users className={isMobile ? 'w-4 h-4 text-red-500' : 'w-6 h-6 md:w-8 md:h-8 text-red-500'} />
             Client Portal
           </h1>
           <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-base mt-0.5 md:mt-1'}`}>
             <span className="hidden md:inline">Manage client feedback requests and access</span>
-            <span className="md:hidden">
+            <span className="md:hidden truncate">
               {needsAttentionCount > 0 
-                ? `${needsAttentionCount} item${needsAttentionCount !== 1 ? 's' : ''} need attention`
+                ? `${needsAttentionCount} need attention`
                 : 'All caught up'}
             </span>
           </p>
@@ -748,7 +748,7 @@ export default function ClientPortalHub() {
               <Button 
                 variant="outline" 
                 size="sm"
-                className={`justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
+                className={`justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800 ${isMobile ? 'h-10' : ''} ${assignedTo.length > 0 ? 'border-cyan-500/50' : ''}`}
               >
                 <span className="flex items-center gap-2 truncate">
                   <User className="w-4 h-4 shrink-0" />
@@ -795,12 +795,12 @@ export default function ClientPortalHub() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
+          <div className={`flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg ${isMobile ? 'p-0.5' : 'p-1'}`}>
             <Button
               size="sm"
               variant={viewMode === 'cards' ? 'default' : 'ghost'}
               onClick={() => handleViewModeChange('cards')}
-              className={viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+              className={`${isMobile ? 'h-8 w-8 p-0' : ''} ${viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -808,7 +808,7 @@ export default function ClientPortalHub() {
               size="sm"
               variant={viewMode === 'list' ? 'default' : 'ghost'}
               onClick={() => handleViewModeChange('list')}
-              className={viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}
+              className={`${isMobile ? 'h-8 w-8 p-0' : ''} ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
             >
               <List className="w-4 h-4" />
             </Button>
@@ -1097,11 +1097,11 @@ export default function ClientPortalHub() {
         title="Filter Client Portal"
       >
         <MobileFilterSection title="Project Status" badge={tempFilters?.statusFilter !== 'all' ? 1 : null}>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <button
               type="button"
               onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: 'all' }))}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors text-sm ${
                 tempFilters?.statusFilter === 'all' 
                   ? 'bg-red-600/20 border border-red-500/50 text-white' 
                   : 'bg-gray-800/50 text-gray-300'
@@ -1114,7 +1114,7 @@ export default function ClientPortalHub() {
                 key={s.id}
                 type="button"
                 onClick={() => setTempFilters(prev => ({ ...prev, statusFilter: s.id }))}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center gap-2 text-sm ${
                   tempFilters?.statusFilter === s.id 
                     ? 'bg-red-600/20 border border-red-500/50 text-white' 
                     : 'bg-gray-800/50 text-gray-300'
@@ -1128,7 +1128,7 @@ export default function ClientPortalHub() {
         </MobileFilterSection>
 
         <MobileFilterSection title="Project Type" badge={tempFilters?.selectedTypes?.length || null}>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {projectTypes.filter(t => t.active).map(t => (
               <button
                 key={t.id}
@@ -1142,7 +1142,7 @@ export default function ClientPortalHub() {
                       : [...current, t.id]
                   }));
                 }}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center gap-2 text-sm ${
                   tempFilters?.selectedTypes?.includes(t.id) 
                     ? 'bg-red-600/20 border border-red-500/50 text-white' 
                     : 'bg-gray-800/50 text-gray-300'
@@ -1156,7 +1156,7 @@ export default function ClientPortalHub() {
         </MobileFilterSection>
 
         <MobileFilterSection title="Assigned To" badge={tempFilters?.assignedTo?.length || null}>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {activeTeamMembers.map(tm => (
               <button
                 key={tm.id}
@@ -1170,7 +1170,7 @@ export default function ClientPortalHub() {
                       : [...current, tm.id]
                   }));
                 }}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors text-sm ${
                   tempFilters?.assignedTo?.includes(tm.id) 
                     ? 'bg-red-600/20 border border-red-500/50 text-white' 
                     : 'bg-gray-800/50 text-gray-300'
