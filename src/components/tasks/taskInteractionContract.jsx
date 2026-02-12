@@ -1,5 +1,5 @@
 /**
- * TASK INTERACTION CONTRACT
+ * TASK INTERACTION CONTRACT v2.0
  * 
  * This file defines the enforcement rules for task UI consistency.
  * 
@@ -10,6 +10,13 @@
  * 4. All task modals/drawers MUST use TaskActionFooter
  * 5. All inline controls MUST use TaskInlineControlBar
  * 6. All grouping MUST use useTaskGrouping
+ * 7. Calendar views MUST exclude tasks without start_date AND due_date
+ * 8. All mutations MUST include timestamp for race condition prevention
+ * 
+ * STATE INTEGRITY RULES:
+ * - normalizeTask() must be applied after fetch and before cache write
+ * - emitTaskStateUpdated() must be called after successful mutation
+ * - useTaskGrouping must subscribe to state events for instant reflow
  */
 
 // Development mode assertions
@@ -64,6 +71,51 @@ export function assertUsesTaskGrouping(componentName, usesGrouping) {
 }
 
 /**
+ * Assert that inline controls route through useTaskInteraction
+ * Call this in development when inline controls are used
+ */
+export function assertUsesTaskInteraction(componentName, usesInteraction) {
+  if (!isDev) return;
+  
+  if (!usesInteraction) {
+    console.warn(
+      `[TASK CONTRACT VIOLATION] ${componentName} bypasses useTaskInteraction. ` +
+      'All inline controls must route through useTaskInteraction or useTaskData.'
+    );
+  }
+}
+
+/**
+ * Assert that direct entity updates are not used
+ * Call this to detect direct base44.entities.Task.update() calls
+ */
+export function assertNoDirectEntityUpdate(componentName, hasDirectUpdate) {
+  if (!isDev) return;
+  
+  if (hasDirectUpdate) {
+    console.warn(
+      `[TASK CONTRACT VIOLATION] ${componentName} uses direct entity update. ` +
+      'All task mutations MUST route through useTaskInteraction hook.'
+    );
+  }
+}
+
+/**
+ * Assert calendar excludes tasks without dates
+ * Call this in calendar views to verify date filtering
+ */
+export function assertCalendarDateFiltering(componentName, tasksWithoutDates) {
+  if (!isDev) return;
+  
+  if (tasksWithoutDates > 0) {
+    console.warn(
+      `[TASK CONTRACT VIOLATION] ${componentName} includes ${tasksWithoutDates} tasks without dates. ` +
+      'Calendar views MUST exclude tasks without start_date AND due_date.'
+    );
+  }
+}
+
+/**
  * Accessibility constants
  */
 export const ACCESSIBILITY = {
@@ -86,7 +138,13 @@ export const TASK_CACHE_KEYS = [
  * Task interaction contract summary
  */
 export const CONTRACT_SUMMARY = `
-TASK INTERACTION CONTRACT v1.0
+TASK INTERACTION CONTRACT v2.0
+
+STATE INTEGRITY:
+✓ normalizeTask() after fetch and before cache write
+✓ emitTaskStateUpdated() after successful mutation
+✓ Mutation timestamps for race condition prevention
+✓ useTaskGrouping subscribes to state events
 
 ALLOWED:
 ✓ useTaskInteraction() for all mutations
@@ -101,12 +159,16 @@ FORBIDDEN:
 ✗ Custom footer implementations
 ✗ Custom inline control implementations
 ✗ Manual grouping logic outside useTaskGrouping
+✗ Tasks without dates in calendar views
 `;
 
 export default {
   assertPresentationalTaskCard,
   assertHasActionFooter,
   assertUsesTaskGrouping,
+  assertUsesTaskInteraction,
+  assertNoDirectEntityUpdate,
+  assertCalendarDateFiltering,
   ACCESSIBILITY,
   TASK_CACHE_KEYS,
   CONTRACT_SUMMARY,
