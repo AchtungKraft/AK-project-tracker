@@ -21,6 +21,7 @@ import CompletedTasksSection from "./CompletedTasksSection";
 import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
 import ProjectCalendarView from "./ProjectCalendarView";
 import { useTaskData } from "../tasks/useTaskData";
+import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -411,6 +412,14 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         onClose={() => setSelectedImage(null)}
         imageUrl={selectedImage}
       />
+
+      {selectedTask && (
+        <TaskDetailDrawer
+          task={selectedTask}
+          projectId={projectId}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
     </>
   );
 }
