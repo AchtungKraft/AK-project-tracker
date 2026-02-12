@@ -26,6 +26,8 @@ import {
   Calendar,
   TrendingUp,
   HelpCircle,
+  ShieldCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PartTypeBadge } from "../parts/PartTypeSelector";
@@ -87,6 +89,20 @@ const BILLING_SOURCE_LABELS = {
   NONE: "None",
 };
 
+const ORDERING_SAFETY_CONFIG = {
+  RED: { label: 'Not Billed', color: 'bg-red-600', icon: AlertCircle },
+  YELLOW: { label: 'Awaiting Payment', color: 'bg-yellow-600', icon: Clock },
+  GREEN: { label: 'Paid - Safe to Order', color: 'bg-green-600', icon: ShieldCheck },
+};
+
+const LIFECYCLE_LABELS = {
+  ASSIGNED_NEEDS_BILLING: 'Needs Billing',
+  BILLED_NOT_PAID: 'Awaiting Payment',
+  PAID_READY_TO_ORDER: 'Ready to Order',
+  ORDERED_WAITING_RECEIPT: 'Order in Progress',
+  INSTALLED_READY_TO_BILL: 'Installed - Billing',
+};
+
 // ============================================
 // TIMELINE ITEM COMPONENT
 // ============================================
@@ -130,6 +146,7 @@ export default function FinancialDetailDrawer({
   partId, 
   projectId,
   financialStatus,
+  lifecycleContext, // Optional: { lifecycle_category, ordering_safety, commitment_id, order_reference }
 }) {
   // Fetch part data
   const { data: part } = useQuery({
@@ -413,6 +430,51 @@ export default function FinancialDetailDrawer({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Section: Lifecycle Context (Phase 7) */}
+            {lifecycleContext && (
+              <Card className="bg-gray-800/50 border-gray-700">
+                <CardHeader className="p-3 border-b border-gray-700">
+                  <CardTitle className="text-sm text-white flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-blue-400" />
+                    Lifecycle Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 space-y-3">
+                  {lifecycleContext.lifecycle_category && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Category</span>
+                      <Badge className="bg-blue-600 text-xs">
+                        {LIFECYCLE_LABELS[lifecycleContext.lifecycle_category] || lifecycleContext.lifecycle_category}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {lifecycleContext.ordering_safety && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Ordering Safety</span>
+                      <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[lifecycleContext.ordering_safety]?.color || 'bg-gray-600')}>
+                        {lifecycleContext.ordering_safety} - {ORDERING_SAFETY_CONFIG[lifecycleContext.ordering_safety]?.label}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {lifecycleContext.order_reference && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">PO Reference</span>
+                      <span className="text-xs text-white">{lifecycleContext.order_reference}</span>
+                    </div>
+                  )}
+
+                  {lifecycleContext.recommended_action && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Recommended</span>
+                      <span className="text-xs text-green-400">{lifecycleContext.recommended_action}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Section E: Data Traceability */}
             <Card className="bg-gray-800/50 border-gray-700">
