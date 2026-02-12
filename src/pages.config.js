@@ -67,6 +67,7 @@ import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
+import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
 import __Layout from './Layout.jsx';
 
 
@@ -91,6 +92,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
+    "InventoryMutationMonitor": InventoryMutationMonitor,
 }
 
 export const pagesConfig = {
