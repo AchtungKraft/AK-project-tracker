@@ -27,6 +27,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
   const [viewMode, setViewMode] = useState('list'); // Default to list view
   const [showGrouping, setShowGrouping] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
   
@@ -166,6 +167,11 @@ export default function PartsExplorerLayout({ onPartClick }) {
   };
 
   const filteredParts = parts.filter(part => {
+    // Archive filter - exclude archived unless showArchived is true
+    if (!showArchived && part.is_archived) {
+      return false;
+    }
+    
     const searchLower = debouncedSearchTerm?.toLowerCase() || '';
     
     // Get related data for comprehensive search
@@ -284,6 +290,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
                 showGrouping={showGrouping}
                 onToggleGrouping={() => setShowGrouping(!showGrouping)}
                 partsCount={filteredParts.length}
+                showArchived={showArchived}
+                onToggleArchived={() => setShowArchived(!showArchived)}
               />
             </div>
 
