@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, Archive, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 
 
 export default function AddRequirementModal({ projectId, onClose }) {
@@ -22,9 +24,13 @@ export default function AddRequirementModal({ projectId, onClose }) {
     target_install_date: ''
   });
 
+  // Only show active, non-archived parts
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list()
+    queryFn: async () => {
+      const allParts = await base44.entities.Part.list();
+      return allParts.filter(p => !p.is_archived && p.is_active !== false);
+    }
   });
 
   const { data: existingRequirements = [] } = useQuery({
@@ -131,12 +137,13 @@ export default function AddRequirementModal({ projectId, onClose }) {
               <SelectContent className="max-h-60">
                 {filteredParts.slice(0, 50).map(part => (
                   <SelectItem key={part.id} value={part.id}>
-                    <div className="flex flex-col">
-                      <span>{part.part_name}</span>
-                      {part.vendor_part_number && (
-                        <span className="text-xs text-gray-500">{part.vendor_part_number}</span>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate">{part.part_name}</span>
+                      {part.part_type && <PartTypeBadge partType={part.part_type} size="sm" />}
                     </div>
+                    {part.vendor_part_number && (
+                      <span className="text-xs text-gray-500 block">{part.vendor_part_number}</span>
+                    )}
                   </SelectItem>
                 ))}
                 {filteredParts.length > 50 && (
