@@ -22,12 +22,14 @@ import {
   Filter,
   ExternalLink,
   Clock,
+  FileText,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
+import InvoiceWorkbench from "@/components/financial/InvoiceWorkbench";
 
 // ============================================
 // CONSTANTS
@@ -278,6 +280,7 @@ function ExceptionTable({ exceptions, type, onRowClick }) {
 // ============================================
 
 export default function FinancialExceptionDashboard() {
+  const [viewMode, setViewMode] = useState('exceptions'); // 'exceptions' | 'workbench'
   const [activeTab, setActiveTab] = useState(EXCEPTION_TYPES.INSTALLED_NOT_BILLED);
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -372,24 +375,83 @@ export default function FinancialExceptionDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <AlertTriangle className="w-7 h-7 text-yellow-400" />
-            Financial Exception Dashboard
+            {viewMode === 'exceptions' ? (
+              <AlertTriangle className="w-7 h-7 text-yellow-400" />
+            ) : (
+              <FileText className="w-7 h-7 text-green-400" />
+            )}
+            {viewMode === 'exceptions' ? 'Financial Exceptions' : 'Invoice Workbench'}
           </h1>
           <p className="text-gray-400 mt-1">
-            Identify revenue leakage, cash flow risks, and incomplete margin chains
+            {viewMode === 'exceptions' 
+              ? 'Identify revenue leakage, cash flow risks, and incomplete margin chains'
+              : 'Select items, create invoice batches, and export to QuickBooks'}
           </p>
         </div>
-        <Button 
-          onClick={() => refetch()} 
-          variant="outline" 
-          className="border-gray-700 gap-2"
-          disabled={isFetching}
-        >
-          {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* View Mode Toggle */}
+          <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-1 flex">
+            <button
+              onClick={() => setViewMode('exceptions')}
+              className={cn(
+                "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+                viewMode === 'exceptions' 
+                  ? "bg-yellow-600 text-white" 
+                  : "text-gray-400 hover:text-white"
+              )}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Exceptions
+            </button>
+            <button
+              onClick={() => setViewMode('workbench')}
+              className={cn(
+                "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+                viewMode === 'workbench' 
+                  ? "bg-green-600 text-white" 
+                  : "text-gray-400 hover:text-white"
+              )}
+            >
+              <FileText className="w-4 h-4" />
+              Invoice Workbench
+            </button>
+          </div>
+          {viewMode === 'exceptions' && (
+            <Button 
+              onClick={() => refetch()} 
+              variant="outline" 
+              className="border-gray-700 gap-2"
+              disabled={isFetching}
+            >
+              {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Refresh
+            </Button>
+          )}
+        </div>
       </div>
 
+      {/* Invoice Workbench Mode */}
+      {viewMode === 'workbench' && (
+        <>
+          <InvoiceWorkbench onRowClick={handleRowClick} />
+          
+          {/* Financial Detail Drawer */}
+          <FinancialDetailDrawer
+            isOpen={drawerOpen}
+            onClose={() => {
+              setDrawerOpen(false);
+              setDrawerContext(null);
+            }}
+            partId={drawerContext?.part_id}
+            projectId={drawerContext?.project_id}
+            financialStatus={financialStatuses[0] || null}
+          />
+        </>
+      )}
+
+      {/* Exceptions Mode */}
+      {viewMode === 'exceptions' && (
+        <>
       {/* KPI Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KPICard
@@ -613,6 +675,8 @@ export default function FinancialExceptionDashboard() {
         projectId={drawerContext?.project_id}
         financialStatus={financialStatuses[0] || null}
       />
+        </>
+      )}
     </div>
   );
 }
