@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 import ProjectKanban from "./ProjectKanban";
 import CompletedTasksSection from "./CompletedTasksSection";
+import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
+import ProjectCalendarView from "./ProjectCalendarView";
+import { useTaskData } from "../tasks/useTaskData";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -26,6 +29,8 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState('card'); // 'card' | 'calendar'
+  const [selectedTask, setSelectedTask] = useState(null);
   const [formData, setFormData] = useState({
     name: project?.name || "",
     client_name: project?.client_name || "",
@@ -42,8 +47,20 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   const { 
     statuses = [], 
     projectTypes = [], 
-    journalEntries = [] 
+    journalEntries = [],
+    categories = [],
+    teamMembers = [],
+    tasks = [],
   } = sharedData;
+
+  // Use task data hook for calendar view handlers
+  const {
+    commentCountByTaskId,
+    handleToggleComplete,
+    handleUpdateDueDate,
+    handleUpdateStartDate,
+    handleTogglePriority,
+  } = useTaskData({ scope: 'project', projectId });
 
   const currentStatus = statuses.find((s) => s.id === project?.status_id);
   const projectType = projectTypes.find((t) => t.id === project?.project_type_id);
@@ -284,11 +301,37 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           </Card>
         </Collapsible>
 
-        {/* Main Task Groups Board */}
-        <ProjectKanban projectId={projectId} sharedData={sharedData} />
+        {/* View Switcher */}
+        <div className="flex items-center justify-between">
+          <TaskViewSwitcher 
+            viewMode={viewMode} 
+            onViewChange={setViewMode} 
+          />
+        </div>
 
-        {/* Completed Tasks Section */}
-        <CompletedTasksSection projectId={projectId} sharedData={sharedData} />
+        {/* Task Views */}
+        {viewMode === 'card' ? (
+          <>
+            {/* Main Task Groups Board */}
+            <ProjectKanban projectId={projectId} sharedData={sharedData} />
+
+            {/* Completed Tasks Section */}
+            <CompletedTasksSection projectId={projectId} sharedData={sharedData} />
+          </>
+        ) : (
+          <ProjectCalendarView
+            tasks={tasks}
+            categories={categories}
+            teamMembers={teamMembers}
+            statuses={statuses}
+            onTaskClick={setSelectedTask}
+            onToggleComplete={handleToggleComplete}
+            onUpdateDueDate={handleUpdateDueDate}
+            onUpdateStartDate={handleUpdateStartDate}
+            onTogglePriority={handleTogglePriority}
+            commentCountByTaskId={commentCountByTaskId}
+          />
+        )}
 
         {/* Recent Journal Entries Grid */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
