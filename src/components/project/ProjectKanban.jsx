@@ -50,6 +50,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
     onUpdateDueDate,
     onUpdateStartDate,
     onTogglePriority,
+    showInlineControls = true, // Default to showing inline controls
   } = sharedData;
 
   // Only fetch if not provided via sharedData
@@ -492,18 +493,19 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                           className={snapshot.isDragging ? 'opacity-50' : ''}
                                         >
                                           <TaskCard
-                                                  task={task}
-                                                  categories={categories}
-                                                  teamMembers={teamMembers}
-                                                  statuses={statuses}
-                                                  onToggleComplete={handleToggleComplete}
-                                                  onClick={() => setSelectedTask(task)}
-                                                  commentCount={commentCountByTaskId[task.id] || 0}
-                                                  compact={isMobile}
-                                                  onUpdateDueDate={onUpdateDueDate}
-                                                  onUpdateStartDate={onUpdateStartDate}
-                                                  onTogglePriority={onTogglePriority}
-                                                />
+                                          task={task}
+                                          categories={categories}
+                                          teamMembers={teamMembers}
+                                          statuses={statuses}
+                                          onToggleComplete={handleToggleComplete}
+                                          onClick={() => setSelectedTask(task)}
+                                          commentCount={commentCountByTaskId[task.id] || 0}
+                                          compact={isMobile}
+                                          showInlineControls={showInlineControls}
+                                          onUpdateDueDate={onUpdateDueDate}
+                                          onUpdateStartDate={onUpdateStartDate}
+                                          onTogglePriority={onTogglePriority}
+                                          />
                                         </div>
                                       )}
                                     </Draggable>
@@ -607,6 +609,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                     onClick={() => setSelectedTask(task)}
                                                     commentCount={commentCountByTaskId[task.id] || 0}
                                                     compact={isMobile}
+                                                    showInlineControls={showInlineControls}
                                                     onUpdateDueDate={onUpdateDueDate}
                                                     onUpdateStartDate={onUpdateStartDate}
                                                     onTogglePriority={onTogglePriority}
@@ -674,6 +677,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                         onClick={() => setSelectedTask(task)}
                                         commentCount={commentCountByTaskId[task.id] || 0}
                                         compact={isMobile}
+                                        showInlineControls={showInlineControls}
                                         onUpdateDueDate={onUpdateDueDate}
                                         onUpdateStartDate={onUpdateStartDate}
                                         onTogglePriority={onTogglePriority}
@@ -760,6 +764,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                                 onClick={() => setSelectedTask(task)}
                                                 commentCount={commentCountByTaskId[task.id] || 0}
                                                 compact={isMobile}
+                                                showInlineControls={showInlineControls}
                                                 onUpdateDueDate={onUpdateDueDate}
                                                 onUpdateStartDate={onUpdateStartDate}
                                                 onTogglePriority={onTogglePriority}
@@ -795,6 +800,7 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                                       onClick={() => setSelectedTask(task)}
                                       commentCount={commentCountByTaskId[task.id] || 0}
                                       compact={isMobile}
+                                      showInlineControls={showInlineControls}
                                       onUpdateDueDate={onUpdateDueDate}
                                       onUpdateStartDate={onUpdateStartDate}
                                       onTogglePriority={onTogglePriority}
