@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import InstallPartModal from "../project/InstallPartModal";
 import BuildExportActions from "../inventory/BuildExportActions";
+import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
+import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
 
 /**
  * BuildsDashboard - Shows projects with their part requirements
@@ -52,6 +54,16 @@ export default function BuildsDashboard({ onPartClick }) {
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: () => base44.entities.PartCategory.list()
+  });
+
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.list()
+  });
+
+  const { data: buildAssignments = [] } = useQuery({
+    queryKey: ['partBuildAssignments'],
+    queryFn: () => base44.entities.PartBuildAssignment.list()
   });
 
   // Filter projects that have requirements
@@ -117,16 +129,28 @@ export default function BuildsDashboard({ onPartClick }) {
   const getProjectData = (projectId) => {
     const projectReqs = requirements.filter(r => r.project_id === projectId);
     const projectInstalled = installedParts.filter(ip => ip.project_id === projectId);
+    const projectCommitments = commitments.filter(c => c.project_id === projectId);
+    const projectAssignments = buildAssignments.filter(ba => ba.project_id === projectId);
     
     // Categorize requirements by status
     const installed = [];
     const allocated = [];
     const onOrder = [];
     const needToOrder = [];
+    let pricingIssueCount = 0;
     
     projectReqs.forEach(req => {
       const part = parts.find(p => p.id === req.part_id);
       if (!part) return;
+      
+      // Get pricing integrity
+      const commitment = projectCommitments.find(c => c.requirement_id === req.id && c.commitment_status !== 'cancelled');
+      const assignment = projectAssignments.find(ba => ba.part_id === req.part_id);
+      const pricingIntegrity = getPricingIntegrity({ commitment, assignment, part, lineItem: null });
+      
+      if (pricingIntegrity.status !== PRICING_STATUS.OK && pricingIntegrity.status !== PRICING_STATUS.ESTIMATED_COST) {
+        pricingIssueCount++;
+      }
       
       const item = {
         requirement: req,
@@ -135,6 +159,7 @@ export default function BuildsDashboard({ onPartClick }) {
         qty_allocated: req.qty_allocated || 0,
         qty_ordered: req.qty_ordered || 0,
         qty_installed: req.qty_installed || 0,
+        pricingIntegrity,
       };
       
       // Determine status bucket
@@ -183,6 +208,7 @@ export default function BuildsDashboard({ onPartClick }) {
       totalInstalled,
       toOrder,
       partsCost,
+      pricingIssueCount,
       sections: { installed, allocated, onOrder, needToOrder },
     };
   };
@@ -201,52 +227,60 @@ export default function BuildsDashboard({ onPartClick }) {
     return allocatedNotInstalled > 0;
   };
 
-  const renderPartRow = (item, showStatus = true, showInstallAction = false) => (
-    <div 
-      key={item.requirement.id + item.status}
-      className="flex items-center gap-3 p-2 hover:bg-gray-800/30 rounded cursor-pointer"
-      onClick={() => onPartClick?.(item.part)}
-    >
-      {item.part.featured_photo && (
-        <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden flex-shrink-0">
-          <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+  const renderPartRow = (item, showStatus = true, showInstallAction = false) => {
+    const rowHighlight = getPricingRowHighlight(item.pricingIntegrity?.status);
+    
+    return (
+      <div 
+        key={item.requirement.id + item.status}
+        className={`flex items-center gap-3 p-2 hover:bg-gray-800/30 rounded cursor-pointer ${rowHighlight}`}
+        onClick={() => onPartClick?.(item.part)}
+      >
+        {item.part.featured_photo && (
+          <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden flex-shrink-0">
+            <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <p className="text-sm text-white truncate">{item.part.part_name}</p>
+            <PricingWarningIcon status={item.pricingIntegrity?.status} />
+          </div>
+          <p className="text-xs text-gray-500 font-mono">{item.part.vendor_part_number}</p>
         </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-white truncate">{item.part.part_name}</p>
-        <p className="text-xs text-gray-500 font-mono">{item.part.vendor_part_number}</p>
+        <div className="flex items-center gap-2 text-xs">
+          {showStatus && (
+            <Badge variant="outline" className={
+              item.status === 'Installed' ? 'border-green-500 text-green-400' :
+              item.status === 'Allocated' ? 'border-blue-500 text-blue-400' :
+              item.status === 'On Order' ? 'border-yellow-500 text-yellow-400' :
+              'border-red-500 text-red-400'
+            }>
+              {item.status}
+            </Badge>
+          )}
+          <PricingIntegrityCell integrity={item.pricingIntegrity} compact />
+          <span className="text-gray-400 w-24 text-right">
+            {item.qty_installed}/{item.qty_allocated}/{item.qty_needed}
+          </span>
+          {showInstallAction && canInstall(item) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
+              onClick={(e) => {
+                e.stopPropagation();
+                setInstallRequirement(item.requirement);
+              }}
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Install
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-2 text-xs">
-        {showStatus && (
-          <Badge variant="outline" className={
-            item.status === 'Installed' ? 'border-green-500 text-green-400' :
-            item.status === 'Allocated' ? 'border-blue-500 text-blue-400' :
-            item.status === 'On Order' ? 'border-yellow-500 text-yellow-400' :
-            'border-red-500 text-red-400'
-          }>
-            {item.status}
-          </Badge>
-        )}
-        <span className="text-gray-400 w-24 text-right">
-          {item.qty_installed}/{item.qty_allocated}/{item.qty_needed}
-        </span>
-        {showInstallAction && canInstall(item) && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 border-green-700 text-green-400 hover:bg-green-900/30"
-            onClick={(e) => {
-              e.stopPropagation();
-              setInstallRequirement(item.requirement);
-            }}
-          >
-            <Download className="w-3 h-3 mr-1" />
-            Install
-          </Button>
-        )}
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -332,6 +366,12 @@ export default function BuildsDashboard({ onPartClick }) {
                           <div className="flex items-center gap-1 text-red-400">
                             <ShoppingCart className="w-3 h-3" />
                             <span>{data.toOrder}</span>
+                          </div>
+                        )}
+                        {data.pricingIssueCount > 0 && (
+                          <div className="flex items-center gap-1 text-amber-400">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>{data.pricingIssueCount}</span>
                           </div>
                         )}
                       </div>
