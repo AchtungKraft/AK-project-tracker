@@ -438,6 +438,7 @@ async function processMutation(base44, user, payload, startTime) {
       if (originalMutation.is_reversed) throw { status: 400, error: 'Mutation has already been reversed', code: 'ALREADY_REVERSED' };
 
       mutationLog.reversed_mutation_id = reversed_mutation_id;
+      mutationLog.part_id = originalMutation.part_id; // Override from original
       const origQty = originalMutation.qty;
 
       // Reverse based on original mutation type
@@ -452,10 +453,11 @@ async function processMutation(base44, user, payload, startTime) {
             result.updated_inventory_balance = newQty;
             mutationLog.qty_before = item.quantity_on_hand;
             mutationLog.qty_after = newQty;
+            mutationLog.inventory_item_id = item.id;
           }
         }
       } else if (originalMutation.mutation_type === 'install') {
-        // Add back the installed quantity
+        // Add back the installed quantity to inventory
         if (originalMutation.inventory_item_id) {
           const items = await base44.asServiceRole.entities.InventoryItem.filter({ id: originalMutation.inventory_item_id });
           const item = items[0];
@@ -465,11 +467,48 @@ async function processMutation(base44, user, payload, startTime) {
             result.updated_inventory_balance = newQty;
             mutationLog.qty_before = item.quantity_on_hand;
             mutationLog.qty_after = newQty;
+            mutationLog.inventory_item_id = item.id;
           }
         }
-        // Mark InstalledPart as reversed (could also delete)
-        if (originalMutation.mutation_record_id) {
-          // Note: We don't delete, just document the reversal in audit
+        
+        // Update TaskPartLink if present
+        if (originalMutation.task_part_link_id) {
+          const links = await base44.asServiceRole.entities.TaskPartLink.filter({ id: originalMutation.task_part_link_id });
+          const link = links[0];
+          if (link) {
+            const newInstalled = Math.max(0, (link.qty_installed || 0) - origQty);
+            const newStatus = newInstalled === 0 ? 'pending' : newInstalled >= (link.qty_allocated || 0) ? 'complete' : 'partial';
+            await base44.asServiceRole.entities.TaskPartLink.update(link.id, {
+              qty_installed: newInstalled,
+              install_status: newStatus,
+            });
+          }
+        }
+        
+        // Update Commitment if present  
+        if (originalMutation.commitment_id) {
+          const commitments = await base44.asServiceRole.entities.PartCommitment.filter({ id: originalMutation.commitment_id });
+          const commitment = commitments[0];
+          if (commitment) {
+            const newInstalled = Math.max(0, (commitment.qty_installed || 0) - origQty);
+            const newCommitment = { ...commitment, qty_installed: newInstalled };
+            const newStatus = calculateCommitmentState(newCommitment);
+            
+            await base44.asServiceRole.entities.PartCommitment.update(commitment.id, {
+              qty_installed: newInstalled,
+              commitment_status: newStatus,
+              commitment_version: (commitment.commitment_version || 1) + 1,
+            });
+            
+            await base44.asServiceRole.entities.CommitmentAuditLog.create({
+              commitment_id: commitment.id,
+              action_type: 'qty_change',
+              previous_values: { qty_installed: commitment.qty_installed, commitment_status: commitment.commitment_status },
+              new_values: { qty_installed: newInstalled, commitment_status: newStatus, delta: -origQty },
+              trigger_source: 'reversal',
+              validation_passed: true,
+            });
+          }
         }
       } else if (originalMutation.mutation_type === 'move') {
         // Reverse the move direction
@@ -483,6 +522,7 @@ async function processMutation(base44, user, payload, startTime) {
           if (sourceItem) {
             const newSourceQty = (sourceItem.quantity_on_hand || 0) + origQty;
             await base44.asServiceRole.entities.InventoryItem.update(sourceItem.id, { quantity_on_hand: newSourceQty });
+            mutationLog.qty_after = newSourceQty;
           }
           
           // Subtract from destination
@@ -492,6 +532,7 @@ async function processMutation(base44, user, payload, startTime) {
           });
           let destItem = destItems[0];
           if (destItem) {
+            mutationLog.qty_before = destItem.quantity_on_hand;
             const newDestQty = Math.max(0, (destItem.quantity_on_hand || 0) - origQty);
             await base44.asServiceRole.entities.InventoryItem.update(destItem.id, { quantity_on_hand: newDestQty });
             result.updated_inventory_balance = newDestQty;
@@ -499,20 +540,26 @@ async function processMutation(base44, user, payload, startTime) {
         }
       }
 
-      // Mark original mutation as reversed
+      // Mark original mutation as reversed and link to this reversal
+      // Note: We'll link back after creating this mutation log
       await base44.asServiceRole.entities.InventoryMutationLog.update(reversed_mutation_id, {
         is_reversed: true,
       });
 
       result.mutation_type = 'reversal';
+      result.part_id = originalMutation.part_id;
       result.qty = origQty;
       result.reversed_mutation_id = reversed_mutation_id;
+      result.original_mutation_type = originalMutation.mutation_type;
 
       const auditLog = await base44.asServiceRole.entities.InventoryAuditLog.create({
         part_id: originalMutation.part_id,
+        project_id: originalMutation.project_id || null,
+        commitment_id: originalMutation.commitment_id || null,
+        inventory_item_id: originalMutation.inventory_item_id || null,
         action_type: 'quantity_adjust',
-        qty_changed: origQty,
-        notes: `Reversal of ${originalMutation.mutation_type} mutation`,
+        qty_changed: -origQty,
+        notes: `Reversal of ${originalMutation.mutation_type} mutation (original: ${reversed_mutation_id})`,
         performed_by: user.id,
         performed_at: now,
         related_entity_type: 'InventoryMutationLog',
