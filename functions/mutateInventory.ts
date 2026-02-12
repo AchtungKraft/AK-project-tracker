@@ -121,7 +121,7 @@ async function processMutation(base44, user, payload, startTime) {
 
     // Validate required fields
     if (!mutation_type) throw { status: 400, error: 'mutation_type is required', code: 'MISSING_FIELD' };
-    if (!part_id) throw { status: 400, error: 'part_id is required', code: 'MISSING_FIELD' };
+    if (mutation_type !== 'reversal' && !part_id) throw { status: 400, error: 'part_id is required', code: 'MISSING_FIELD' };
     if (mutation_type !== 'reversal' && (qty === undefined || qty === null || qty <= 0)) {
       throw { status: 400, error: 'qty must be a positive number', code: 'INVALID_QTY' };
     }
