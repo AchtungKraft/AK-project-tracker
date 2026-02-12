@@ -31,6 +31,7 @@ export default function ConfirmInventoryActionModal({
   task,
   commitment,
   isLoading = false,
+  children, // Allow custom content (e.g., location selector)
 }) {
   const isMobile = useIsMobile();
 
@@ -81,6 +82,9 @@ export default function ConfirmInventoryActionModal({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Custom Content (e.g., location selector) */}
+          {children}
+          
           {/* Part Info */}
           {part && (
             <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
