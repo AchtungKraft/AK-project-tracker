@@ -146,8 +146,8 @@ async function processMutation(base44, user, payload, startTime) {
     }
     const result = {
       mutation_type,
-      part_id,
-      qty,
+      part_id: part_id || null,
+      qty: qty || null,
       audit_log_id: null,
       mutation_record_id: null,
       updated_inventory_balance: null,
