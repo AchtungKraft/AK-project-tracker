@@ -255,3 +255,129 @@ export function getBillingStatusColor(status) {
       return 'bg-gray-600';
   }
 }
+
+/**
+ * Workflow enforcement for part types
+ */
+export const PART_TYPE_WORKFLOW_RULES = {
+  [PART_TYPES.PURCHASED_VENDOR]: {
+    canReceive: true,
+    canReceiveFromVendor: true,
+    canInstall: true,
+    canMove: true,
+    canOrder: true,
+    canLinkToTask: true,
+  },
+  [PART_TYPES.AK_MANUFACTURED]: {
+    canReceive: true, // Internal production
+    canReceiveFromVendor: false,
+    canInstall: true,
+    canMove: true,
+    canOrder: false,
+    canLinkToTask: true,
+  },
+  [PART_TYPES.CLIENT_SUPPLIED]: {
+    canReceive: true, // Manual entry only
+    canReceiveFromVendor: false,
+    canInstall: true,
+    canMove: true,
+    canOrder: false,
+    canLinkToTask: true,
+  },
+  [PART_TYPES.TAKE_OFF]: {
+    canReceive: true, // Vehicle removal
+    canReceiveFromVendor: false,
+    canInstall: false,
+    canMove: true,
+    canOrder: false,
+    canLinkToTask: false,
+  },
+  [PART_TYPES.STOCK_AK]: {
+    canReceive: true,
+    canReceiveFromVendor: true,
+    canInstall: true,
+    canMove: true,
+    canOrder: true,
+    canLinkToTask: true,
+  },
+  [PART_TYPES.WARRANTY_REPLACEMENT]: {
+    canReceive: true,
+    canReceiveFromVendor: true,
+    canInstall: true,
+    canMove: true,
+    canOrder: false, // Handled through warranty process
+    canLinkToTask: true,
+  },
+};
+
+/**
+ * Check if a part can perform a specific workflow action
+ */
+export function canPerformWorkflow(part, action) {
+  if (!part) return { allowed: false, reason: 'Part not found' };
+  
+  // Archived parts have limited workflows
+  if (part.is_archived) {
+    const archivedAllowed = ['canInstall', 'canMove']; // Allow depleting inventory
+    if (!archivedAllowed.includes(action)) {
+      return { allowed: false, reason: 'Part is archived' };
+    }
+  }
+  
+  const partType = part.part_type || PART_TYPES.PURCHASED_VENDOR;
+  const rules = PART_TYPE_WORKFLOW_RULES[partType] || PART_TYPE_WORKFLOW_RULES[PART_TYPES.PURCHASED_VENDOR];
+  
+  if (rules[action] === false) {
+    return { 
+      allowed: false, 
+      reason: `${PART_TYPE_LABELS[partType]} parts cannot perform this action` 
+    };
+  }
+  
+  return { allowed: true };
+}
+
+/**
+ * Check if a part can be received
+ */
+export function canReceivePart(part, sourceType = 'manual_entry') {
+  const result = canPerformWorkflow(part, 'canReceive');
+  if (!result.allowed) return result;
+  
+  // Check vendor-specific receiving
+  if (sourceType === 'vendor_order') {
+    const vendorResult = canPerformWorkflow(part, 'canReceiveFromVendor');
+    if (!vendorResult.allowed) {
+      return { 
+        allowed: false, 
+        reason: 'This part type cannot be received from vendor orders' 
+      };
+    }
+  }
+  
+  return { allowed: true };
+}
+
+/**
+ * Check if a part can be installed
+ */
+export function canInstallPart(part) {
+  return canPerformWorkflow(part, 'canInstall');
+}
+
+/**
+ * Check if a part can be moved between locations
+ */
+export function canMovePart(part) {
+  return canPerformWorkflow(part, 'canMove');
+}
+
+/**
+ * Check if a part can be linked to a task
+ */
+export function canLinkPartToTask(part) {
+  if (part?.is_archived) {
+    return { allowed: false, reason: 'Cannot link archived parts to tasks' };
+  }
+  return canPerformWorkflow(part, 'canLinkToTask');
+}
