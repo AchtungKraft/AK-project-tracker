@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,27 @@ export default function TaskPartsSection({
 
   const partsMap = Object.fromEntries(parts.map((p) => [p.id, p]));
   const activeLocations = locations.filter(l => l.active);
+
+  // Batch resolve financial status for linked parts
+  const financialContexts = useMemo(() => {
+    return taskPartLinks.map(link => ({
+      part_id: link.part_id,
+      project_id: project?.id,
+      commitment_id: link.commitment_id,
+    }));
+  }, [taskPartLinks, project?.id]);
+  
+  const { data: financialStatuses = [] } = useFinancialStatusBatch(financialContexts, {
+    enabled: taskPartLinks.length > 0,
+  });
+  
+  const financialStatusMap = useMemo(() => {
+    const map = new Map();
+    financialStatuses.forEach(fs => {
+      map.set(fs.part_id, fs);
+    });
+    return map;
+  }, [financialStatuses]);
 
   // Get inventory availability for a part
   const getPartInventory = (partId) => {
@@ -246,6 +267,12 @@ export default function TaskPartsSection({
                       >
                         {link.install_status}
                       </Badge>
+                    </div>
+                    <div className="mt-1">
+                      <FinancialStatusBadge 
+                        financialStatus={financialStatusMap.get(link.part_id)} 
+                        displayMode="compact" 
+                      />
                     </div>
                   </div>
 
