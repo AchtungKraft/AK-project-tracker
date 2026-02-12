@@ -10,6 +10,8 @@ import ManageBucketsModal from "./ManageBucketsModal";
 import TaskCard from "./TaskCard";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import CreateTaskModal from "../tasks/CreateTaskModal";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { cn } from "@/lib/utils";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -28,6 +30,7 @@ const getCategoryPath = (categoryId, categories) => {
 
 export default function ProjectKanban({ projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [showManageBuckets, setShowManageBuckets] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -354,18 +357,21 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className={cn("space-y-4", isMobile && "space-y-2")}>
         {/* Header */}
-        <div className="space-y-3">
+        <div className={cn("space-y-3", isMobile && "space-y-2")}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">Task Groups</h2>
+              <h2 className={cn("font-bold text-white", isMobile ? "text-base" : "text-xl")}>Task Groups</h2>
               <p className="text-sm text-gray-400 hidden md:block">Drag tasks to organize</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className={cn("flex flex-wrap gap-2", isMobile && "gap-1.5")}>
             <Select value={groupBy} onValueChange={setGroupBy}>
-              <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white text-sm">
+              <SelectTrigger className={cn(
+                "bg-gray-900/50 border-gray-700 text-white",
+                isMobile ? "w-32 h-8 text-xs" : "w-40 text-sm"
+              )}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -377,7 +383,10 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
             </Select>
             {groupBy === 'buckets' && (
               <Select value={subGroupBy} onValueChange={setSubGroupBy}>
-                <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white text-sm">
+                <SelectTrigger className={cn(
+                  "bg-gray-900/50 border-gray-700 text-white",
+                  isMobile ? "w-28 h-8 text-xs" : "w-36 text-sm"
+                )}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -390,9 +399,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
             <Button
               onClick={() => setShowCreateTask(true)}
               size="sm"
-              className="bg-red-600 hover:bg-red-700 gap-2"
+              className={cn("bg-red-600 hover:bg-red-700 gap-2", isMobile && "h-8 px-2 text-xs")}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
               <span className="hidden sm:inline">New Task</span>
               <span className="sm:hidden">New</span>
             </Button>
@@ -401,9 +410,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
                 onClick={() => setShowManageBuckets(true)}
                 size="sm"
                 variant="outline"
-                className="border-gray-700 gap-2"
+                className={cn("border-gray-700 gap-2", isMobile && "h-8 px-2 text-xs")}
               >
-                <Settings className="w-4 h-4" />
+                <Settings className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
                 <span className="hidden sm:inline">Manage Buckets</span>
                 <span className="sm:hidden">Manage</span>
               </Button>
