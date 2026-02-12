@@ -33,7 +33,7 @@ export default function MobileModalWrapper({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
       {/* Sticky Header */}

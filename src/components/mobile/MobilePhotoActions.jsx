@@ -151,7 +151,7 @@ export function MobilePhotoGrid({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-              className="absolute top-1 right-1 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1 right-1 w-7 h-7 bg-red-600 rounded-full flex items-center justify-center text-white text-sm md:w-6 md:h-6 md:text-xs md:opacity-0 md:group-hover:opacity-100 transition-opacity"
             >
               ×
             </button>

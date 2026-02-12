@@ -66,7 +66,12 @@ export default function MobileCollapsibleHeader({
         className
       )}
       style={{
-        padding: isCollapsed ? '6px 12px' : '8px 12px',
+        paddingTop: isCollapsed 
+          ? 'calc(6px + env(safe-area-inset-top, 0px))' 
+          : 'calc(8px + env(safe-area-inset-top, 0px))',
+        paddingBottom: isCollapsed ? '6px' : '8px',
+        paddingLeft: '12px',
+        paddingRight: '12px',
       }}
     >
       <div className="flex items-center justify-between">
