@@ -71,6 +71,11 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("FinancialExceptionDashboard"),
         icon: AlertTriangle,
       },
+      {
+        title: "Lifecycle Diagnostic",
+        url: createPageUrl("PartsLifecycleDiagnostic"),
+        icon: ListChecks,
+      },
       { divider: true },
       {
         title: "Admin Config",
