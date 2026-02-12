@@ -591,7 +591,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   </Button>
                   <Button
                     variant="destructive"
-                    onClick={handleDelete}
+                    onClick={handleDeleteClick}
                     disabled={deleteMutation.isPending}
                     className="h-11 px-4"
                   >
