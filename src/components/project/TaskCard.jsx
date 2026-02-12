@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { Button } from "@/components/ui/button";
+import PriorityRemoveConfirm from "@/components/tasks/PriorityRemoveConfirm";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -42,6 +43,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
   const [isUpdatingPriority, setIsUpdatingPriority] = useState(false);
   const [isUpdatingDueDate, setIsUpdatingDueDate] = useState(false);
   const [isUpdatingStartDate, setIsUpdatingStartDate] = useState(false);
+  const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
   
   // Determine if inline controls should be shown
   const hasInlineControls = onUpdateDueDate || onUpdateStartDate || onTogglePriority;
@@ -79,13 +81,30 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
 
   const handleTogglePriority = async (e) => {
     e.stopPropagation();
-    if (onTogglePriority) {
-      setIsUpdatingPriority(true);
-      try {
-        await onTogglePriority(task);
-      } finally {
-        setIsUpdatingPriority(false);
-      }
+    if (!onTogglePriority) return;
+    
+    // If removing priority, show confirmation dialog
+    if (task.is_priority) {
+      setShowPriorityConfirm(true);
+      return;
+    }
+    
+    // Adding priority - execute immediately
+    setIsUpdatingPriority(true);
+    try {
+      await onTogglePriority(task, true); // skipConfirm = true
+    } finally {
+      setIsUpdatingPriority(false);
+    }
+  };
+
+  const handleConfirmRemovePriority = async () => {
+    setIsUpdatingPriority(true);
+    try {
+      await onTogglePriority(task, true); // skipConfirm = true, forces the update
+    } finally {
+      setIsUpdatingPriority(false);
+      setShowPriorityConfirm(false);
     }
   };
 
@@ -280,6 +299,15 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
           </div>
         </div>
       </div>
+
+      {/* Priority Removal Confirmation */}
+      <PriorityRemoveConfirm
+        isOpen={showPriorityConfirm}
+        onClose={() => setShowPriorityConfirm(false)}
+        onConfirm={handleConfirmRemovePriority}
+        taskName={task.name}
+        isLoading={isUpdatingPriority}
+      />
     </div>
   );
 }
