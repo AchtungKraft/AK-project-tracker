@@ -73,6 +73,20 @@ export default function ClientPortalHub() {
   const toggleLifecycleFilter = useCallback((bucket) => {
     setLifecycleQuickFilter(prev => prev === bucket ? 'all' : bucket);
   }, []);
+  
+  // Handle due date updates for requests
+  const handleUpdateRequestDueDate = useCallback(async (requestId, newDate) => {
+    try {
+      await base44.entities.ClientFeedbackRequest.update(requestId, {
+        due_date: newDate
+      });
+      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'] });
+      toast.success(newDate ? 'Due date updated' : 'Due date cleared');
+    } catch (error) {
+      console.error('Error updating due date:', error);
+      toast.error('Failed to update due date');
+    }
+  }, [queryClient]);
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, applyView, clearFilters } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
@@ -692,7 +706,11 @@ export default function ClientPortalHub() {
               <ClientPortalCalendarView
                 requests={flattenedRequests}
                 projects={projects}
+                comments={comments}
+                decisions={decisions}
+                teamMembers={teamMembers}
                 getProjectClientSlug={getProjectClientSlug}
+                onUpdateDueDate={handleUpdateRequestDueDate}
               />
             )}
           </TabsContent>
