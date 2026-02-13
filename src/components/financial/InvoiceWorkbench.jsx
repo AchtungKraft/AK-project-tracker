@@ -252,10 +252,19 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
               )}
             </TableCell>
             <TableCell>
-              <p className="text-white text-sm">{item.part_name}</p>
-              {item.part_number && (
-                <p className="text-xs text-gray-500">{item.part_number}</p>
-              )}
+              <div className="flex items-center gap-2">
+                <div>
+                  <p className="text-white text-sm">{item.part_name}</p>
+                  {item.part_number && (
+                    <p className="text-xs text-gray-500">{item.part_number}</p>
+                  )}
+                </div>
+                {item.part_type_missing && (
+                  <Badge className="bg-amber-600/30 text-amber-400 text-xs shrink-0">
+                    ⚠ Missing Type
+                  </Badge>
+                )}
+              </div>
             </TableCell>
             <TableCell className="text-center">
               <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>

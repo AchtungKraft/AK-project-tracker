@@ -26,13 +26,13 @@ const LIFECYCLE_CATEGORY = {
   UNCATEGORIZED: 'UNCATEGORIZED',
 };
 
-const BILLABLE_PART_TYPES = [
-  'PURCHASED_VENDOR',
-  'AK_MANUFACTURED',
-  'STOCK_AK',
-  'CLIENT_SUPPLIED',
-  'TAKE_OFF',
-];
+// REMOVED: BILLABLE_PART_TYPES filter - now using explicit NON_BILLABLE check
+const DEFAULT_PART_TYPE = 'PURCHASED_VENDOR'; // Fallback for null/missing part_type
+
+function getEffectivePartType(part) {
+  if (!part) return DEFAULT_PART_TYPE;
+  return part.part_type || DEFAULT_PART_TYPE;
+}
 
 // Financial status normalization (mirrors resolveFinancialStatus)
 function normalizeClientBillingStatus(rawStatus, isBillable = true) {
@@ -63,9 +63,12 @@ function deriveClientPaymentStatus(billingStatus) {
   return 'UNPAID';
 }
 
-function getFinancialRole(part) {
+function getFinancialRole(part, effectivePartType) {
   if (!part) return 'VENDOR_MARGIN';
   if (part.requires_client_billing === false) return 'NON_BILLABLE';
+  
+  // Only WARRANTY_REPLACEMENT is explicitly non-billable
+  if (effectivePartType === 'WARRANTY_REPLACEMENT') return 'NON_BILLABLE';
   
   const roleMap = {
     'PURCHASED_VENDOR': 'VENDOR_MARGIN',
@@ -73,17 +76,16 @@ function getFinancialRole(part) {
     'CLIENT_SUPPLIED': 'LABOR_ONLY',
     'TAKE_OFF': 'ASSET_RECOVERY',
     'STOCK_AK': 'VENDOR_MARGIN',
-    'WARRANTY_REPLACEMENT': 'NON_BILLABLE',
   };
   
-  return roleMap[part.part_type] || 'VENDOR_MARGIN';
+  return roleMap[effectivePartType] || 'VENDOR_MARGIN';
 }
 
-function requiresVendorPurchase(part) {
+function requiresVendorPurchase(part, effectivePartType) {
   if (!part) return false;
   if (part.requires_vendor_purchase === false) return false;
   const noVendorTypes = ['CLIENT_SUPPLIED', 'TAKE_OFF', 'WARRANTY_REPLACEMENT'];
-  return !noVendorTypes.includes(part.part_type);
+  return !noVendorTypes.includes(effectivePartType);
 }
 
 // ============================================
@@ -162,7 +164,7 @@ function classifyLifecycle(trace) {
 // FILTER SIMULATION
 // ============================================
 
-function simulateFilters(trace, part) {
+function simulateFilters(trace, part, effectivePartType) {
   const droppedBy = [];
 
   // Invoice Ready filter
@@ -171,19 +173,16 @@ function simulateFilters(trace, part) {
   }
 
   // Requires Vendor filter
-  if (!requiresVendorPurchase(part) && trace.lifecycle_category === LIFECYCLE_CATEGORY.PAID_READY_TO_ORDER) {
+  if (!requiresVendorPurchase(part, effectivePartType) && trace.lifecycle_category === LIFECYCLE_CATEGORY.PAID_READY_TO_ORDER) {
     droppedBy.push('requires_vendor_purchase_filter');
   }
 
-  // Non-billable filter
+  // Non-billable filter - REMEDIATION: Only explicit NON_BILLABLE
   if (trace.financial_role === 'NON_BILLABLE') {
     droppedBy.push('non_billable_exclusion');
   }
 
-  // Billable part type filter
-  if (!BILLABLE_PART_TYPES.includes(part?.part_type)) {
-    droppedBy.push('billable_part_type_filter');
-  }
+  // REMOVED: billable_part_type_filter - no longer filtering by part type list
 
   // Pricing missing filter
   if (!trace.unit_retail || trace.unit_retail <= 0) {
@@ -284,6 +283,11 @@ async function diagnosePartsLifecycleCoverage(base44, filters = {}) {
     
     if (!part || !project) continue;
 
+    // REMEDIATION: Use effective part type (defaults null to PURCHASED_VENDOR)
+    const effectivePartType = getEffectivePartType(part);
+    const originalPartType = part.part_type;
+    const partTypeMissing = !originalPartType;
+
     // Assignment layer
     const hasCommitment = true;
     const hasProjectPart = false; // Legacy - commitments are the source now
@@ -314,8 +318,8 @@ async function diagnosePartsLifecycleCoverage(base44, filters = {}) {
     const hasInstalledPart = installedRecords.length > 0;
     const installedQty = installedRecords.reduce((sum, ip) => sum + (ip.qty_consumed || 0), 0);
 
-    // Financial role and billing status
-    const financialRole = getFinancialRole(part);
+    // Financial role and billing status - use effective part type
+    const financialRole = getFinancialRole(part, effectivePartType);
     
     let clientBillingStatus = 'NOT_INVOICED';
     if (commitment.billing_status) {
@@ -335,7 +339,7 @@ async function diagnosePartsLifecycleCoverage(base44, filters = {}) {
     }
 
     const clientPaymentStatus = deriveClientPaymentStatus(clientBillingStatus);
-    const requiresVendor = requiresVendorPurchase(part);
+    const requiresVendor = requiresVendorPurchase(part, effectivePartType);
 
     // Build trace object for classification
     const trace = {
@@ -354,15 +358,15 @@ async function diagnosePartsLifecycleCoverage(base44, filters = {}) {
     // Classify lifecycle
     const { category, reason } = classifyLifecycle(trace);
 
-    // Missing dependencies
+    // Missing dependencies - REMEDIATION: Only flag explicit NON_BILLABLE
     const missingDependencies = [];
     if (!hasCommitment) missingDependencies.push('commitment_missing');
     if (financialRole === 'NON_BILLABLE') missingDependencies.push('non_billable_role');
-    if (!BILLABLE_PART_TYPES.includes(part.part_type)) missingDependencies.push('non_billable_part_type');
+    if (partTypeMissing) missingDependencies.push('part_type_missing_defaulted');
     if (!trace.unit_retail || trace.unit_retail <= 0) missingDependencies.push('pricing_missing');
 
     // Simulate filter drops
-    const droppedByFilter = simulateFilters({ ...trace, lifecycle_category: category }, part);
+    const droppedByFilter = simulateFilters({ ...trace, lifecycle_category: category }, part, effectivePartType);
 
     // Update totals
     totals.resolver_records_count++;
@@ -376,7 +380,10 @@ async function diagnosePartsLifecycleCoverage(base44, filters = {}) {
       part_id: commitment.part_id,
       part_name: part.part_name,
       part_number: part.vendor_part_number,
-      part_type: part.part_type,
+      part_type: effectivePartType, // REMEDIATION: Use effective type
+      original_part_type: originalPartType, // Track original
+      part_type_missing: partTypeMissing, // Flag for UI
+      effective_part_type: effectivePartType, // Explicit output
       project_id: commitment.project_id,
       project_name: project.name,
       commitment_id: commitment.id,

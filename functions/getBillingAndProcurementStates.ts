@@ -31,13 +31,10 @@ const LIFECYCLE_CATEGORY = {
   INSTALLED_READY_TO_BILL: 'INSTALLED_READY_TO_BILL',
 };
 
-const BILLABLE_PART_TYPES = [
-  'PURCHASED_VENDOR',
-  'AK_MANUFACTURED',
-  'STOCK_AK',
-  'CLIENT_SUPPLIED',
-  'TAKE_OFF',
-];
+// REMOVED: BILLABLE_PART_TYPES filter - now using explicit NON_BILLABLE check
+// Parts with null/missing part_type default to billable behavior
+
+const DEFAULT_PART_TYPE = 'PURCHASED_VENDOR'; // Fallback for null/missing part_type
 
 // ============================================
 // FINANCIAL STATUS HELPERS (mirrors resolveFinancialStatus)
@@ -71,9 +68,17 @@ function deriveClientPaymentStatus(billingStatus) {
   return 'UNPAID';
 }
 
-function getFinancialRole(part) {
+function getEffectivePartType(part) {
+  if (!part) return DEFAULT_PART_TYPE;
+  return part.part_type || DEFAULT_PART_TYPE;
+}
+
+function getFinancialRole(part, effectivePartType) {
   if (!part) return 'VENDOR_MARGIN';
   if (part.requires_client_billing === false) return 'NON_BILLABLE';
+  
+  // Only WARRANTY_REPLACEMENT is explicitly non-billable
+  if (effectivePartType === 'WARRANTY_REPLACEMENT') return 'NON_BILLABLE';
   
   const roleMap = {
     'PURCHASED_VENDOR': 'VENDOR_MARGIN',
@@ -81,10 +86,9 @@ function getFinancialRole(part) {
     'CLIENT_SUPPLIED': 'LABOR_ONLY',
     'TAKE_OFF': 'ASSET_RECOVERY',
     'STOCK_AK': 'VENDOR_MARGIN',
-    'WARRANTY_REPLACEMENT': 'NON_BILLABLE',
   };
   
-  return roleMap[part.part_type] || 'VENDOR_MARGIN';
+  return roleMap[effectivePartType] || 'VENDOR_MARGIN';
 }
 
 function getOrderingSafety(billingStatus, paymentStatus) {
@@ -93,13 +97,21 @@ function getOrderingSafety(billingStatus, paymentStatus) {
   return ORDERING_SAFETY.RED;
 }
 
-function requiresVendorPurchase(part) {
+function requiresVendorPurchase(part, effectivePartType) {
   if (!part) return false;
   if (part.requires_vendor_purchase === false) return false;
   
   // Part types that don't need vendor purchase
   const noVendorTypes = ['CLIENT_SUPPLIED', 'TAKE_OFF', 'WARRANTY_REPLACEMENT'];
-  return !noVendorTypes.includes(part.part_type);
+  return !noVendorTypes.includes(effectivePartType);
+}
+
+function isOrderingAllowed(paymentStatus, effectivePartType) {
+  // Ordering allowed when: paid AND not CLIENT_SUPPLIED AND not WARRANTY_REPLACEMENT
+  if (paymentStatus !== 'PAID') return false;
+  if (effectivePartType === 'CLIENT_SUPPLIED') return false;
+  if (effectivePartType === 'WARRANTY_REPLACEMENT') return false;
+  return true;
 }
 
 // ============================================
@@ -189,13 +201,18 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
 
     // Apply filters
     if (filters.project_id && commitment.project_id !== filters.project_id) continue;
-    if (filters.part_type && part.part_type !== filters.part_type) continue;
-
-    const financialRole = getFinancialRole(part);
     
-    // Skip non-billable
+    // REMEDIATION: Use effective part type (defaults null to PURCHASED_VENDOR)
+    const effectivePartType = getEffectivePartType(part);
+    const originalPartType = part.part_type; // Track original for diagnostics
+    
+    if (filters.part_type && effectivePartType !== filters.part_type) continue;
+
+    const financialRole = getFinancialRole(part, effectivePartType);
+    
+    // REMEDIATION: Only skip explicit NON_BILLABLE role
+    // Parts with null/missing part_type are now billable by default
     if (financialRole === 'NON_BILLABLE') continue;
-    if (!BILLABLE_PART_TYPES.includes(part.part_type)) continue;
 
     // Determine billing status from commitment or order
     let clientBillingStatus = 'NOT_INVOICED';
@@ -265,7 +282,9 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       part_id: commitment.part_id,
       part_name: part.part_name,
       part_number: part.vendor_part_number,
-      part_type: part.part_type,
+      part_type: effectivePartType, // REMEDIATION: Use effective type
+      original_part_type: originalPartType, // Track original for diagnostics
+      part_type_missing: !originalPartType, // Flag for UI badge
       financial_role: financialRole,
       client_billing_status: clientBillingStatus,
       client_payment_status: clientPaymentStatus,
@@ -280,7 +299,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       line_total: assignedQty * unitRetail,
       cost_total: assignedQty * unitCost,
       ordering_safety: orderingSafety,
-      requires_vendor_purchase: requiresVendorPurchase(part),
+      ordering_allowed: isOrderingAllowed(clientPaymentStatus, effectivePartType),
+      requires_vendor_purchase: requiresVendorPurchase(part, effectivePartType),
       is_queued: queuedSourceIds.has(commitment.id),
       billing_source: billingSource,
       source_type: 'commitment',
@@ -310,7 +330,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     }
 
     // 3. PAID_READY_TO_ORDER: Client paid, needs vendor order
-    if (clientPaymentStatus === 'PAID' && requiresVendorPurchase(part) && vendorOrderStatus !== 'ORDERED') {
+    if (clientPaymentStatus === 'PAID' && requiresVendorPurchase(part, effectivePartType) && vendorOrderStatus !== 'ORDERED') {
       row.lifecycle_category = LIFECYCLE_CATEGORY.PAID_READY_TO_ORDER;
       row.recommended_action = 'Create Purchase Order';
       results.paid_ready_to_order.push(row);
