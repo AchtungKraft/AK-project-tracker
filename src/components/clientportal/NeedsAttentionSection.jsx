@@ -145,18 +145,14 @@ export default function NeedsAttentionSection({
   decisions, 
   attachments 
 }) {
-  // Get all requests that need attention using Review Ownership model
+  // Simplified attention logic:
+  // 1. Client replied (needs AK action)
+  // 2. Overdue awaiting_client items
+  // NEVER include drafts
+  
   const needsAttention = requests
     .filter(r => r.status !== 'draft' && r.status !== 'archived')
     .map(request => {
-      const ownership = getReviewOwnership(request, comments, decisions, attachments);
-      const attentionType = getAttentionType(request, comments, decisions, attachments);
-      
-      // Only include items that need AK attention OR are pending closure (client approved)
-      if (ownership.ownership !== 'ak_needs_review' && attentionType !== 'client_approved') {
-        return null;
-      }
-      
       const project = projects.find(p => p.id === request.project_id);
       
       // Get last client comment date
@@ -164,29 +160,57 @@ export default function NeedsAttentionSection({
         c.request_id === request.id && c.author_type === 'client_contact'
       ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
       const lastClientComment = clientComments[0];
-      
-      // Get comment count
       const commentCount = clientComments.length;
+      
+      // Check if client has replied since last post
+      let hasClientReplied = false;
+      if (request.posted_at && lastClientComment) {
+        const postedAt = new Date(request.posted_at);
+        const commentDate = lastClientComment.posted_at 
+          ? new Date(lastClientComment.posted_at) 
+          : new Date(lastClientComment.created_date);
+        hasClientReplied = commentDate > postedAt;
+      }
+      
+      // Check if overdue and awaiting client
+      const isOverdue = request.due_date && new Date(request.due_date) < new Date();
+      const isAwaitingClient = request.posted_at && !hasClientReplied;
+      
+      // Only include if:
+      // 1. Client replied (needs AK action)
+      // 2. Overdue and awaiting client
+      if (!hasClientReplied && !(isOverdue && isAwaitingClient)) {
+        return null;
+      }
+      
+      // Determine attention type
+      let attentionType = null;
+      if (hasClientReplied) {
+        attentionType = 'client_replied';
+      } else if (isOverdue) {
+        attentionType = 'overdue';
+      }
 
       return {
         ...request,
-        ownership,
         attentionType,
         project,
         lastClientComment,
-        commentCount
+        commentCount,
+        hasClientReplied,
+        isOverdue
       };
     })
     .filter(Boolean)
     .sort((a, b) => {
-      // Sort by ownership priority first
-      const priorityA = getOwnershipSortPriority(a.ownership);
-      const priorityB = getOwnershipSortPriority(b.ownership);
-      if (priorityA !== priorityB) return priorityA - priorityB;
+      // Client replied items first (more urgent)
+      if (a.hasClientReplied && !b.hasClientReplied) return -1;
+      if (!a.hasClientReplied && b.hasClientReplied) return 1;
       
-      // Within same priority, sort by attention type
-      const attentionPriorityDiff = getAttentionPriority(a.attentionType) - getAttentionPriority(b.attentionType);
-      if (attentionPriorityDiff !== 0) return attentionPriorityDiff;
+      // Then by due date for overdue items
+      if (a.isOverdue && b.isOverdue) {
+        return new Date(a.due_date) - new Date(b.due_date);
+      }
       
       // Then by most recent activity
       return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
@@ -194,13 +218,9 @@ export default function NeedsAttentionSection({
 
   if (needsAttention.length === 0) return null;
 
-  // Split into two groups: AK Needs Review vs Pending Closure
-  const actionRequired = needsAttention.filter(r => 
-    r.ownership.ownership === 'ak_needs_review'
-  );
-  const pendingClosure = needsAttention.filter(r => 
-    r.attentionType === 'client_approved' && r.ownership.ownership !== 'ak_needs_review'
-  );
+  // Split into two groups: Client Replied vs Overdue
+  const clientReplied = needsAttention.filter(r => r.hasClientReplied);
+  const overdueItems = needsAttention.filter(r => !r.hasClientReplied && r.isOverdue);
 
   const RequestCard = ({ request, isDeemphasized = false }) => (
     <Link
@@ -311,47 +331,47 @@ export default function NeedsAttentionSection({
         </div>
       </CardHeader>
       <CardContent className="p-2 md:p-4 space-y-2 md:space-y-4">
-        {/* Action Required Section */}
-        {actionRequired.length > 0 && (
+        {/* Client Replied Section - Most Urgent */}
+        {clientReplied.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-px flex-1 bg-red-500/30" />
-              <span className="text-[10px] md:text-xs font-semibold text-red-400 uppercase tracking-wider whitespace-nowrap">
-                Action Required ({actionRequired.length})
+              <div className="h-px flex-1 bg-blue-500/30" />
+              <span className="text-[10px] md:text-xs font-semibold text-blue-400 uppercase tracking-wider whitespace-nowrap">
+                Client Replied ({clientReplied.length})
               </span>
-              <div className="h-px flex-1 bg-red-500/30" />
+              <div className="h-px flex-1 bg-blue-500/30" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-              {actionRequired.slice(0, 6).map(request => (
+              {clientReplied.slice(0, 6).map(request => (
                 <RequestCard key={request.id} request={request} />
               ))}
             </div>
-            {actionRequired.length > 6 && (
+            {clientReplied.length > 6 && (
               <p className="text-xs text-gray-500 text-center mt-2">
-                +{actionRequired.length - 6} more action items
+                +{clientReplied.length - 6} more client replies
               </p>
             )}
           </div>
         )}
 
-        {/* Pending Closure Section */}
-        {pendingClosure.length > 0 && (
+        {/* Overdue Items Section */}
+        {overdueItems.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-px flex-1 bg-green-500/20" />
-              <span className="text-[10px] md:text-xs font-semibold text-green-400/70 uppercase tracking-wider whitespace-nowrap">
-                Pending Closure ({pendingClosure.length})
+              <div className="h-px flex-1 bg-red-500/30" />
+              <span className="text-[10px] md:text-xs font-semibold text-red-400 uppercase tracking-wider whitespace-nowrap">
+                Overdue ({overdueItems.length})
               </span>
-              <div className="h-px flex-1 bg-green-500/20" />
+              <div className="h-px flex-1 bg-red-500/30" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-              {pendingClosure.slice(0, 3).map(request => (
-                <RequestCard key={request.id} request={request} isDeemphasized />
+              {overdueItems.slice(0, 3).map(request => (
+                <RequestCard key={request.id} request={request} />
               ))}
             </div>
-            {pendingClosure.length > 3 && (
+            {overdueItems.length > 3 && (
               <p className="text-xs text-gray-500 text-center mt-2">
-                +{pendingClosure.length - 3} more pending closure
+                +{overdueItems.length - 3} more overdue items
               </p>
             )}
           </div>
