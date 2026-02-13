@@ -128,6 +128,12 @@ function normalizeRawBillingStatus(rawStatus) {
 }
 
 async function getLifecycleActionQueue(base44, filters = {}) {
+  const { 
+    include_closed = false, 
+    include_archived = false,
+    include_non_billable = false,
+  } = filters;
+  
   // Batch load all required data
   const [
     commitments,
@@ -207,8 +213,14 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     const effectivePartType = getEffectivePartType(part);
     const financialRole = getFinancialRole(part, effectivePartType);
     
+    // Skip archived commitments unless include_archived is true
+    if (commitment.commitment_status === 'cancelled' && !include_archived) continue;
+    
+    // Skip archived parts unless include_archived is true
+    if (part.is_archived && !include_archived) continue;
+    
     // Skip non-billable by default (unless filter says otherwise)
-    if (financialRole === 'NON_BILLABLE' && !filters.include_non_billable) continue;
+    if (financialRole === 'NON_BILLABLE' && !include_non_billable) continue;
 
     kpis.total_commitments++;
 
@@ -283,8 +295,9 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       actionOwner = 'PM';
       kpis.blocked_count++;
     }
-    // COMPLETE
+    // COMPLETE - skip unless include_closed
     else if (installStatus === 'INSTALLED' && paymentStatus === 'PAID') {
+      if (!include_closed) continue; // Skip completed items by default
       recommendedAction = 'Lifecycle Complete';
       actionPriority = 'NONE';
       actionOwner = null;
