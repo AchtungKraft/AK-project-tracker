@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { motion, AnimatePresence } from "framer-motion";
 
 /**
  * Visual progress stack showing 3 lifecycle axes:
@@ -92,12 +93,21 @@ function AxisProgressBar({ axis, status, compact = false }) {
       <div className="flex-1">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs text-gray-400">{config.label}</span>
-          <span className="text-xs text-gray-300">{stateConfig.label}</span>
+          <motion.span 
+            key={stateConfig.label}
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-xs text-gray-300"
+          >
+            {stateConfig.label}
+          </motion.span>
         </div>
         <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div 
-            className={cn("h-full rounded-full transition-all duration-300", stateConfig.color)}
-            style={{ width: `${stateConfig.progress}%` }}
+          <motion.div 
+            className={cn("h-full rounded-full", stateConfig.color)}
+            initial={{ width: 0 }}
+            animate={{ width: `${stateConfig.progress}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
           />
         </div>
       </div>
