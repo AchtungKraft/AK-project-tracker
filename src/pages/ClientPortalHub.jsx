@@ -573,13 +573,9 @@ export default function ClientPortalHub() {
           </div>
         )}
 
-        {/* Needs Attention Section - Simplified */}
+        {/* Needs Attention Section - Lifecycle-Driven */}
         <NeedsAttentionSection
-          requests={filteredRequests}
-          projects={projects}
-          comments={comments}
-          decisions={decisions}
-          attachments={attachments}
+          projectGroups={groupedProjectData}
           lifecycleQuickFilter={lifecycleQuickFilter}
         />
 
