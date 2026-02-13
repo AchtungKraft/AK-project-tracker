@@ -94,6 +94,13 @@ const PRICING_INTEGRITY = {
   MARGIN_NEGATIVE: 'margin_negative',
 };
 
+// INVOICE RISK LEVELS (Phase 9.6)
+const INVOICE_RISK_LEVEL = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+};
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -488,6 +495,37 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
 }
 
 // ============================================
+// INVOICE RISK LEVEL (Phase 9.6)
+// ============================================
+
+function deriveInvoiceRiskLevel(clientAxis, financialSummary, commitment, part) {
+  // HIGH risk conditions
+  if (financialSummary.integrity_status === PRICING_INTEGRITY.MISSING_RETAIL) {
+    return INVOICE_RISK_LEVEL.HIGH;
+  }
+  if (financialSummary.margin_pct < 0) {
+    return INVOICE_RISK_LEVEL.HIGH;
+  }
+  if (part?.is_archived) {
+    return INVOICE_RISK_LEVEL.HIGH;
+  }
+  if (commitment?.commitment_status === 'cancelled') {
+    return INVOICE_RISK_LEVEL.HIGH;
+  }
+  
+  // MEDIUM risk conditions
+  if (financialSummary.integrity_status === PRICING_INTEGRITY.ESTIMATED_COST) {
+    return INVOICE_RISK_LEVEL.MEDIUM;
+  }
+  if (!commitment?.actual_unit_cost && financialSummary.unit_cost > 0) {
+    return INVOICE_RISK_LEVEL.MEDIUM;
+  }
+  
+  // LOW risk - all good
+  return INVOICE_RISK_LEVEL.LOW;
+}
+
+// ============================================
 // ORDERING SAFETY DERIVATION
 // ============================================
 
@@ -610,6 +648,9 @@ async function resolvePartLifecycleStateBatch(base44, commitmentIds = null, filt
     // Derive action recommendation
     const actionRecommendation = deriveActionRecommendation(clientAxis, procurementAxis, installAxis, overallStage);
 
+    // Derive invoice risk level (Phase 9.6)
+    const invoiceRiskLevel = deriveInvoiceRiskLevel(clientAxis, financialSummary, commitment, part);
+
     results.push({
       commitment_id: commitment.id,
       part_id: commitment.part_id,
@@ -631,9 +672,19 @@ async function resolvePartLifecycleStateBatch(base44, commitmentIds = null, filt
       financial_summary: financialSummary,
       
       lifecycle_overall_stage: overallStage,
+      invoice_risk_level: invoiceRiskLevel,
       ...actionRecommendation,
       
       // Convenience fields for UI
+      is_archived: part.is_archived || false,
+      pricing_integrity_status: financialSummary.integrity_status,
+      actual_unit_cost: commitment.actual_unit_cost || null,
+      unit_cost_snapshot: commitment.unit_cost_snapshot || null,
+      unit_retail_snapshot: commitment.unit_retail_snapshot || null,
+      commitment_status: commitment.commitment_status,
+      billing_status: commitment.billing_status,
+      requires_client_billing: part.requires_client_billing,
+      margin_pct: financialSummary.margin_pct,
       assigned_qty: commitment.qty_committed || 1,
       ordered_qty: procurementAxis.ordered_qty || 0,
       received_qty: procurementAxis.received_qty || 0,
