@@ -143,7 +143,8 @@ export default function NeedsAttentionSection({
   projects, 
   comments, 
   decisions, 
-  attachments 
+  attachments,
+  lifecycleQuickFilter = 'all'
 }) {
   // Simplified attention logic:
   // 1. Client replied (needs AK action)
@@ -153,6 +154,12 @@ export default function NeedsAttentionSection({
   const needsAttention = requests
     .filter(r => r.status !== 'draft' && r.status !== 'archived')
     .map(request => {
+      // Apply lifecycle quick filter if set
+      if (lifecycleQuickFilter !== 'all') {
+        if (lifecycleQuickFilter === 'draft') return null; // Drafts never in attention
+        if (lifecycleQuickFilter === 'approved') return null; // Approved never in attention
+        // For overdue filter, will check below
+      }
       const project = projects.find(p => p.id === request.project_id);
       
       // Get last client comment date
@@ -182,6 +189,11 @@ export default function NeedsAttentionSection({
       if (!hasClientReplied && !(isOverdue && isAwaitingClient)) {
         return null;
       }
+      
+      // Apply lifecycle quick filter
+      if (lifecycleQuickFilter === 'overdue' && !isOverdue) return null;
+      if (lifecycleQuickFilter === 'client_replied' && !hasClientReplied) return null;
+      if (lifecycleQuickFilter === 'awaiting_client' && !isAwaitingClient) return null;
       
       // Determine attention type
       let attentionType = null;
