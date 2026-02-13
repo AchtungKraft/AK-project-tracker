@@ -10,7 +10,6 @@ import {
   Loader2,
   Menu,
   LayoutGrid,
-  List,
   User,
   X,
   ArrowUpDown,
@@ -18,8 +17,11 @@ import {
   Clock,
   MessageSquareText,
   CheckCircle2,
-  LayoutDashboard
+  LayoutDashboard,
+  Calendar,
+  AlertCircle
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
 import MobileFilterDrawer, { MobileFilterSection } from "@/components/mobile/MobileFilterDrawer";
@@ -40,7 +42,14 @@ import { useFilterState, CLIENT_PORTAL_DEFAULTS } from "@/components/common/useF
 import NeedsAttentionSection from "@/components/clientportal/NeedsAttentionSection";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ProjectLifecycleCard from "@/components/clientportal/ProjectLifecycleCard";
-import { groupRequestsByProjectAndLifecycle, SORT_MODE_OPTIONS } from "@/components/clientportal/lifecycleHelpers";
+import ClientPortalCalendarView from "@/components/clientportal/ClientPortalCalendarView";
+import { 
+  groupRequestsByProjectAndLifecycle, 
+  SORT_MODE_OPTIONS,
+  isRequestOverdue,
+  filterByLifecycleQuickFilter,
+  flattenGroupedRequests
+} from "@/components/clientportal/lifecycleHelpers";
 
 export default function ClientPortalHub() {
   const queryClient = useQueryClient();
@@ -49,6 +58,21 @@ export default function ClientPortalHub() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
   const [sortMode, setSortMode] = useState('due_date');
+  const [lifecycleQuickFilter, setLifecycleQuickFilter] = useState('all');
+  const [boardViewMode, setBoardViewMode] = useState(() => {
+    return localStorage.getItem('clientportal_board_view') || 'card';
+  });
+  
+  // Persist board view mode
+  const handleBoardViewModeChange = useCallback((mode) => {
+    setBoardViewMode(mode);
+    localStorage.setItem('clientportal_board_view', mode);
+  }, []);
+  
+  // Toggle lifecycle quick filter
+  const toggleLifecycleFilter = useCallback((bucket) => {
+    setLifecycleQuickFilter(prev => prev === bucket ? 'all' : bucket);
+  }, []);
 
   // Unified filter state with URL/localStorage persistence
   const { filters, setFilter, applyView, clearFilters } = useFilterState('clientportal', CLIENT_PORTAL_DEFAULTS);
@@ -249,17 +273,35 @@ export default function ClientPortalHub() {
     );
   }, [filteredRequests, projects, decisions, attachments, comments, sortMode]);
 
-  // Calculate summary counts
+  // Calculate summary counts including overdue
   const summaryCounts = useMemo(() => {
-    const counts = { draft: 0, awaiting_client: 0, client_replied: 0, approved: 0 };
+    const counts = { draft: 0, awaiting_client: 0, client_replied: 0, approved: 0, overdue: 0 };
     groupedProjectData.forEach(group => {
       counts.draft += group.draft.length;
       counts.awaiting_client += group.awaiting_client.length;
       counts.client_replied += group.client_replied.length;
       counts.approved += group.approved.length;
+      
+      // Count overdue (only from awaiting_client and client_replied)
+      group.awaiting_client.forEach(r => {
+        if (isRequestOverdue(r, 'awaiting_client')) counts.overdue++;
+      });
+      group.client_replied.forEach(r => {
+        if (isRequestOverdue(r, 'client_replied')) counts.overdue++;
+      });
     });
     return counts;
   }, [groupedProjectData]);
+  
+  // Apply lifecycle quick filter
+  const filteredProjectData = useMemo(() => {
+    return filterByLifecycleQuickFilter(groupedProjectData, lifecycleQuickFilter);
+  }, [groupedProjectData, lifecycleQuickFilter]);
+  
+  // Flatten for calendar view
+  const flattenedRequests = useMemo(() => {
+    return flattenGroupedRequests(filteredProjectData);
+  }, [filteredProjectData]);
 
   const isLoading = loadingRequests || loadingProjects;
 
@@ -405,53 +447,117 @@ export default function ClientPortalHub() {
           />
         </div>
 
-        {/* Summary KPI Row */}
-        <div className="grid grid-cols-4 gap-2 md:gap-4">
-          <Card className="bg-slate-900/50 border-slate-700/50">
-            <CardContent className="p-3 md:p-4 flex items-center gap-2 md:gap-3">
-              <div className="p-2 bg-slate-500/20 rounded-lg shrink-0">
+        {/* Summary KPI Row - Clickable Filters */}
+        <div className="grid grid-cols-5 gap-2 md:gap-3">
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:scale-[1.02]",
+              "bg-slate-900/50 border-slate-700/50",
+              lifecycleQuickFilter === 'draft' && "ring-2 ring-slate-400 shadow-lg shadow-slate-500/20"
+            )}
+            onClick={() => toggleLifecycleFilter('draft')}
+          >
+            <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-slate-500/20 rounded-lg shrink-0">
                 <Wrench className="w-4 h-4 md:w-5 md:h-5 text-slate-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl md:text-2xl font-bold text-white">{summaryCounts.draft}</p>
-                <p className="text-xs text-slate-400 truncate">Drafts</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.draft}</p>
+                <p className="text-[10px] md:text-xs text-slate-400 truncate">Drafts</p>
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-amber-900/30 border-amber-700/50">
-            <CardContent className="p-3 md:p-4 flex items-center gap-2 md:gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-lg shrink-0">
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:scale-[1.02]",
+              "bg-amber-900/30 border-amber-700/50",
+              lifecycleQuickFilter === 'awaiting_client' && "ring-2 ring-amber-400 shadow-lg shadow-amber-500/20"
+            )}
+            onClick={() => toggleLifecycleFilter('awaiting_client')}
+          >
+            <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-amber-500/20 rounded-lg shrink-0">
                 <Clock className="w-4 h-4 md:w-5 md:h-5 text-amber-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl md:text-2xl font-bold text-white">{summaryCounts.awaiting_client}</p>
-                <p className="text-xs text-amber-400 truncate">Awaiting</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.awaiting_client}</p>
+                <p className="text-[10px] md:text-xs text-amber-400 truncate">Awaiting</p>
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-blue-900/30 border-blue-700/50">
-            <CardContent className="p-3 md:p-4 flex items-center gap-2 md:gap-3">
-              <div className="p-2 bg-blue-500/20 rounded-lg shrink-0">
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:scale-[1.02]",
+              "bg-blue-900/30 border-blue-700/50",
+              lifecycleQuickFilter === 'client_replied' && "ring-2 ring-blue-400 shadow-lg shadow-blue-500/20"
+            )}
+            onClick={() => toggleLifecycleFilter('client_replied')}
+          >
+            <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-blue-500/20 rounded-lg shrink-0">
                 <MessageSquareText className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl md:text-2xl font-bold text-white">{summaryCounts.client_replied}</p>
-                <p className="text-xs text-blue-400 truncate">Replied</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.client_replied}</p>
+                <p className="text-[10px] md:text-xs text-blue-400 truncate">Replied</p>
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-green-900/30 border-green-700/50">
-            <CardContent className="p-3 md:p-4 flex items-center gap-2 md:gap-3">
-              <div className="p-2 bg-green-500/20 rounded-lg shrink-0">
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:scale-[1.02]",
+              "bg-green-900/30 border-green-700/50",
+              lifecycleQuickFilter === 'approved' && "ring-2 ring-green-400 shadow-lg shadow-green-500/20"
+            )}
+            onClick={() => toggleLifecycleFilter('approved')}
+          >
+            <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-green-500/20 rounded-lg shrink-0">
                 <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-green-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl md:text-2xl font-bold text-white">{summaryCounts.approved}</p>
-                <p className="text-xs text-green-400 truncate">Approved</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.approved}</p>
+                <p className="text-[10px] md:text-xs text-green-400 truncate">Approved</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:scale-[1.02]",
+              "bg-red-900/30 border-red-700/50",
+              lifecycleQuickFilter === 'overdue' && "ring-2 ring-red-400 shadow-lg shadow-red-500/20"
+            )}
+            onClick={() => toggleLifecycleFilter('overdue')}
+          >
+            <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-red-500/20 rounded-lg shrink-0">
+                <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.overdue}</p>
+                <p className="text-[10px] md:text-xs text-red-400 truncate">Overdue</p>
               </div>
             </CardContent>
           </Card>
         </div>
+        
+        {/* Active Filter Indicator */}
+        {lifecycleQuickFilter !== 'all' && (
+          <div className="flex items-center gap-2">
+            <Badge className="bg-gray-800 text-gray-300 border border-gray-600">
+              Filtering: {lifecycleQuickFilter.replace('_', ' ')}
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setLifecycleQuickFilter('all')}
+              className="text-gray-400 hover:text-white h-6 px-2"
+            >
+              <X className="w-3 h-3 mr-1" />
+              Clear
+            </Button>
+          </div>
+        )}
 
         {/* Needs Attention Section - Simplified */}
         <NeedsAttentionSection
@@ -460,6 +566,7 @@ export default function ClientPortalHub() {
           comments={comments}
           decisions={decisions}
           attachments={attachments}
+          lifecycleQuickFilter={lifecycleQuickFilter}
         />
 
         {/* Main Tabs */}
@@ -516,33 +623,77 @@ export default function ClientPortalHub() {
 
           {/* Production Board Tab */}
           <TabsContent value="board" className="mt-6 space-y-4">
-            {groupedProjectData.length === 0 ? (
-              <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-                <CardContent className="p-8 md:p-12 text-center">
-                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
-                    <LayoutDashboard className="w-8 h-8 text-gray-500" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
-                  <p className="text-gray-400">No feedback requests match the current filters.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              groupedProjectData.map((projectGroup, index) => (
-                <ProjectLifecycleCard
-                  key={projectGroup.project?.id || `unknown-${index}`}
-                  project={projectGroup.project}
-                  buckets={{
-                    draft: projectGroup.draft,
-                    awaiting_client: projectGroup.awaiting_client,
-                    client_replied: projectGroup.client_replied,
-                    approved: projectGroup.approved
-                  }}
-                  getProjectClientSlug={getProjectClientSlug}
-                  onSendBulkEmail={handleSendBulkEmail}
-                  sendingEmailForProject={sendingEmailForProject}
-                  initialCollapsed={false}
-                />
-              ))
+            {/* View Mode Toggle */}
+            <div className="flex items-center justify-between">
+              <Tabs value={boardViewMode} onValueChange={handleBoardViewModeChange}>
+                <TabsList className="bg-gray-800/80 border border-gray-700 p-1 h-auto">
+                  <TabsTrigger 
+                    value="card" 
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5 text-xs md:text-sm"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    <span className="hidden sm:inline">Card View</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="calendar" 
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5 text-xs md:text-sm"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span className="hidden sm:inline">Calendar View</span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              
+              <p className="text-xs text-gray-500">
+                {filteredProjectData.length} projects • {flattenedRequests.length} requests
+              </p>
+            </div>
+            
+            {/* Card View */}
+            {boardViewMode === 'card' && (
+              <>
+                {filteredProjectData.length === 0 ? (
+                  <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
+                    <CardContent className="p-8 md:p-12 text-center">
+                      <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
+                        <LayoutDashboard className="w-8 h-8 text-gray-500" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
+                      <p className="text-gray-400">
+                        {lifecycleQuickFilter !== 'all' 
+                          ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
+                          : 'No feedback requests match the current filters.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  filteredProjectData.map((projectGroup, index) => (
+                    <ProjectLifecycleCard
+                      key={projectGroup.project?.id || `unknown-${index}`}
+                      project={projectGroup.project}
+                      buckets={{
+                        draft: projectGroup.draft,
+                        awaiting_client: projectGroup.awaiting_client,
+                        client_replied: projectGroup.client_replied,
+                        approved: projectGroup.approved
+                      }}
+                      getProjectClientSlug={getProjectClientSlug}
+                      onSendBulkEmail={handleSendBulkEmail}
+                      sendingEmailForProject={sendingEmailForProject}
+                      initialCollapsed={false}
+                    />
+                  ))
+                )}
+              </>
+            )}
+            
+            {/* Calendar View */}
+            {boardViewMode === 'calendar' && (
+              <ClientPortalCalendarView
+                requests={flattenedRequests}
+                projects={projects}
+                getProjectClientSlug={getProjectClientSlug}
+              />
             )}
           </TabsContent>
 
