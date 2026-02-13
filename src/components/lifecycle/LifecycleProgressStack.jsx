@@ -110,6 +110,7 @@ export default function LifecycleProgressStack({
   clientPaymentStatus,
   procurementStatus, 
   installStatus,
+  nextStepLabel,
   compact = false,
   className 
 }) {
@@ -139,6 +140,16 @@ export default function LifecycleProgressStack({
       <AxisProgressBar axis="client" status={clientBillingStatus} />
       <AxisProgressBar axis="procurement" status={procurementStatus} />
       <AxisProgressBar axis="installation" status={installStatus} />
+      
+      {/* Next Step Label - Phase 9.5 */}
+      {nextStepLabel && nextStepLabel !== 'Lifecycle Complete' && (
+        <div className="pt-2 mt-2 border-t border-gray-700">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 uppercase">Next:</span>
+            <span className="text-sm font-semibold text-yellow-400">{nextStepLabel}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -382,6 +382,20 @@ function deriveOverallStage(clientAxis, procurementAxis, installAxis, financialS
 }
 
 // ============================================
+// NEXT STEP LABELS (Phase 9.5)
+// ============================================
+
+const NEXT_STEP_LABELS = {
+  NEEDS_BILLING: 'Invoice Client',
+  INVOICED: 'Await Payment',
+  READY_FOR_ORDER: 'Create Purchase Order',
+  ORDER_IN_PROGRESS: 'Receive Part',
+  AWAITING_INSTALL: 'Install Part',
+  BLOCKED: 'Fix Missing Data',
+  COMPLETE: 'Lifecycle Complete',
+};
+
+// ============================================
 // ACTION RECOMMENDATION ENGINE
 // ============================================
 
@@ -392,6 +406,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Fix Missing Data',
       action_priority: ACTION_PRIORITY.HIGH,
       action_owner: 'PM',
+      next_step_label: NEXT_STEP_LABELS.BLOCKED,
+      action_type: 'FIX_DATA',
     };
   }
   
@@ -401,6 +417,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Lifecycle Complete',
       action_priority: ACTION_PRIORITY.NONE,
       action_owner: null,
+      next_step_label: NEXT_STEP_LABELS.COMPLETE,
+      action_type: null,
     };
   }
   
@@ -410,6 +428,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Invoice Client',
       action_priority: ACTION_PRIORITY.HIGH,
       action_owner: 'Accounting',
+      next_step_label: NEXT_STEP_LABELS.NEEDS_BILLING,
+      action_type: 'INVOICE_CLIENT',
     };
   }
   
@@ -420,6 +440,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Await Client Payment',
       action_priority: ACTION_PRIORITY.MEDIUM,
       action_owner: 'Accounting',
+      next_step_label: NEXT_STEP_LABELS.INVOICED,
+      action_type: 'RECORD_PAYMENT',
     };
   }
   
@@ -429,6 +451,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Create Vendor Order',
       action_priority: ACTION_PRIORITY.HIGH,
       action_owner: 'Purchasing',
+      next_step_label: NEXT_STEP_LABELS.READY_FOR_ORDER,
+      action_type: 'CREATE_ORDER',
     };
   }
   
@@ -438,6 +462,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Track Vendor Delivery',
       action_priority: ACTION_PRIORITY.MEDIUM,
       action_owner: 'Purchasing',
+      next_step_label: NEXT_STEP_LABELS.ORDER_IN_PROGRESS,
+      action_type: 'RECEIVE_PART',
     };
   }
   
@@ -447,6 +473,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
       recommended_action: 'Schedule Installation',
       action_priority: ACTION_PRIORITY.MEDIUM,
       action_owner: 'Shop',
+      next_step_label: NEXT_STEP_LABELS.AWAITING_INSTALL,
+      action_type: 'INSTALL_PART',
     };
   }
   
@@ -454,6 +482,8 @@ function deriveActionRecommendation(clientAxis, procurementAxis, installAxis, ov
     recommended_action: 'Review Status',
     action_priority: ACTION_PRIORITY.LOW,
     action_owner: 'PM',
+    next_step_label: 'Review Status',
+    action_type: null,
   };
 }
 

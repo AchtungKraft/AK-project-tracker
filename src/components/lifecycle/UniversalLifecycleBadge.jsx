@@ -75,8 +75,10 @@ export default function UniversalLifecycleBadge({
   overallStage,
   orderingSafety,
   invoiceReadiness,
+  nextStepLabel,
   showSafety = true,
   showReadiness = false,
+  showNextStep = false,
   compact = false,
   className,
 }) {
@@ -108,6 +110,9 @@ export default function UniversalLifecycleBadge({
               {showReadiness && invoiceReadiness && (
                 <p>Invoice: {READINESS_CONFIG[invoiceReadiness]?.label}</p>
               )}
+              {nextStepLabel && nextStepLabel !== 'Lifecycle Complete' && (
+                <p className="font-semibold text-yellow-400">Next: {nextStepLabel}</p>
+              )}
             </div>
           </TooltipContent>
         </Tooltip>
@@ -131,6 +136,13 @@ export default function UniversalLifecycleBadge({
       {showReadiness && invoiceReadiness && invoiceReadiness !== 'READY' && (
         <Badge variant="outline" className={cn("text-xs", READINESS_CONFIG[invoiceReadiness]?.color)}>
           Invoice: {READINESS_CONFIG[invoiceReadiness]?.label}
+        </Badge>
+      )}
+      
+      {/* Next Step Label - Phase 9.5 */}
+      {showNextStep && nextStepLabel && nextStepLabel !== 'Lifecycle Complete' && (
+        <Badge className="bg-yellow-600/30 text-yellow-400 text-xs">
+          → {nextStepLabel}
         </Badge>
       )}
     </div>
