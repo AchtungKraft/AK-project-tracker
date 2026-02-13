@@ -130,8 +130,19 @@ function DiagnosticDetailDrawer({ row, isOpen, onClose }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">Part Type</span>
-                  <Badge className="text-xs">{row.part_type}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge className="text-xs">{row.part_type}</Badge>
+                    {row.part_type_missing && (
+                      <Badge className="bg-amber-600/30 text-amber-400 text-xs">Defaulted</Badge>
+                    )}
+                  </div>
                 </div>
+                {row.part_type_missing && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-400">Original Type</span>
+                    <span className="text-xs text-red-400 italic">null (missing)</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">Project</span>
                   <span className="text-white text-sm">{row.project_name}</span>
@@ -552,8 +563,15 @@ export default function PartsLifecycleDiagnostic() {
                   >
                     <TableCell className="text-white text-sm">{row.project_name}</TableCell>
                     <TableCell>
-                      <p className="text-white text-sm">{row.part_name}</p>
-                      <p className="text-xs text-gray-500">{row.part_type}</p>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="text-white text-sm">{row.part_name}</p>
+                          <p className="text-xs text-gray-500">{row.part_type}</p>
+                        </div>
+                        {row.part_type_missing && (
+                          <Badge className="bg-amber-600/30 text-amber-400 text-xs shrink-0">⚠</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
                       {row.resolver_present ? 
