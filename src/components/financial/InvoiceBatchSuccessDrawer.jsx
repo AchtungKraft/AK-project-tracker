@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -21,10 +21,12 @@ import {
   ExternalLink,
   Copy,
   Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import PaymentTimeline from "./PaymentTimeline";
 
 // ============================================
 // TIMELINE STEP
@@ -99,7 +101,11 @@ export default function InvoiceBatchSuccessDrawer({
   onExportToQB,
   onViewBatch,
   onReturnToWorkbench,
+  onMarkPaid,
+  onUndoPayment,
 }) {
+  const [showTimeline, setShowTimeline] = useState(false);
+  
   if (!batchData) return null;
 
   const {
@@ -111,7 +117,11 @@ export default function InvoiceBatchSuccessDrawer({
     client_name,
     project_name,
     qb_status,
+    status,
+    payment_received_at,
   } = batchData;
+  
+  const isPaid = status === 'paid' || !!payment_received_at;
 
   const handleCopyBatchId = () => {
     navigator.clipboard.writeText(batch_id || '');
@@ -238,6 +248,23 @@ export default function InvoiceBatchSuccessDrawer({
             </div>
           </div>
 
+          {/* Payment Timeline (collapsible) */}
+          <div className="space-y-2">
+            <button 
+              onClick={() => setShowTimeline(!showTimeline)}
+              className="flex items-center justify-between w-full text-sm text-gray-400 hover:text-gray-300"
+            >
+              <span className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Payment History
+              </span>
+              <span>{showTimeline ? '−' : '+'}</span>
+            </button>
+            {showTimeline && (
+              <PaymentTimeline batch={batchData} className="mt-2" />
+            )}
+          </div>
+
           {/* Next Steps */}
           <div className="space-y-3">
             <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
@@ -245,13 +272,47 @@ export default function InvoiceBatchSuccessDrawer({
               Next Steps
             </h4>
             
-            <NextStepCard
-              icon={Upload}
-              title="Export to QuickBooks"
-              description="Send this batch to QuickBooks to create the invoice"
-              onClick={onExportToQB}
-              variant="primary"
-            />
+            {!isPaid ? (
+              <>
+                <NextStepCard
+                  icon={Upload}
+                  title="Export to QuickBooks"
+                  description="Send this batch to QuickBooks to create the invoice"
+                  onClick={onExportToQB}
+                  variant="primary"
+                />
+                
+                {onMarkPaid && (
+                  <NextStepCard
+                    icon={DollarSign}
+                    title="Mark as Paid"
+                    description="Record payment received for this batch"
+                    onClick={onMarkPaid}
+                    variant="secondary"
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <div className="bg-green-950/30 border border-green-900/30 rounded-lg p-4 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
+                  <p className="text-green-400 font-medium">Payment Received</p>
+                  <p className="text-xs text-gray-400 mt-1">This batch has been marked as paid</p>
+                </div>
+                
+                {onUndoPayment && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full text-yellow-400 hover:text-yellow-300 hover:bg-yellow-950/20"
+                    onClick={onUndoPayment}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Undo Payment
+                  </Button>
+                )}
+              </>
+            )}
             
             <NextStepCard
               icon={Eye}
