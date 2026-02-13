@@ -94,9 +94,8 @@ const getNavigationItems = (isAchtungKraft) => {
       },
       {
         title: "Portal Stats",
-        url: "https://akclient.base44.app/AnalyticsDashboard",
-       icon: ListChecks,
-        external: true,
+        url: createPageUrl("PortalStatsEmbed"),
+        icon: ListChecks,
       },
     ];
   } else {
