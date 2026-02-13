@@ -12,6 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { 
   DollarSign, 
   Clock,
@@ -30,6 +37,8 @@ import {
   Users,
   ListChecks,
   Zap,
+  Settings2,
+  Archive,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -383,6 +392,135 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
 // MAIN PAGE
 // ============================================
 
+// ============================================
+// COVERAGE DIAGNOSTICS DRAWER
+// ============================================
+
+function CoverageDiagnosticsDrawer({ isOpen, onClose }) {
+  const { data: diagnostics, isLoading, refetch } = useQuery({
+    queryKey: ['coverageDiagnostics'],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('diagnoseActionWorkbenchCoverage', {
+        options: { limit: 50 }
+      });
+      return response.data;
+    },
+    enabled: isOpen,
+  });
+
+  return (
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent className="w-full sm:max-w-2xl bg-gray-900 border-gray-700">
+        <SheetHeader>
+          <SheetTitle className="text-white flex items-center gap-2">
+            <Settings2 className="w-5 h-5" />
+            Coverage Diagnostics
+          </SheetTitle>
+        </SheetHeader>
+        
+        <div className="mt-4 space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+            </div>
+          ) : diagnostics ? (
+            <>
+              {/* KPIs */}
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="bg-gray-800/50 border-gray-700">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-gray-400">Total Commitments</p>
+                    <p className="text-xl font-bold text-white">{diagnostics.kpis?.total_commitments || 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gray-800/50 border-gray-700">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-gray-400">Eligible</p>
+                    <p className="text-xl font-bold text-green-400">{diagnostics.kpis?.total_eligible || 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gray-800/50 border-gray-700">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-gray-400">Missing</p>
+                    <p className="text-xl font-bold text-red-400">{diagnostics.kpis?.total_missing || 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gray-800/50 border-gray-700">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-gray-400">Coverage %</p>
+                    <p className="text-xl font-bold text-blue-400">{diagnostics.kpis?.coverage_percentage || 0}%</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Reason Breakdown */}
+              {diagnostics.reason_counts && Object.keys(diagnostics.reason_counts).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Exclusion Reasons</h4>
+                  <div className="space-y-1">
+                    {Object.entries(diagnostics.reason_counts).map(([reason, count]) => (
+                      <div key={reason} className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+                        <span className="text-sm text-gray-300">{reason.replace(/_/g, ' ')}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Breakdown */}
+              {diagnostics.action_breakdown && Object.keys(diagnostics.action_breakdown).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Action Distribution</h4>
+                  <div className="space-y-1">
+                    {Object.entries(diagnostics.action_breakdown).map(([action, count]) => (
+                      <div key={action} className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+                        <span className="text-sm text-gray-300">{action}</span>
+                        <Badge className="bg-blue-600 text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Missing Items Sample */}
+              {diagnostics.missing_commitments?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Missing Items (Sample)</h4>
+                  <ScrollArea className="h-48">
+                    <div className="space-y-2">
+                      {diagnostics.missing_commitments.map((item, idx) => (
+                        <div key={idx} className="p-2 bg-gray-800/50 rounded text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white font-medium">{item.part_name}</span>
+                            <Badge className="bg-red-600/30 text-red-400">{item.reason?.replace(/_/g, ' ')}</Badge>
+                          </div>
+                          <p className="text-gray-500 mt-1">{item.project_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full border-gray-700">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Re-run Diagnostics
+              </Button>
+            </>
+          ) : (
+            <p className="text-gray-500 text-center py-8">No diagnostic data available</p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ============================================
+// MAIN PAGE
+// ============================================
+
 export default function PartsActionWorkbench() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('invoice_client');
@@ -392,12 +530,18 @@ export default function PartsActionWorkbench() {
   const [batchMode, setBatchMode] = useState('MANUAL');
   const [selectedItem, setSelectedItem] = useState(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // Fetch action queue data
   const { data: queueData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['lifecycleActionQueue', projectFilter],
+    queryKey: ['lifecycleActionQueue', projectFilter, showClosed, showArchived],
     queryFn: async () => {
-      const filters = {};
+      const filters = {
+        include_closed: showClosed,
+        include_archived: showArchived,
+      };
       if (projectFilter !== 'all') filters.project_id = projectFilter;
       
       const response = await base44.functions.invoke('getLifecycleActionQueue', { filters });
@@ -492,16 +636,52 @@ export default function PartsActionWorkbench() {
             Unified workflow for billing, ordering, and installation
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => refetch()} 
-          disabled={isFetching}
-          className="border-gray-700"
-        >
-          {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          <span className="ml-2">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Toggles */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 rounded-lg">
+            <Switch
+              id="show-closed"
+              checked={showClosed}
+              onCheckedChange={setShowClosed}
+              className="scale-75"
+            />
+            <Label htmlFor="show-closed" className="text-xs text-gray-400 cursor-pointer">
+              Closed
+            </Label>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 rounded-lg">
+            <Switch
+              id="show-archived"
+              checked={showArchived}
+              onCheckedChange={setShowArchived}
+              className="scale-75"
+            />
+            <Label htmlFor="show-archived" className="text-xs text-gray-400 cursor-pointer">
+              <Archive className="w-3 h-3 inline mr-1" />
+              Archived
+            </Label>
+          </div>
+          
+          {/* Diagnostics Button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setDiagnosticsOpen(true)}
+            className="border-gray-700"
+          >
+            <Settings2 className="w-4 h-4" />
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => refetch()} 
+            disabled={isFetching}
+            className="border-gray-700"
+          >
+            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </Button>
+        </div>
       </div>
 
       {/* KPI Header */}
@@ -611,6 +791,12 @@ export default function PartsActionWorkbench() {
         onClose={() => setTimelineOpen(false)}
         commitmentId={selectedItem?.commitment_id}
         lifecycleState={selectedItem}
+      />
+
+      {/* Coverage Diagnostics Drawer */}
+      <CoverageDiagnosticsDrawer
+        isOpen={diagnosticsOpen}
+        onClose={() => setDiagnosticsOpen(false)}
       />
     </div>
   );
