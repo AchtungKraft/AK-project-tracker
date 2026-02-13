@@ -105,8 +105,15 @@ Deno.serve(async (req) => {
     }
     
     // Check for duplicates in existing queued batches
-    const existingLines = await base44.entities.InvoiceBatchLine.filter({ qb_status: 'queued' });
+    let existingLines = [];
+    try {
+      existingLines = await base44.entities.InvoiceBatchLine.filter({ qb_status: 'queued' });
+    } catch (e) {
+      console.warn('Could not fetch existing lines:', e);
+    }
     
+    // Filter out duplicates from validItems
+    const finalItems = [];
     for (const item of validItems) {
       const isDuplicate = existingLines.some(el => 
         (el.source_id === item.source_id && el.source_type === item.source_type) ||
@@ -120,14 +127,13 @@ Deno.serve(async (req) => {
           reasons: ['Already queued in another batch'],
           lifecycle_stage: item.client_billing_status,
         });
-        // Remove from valid items
-        const idx = validItems.indexOf(item);
-        if (idx > -1) validItems.splice(idx, 1);
+      } else {
+        finalItems.push(item);
       }
     }
     
     // Check again if all items now blocked
-    if (validItems.length === 0) {
+    if (finalItems.length === 0) {
       return Response.json({
         success: false,
         error: 'All items already queued or blocked',
@@ -141,12 +147,12 @@ Deno.serve(async (req) => {
     const createdBatches = [];
     const createdLines = [];
     
-    // Group items based on batch mode (use validItems, not items)
+    // Group items based on batch mode (use finalItems)
     let groups = {};
     
     switch (batch_mode) {
       case 'BY_PROJECT':
-        validItems.forEach(item => {
+        finalItems.forEach(item => {
           const key = item.project_id;
           if (!groups[key]) groups[key] = { items: [], project_name: item.project_name };
           groups[key].items.push(item);
@@ -154,7 +160,7 @@ Deno.serve(async (req) => {
         break;
         
       case 'BY_CLIENT':
-        validItems.forEach(item => {
+        finalItems.forEach(item => {
           const key = item.client_name || 'Unknown Client';
           if (!groups[key]) groups[key] = { items: [], client_name: key };
           groups[key].items.push(item);
@@ -163,7 +169,7 @@ Deno.serve(async (req) => {
         
       case 'BY_MILESTONE':
         // Group by milestone if available, otherwise fall back to project
-        validItems.forEach(item => {
+        finalItems.forEach(item => {
           const key = item.milestone || item.project_id;
           if (!groups[key]) groups[key] = { items: [], milestone: item.milestone, project_name: item.project_name };
           groups[key].items.push(item);
@@ -171,13 +177,13 @@ Deno.serve(async (req) => {
         break;
         
       default: // MANUAL
-        groups['manual'] = { items: validItems };
+        groups['manual'] = { items: finalItems };
     }
     
     // Create batches and lines
     for (const [groupKey, groupData] of Object.entries(groups)) {
       const batchItems = groupData.items;
-      const totalAmount = batchItems.reduce((sum, i) => sum + ((i.qty || 1) * (i.unit_price || 0)), 0);
+      const totalAmount = batchItems.reduce((sum, i) => sum + ((i.assigned_qty || i.qty || 1) * (i.unit_price || 0)), 0);
       
       // Create batch
       const batch = await base44.entities.InvoiceBatch.create({
@@ -195,7 +201,7 @@ Deno.serve(async (req) => {
       
       // Create line items
       for (const item of batchItems) {
-        const qty = item.qty || 1;
+        const qty = item.assigned_qty || item.qty || 1;
         const unitPrice = item.unit_price || 0;
         
         const line = await base44.entities.InvoiceBatchLine.create({
