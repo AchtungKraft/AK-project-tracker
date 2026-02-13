@@ -76,6 +76,21 @@ Deno.serve(async (req) => {
         blockReasons.push('Part is non-billable');
       }
       
+      // Check part type for client-supplied (Phase 9.6)
+      if (item.effective_part_type === 'CLIENT_SUPPLIED' && item.requires_client_billing === false) {
+        blockReasons.push('Client-supplied part not billable');
+      }
+      
+      // Check if archived (Phase 9.6)
+      if (item.is_archived) {
+        blockReasons.push('Part is archived');
+      }
+      
+      // Check billing status - already invoiced/paid (Phase 9.6 duplication safety)
+      if (item.billing_status === 'invoiced' || item.billing_status === 'paid') {
+        blockReasons.push('Already invoiced or paid');
+      }
+      
       if (blockReasons.length > 0) {
         blockedItems.push({
           commitment_id: item.commitment_id || item.id,
