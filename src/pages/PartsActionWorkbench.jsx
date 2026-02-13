@@ -48,6 +48,8 @@ import UniversalLifecycleBadge, { OrderingSafetyBadge } from "@/components/lifec
 import LifecycleTimelineDrawer from "@/components/lifecycle/LifecycleTimelineDrawer";
 import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnosticsDrawer";
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
+import InvoiceBatchPreviewModal from "@/components/financial/InvoiceBatchPreviewModal";
+import InvoiceBatchSuccessDrawer from "@/components/financial/InvoiceBatchSuccessDrawer";
 
 // ============================================
 // CONSTANTS
@@ -540,6 +542,9 @@ export default function PartsActionWorkbench() {
   const [showNonBillable, setShowNonBillable] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [executingIds, setExecutingIds] = useState(new Set());
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [successDrawerOpen, setSuccessDrawerOpen] = useState(false);
+  const [lastBatchResult, setLastBatchResult] = useState(null);
 
   // Lifecycle action hook
   const { executeActionAsync, isExecuting } = useLifecycleAction();
@@ -581,18 +586,21 @@ export default function PartsActionWorkbench() {
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast.success(data.message || `Created ${data.batches_created} batch(es) with ${data.lines_created} lines`, {
-          description: data.batch_name ? `Batch: ${data.batch_name}` : undefined,
-        });
+        // Store result and open success drawer
+        setLastBatchResult(data);
+        setPreviewModalOpen(false);
+        setSuccessDrawerOpen(true);
         
-        // Show warning if some items were blocked
-        if (data.blocked_items?.length > 0) {
-          toast.warning(`${data.blocked_items.length} item(s) blocked`, {
-            description: data.blocked_items.slice(0, 3).map(b => 
-              `${b.part_name}: ${b.reasons?.join(', ')}`
-            ).join('\n'),
-          });
-        }
+        // Log analytics event
+        base44.analytics.track({
+          eventName: 'invoice_batch_created',
+          properties: {
+            batches_created: data.batches_created,
+            lines_created: data.lines_created,
+            total_amount: data.total_amount,
+            batch_mode: batchMode,
+          }
+        });
         
         setSelectedIds(new Set());
         queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
@@ -669,22 +677,45 @@ export default function PartsActionWorkbench() {
       return;
     }
     
+    // Log preview opened event
+    base44.analytics.track({
+      eventName: 'invoice_preview_opened',
+      properties: { items_count: selectedItems.length }
+    });
+    
+    // Open preview modal instead of creating immediately
+    setPreviewModalOpen(true);
+  };
+  
+  const handleConfirmBatch = () => {
     // Pre-check for items with missing pricing
     const readyItems = selectedItems.filter(item => (item.unit_retail || 0) > 0);
-    const blockedItems = selectedItems.filter(item => (item.unit_retail || 0) <= 0);
     
     if (readyItems.length === 0) {
-      toast.error('All selected items have missing pricing', {
-        description: `${blockedItems.length} item(s) cannot be invoiced without retail prices.`,
-      });
+      toast.error('No items ready for invoicing');
       return;
     }
     
-    if (blockedItems.length > 0) {
-      toast.warning(`${blockedItems.length} item(s) will be skipped (missing pricing)`);
-    }
-    
-    createBatchMutation.mutate(selectedItems);
+    createBatchMutation.mutate(readyItems);
+  };
+  
+  const handleFixItem = (item) => {
+    setPreviewModalOpen(false);
+    setSelectedItem(item);
+    setTimelineOpen(true);
+  };
+  
+  const handleExportToQB = () => {
+    if (!lastBatchResult?.batch_id) return;
+    // Navigate to batch export or trigger export
+    toast.info('QuickBooks export functionality coming soon');
+  };
+  
+  const handleViewBatch = () => {
+    if (!lastBatchResult?.batch_id) return;
+    // Navigate to batch detail view
+    toast.info('Batch detail view coming soon');
+    setSuccessDrawerOpen(false);
   };
 
   const handleExecuteAction = async (item, actionType) => {
@@ -915,6 +946,34 @@ export default function PartsActionWorkbench() {
       <CoverageDiagnosticsDrawer
         isOpen={diagnosticsOpen}
         onClose={() => setDiagnosticsOpen(false)}
+      />
+
+      {/* Invoice Batch Preview Modal */}
+      <InvoiceBatchPreviewModal
+        isOpen={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        selectedItems={selectedItems}
+        blockedItems={selectedItems.filter(item => (item.unit_retail || 0) <= 0).map(item => ({
+          commitment_id: item.commitment_id,
+          part_name: item.part_name,
+          project_name: item.project_name,
+          reasons: ['Missing retail pricing'],
+          lifecycle_stage: item.lifecycle_overall_stage,
+        }))}
+        batchMode={batchMode}
+        onConfirm={handleConfirmBatch}
+        onFixItem={handleFixItem}
+        isCreating={createBatchMutation.isPending}
+      />
+
+      {/* Invoice Batch Success Drawer */}
+      <InvoiceBatchSuccessDrawer
+        isOpen={successDrawerOpen}
+        onClose={() => setSuccessDrawerOpen(false)}
+        batchData={lastBatchResult}
+        onExportToQB={handleExportToQB}
+        onViewBatch={handleViewBatch}
+        onReturnToWorkbench={() => setSuccessDrawerOpen(false)}
       />
     </div>
   );
