@@ -236,3 +236,66 @@ export const SORT_MODE_OPTIONS = [
   { value: 'last_internal_activity', label: 'Last Internal Activity' },
   { value: 'oldest_waiting', label: 'Oldest Waiting' }
 ];
+
+/**
+ * Check if a request is overdue
+ * Overdue applies to awaiting_client and client_replied only (not drafts or approved)
+ */
+export const isRequestOverdue = (request, bucket) => {
+  if (!request.due_date) return false;
+  if (bucket === 'draft' || bucket === 'approved') return false;
+  
+  const due = new Date(request.due_date);
+  const now = new Date();
+  // Set to end of due day for comparison
+  due.setHours(23, 59, 59, 999);
+  
+  return due < now;
+};
+
+/**
+ * Filter grouped project data by lifecycle quick filter
+ */
+export const filterByLifecycleQuickFilter = (groupedProjectData, lifecycleQuickFilter) => {
+  if (lifecycleQuickFilter === 'all') return groupedProjectData;
+  
+  return groupedProjectData
+    .map(group => {
+      const filterFn = (request, bucket) => {
+        if (lifecycleQuickFilter === 'overdue') {
+          return isRequestOverdue(request, bucket);
+        }
+        return bucket === lifecycleQuickFilter;
+      };
+      
+      return {
+        ...group,
+        draft: group.draft.filter(r => filterFn(r, 'draft')),
+        awaiting_client: group.awaiting_client.filter(r => filterFn(r, 'awaiting_client')),
+        client_replied: group.client_replied.filter(r => filterFn(r, 'client_replied')),
+        approved: group.approved.filter(r => filterFn(r, 'approved')),
+      };
+    })
+    .filter(group =>
+      group.draft.length ||
+      group.awaiting_client.length ||
+      group.client_replied.length ||
+      group.approved.length
+    );
+};
+
+/**
+ * Flatten grouped project data into a flat list with lifecycle bucket info
+ */
+export const flattenGroupedRequests = (groupedProjectData) => {
+  const flattened = [];
+  
+  groupedProjectData.forEach(group => {
+    group.draft.forEach(r => flattened.push({ ...r, lifecycleBucket: 'draft' }));
+    group.awaiting_client.forEach(r => flattened.push({ ...r, lifecycleBucket: 'awaiting_client' }));
+    group.client_replied.forEach(r => flattened.push({ ...r, lifecycleBucket: 'client_replied' }));
+    group.approved.forEach(r => flattened.push({ ...r, lifecycleBucket: 'approved' }));
+  });
+  
+  return flattened;
+};
