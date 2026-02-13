@@ -554,6 +554,9 @@ export default function PartsActionWorkbench() {
   // Create batch mutation
   const createBatchMutation = useMutation({
     mutationFn: async (items) => {
+      console.log("Create Invoice Batch clicked");
+      console.log("Selected items:", items.length, items);
+      
       const response = await base44.functions.invoke('createInvoiceBatch', {
         items,
         batch_mode: batchMode,
@@ -561,12 +564,41 @@ export default function PartsActionWorkbench() {
       return response.data;
     },
     onSuccess: (data) => {
-      toast.success(`Created ${data.batches_created} batch(es) with ${data.lines_created} lines`);
-      setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+      if (data.success) {
+        toast.success(data.message || `Created ${data.batches_created} batch(es) with ${data.lines_created} lines`, {
+          description: data.batch_name ? `Batch: ${data.batch_name}` : undefined,
+        });
+        
+        // Show warning if some items were blocked
+        if (data.blocked_items?.length > 0) {
+          toast.warning(`${data.blocked_items.length} item(s) blocked`, {
+            description: data.blocked_items.slice(0, 3).map(b => 
+              `${b.part_name}: ${b.reasons?.join(', ')}`
+            ).join('\n'),
+          });
+        }
+        
+        setSelectedIds(new Set());
+        queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+        queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
+        queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
+      } else {
+        toast.error(data.message || 'Batch creation failed');
+      }
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to create batch');
+      console.error("Create batch error:", error);
+      const errorData = error.response?.data || error;
+      
+      if (errorData.blocked_items?.length > 0) {
+        toast.error(errorData.message || 'Items cannot be invoiced', {
+          description: errorData.blocked_items.slice(0, 3).map(b => 
+            `${b.part_name}: ${b.reasons?.join(', ') || 'Unknown'}`
+          ).join('\n'),
+        });
+      } else {
+        toast.error(errorData.message || error.message || 'Failed to create batch');
+      }
     },
   });
 
@@ -614,7 +646,28 @@ export default function PartsActionWorkbench() {
   };
 
   const handleCreateBatch = () => {
-    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 0) {
+      toast.error('No items selected', {
+        description: 'Please select at least one item to create an invoice batch.',
+      });
+      return;
+    }
+    
+    // Pre-check for items with missing pricing
+    const readyItems = selectedItems.filter(item => (item.unit_retail || 0) > 0);
+    const blockedItems = selectedItems.filter(item => (item.unit_retail || 0) <= 0);
+    
+    if (readyItems.length === 0) {
+      toast.error('All selected items have missing pricing', {
+        description: `${blockedItems.length} item(s) cannot be invoiced without retail prices.`,
+      });
+      return;
+    }
+    
+    if (blockedItems.length > 0) {
+      toast.warning(`${blockedItems.length} item(s) will be skipped (missing pricing)`);
+    }
+    
     createBatchMutation.mutate(selectedItems);
   };
 

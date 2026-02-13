@@ -61,6 +61,7 @@ import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
 import MyPriorities from './pages/MyPriorities';
 import MyProjects from './pages/MyProjects';
 import MyTasks from './pages/MyTasks';
+import PartsActionWorkbench from './pages/PartsActionWorkbench';
 import PartsLifecycleDiagnostic from './pages/PartsLifecycleDiagnostic';
 import PartsTracker from './pages/PartsTracker';
 import PriorityDashboard from './pages/PriorityDashboard';
@@ -70,7 +71,6 @@ import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import PartsActionWorkbench from './pages/PartsActionWorkbench';
 import __Layout from './Layout.jsx';
 
 
@@ -89,6 +89,7 @@ export const PAGES = {
     "MyPriorities": MyPriorities,
     "MyProjects": MyProjects,
     "MyTasks": MyTasks,
+    "PartsActionWorkbench": PartsActionWorkbench,
     "PartsLifecycleDiagnostic": PartsLifecycleDiagnostic,
     "PartsTracker": PartsTracker,
     "PriorityDashboard": PriorityDashboard,
@@ -98,7 +99,6 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "PartsActionWorkbench": PartsActionWorkbench,
 }
 
 export const pagesConfig = {
