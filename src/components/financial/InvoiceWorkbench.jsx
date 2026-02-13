@@ -306,10 +306,15 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
   const selectedCount = selectedItems.length;
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
   
+  // Calculate ready vs blocked counts
+  const readyCount = selectedItems.filter(item => (item.unit_retail || item.unit_price || 0) > 0).length;
+  const blockedCount = selectedCount - readyCount;
+  
   if (selectedCount === 0) return null;
 
   const isInvoiceAction = actionType === 'invoice';
   const isPurchaseAction = actionType === 'purchase';
+  const canCreate = readyCount > 0;
 
   return (
     <Card className={cn(
@@ -328,6 +333,14 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
               <span className={cn("font-bold text-lg", isInvoiceAction ? "text-green-400" : "text-blue-400")}>
                 ${totalAmount.toFixed(2)}
               </span>
+              
+              {/* Readiness indicator */}
+              <div className="flex items-center gap-2 ml-4 text-sm">
+                <span className="text-green-400">✓ Ready: {readyCount}</span>
+                {blockedCount > 0 && (
+                  <span className="text-red-400">✗ Blocked: {blockedCount}</span>
+                )}
+              </div>
             </div>
             
             {isInvoiceAction && (
@@ -355,13 +368,16 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
             </Button>
             <Button 
               onClick={onCreateBatch} 
-              disabled={isCreating}
-              className={cn(isInvoiceAction ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700")}
+              disabled={isCreating || !canCreate}
+              className={cn(
+                isInvoiceAction ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700",
+                !canCreate && "opacity-50 cursor-not-allowed"
+              )}
             >
               {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : (
                 isInvoiceAction ? <FileText className="w-4 h-4 mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />
               )}
-              {isInvoiceAction ? 'Create Invoice Batch' : 'Create Purchase Order'}
+              {isInvoiceAction ? `Create Invoice Batch (${readyCount})` : 'Create Purchase Order'}
             </Button>
           </div>
         </div>
