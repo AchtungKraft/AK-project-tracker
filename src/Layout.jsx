@@ -67,6 +67,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Package,
       },
       {
+        title: "Action Workbench",
+        url: createPageUrl("PartsActionWorkbench"),
+        icon: Flame,
+      },
+      {
         title: "Financial Exceptions",
         url: createPageUrl("FinancialExceptionDashboard"),
         icon: AlertTriangle,
