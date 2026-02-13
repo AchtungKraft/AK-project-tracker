@@ -443,9 +443,14 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
   const selectedCount = selectedItems.length;
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
   
+  // Calculate ready vs blocked counts  
+  const readyCount = selectedItems.filter(item => (item.unit_retail || 0) > 0).length;
+  const blockedCount = selectedCount - readyCount;
+  
   if (selectedCount === 0) return null;
 
   const isInvoiceAction = actionType === 'invoice';
+  const canCreate = readyCount > 0;
 
   return (
     <Card className={cn(
