@@ -348,6 +348,29 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       kpis.ready_to_install_count++;
     }
 
+    // Derive next_step_label and action_type for inline execution (Phase 9.5)
+    const NEXT_STEP_LABELS = {
+      'Invoice Client': 'Invoice Client',
+      'Await Client Payment': 'Await Payment',
+      'Create Vendor Order': 'Create Purchase Order',
+      'Track Vendor Delivery': 'Receive Part',
+      'Schedule Installation': 'Install Part',
+      'Fix Missing Data': 'Fix Missing Data',
+      'Lifecycle Complete': 'Lifecycle Complete',
+      'Review Status': 'Review Status',
+    };
+    const nextStepLabel = NEXT_STEP_LABELS[recommendedAction] || recommendedAction;
+    
+    const ACTION_TYPE_MAP = {
+      'Invoice Client': 'INVOICE_CLIENT',
+      'Await Client Payment': 'RECORD_PAYMENT',
+      'Create Vendor Order': 'CREATE_ORDER',
+      'Track Vendor Delivery': 'RECEIVE_PART',
+      'Schedule Installation': 'INSTALL_PART',
+      'Fix Missing Data': 'FIX_DATA',
+    };
+    const actionType = ACTION_TYPE_MAP[recommendedAction] || null;
+
     // Build commitment row
     const row = {
       id: commitment.id,
@@ -385,8 +408,10 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       line_total: lineTotal,
       cost_total: costTotal,
       
-      // Action
+      // Action (Phase 9.5)
       recommended_action: recommendedAction,
+      next_step_label: nextStepLabel,
+      action_type: actionType,
       action_priority: actionPriority,
       action_owner: actionOwner,
     };
