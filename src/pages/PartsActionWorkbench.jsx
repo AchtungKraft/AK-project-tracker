@@ -461,7 +461,7 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
       <CardContent className="p-4">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <Badge className={cn("text-lg px-3 py-1", isInvoiceAction ? "bg-green-600" : "bg-blue-600")}>
                 {selectedCount}
               </Badge>
@@ -469,6 +469,14 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
               <span className={cn("font-bold text-lg", isInvoiceAction ? "text-green-400" : "text-blue-400")}>
                 ${totalAmount.toFixed(2)}
               </span>
+              
+              {/* Readiness indicator */}
+              <div className="flex items-center gap-2 ml-2 text-sm">
+                <span className="text-green-400">✓ Ready: {readyCount}</span>
+                {blockedCount > 0 && (
+                  <span className="text-red-400">✗ Blocked: {blockedCount}</span>
+                )}
+              </div>
             </div>
             
             {isInvoiceAction && (
@@ -496,13 +504,16 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
             </Button>
             <Button 
               onClick={onCreateBatch} 
-              disabled={isCreating}
-              className={cn(isInvoiceAction ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700")}
+              disabled={isCreating || !canCreate}
+              className={cn(
+                isInvoiceAction ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700",
+                !canCreate && "opacity-50 cursor-not-allowed"
+              )}
             >
               {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : (
                 isInvoiceAction ? <FileText className="w-4 h-4 mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />
               )}
-              {isInvoiceAction ? 'Create Invoice Batch' : 'Create PO'}
+              {isInvoiceAction ? `Create Invoice Batch (${readyCount})` : 'Create PO'}
             </Button>
           </div>
         </div>
