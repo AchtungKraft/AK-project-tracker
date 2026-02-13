@@ -173,5 +173,5 @@ export const CLIENT_PORTAL_DEFAULTS = {
   statusFilter: 'all',
   assignedTo: [],
   viewMode: 'cards',
-  tab: 'awaiting',
+  tab: 'board',
 };
