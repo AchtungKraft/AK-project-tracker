@@ -13,12 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   DollarSign, 
   Clock,
@@ -39,6 +34,10 @@ import {
   Zap,
   Settings2,
   Archive,
+  Play,
+  ChevronRight,
+  Activity,
+  FileWarning,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -47,6 +46,8 @@ import { toast } from "sonner";
 import LifecycleProgressStack from "@/components/lifecycle/LifecycleProgressStack";
 import UniversalLifecycleBadge, { OrderingSafetyBadge } from "@/components/lifecycle/UniversalLifecycleBadge";
 import LifecycleTimelineDrawer from "@/components/lifecycle/LifecycleTimelineDrawer";
+import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnosticsDrawer";
+import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
 
 // ============================================
 // CONSTANTS
@@ -125,6 +126,72 @@ const BATCH_MODES = {
   BY_PROJECT: { label: 'By Project', icon: FolderOpen },
   BY_CLIENT: { label: 'By Client', icon: Users },
 };
+
+// ============================================
+// COVERAGE HEALTH KPI
+// ============================================
+
+function CoverageHealthKPI({ onOpenDiagnostics }) {
+  const { data: diagnostics, isLoading } = useQuery({
+    queryKey: ['coverageDiagnostics'],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('diagnoseActionWorkbenchCoverage', {
+        options: { limit: 10 }
+      });
+      return response.data;
+    },
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+  });
+
+  const coveragePct = diagnostics?.kpis?.coverage_percentage || 0;
+  const totalCommitments = diagnostics?.kpis?.total_commitments || 0;
+  const eligible = diagnostics?.kpis?.total_eligible || 0;
+  const excluded = diagnostics?.kpis?.total_missing || 0;
+
+  const coverageColor = coveragePct >= 100 ? 'text-green-400 bg-green-600/20' : 
+                        coveragePct >= 95 ? 'text-yellow-400 bg-yellow-600/20' : 
+                        'text-red-400 bg-red-600/20';
+  const StatusIcon = coveragePct >= 95 ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onOpenDiagnostics}
+            className={cn(
+              "flex items-center gap-3 px-4 py-2 rounded-lg border transition-all",
+              coverageColor.split(' ')[1],
+              "border-gray-700 hover:border-gray-600"
+            )}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+            ) : (
+              <>
+                <StatusIcon className={cn("w-5 h-5", coverageColor.split(' ')[0])} />
+                <div className="text-left">
+                  <p className="text-xs text-gray-400">Coverage</p>
+                  <p className={cn("text-lg font-bold", coverageColor.split(' ')[0])}>
+                    {coveragePct}%
+                  </p>
+                </div>
+                <div className="text-xs text-gray-500 border-l border-gray-700 pl-3 ml-2">
+                  <p>{eligible} eligible</p>
+                  <p>{excluded} excluded</p>
+                </div>
+              </>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
+          <p className="text-xs">Click to open Coverage Diagnostics</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 // ============================================
 // KPI CARDS
@@ -210,10 +277,59 @@ function KPIHeader({ kpis, activeTab, onTabClick }) {
 }
 
 // ============================================
+// INLINE ACTION BUTTON
+// ============================================
+
+function InlineActionButton({ item, onExecute, isExecuting }) {
+  const actionType = item.action_type;
+  if (!actionType) return null;
+
+  const actionConfig = {
+    INVOICE_CLIENT: { icon: DollarSign, label: 'Invoice', color: 'bg-yellow-600 hover:bg-yellow-700' },
+    RECORD_PAYMENT: { icon: CheckCircle2, label: 'Record Pay', color: 'bg-orange-600 hover:bg-orange-700' },
+    CREATE_ORDER: { icon: ShoppingCart, label: 'Create PO', color: 'bg-green-600 hover:bg-green-700' },
+    RECEIVE_PART: { icon: Truck, label: 'Receive', color: 'bg-blue-600 hover:bg-blue-700' },
+    INSTALL_PART: { icon: Wrench, label: 'Install', color: 'bg-purple-600 hover:bg-purple-700' },
+    FIX_DATA: { icon: AlertTriangle, label: 'Fix', color: 'bg-red-600 hover:bg-red-700' },
+  };
+
+  const config = actionConfig[actionType] || { icon: Play, label: 'Action', color: 'bg-gray-600' };
+  const Icon = config.icon;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            className={cn("h-7 px-2 gap-1", config.color)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onExecute(item, actionType);
+            }}
+            disabled={isExecuting}
+          >
+            {isExecuting ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Icon className="w-3 h-3" />
+            )}
+            <span className="text-xs hidden sm:inline">{config.label}</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="bg-gray-800 border-gray-700">
+          <p className="text-xs">{item.next_step_label || item.recommended_action}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// ============================================
 // ACTION TABLE
 // ============================================
 
-function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick }) {
+function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick, onExecuteAction, executingIds }) {
   const allowSelection = tabConfig.allowSelection;
 
   if (!items || items.length === 0) {
@@ -245,7 +361,7 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
           <TableHead className="text-gray-400 text-xs text-center">Safety</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Qty</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Value</TableHead>
-          <TableHead className="text-gray-400 text-xs">Owner</TableHead>
+          <TableHead className="text-gray-400 text-xs">Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -279,8 +395,8 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
                     <Badge className="bg-amber-600/30 text-amber-400 text-xs">⚠</Badge>
                   )}
                 </div>
-                {item.part_number && (
-                  <p className="text-xs text-gray-500">{item.part_number}</p>
+                {item.next_step_label && item.next_step_label !== 'Lifecycle Complete' && (
+                  <p className="text-xs text-yellow-400 font-medium">→ {item.next_step_label}</p>
                 )}
               </div>
             </TableCell>
@@ -305,10 +421,12 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
                 <Badge className="bg-red-600/30 text-red-400 text-xs">No Price</Badge>
               )}
             </TableCell>
-            <TableCell>
-              <Badge variant="outline" className="text-xs border-gray-600">
-                {item.action_owner}
-              </Badge>
+            <TableCell onClick={(e) => e.stopPropagation()}>
+              <InlineActionButton 
+                item={item} 
+                onExecute={onExecuteAction}
+                isExecuting={executingIds?.has(item.commitment_id)}
+              />
             </TableCell>
           </TableRow>
         ))}
@@ -392,135 +510,6 @@ function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBat
 // MAIN PAGE
 // ============================================
 
-// ============================================
-// COVERAGE DIAGNOSTICS DRAWER
-// ============================================
-
-function CoverageDiagnosticsDrawer({ isOpen, onClose }) {
-  const { data: diagnostics, isLoading, refetch } = useQuery({
-    queryKey: ['coverageDiagnostics'],
-    queryFn: async () => {
-      const response = await base44.functions.invoke('diagnoseActionWorkbenchCoverage', {
-        options: { limit: 50 }
-      });
-      return response.data;
-    },
-    enabled: isOpen,
-  });
-
-  return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl bg-gray-900 border-gray-700">
-        <SheetHeader>
-          <SheetTitle className="text-white flex items-center gap-2">
-            <Settings2 className="w-5 h-5" />
-            Coverage Diagnostics
-          </SheetTitle>
-        </SheetHeader>
-        
-        <div className="mt-4 space-y-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
-            </div>
-          ) : diagnostics ? (
-            <>
-              {/* KPIs */}
-              <div className="grid grid-cols-2 gap-3">
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-3">
-                    <p className="text-xs text-gray-400">Total Commitments</p>
-                    <p className="text-xl font-bold text-white">{diagnostics.kpis?.total_commitments || 0}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-3">
-                    <p className="text-xs text-gray-400">Eligible</p>
-                    <p className="text-xl font-bold text-green-400">{diagnostics.kpis?.total_eligible || 0}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-3">
-                    <p className="text-xs text-gray-400">Missing</p>
-                    <p className="text-xl font-bold text-red-400">{diagnostics.kpis?.total_missing || 0}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-3">
-                    <p className="text-xs text-gray-400">Coverage %</p>
-                    <p className="text-xl font-bold text-blue-400">{diagnostics.kpis?.coverage_percentage || 0}%</p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Reason Breakdown */}
-              {diagnostics.reason_counts && Object.keys(diagnostics.reason_counts).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Exclusion Reasons</h4>
-                  <div className="space-y-1">
-                    {Object.entries(diagnostics.reason_counts).map(([reason, count]) => (
-                      <div key={reason} className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-                        <span className="text-sm text-gray-300">{reason.replace(/_/g, ' ')}</span>
-                        <Badge variant="outline" className="text-xs">{count}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Breakdown */}
-              {diagnostics.action_breakdown && Object.keys(diagnostics.action_breakdown).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Action Distribution</h4>
-                  <div className="space-y-1">
-                    {Object.entries(diagnostics.action_breakdown).map(([action, count]) => (
-                      <div key={action} className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-                        <span className="text-sm text-gray-300">{action}</span>
-                        <Badge className="bg-blue-600 text-xs">{count}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Missing Items Sample */}
-              {diagnostics.missing_commitments?.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Missing Items (Sample)</h4>
-                  <ScrollArea className="h-48">
-                    <div className="space-y-2">
-                      {diagnostics.missing_commitments.map((item, idx) => (
-                        <div key={idx} className="p-2 bg-gray-800/50 rounded text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-white font-medium">{item.part_name}</span>
-                            <Badge className="bg-red-600/30 text-red-400">{item.reason?.replace(/_/g, ' ')}</Badge>
-                          </div>
-                          <p className="text-gray-500 mt-1">{item.project_name}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-
-              <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full border-gray-700">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Re-run Diagnostics
-              </Button>
-            </>
-          ) : (
-            <p className="text-gray-500 text-center py-8">No diagnostic data available</p>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-// ============================================
-// MAIN PAGE
-// ============================================
-
 export default function PartsActionWorkbench() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('invoice_client');
@@ -532,15 +521,21 @@ export default function PartsActionWorkbench() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [showNonBillable, setShowNonBillable] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [executingIds, setExecutingIds] = useState(new Set());
+
+  // Lifecycle action hook
+  const { executeActionAsync, isExecuting } = useLifecycleAction();
 
   // Fetch action queue data
   const { data: queueData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['lifecycleActionQueue', projectFilter, showClosed, showArchived],
+    queryKey: ['lifecycleActionQueue', projectFilter, showClosed, showArchived, showNonBillable],
     queryFn: async () => {
       const filters = {
         include_closed: showClosed,
         include_archived: showArchived,
+        include_non_billable: showNonBillable,
       };
       if (projectFilter !== 'all') filters.project_id = projectFilter;
       
@@ -623,21 +618,80 @@ export default function PartsActionWorkbench() {
     createBatchMutation.mutate(selectedItems);
   };
 
+  const handleExecuteAction = async (item, actionType) => {
+    const commitmentId = item.commitment_id;
+    
+    // Check if action requires a modal
+    if (actionRequiresModal(actionType)) {
+      // Open timeline drawer for now - modals can be wired later
+      setSelectedItem(item);
+      setTimelineOpen(true);
+      toast.info(`${item.next_step_label || 'Action'} - Use the appropriate modal to complete`);
+      return;
+    }
+
+    // Direct execution for non-modal actions
+    setExecutingIds(prev => new Set(prev).add(commitmentId));
+    
+    try {
+      const result = await executeActionAsync({
+        commitmentId,
+        actionType,
+        actionData: {},
+      });
+      
+      if (result.success) {
+        toast.success(result.message || 'Action completed');
+        refetch();
+      } else {
+        toast.error(result.error || 'Action failed');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Action execution failed');
+    } finally {
+      setExecutingIds(prev => {
+        const next = new Set(prev);
+        next.delete(commitmentId);
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Zap className="w-6 h-6 text-yellow-400" />
-            Parts Action Workbench
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Unified workflow for billing, ordering, and installation
-          </p>
+      {/* Page Header with Coverage Health */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                <Zap className="w-6 h-6 text-yellow-400" />
+                Parts Action Workbench
+              </h1>
+              <p className="text-gray-400 text-sm mt-1">
+                Single operational command center
+              </p>
+            </div>
+            
+            {/* Coverage Health KPI */}
+            <CoverageHealthKPI onOpenDiagnostics={() => setDiagnosticsOpen(true)} />
+          </div>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => refetch()} 
+            disabled={isFetching}
+            className="border-gray-700"
+          >
+            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            <span className="ml-2 hidden sm:inline">Refresh</span>
+          </Button>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Toggles */}
+        
+        {/* Filter Toggles Row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500 uppercase">Filters:</span>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 rounded-lg">
             <Switch
               id="show-closed"
@@ -646,6 +700,7 @@ export default function PartsActionWorkbench() {
               className="scale-75"
             />
             <Label htmlFor="show-closed" className="text-xs text-gray-400 cursor-pointer">
+              <CheckCircle2 className="w-3 h-3 inline mr-1" />
               Closed
             </Label>
           </div>
@@ -661,26 +716,18 @@ export default function PartsActionWorkbench() {
               Archived
             </Label>
           </div>
-          
-          {/* Diagnostics Button */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setDiagnosticsOpen(true)}
-            className="border-gray-700"
-          >
-            <Settings2 className="w-4 h-4" />
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => refetch()} 
-            disabled={isFetching}
-            className="border-gray-700"
-          >
-            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 rounded-lg">
+            <Switch
+              id="show-non-billable"
+              checked={showNonBillable}
+              onCheckedChange={setShowNonBillable}
+              className="scale-75"
+            />
+            <Label htmlFor="show-non-billable" className="text-xs text-gray-400 cursor-pointer">
+              <DollarSign className="w-3 h-3 inline mr-1" />
+              Non-Billable
+            </Label>
+          </div>
         </div>
       </div>
 
@@ -763,6 +810,8 @@ export default function PartsActionWorkbench() {
                       selectedIds={selectedIds}
                       onToggleSelection={toggleSelection}
                       onRowClick={handleRowClick}
+                      onExecuteAction={handleExecuteAction}
+                      executingIds={executingIds}
                     />
                   </ScrollArea>
                 </TabsContent>
