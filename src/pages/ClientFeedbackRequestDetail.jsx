@@ -17,6 +17,7 @@ import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThrea
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import { cn } from "@/lib/utils";
 import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
+import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ImageModal from "../components/ui/ImageModal";
 
 export default function ClientFeedbackRequestDetail() {
@@ -274,7 +275,7 @@ export default function ClientFeedbackRequestDetail() {
     return request ? getRequestState(request, decisions, attachments) : null;
   }, [request?.id, request?.status, decisions, attachments]);
   
-  const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
+  const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
   
   // Memoize thread request object to prevent re-renders
   const threadRequest = useMemo(() => {
@@ -336,7 +337,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type !== 'design_review' && (
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && !isStructuredReview(request.request_type) && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -357,7 +358,7 @@ export default function ClientFeedbackRequestDetail() {
               </div>
             )}
             
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && request.request_type === 'design_review' && (
+            {clientAccess?.access_role === 'approver' && request.status === 'posted' && isStructuredReview(request.request_type) && (
               <p className="text-sm text-gray-400 italic mt-4">Select images below to approve or request changes</p>
             )}
           </div>

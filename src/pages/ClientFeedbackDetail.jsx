@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
+import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import CreateTaskFromApprovalModal from "../components/clientportal/CreateTaskFromApprovalModal.jsx";
@@ -366,7 +367,7 @@ export default function ClientFeedbackDetail() {
   }, [request?.id, request?.status, decisions, attachments]);
 
   // Determine button labels based on request type
-  const approveLabel = request?.request_type === 'design_review' ? 'Approve' : 'Confirm';
+  const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
   
   // Memoize the request object passed to thread to prevent unnecessary re-renders
@@ -481,7 +482,7 @@ export default function ClientFeedbackDetail() {
             </div>
 
             {/* Action buttons - only show when data is loaded, hidden on mobile (shown in metadata card) */}
-            {!isMobile && !isInitialLoad && request?.status === 'posted' && request?.request_type !== 'design_review' && (
+            {!isMobile && !isInitialLoad && request?.status === 'posted' && !isStructuredReview(request?.request_type) && (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -508,7 +509,7 @@ export default function ClientFeedbackDetail() {
               </div>
             )}
 
-            {!isMobile && !isInitialLoad && request?.status === 'posted' && request?.request_type === 'design_review' && (
+            {!isMobile && !isInitialLoad && request?.status === 'posted' && isStructuredReview(request?.request_type) && (
               <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
             )}
           </div>
@@ -559,8 +560,8 @@ export default function ClientFeedbackDetail() {
                 )}
               </div>
 
-              {/* Mobile: Approve/Changes buttons for non-design-review */}
-              {isMobile && request?.status === 'posted' && request?.request_type !== 'design_review' && (
+              {/* Mobile: Approve/Changes buttons for non-structured-review */}
+              {isMobile && request?.status === 'posted' && !isStructuredReview(request?.request_type) && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -587,7 +588,7 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
 
-              {isMobile && request?.status === 'posted' && request?.request_type === 'design_review' && (
+              {isMobile && request?.status === 'posted' && isStructuredReview(request?.request_type) && (
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
