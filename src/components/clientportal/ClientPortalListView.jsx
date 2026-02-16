@@ -18,28 +18,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { AttentionBadge, getAttentionPriority } from "./NeedsAttentionSection";
 import { CopyRequestLinkButton } from "./ClientLinksCopyButtons";
-
-const getTypeColor = (type) => {
-  switch (type) {
-    case 'question': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
-    case 'feedback_needed': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50';
-    case 'design_review': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
-    case 'client_need': return 'bg-amber-500/20 text-amber-400 border-amber-500/50';
-    case 'todo_list': return 'bg-teal-500/20 text-teal-400 border-teal-500/50';
-    default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
-  }
-};
-
-const getTypeLabel = (type) => {
-  switch (type) {
-    case 'question': return 'Question';
-    case 'feedback_needed': return 'Feedback';
-    case 'design_review': return 'Design';
-    case 'client_need': return 'Client Need';
-    case 'todo_list': return 'To-Do';
-    default: return 'General';
-  }
-};
+import { getRequestTypeInfo } from "./utils";
 
 // Get last activity date for a request (latest comment or decision)
 const getLastActivityDate = (requestId, comments, decisions) => {
@@ -81,7 +60,7 @@ export default function ClientPortalListView({
   }
 
   // Sort type order for consistency
-  const typeOrder = ['design_review', 'feedback_needed', 'question', 'client_need', 'todo_list', 'general'];
+  const typeOrder = ['design_review', 'feedback_needed', 'question', 'client_need', 'todo_list', 'update', 'budget_review', 'deliverable_review', 'general'];
   
   // Sort requests within each project: attention items first, then by type
   const sortedGroupedData = groupedData.map(({ project, requests }) => ({
@@ -174,8 +153,8 @@ export default function ClientPortalListView({
                   
                   {/* Type */}
                   <div className="col-span-2 md:col-span-2">
-                    <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
-                      {getTypeLabel(request.request_type)}
+                    <Badge className={`${getRequestTypeInfo(request.request_type).color} text-xs`}>
+                      {getRequestTypeInfo(request.request_type).label}
                     </Badge>
                   </div>
                   
