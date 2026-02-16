@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { CopyRequestLinkButton } from "./ClientLinksCopyButtons";
+import { getRequestTypeInfo } from "./utils";
 
 // Lifecycle bucket configurations
 export const LIFECYCLE_BUCKETS = {
@@ -61,27 +62,7 @@ export const LIFECYCLE_BUCKETS = {
   }
 };
 
-const getTypeColor = (type) => {
-  switch (type) {
-    case 'question': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
-    case 'feedback_needed': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50';
-    case 'design_review': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
-    case 'client_need': return 'bg-amber-500/20 text-amber-400 border-amber-500/50';
-    case 'todo_list': return 'bg-teal-500/20 text-teal-400 border-teal-500/50';
-    default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
-  }
-};
-
-const getTypeLabel = (type) => {
-  switch (type) {
-    case 'question': return 'Question';
-    case 'feedback_needed': return 'Feedback';
-    case 'design_review': return 'Design';
-    case 'client_need': return 'Client Need';
-    case 'todo_list': return 'To-Do';
-    default: return 'General';
-  }
-};
+// Use centralized type info from utils
 
 // Request card component
 const RequestCard = ({ request, bucket, getProjectClientSlug }) => {
@@ -111,8 +92,8 @@ const RequestCard = ({ request, bucket, getProjectClientSlug }) => {
       
       {/* Type badge */}
       <div className="flex items-center gap-2 mb-2">
-        <Badge className={`${getTypeColor(request.request_type)} text-xs`}>
-          {getTypeLabel(request.request_type)}
+        <Badge className={`${getRequestTypeInfo(request.request_type).color} text-xs`}>
+          {getRequestTypeInfo(request.request_type).label}
         </Badge>
         {isDraft && (
           <span className="text-xs text-slate-500 flex items-center gap-1">
