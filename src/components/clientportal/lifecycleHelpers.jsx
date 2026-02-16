@@ -8,6 +8,8 @@
  * - approved: Request is approved/closed
  */
 
+import { isStructuredReview } from "./reviewBehavior";
+
 /**
  * Determine the request state based on status and decisions
  */
@@ -39,8 +41,8 @@ export const getRequestState = (request, decisions, attachments) => {
   if (hasApproval) return 'approved';
   if (hasChangesRequested) return 'changes_requested';
   
-  // For design reviews, check if all images are decided
-  if (request.request_type === 'design_review') {
+  // For structured reviews (design_review, budget_review, deliverable_review), check if all images are decided
+  if (isStructuredReview(request.request_type)) {
     const imageAttachments = attachments.filter(a => a.request_id === request.id && a.attachment_type === 'image');
     const imageDecisions = requestDecisions.filter(d => d.target_type === 'attachment_image');
     if (imageAttachments.length > 0 && imageDecisions.length >= imageAttachments.length) {

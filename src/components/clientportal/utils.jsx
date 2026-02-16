@@ -1,4 +1,5 @@
 import { CheckCircle2, AlertCircle, Clock, Archive, FileText } from "lucide-react";
+import { isStructuredReview } from "./reviewBehavior";
 
 /**
  * UI label and color configuration for request types
@@ -84,7 +85,7 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
   
   // Explicit status check for approved
   if (request.status === 'approved') {
-    const label = request.request_type === 'design_review' ? 'Approved' : 'Confirmed';
+    const label = isStructuredReview(request.request_type) ? 'Approved' : 'Confirmed';
     return { label, color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
   }
   
@@ -111,7 +112,7 @@ export const getRequestState = (request, allDecisions, allAttachments) => {
   }
   if (latestGlobalDecision?.decision === 'approved') {
     // Determine label based on request type
-    const label = request.request_type === 'design_review' ? 'Approved' : 'Confirmed';
+    const label = isStructuredReview(request.request_type) ? 'Approved' : 'Confirmed';
     return { label, color: 'bg-[oklch(64.8%_0.2_131.684)]/20 text-[oklch(64.8%_0.2_131.684)] border-[oklch(64.8%_0.2_131.684)]/50 border', icon: CheckCircle2 };
   }
 

@@ -11,6 +11,7 @@ import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loade
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
+import { isStructuredReview } from "./reviewBehavior";
 
 // Memoized timeline event card to prevent unnecessary re-renders
 const TimelineEventCard = React.memo(function TimelineEventCard({ 
@@ -245,7 +246,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
 
         {event.type !== 'decision' && event.attachments?.length > 0 && (
           <div className="pl-0 md:pl-10 space-y-3">
-            {canReview && requestType === 'design_review' && event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
+            {canReview && isStructuredReview(requestType) && event.attachments.filter(a => a.attachment_type === 'image').length > 0 && (
               <p className="text-sm text-purple-400 font-medium">
                 SELECT CHECKBOX on IMAGE(s) above to APPROVE or REQUEST CHANGES
               </p>
@@ -269,7 +270,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                       >
                         <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
 
-                        {canReview && requestType === 'design_review' && (
+                        {canReview && isStructuredReview(requestType) && (
                           <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
                             <span className="text-white text-xs font-medium">SELECT</span>
                             <Checkbox 
@@ -623,7 +624,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         ))}
       </div>
 
-      {selectedImageIds.length > 0 && requestType === 'design_review' && (
+      {selectedImageIds.length > 0 && isStructuredReview(requestType) && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in w-[95%] md:w-auto">
           <Card className="bg-gray-900 border-gray-700 shadow-2xl ring-1 ring-white/10">
             <CardContent className="p-2 md:p-3 flex flex-col md:flex-row items-center gap-2 md:gap-4">
