@@ -20,6 +20,8 @@ export { default as PaymentTimeline, PaymentTimelineCompact } from './PaymentTim
 // Pool & Commitment Management Components
 export { default as PoolPanel } from './PoolPanel';
 export { default as PoolDetailView } from './PoolDetailView';
+export { default as ClosePoolModal } from './ClosePoolModal';
+export { default as TransferPoolBalanceModal } from './TransferPoolBalanceModal';
 export { default as CoverageBadge } from './CoverageBadge';
 export { default as ProjectFinancialDashboard } from './ProjectFinancialDashboard';
 export { 
@@ -33,6 +35,13 @@ export {
   commitmentAction,
   CommitmentActions
 } from './financialMutationGuard';
+
+// Lifecycle Action Gating
+export { 
+  getAllowedCommitmentActions, 
+  getCommitmentLifecycleState,
+  getActionBlockReason 
+} from '../lifecycle/getAllowedCommitmentActions';
 
 // Note: FinancialExceptionDashboard is a page at pages/FinancialExceptionDashboard.jsx
 // Note: ProjectFinancialReport is a page at pages/ProjectFinancialReport.jsx
