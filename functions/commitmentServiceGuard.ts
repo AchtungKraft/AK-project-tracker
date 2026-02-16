@@ -26,49 +26,57 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const COMMITMENT_SERVICE_TOKEN = '__COMMITMENT_SERVICE_AUTHORIZED__';
 
 // Protected entities and their sensitive fields
+// INCLUDES: Financial fields + Lifecycle-impacting fields
 const PROTECTED_ENTITIES = {
   BillingPool: {
-    sensitiveFields: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version'],
+    sensitiveFields: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version', 'status'],
     allowDelete: false,
     conditionalLocks: []
   },
   PoolAllocation: {
-    sensitiveFields: ['amount_allocated'],
+    sensitiveFields: ['amount_allocated', 'is_reversed', 'reversed_at', 'reversed_by'],
     allowDelete: false,
     conditionalLocks: [
       { field: 'is_reversed', lockFields: ['amount_allocated', 'pool_id', 'commitment_id'], condition: (val) => val === true }
     ]
   },
   PoolCharge: {
-    sensitiveFields: ['amount'],
+    sensitiveFields: ['amount', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason'],
     allowDelete: false,
     conditionalLocks: [
       { field: 'is_reversed', lockFields: ['amount', 'pool_id', 'charge_type'], condition: (val) => val === true }
     ]
   },
   PartCommitment: {
-    sensitiveFields: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version'],
+    sensitiveFields: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version', 'qty_committed', 'commitment_status', 'qty_cancelled', 'cancelled_at', 'cancelled_by', 'cancelled_reason'],
     allowDelete: false,
     conditionalLocks: [
       { field: 'commitment_status', lockFields: ['qty_committed', 'unit_retail_snapshot'], condition: (val) => val === 'cancelled' }
     ]
   },
   PartPurchaseLineItem: {
-    sensitiveFields: [],
+    sensitiveFields: ['status'],
     allowDelete: false,
     conditionalLocks: [
       { field: 'cost_locked_at', lockFields: ['unit_price', 'vendor_id', 'qty_ordered', 'line_total'], condition: (val) => val != null }
     ]
   },
   InstalledPart: {
-    sensitiveFields: ['extended_cost'],
+    sensitiveFields: ['extended_cost', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason', 'reversal_type', 'qty_consumed'],
     allowDelete: false,
     conditionalLocks: [
       { field: 'is_reversed', lockFields: ['qty_consumed', 'unit_cost_at_install', 'commitment_id', 'inventory_item_id'], condition: (val) => val === true }
     ]
   },
+  InvoiceBatch: {
+    sensitiveFields: ['status', 'total_amount', 'line_count', 'qb_export_id', 'qb_exported_at', 'qb_invoice_number', 'voided_at', 'voided_by', 'payment_received_at', 'payment_sync_status'],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'status', lockFields: ['total_amount', 'line_count', 'batch_mode'], condition: (val) => ['invoiced', 'paid'].includes(val) }
+    ]
+  },
   InvoiceBatchLine: {
-    sensitiveFields: ['line_total'],
+    sensitiveFields: ['line_total', 'qb_status', 'qb_line_id'],
     allowDelete: false,
     conditionalLocks: [],
     // Special: requires batch status check
@@ -83,13 +91,15 @@ const ALLOWED_MUTATION_SOURCES = [
   'commitmentService',
   'commitmentServiceGuard', // Self for testing
   'testCommitmentLifecycle',
+  'testMutationGuard',
   'createInvoiceBatch',
   'voidInvoiceBatch',
   'updatePaymentStatus',
   'mutateInventory',
   'syncReceivingToCommitments',
   'syncInstallToCommitments',
-  'syncInvoiceToCommitments'
+  'syncInvoiceToCommitments',
+  'exportInvoiceBatchToQuickBooks'
 ];
 
 Deno.serve(async (req) => {

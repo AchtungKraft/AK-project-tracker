@@ -40,18 +40,20 @@ Deno.serve(async (req) => {
     };
 
     // Inline guard validation (no function call to avoid timeout)
+    // INCLUDES: Financial fields + Lifecycle-impacting fields
     function validateMutationLocal(entityName, updates, callerSource) {
       const PROTECTED_ENTITIES = {
-        BillingPool: { sensitiveFields: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version'], allowDelete: false },
-        PoolAllocation: { sensitiveFields: ['amount_allocated'], allowDelete: false },
-        PoolCharge: { sensitiveFields: ['amount'], allowDelete: false },
-        PartCommitment: { sensitiveFields: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version'], allowDelete: false },
-        PartPurchaseLineItem: { sensitiveFields: [], allowDelete: false },
-        InstalledPart: { sensitiveFields: ['extended_cost'], allowDelete: false },
-        InvoiceBatchLine: { sensitiveFields: ['line_total'], allowDelete: false }
+        BillingPool: { sensitiveFields: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version', 'status'] },
+        PoolAllocation: { sensitiveFields: ['amount_allocated', 'is_reversed', 'reversed_at', 'reversed_by'] },
+        PoolCharge: { sensitiveFields: ['amount', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason'] },
+        PartCommitment: { sensitiveFields: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version', 'qty_committed', 'commitment_status', 'qty_cancelled', 'cancelled_at', 'cancelled_by'] },
+        PartPurchaseLineItem: { sensitiveFields: ['status'] },
+        InstalledPart: { sensitiveFields: ['extended_cost', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason', 'reversal_type', 'qty_consumed'] },
+        InvoiceBatch: { sensitiveFields: ['status', 'total_amount', 'line_count', 'qb_export_id', 'qb_exported_at', 'qb_invoice_number', 'voided_at', 'payment_received_at', 'payment_sync_status'] },
+        InvoiceBatchLine: { sensitiveFields: ['line_total', 'qb_status', 'qb_line_id'] }
       };
       
-      const ALLOWED_SOURCES = ['commitmentService', 'commitmentServiceGuard', 'testCommitmentLifecycle', 'createInvoiceBatch'];
+      const ALLOWED_SOURCES = ['commitmentService', 'commitmentServiceGuard', 'testCommitmentLifecycle', 'testMutationGuard', 'createInvoiceBatch', 'voidInvoiceBatch', 'updatePaymentStatus', 'exportInvoiceBatchToQuickBooks'];
       
       const protection = PROTECTED_ENTITIES[entityName];
       if (!protection) return { allowed: true, violations: [] };
@@ -69,7 +71,7 @@ Deno.serve(async (req) => {
     }
 
     function validateDeleteLocal(entityName) {
-      const PROTECTED_ENTITIES = ['BillingPool', 'PoolAllocation', 'PoolCharge', 'PartCommitment', 'InstalledPart'];
+      const PROTECTED_ENTITIES = ['BillingPool', 'PoolAllocation', 'PoolCharge', 'PartCommitment', 'InstalledPart', 'InvoiceBatch', 'InvoiceBatchLine'];
       if (PROTECTED_ENTITIES.includes(entityName)) {
         return { allowed: false, violations: [{ type: 'DELETE_BLOCKED' }] };
       }
@@ -256,10 +258,93 @@ Deno.serve(async (req) => {
     );
 
     // ============================================
+    // TEST SUITE: LIFECYCLE FIELD PROTECTION
+    // ============================================
+
+    // Test 15: Direct PoolAllocation.is_reversed mutation should be BLOCKED
+    testGuard(
+      'Direct PoolAllocation.is_reversed mutation blocked',
+      'PoolAllocation',
+      'test_allocation_id',
+      { is_reversed: true },
+      'ui_component',
+      false
+    );
+
+    // Test 16: Direct PoolCharge.is_reversed mutation should be BLOCKED
+    testGuard(
+      'Direct PoolCharge.is_reversed mutation blocked',
+      'PoolCharge',
+      'test_charge_id',
+      { is_reversed: true },
+      'ui_component',
+      false
+    );
+
+    // Test 17: Direct InstalledPart.is_reversed mutation should be BLOCKED
+    testGuard(
+      'Direct InstalledPart.is_reversed mutation blocked',
+      'InstalledPart',
+      'test_installed_id',
+      { is_reversed: true, reversal_type: 'error' },
+      'ui_component',
+      false
+    );
+
+    // Test 18: Direct PartCommitment.qty_committed mutation should be BLOCKED
+    testGuard(
+      'Direct PartCommitment.qty_committed mutation blocked',
+      'PartCommitment',
+      'test_commitment_id',
+      { qty_committed: 10 },
+      'ui_component',
+      false
+    );
+
+    // Test 19: Direct PartCommitment.commitment_status mutation should be BLOCKED
+    testGuard(
+      'Direct PartCommitment.commitment_status mutation blocked',
+      'PartCommitment',
+      'test_commitment_id',
+      { commitment_status: 'cancelled' },
+      'ui_component',
+      false
+    );
+
+    // Test 20: Direct InvoiceBatch.status mutation should be BLOCKED
+    testGuard(
+      'Direct InvoiceBatch.status mutation blocked',
+      'InvoiceBatch',
+      'test_batch_id',
+      { status: 'invoiced' },
+      'ui_component',
+      false
+    );
+
+    // Test 21: Direct InvoiceBatch.total_amount mutation should be BLOCKED
+    testGuard(
+      'Direct InvoiceBatch.total_amount mutation blocked',
+      'InvoiceBatch',
+      'test_batch_id',
+      { total_amount: 5000 },
+      'ui_component',
+      false
+    );
+
+    // Test 22: Delete InvoiceBatch should be BLOCKED
+    testDeleteGuard(
+      'Delete InvoiceBatch blocked',
+      'InvoiceBatch',
+      'test_batch_id',
+      'ui_component',
+      false
+    );
+
+    // ============================================
     // TEST SUITE: AUTHORIZED CALLER ALLOWED
     // ============================================
 
-    // Test 15: CommitmentService can mutate BillingPool.balance
+    // Test 23: CommitmentService can mutate BillingPool.balance
     testGuard(
       'CommitmentService BillingPool.balance mutation allowed',
       'BillingPool',
@@ -269,7 +354,7 @@ Deno.serve(async (req) => {
       true
     );
 
-    // Test 16: CommitmentService can mutate PartCommitment.exposure_gap
+    // Test 24: CommitmentService can mutate PartCommitment.exposure_gap
     testGuard(
       'CommitmentService PartCommitment.exposure_gap mutation allowed',
       'PartCommitment',
@@ -279,11 +364,31 @@ Deno.serve(async (req) => {
       true
     );
 
+    // Test 25: CommitmentService can mutate lifecycle fields
+    testGuard(
+      'CommitmentService InstalledPart.is_reversed mutation allowed',
+      'InstalledPart',
+      'test_installed_id',
+      { is_reversed: true, reversal_type: 'error' },
+      'commitmentService',
+      true
+    );
+
+    // Test 26: CommitmentService can mutate InvoiceBatch.status
+    testGuard(
+      'CommitmentService InvoiceBatch.status mutation allowed',
+      'InvoiceBatch',
+      'test_batch_id',
+      { status: 'invoiced' },
+      'voidInvoiceBatch',
+      true
+    );
+
     // ============================================
     // TEST SUITE: NON-SENSITIVE FIELD ALLOWED
     // ============================================
 
-    // Test 17: BillingPool.notes update should be ALLOWED (from authorized caller)
+    // Test 27: BillingPool.notes update should be ALLOWED (from authorized caller)
     testGuard(
       'BillingPool.notes update allowed',
       'BillingPool',
@@ -293,7 +398,7 @@ Deno.serve(async (req) => {
       true
     );
 
-    // Test 18: PartCommitment.notes update should be ALLOWED (from authorized caller)
+    // Test 28: PartCommitment.notes update should be ALLOWED (from authorized caller)
     testGuard(
       'PartCommitment.notes update allowed',
       'PartCommitment',
@@ -303,7 +408,7 @@ Deno.serve(async (req) => {
       true
     );
 
-    // Test 19: Non-protected entity update from UI should be ALLOWED
+    // Test 29: Non-protected entity update from UI should be ALLOWED
     testGuard(
       'Non-protected entity (Part) update allowed',
       'Part',
