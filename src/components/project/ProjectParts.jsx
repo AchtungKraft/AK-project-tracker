@@ -40,6 +40,8 @@ import FinancialDetailDrawer from "../financial/FinancialDetailDrawer";
 import ProjectFinancialWarningBanner from "../financial/ProjectFinancialWarningBanner";
 import ProjectFinancialSummaryWidget from "../financial/ProjectFinancialSummaryWidget";
 import { useFinancialStatusBatch, buildFinancialContexts, mergeFinancialStatus } from "../financial/useFinancialStatus";
+import CoverageBadge, { CoverageSummary } from "../financial/CoverageBadge";
+import PoolPanel from "../financial/PoolPanel";
 
 /**
  * Derives status badge from quantities (canonical logic)
@@ -157,8 +159,15 @@ export default function ProjectParts({ projectId }) {
     queryFn: () => base44.entities.PartCommitment.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
+
+  const { data: billingPools = [] } = useQuery({
+    queryKey: ['billingPools', projectId],
+    queryFn: () => base44.entities.BillingPool.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
   
   const project = projects.find(p => p.id === projectId);
+  const primaryPool = billingPools.find(p => p.status !== 'closed') || billingPools[0];
 
   // Batch resolve financial status for all requirements
   const financialContexts = useMemo(() => {
@@ -578,13 +587,20 @@ export default function ProjectParts({ projectId }) {
           <PricingIntegrityCell integrity={req._pricingIntegrity} compact />
         </TableCell>
         <TableCell>
-          <FinancialStatusBadge 
-            financialStatus={req._financialStatus} 
-            displayMode="compact"
-            onClick={handleFinancialBadgeClick}
-            partId={req.part_id}
-            projectId={projectId}
-          />
+          <div className="flex items-center gap-2">
+            <CoverageBadge 
+              commitment={req._commitment}
+              poLine={lineItems.find(li => li.commitment_id === req._commitment?.id)}
+              compact
+            />
+            <FinancialStatusBadge 
+              financialStatus={req._financialStatus} 
+              displayMode="compact"
+              onClick={handleFinancialBadgeClick}
+              partId={req.part_id}
+              projectId={projectId}
+            />
+          </div>
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-1">
@@ -718,6 +734,23 @@ export default function ProjectParts({ projectId }) {
               <p className="text-lg font-bold text-yellow-400">${projectCost.toFixed(2)}</p>
             </div>
           </div>
+
+          {/* Pool Panel - Show billing pool status */}
+          {primaryPool && (
+            <div className="mb-4">
+              <PoolPanel pool={primaryPool} compact />
+            </div>
+          )}
+
+          {/* Coverage Summary */}
+          {commitments.length > 0 && (
+            <div className="mb-4 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">Commitment Coverage</span>
+                <CoverageSummary commitments={commitments} />
+              </div>
+            </div>
+          )}
 
           {/* Financial Summary Widget (Compact) */}
           {financialStatuses.length > 0 && (
