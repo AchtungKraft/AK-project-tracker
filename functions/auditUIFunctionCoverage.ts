@@ -869,6 +869,9 @@ function generateFullAudit() {
                  uiReadinessScore >= 60 ? 'CONDITIONAL GO - fix critical issues first' :
                  'NO-GO - significant gaps remain';
 
+  // Generate missing functions list with categorization
+  const missingFunctions = generateMissingFunctionsList(functionInventory, uiMapping);
+
   return {
     meta: {
       audit_date: new Date().toISOString(),
@@ -878,6 +881,8 @@ function generateFullAudit() {
       ui_readiness_score: uiReadinessScore,
       go_no_go: goNoGo,
     },
+    // NEW: Missing functions with detailed categorization
+    missing_functions: missingFunctions,
     part_1_function_inventory: functionInventory,
     part_2_ui_surface_mapping: uiMapping,
     part_3_lifecycle_consistency: lifecycleConsistency,
