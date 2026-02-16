@@ -210,6 +210,12 @@ Deno.serve(async (req) => {
         case 'validateLockConstraints':
           result = await validateLockConstraintsAction(txn, params);
           break;
+        case 'closePool':
+          result = await closePool(txn, params);
+          break;
+        case 'transferPoolBalance':
+          result = await transferPoolBalance(txn, params);
+          break;
         default:
           return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
       }
@@ -1271,6 +1277,146 @@ async function recalculateProjectExposure(txn, params) {
   });
 
   return result;
+}
+
+/**
+ * Close a billing pool
+ */
+async function closePool(txn, params) {
+  const { pool_id, close_mode, reason } = params;
+
+  const pools = await txn.base44.asServiceRole.entities.BillingPool.filter({ id: pool_id });
+  const pool = pools[0];
+  if (!pool) throw new Error('Pool not found');
+
+  if (pool.status === 'closed') {
+    return { closed: true, alreadyClosed: true };
+  }
+
+  const poolVersion = pool.pool_version || 1;
+  const balance = pool.balance || 0;
+
+  // Validate close conditions
+  if (close_mode === 'zero_balance' && Math.abs(balance) > 0.01) {
+    throw new Error(`Cannot close pool: balance is $${balance.toFixed(2)}, not zero`);
+  }
+
+  if (close_mode === 'force' && balance !== 0) {
+    console.warn(`Force-closing pool ${pool_id} with non-zero balance: $${balance.toFixed(2)}`);
+  }
+
+  txn.recordMutation('BillingPool', pool_id, { status: pool.status }, { status: 'closed' });
+
+  txn.addRollback(async () => {
+    await txn.base44.asServiceRole.entities.BillingPool.update(pool_id, {
+      status: pool.status,
+      closed_at: null,
+      closed_by: null,
+      pool_version: poolVersion
+    });
+  });
+
+  await txn.base44.asServiceRole.entities.BillingPool.update(pool_id, {
+    status: 'closed',
+    closed_at: txn.timestamp,
+    closed_by: txn.user.id,
+    notes: `${pool.notes || ''}\n[CLOSED: ${reason || close_mode}]`.trim(),
+    pool_version: poolVersion + 1
+  });
+
+  return { closed: true, previous_balance: balance };
+}
+
+/**
+ * Transfer balance from one pool to another project
+ */
+async function transferPoolBalance(txn, params) {
+  const { source_pool_id, target_project_id, amount, reason } = params;
+
+  if (!amount || amount <= 0) {
+    throw new Error('Transfer amount must be positive');
+  }
+
+  const sourcePools = await txn.base44.asServiceRole.entities.BillingPool.filter({ id: source_pool_id });
+  const sourcePool = sourcePools[0];
+  if (!sourcePool) throw new Error('Source pool not found');
+
+  const sourceBalance = sourcePool.balance || 0;
+  if (amount > sourceBalance) {
+    throw new Error(`Insufficient balance: pool has $${sourceBalance.toFixed(2)}, requested $${amount.toFixed(2)}`);
+  }
+
+  // Get or create target pool
+  const targetPools = await txn.base44.asServiceRole.entities.BillingPool.filter({
+    project_id: target_project_id,
+    status: { $nin: ['closed'] }
+  });
+
+  let targetPool = targetPools[0];
+  if (!targetPool) {
+    // Create new pool in target project
+    targetPool = await txn.base44.asServiceRole.entities.BillingPool.create({
+      project_id: target_project_id,
+      pool_name: 'Transfer Pool',
+      status: 'paid',
+      invoiced_amount: amount,
+      paid_amount: amount,
+      allocated_total: 0,
+      charges_total: 0,
+      balance: amount,
+      pool_version: 1,
+      notes: `Created via transfer from pool ${sourcePool.pool_name}`
+    });
+
+    txn.addRollback(async () => {
+      await txn.base44.asServiceRole.entities.BillingPool.delete(targetPool.id);
+    });
+  } else {
+    // Add to existing pool
+    const targetVersion = targetPool.pool_version || 1;
+    const newPaid = (targetPool.paid_amount || 0) + amount;
+    const newBalance = (targetPool.balance || 0) + amount;
+
+    txn.addRollback(async () => {
+      await txn.base44.asServiceRole.entities.BillingPool.update(targetPool.id, {
+        paid_amount: targetPool.paid_amount,
+        balance: targetPool.balance,
+        pool_version: targetVersion
+      });
+    });
+
+    await txn.base44.asServiceRole.entities.BillingPool.update(targetPool.id, {
+      paid_amount: newPaid,
+      balance: newBalance,
+      pool_version: targetVersion + 1
+    });
+  }
+
+  // Create charge on source pool to deduct balance
+  const transferCharge = await txn.base44.asServiceRole.entities.PoolCharge.create({
+    pool_id: source_pool_id,
+    project_id: sourcePool.project_id,
+    charge_type: 'adjustment',
+    description: `Transfer to project ${target_project_id}: ${reason || 'Manual transfer'}`,
+    amount: amount,
+    is_reversed: false,
+    source_reference_id: `transfer:${source_pool_id}:${target_project_id}:${Date.now()}`
+  });
+
+  txn.addRollback(async () => {
+    await txn.base44.asServiceRole.entities.PoolCharge.delete(transferCharge.id);
+  });
+
+  // Recalculate source pool
+  await _recalculatePool(txn, source_pool_id);
+
+  return { 
+    transferred: true, 
+    amount,
+    source_pool_id,
+    target_pool_id: targetPool.id,
+    target_project_id
+  };
 }
 
 /**

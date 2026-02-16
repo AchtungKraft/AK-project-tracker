@@ -209,5 +209,7 @@ export const CommitmentActions = {
   reversePoolCharge: (params) => commitmentAction('reversePoolCharge', params),
   recalculatePoolBalance: (params) => commitmentAction('recalculatePoolBalance', params),
   recalculateProjectExposure: (params) => commitmentAction('recalculateProjectExposure', params),
-  getOrCreateCreditPool: (params) => commitmentAction('getOrCreateCreditPool', params)
+  getOrCreateCreditPool: (params) => commitmentAction('getOrCreateCreditPool', params),
+  closePool: (params) => commitmentAction('closePool', params),
+  transferPoolBalance: (params) => commitmentAction('transferPoolBalance', params)
 };
