@@ -218,8 +218,9 @@ export default function VendorInvoiceModal({
           }
 
           // Create idempotent pool charges for freight/tariff if pool exists
+          // Uses reversal pattern instead of direct updates to comply with mutation guard
           if (activePool && projectId) {
-            // Freight charge - idempotent via source_reference_id
+            // Freight charge - idempotent via source_reference_id with reversal pattern
             if (line.freight_allocation > 0) {
               const freightRefId = `vendor_invoice:${invoiceRecord.id}:freight:${line.purchase_line_item_id || line.part_id}`;
               const existingFreight = existingCharges.find(c => 
@@ -227,14 +228,33 @@ export default function VendorInvoiceModal({
               );
               
               if (existingFreight) {
-                // Update if amount changed
+                // Amount changed - use reversal pattern (reverse old, create new)
                 if (Math.abs(existingFreight.amount - line.freight_allocation) > 0.01) {
-                  await base44.entities.PoolCharge.update(existingFreight.id, {
-                    amount: line.freight_allocation,
+                  // Reverse old charge via CommitmentService
+                  try {
+                    await CommitmentActions.reversePoolCharge({
+                      charge_id: existingFreight.id,
+                      reason: `Amount changed from $${existingFreight.amount.toFixed(2)} to $${line.freight_allocation.toFixed(2)} during invoice edit`,
+                    });
+                  } catch (err) {
+                    console.warn('Failed to reverse old freight charge:', err);
+                  }
+                  // Create new charge with updated amount
+                  await base44.entities.PoolCharge.create({
+                    pool_id: activePool.id,
+                    project_id: projectId,
+                    related_vendor_invoice_id: invoiceRecord.id,
+                    related_po_line_id: line.purchase_line_item_id,
+                    charge_type: 'freight',
                     description: `Freight for ${partsMap[line.part_id]?.part_name || 'part'} (updated)`,
+                    amount: line.freight_allocation,
+                    is_reversed: false,
+                    source_reference_id: `${freightRefId}:v${Date.now()}`,
                   });
                 }
+                // Same amount - no action needed (idempotent)
               } else {
+                // No existing charge - create new
                 await base44.entities.PoolCharge.create({
                   pool_id: activePool.id,
                   project_id: projectId,
@@ -249,7 +269,7 @@ export default function VendorInvoiceModal({
               }
             }
 
-            // Tariff charge - idempotent via source_reference_id
+            // Tariff charge - idempotent via source_reference_id with reversal pattern
             if (line.tariff_allocation > 0) {
               const tariffRefId = `vendor_invoice:${invoiceRecord.id}:tariff:${line.purchase_line_item_id || line.part_id}`;
               const existingTariff = existingCharges.find(c => 
@@ -257,14 +277,33 @@ export default function VendorInvoiceModal({
               );
               
               if (existingTariff) {
-                // Update if amount changed
+                // Amount changed - use reversal pattern (reverse old, create new)
                 if (Math.abs(existingTariff.amount - line.tariff_allocation) > 0.01) {
-                  await base44.entities.PoolCharge.update(existingTariff.id, {
-                    amount: line.tariff_allocation,
+                  // Reverse old charge via CommitmentService
+                  try {
+                    await CommitmentActions.reversePoolCharge({
+                      charge_id: existingTariff.id,
+                      reason: `Amount changed from $${existingTariff.amount.toFixed(2)} to $${line.tariff_allocation.toFixed(2)} during invoice edit`,
+                    });
+                  } catch (err) {
+                    console.warn('Failed to reverse old tariff charge:', err);
+                  }
+                  // Create new charge with updated amount
+                  await base44.entities.PoolCharge.create({
+                    pool_id: activePool.id,
+                    project_id: projectId,
+                    related_vendor_invoice_id: invoiceRecord.id,
+                    related_po_line_id: line.purchase_line_item_id,
+                    charge_type: 'tariff',
                     description: `Tariff/duty for ${partsMap[line.part_id]?.part_name || 'part'} (updated)`,
+                    amount: line.tariff_allocation,
+                    is_reversed: false,
+                    source_reference_id: `${tariffRefId}:v${Date.now()}`,
                   });
                 }
+                // Same amount - no action needed (idempotent)
               } else {
+                // No existing charge - create new
                 await base44.entities.PoolCharge.create({
                   pool_id: activePool.id,
                   project_id: projectId,
