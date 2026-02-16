@@ -82,25 +82,72 @@ export default function CoverageBadge({
     ? Math.min(100, (coveredRetail / plannedRetail) * 100).toFixed(0)
     : 0;
 
+  const invoicedRetail = commitment.invoiced_retail_total ?? 0;
+  const remainingExposure = Math.max(0, plannedRetail - coveredRetail);
+
   const tooltipContent = (
-    <div className="text-xs space-y-1">
-      <div className="font-medium">{config.label} Coverage</div>
-      <div className="text-gray-400">
-        ${coveredRetail.toFixed(2)} / ${plannedRetail.toFixed(2)} ({coveragePct}%)
+    <div className="text-xs space-y-1.5 min-w-[180px]">
+      <div className="font-medium border-b border-gray-700 pb-1">{config.label} Coverage</div>
+      
+      {/* Coverage percentage bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className={cn(
+              "h-full rounded-full",
+              coverageState === 'covered' ? 'bg-green-500' :
+              coverageState === 'partial' ? 'bg-yellow-500' :
+              'bg-red-500'
+            )}
+            style={{ width: `${Math.min(100, coveragePct)}%` }}
+          />
+        </div>
+        <span className="text-gray-300 font-medium">{coveragePct}%</span>
       </div>
+      
+      {/* Financial breakdown */}
+      <div className="space-y-0.5 pt-1 border-t border-gray-700">
+        <div className="flex justify-between">
+          <span className="text-gray-500">Planned:</span>
+          <span className="text-white">${plannedRetail.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Covered:</span>
+          <span className="text-green-400">${coveredRetail.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Invoiced:</span>
+          <span className="text-blue-400">${invoicedRetail.toFixed(2)}</span>
+        </div>
+      </div>
+      
+      {/* Exposure warning */}
       {exposureGap > 0 && (
-        <div className="text-red-400">
-          Exposure gap: ${exposureGap.toFixed(2)}
+        <div className="pt-1 border-t border-gray-700">
+          <div className="flex justify-between text-red-400">
+            <span>Exposure Gap:</span>
+            <span className="font-medium">${exposureGap.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-500">
+            <span>Remaining:</span>
+            <span>${remainingExposure.toFixed(2)}</span>
+          </div>
         </div>
       )}
-      {isCostLocked && (
-        <div className="text-purple-400 flex items-center gap-1">
-          <Lock className="w-3 h-3" /> Cost locked by invoice
-        </div>
-      )}
-      {isRetailLocked && (
-        <div className="text-blue-400 flex items-center gap-1">
-          <Lock className="w-3 h-3" /> Retail locked (billed)
+      
+      {/* Lock indicators */}
+      {(isCostLocked || isRetailLocked) && (
+        <div className="pt-1 border-t border-gray-700 space-y-0.5">
+          {isCostLocked && (
+            <div className="text-purple-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" /> Cost locked by invoice
+            </div>
+          )}
+          {isRetailLocked && (
+            <div className="text-blue-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" /> Retail locked (billed)
+            </div>
+          )}
         </div>
       )}
     </div>
