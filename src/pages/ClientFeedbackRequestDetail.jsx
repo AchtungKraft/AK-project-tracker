@@ -16,18 +16,8 @@ import { toast } from "sonner";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import { cn } from "@/lib/utils";
-import { getRequestState } from "@/components/clientportal/utils";
+import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
 import ImageModal from "../components/ui/ImageModal";
-
-const getRequestTypeInfo = (type) => {
-  const map = {
-    question: { label: 'Question', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' },
-    feedback_needed: { label: 'Feedback Needed', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
-    design_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
-    client_need: { label: 'Client Need', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
-  };
-  return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
-};
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();

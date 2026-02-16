@@ -55,13 +55,17 @@ const getStateColor = (label) => {
 };
 
 const getTypeColor = (type) => {
-  switch (type) {
-    case 'question': return '#3b82f6'; // blue-500
-    case 'feedback_needed': return '#6366f1'; // indigo-500
-    case 'design_review': return '#a855f7'; // purple-500
-    case 'client_need': return '#f59e0b'; // amber-500
-    default: return '#6b7280';
-  }
+  const colorMap = {
+    question: '#3b82f6', // blue-500
+    feedback_needed: '#6366f1', // indigo-500
+    design_review: '#a855f7', // purple-500
+    client_need: '#f59e0b', // amber-500
+    todo_list: '#14b8a6', // teal-500
+    update: '#6b7280', // gray-500
+    budget_review: '#f43f5e', // rose-500
+    deliverable_review: '#10b981', // emerald-500
+  };
+  return colorMap[type] || '#6b7280';
 };
 
 const STATE_ORDER = ['Needs Review', 'Needs Your Review', 'Changes Requested', 'Approved/Confirmed', 'Draft', 'Archived'];
