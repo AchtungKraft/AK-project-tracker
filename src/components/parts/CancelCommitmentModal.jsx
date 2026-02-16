@@ -68,34 +68,22 @@ export default function CancelCommitmentModal({
 
   const reduceMutation = useMutation({
     mutationFn: async () => {
-      const user = await base44.auth.me();
-      
-      // Reduce qty_committed to new value
+      // Route through CommitmentService for proper handling with pool recalculation
       const qtyReduced = commitment.qty_committed - newQtyCommitted;
       
-      await base44.entities.PartCommitment.update(commitment.id, {
-        qty_committed: newQtyCommitted,
-        qty_cancelled: (commitment.qty_cancelled || 0) + qtyReduced,
-        commitment_version: (commitment.commitment_version || 1) + 1
-      });
-
-      // Audit log
-      await base44.entities.CommitmentAuditLog.create({
+      const response = await base44.functions.invoke('commitmentService', {
+        action: 'reduceCommitment',
         commitment_id: commitment.id,
-        action_type: 'qty_change',
-        previous_values: {
-          qty_committed: commitment.qty_committed,
-          qty_cancelled: commitment.qty_cancelled
-        },
-        new_values: {
-          qty_committed: newQtyCommitted,
-          qty_cancelled: (commitment.qty_cancelled || 0) + qtyReduced,
-          reduction_reason: reason
-        },
-        trigger_source: 'cancel',
-        triggered_by: user.email,
-        validation_passed: true
+        new_qty_committed: newQtyCommitted,
+        qty_reduced: qtyReduced,
+        reason: reason || 'User requested quantity reduction',
       });
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Failed to reduce commitment');
+      }
+      
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
