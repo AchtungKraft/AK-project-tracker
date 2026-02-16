@@ -29,6 +29,7 @@ import EditPartDrawer from "../parts/EditPartDrawer";
 import ImageModal from "../ui/ImageModal";
 import MoveRequirementModal from "../parts/MoveRequirementModal";
 import CommitmentLockIndicator from "../parts/CommitmentLockIndicator";
+import ReverseInstallationModal from "./ReverseInstallationModal";
 import { useCommitmentData, isRequirementManagedByCommitments, getCommitmentsForRequirement } from "../inventory/useCommitmentData";
 import { isRequirementLocked } from "../inventory/commitmentStateEngine";
 import CancelCommitmentModal from "../parts/CancelCommitmentModal";
@@ -95,6 +96,7 @@ export default function ProjectParts({ projectId }) {
   const [financialDrawerOpen, setFinancialDrawerOpen] = useState(false);
   const [financialDrawerContext, setFinancialDrawerContext] = useState(null);
   const [financialQuickFilter, setFinancialQuickFilter] = useState(null);
+  const [reversingInstall, setReversingInstall] = useState(null);
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements', projectId],
