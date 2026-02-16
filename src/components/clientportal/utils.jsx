@@ -54,8 +54,8 @@ export const REQUEST_TYPE_BEHAVIOR = {
   todo_list: "checklist",
   // New types mapped to existing behavior
   update: "decision",
-  budget_review: "decision",
-  deliverable_review: "decision"
+  budget_review: "image_review",      // Structured review - same as design_review
+  deliverable_review: "image_review"  // Structured review - same as design_review
 };
 
 /**
