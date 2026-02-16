@@ -1,5 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Centralized request type UI mapping
+const REQUEST_TYPE_UI = {
+    question: { label: "Question", color: "#3b82f6" },
+    feedback_needed: { label: "Review Required", color: "#6366f1" },
+    design_review: { label: "Design Review", color: "#a855f7" },
+    client_need: { label: "Need From Client", color: "#f59e0b" },
+    todo_list: { label: "Task List", color: "#14b8a6" },
+    update: { label: "Project Update", color: "#6b7280" },
+    budget_review: { label: "Budget Review", color: "#e11d48" },
+    deliverable_review: { label: "Deliverable Review", color: "#10b981" }
+};
+
+const getRequestTypeInfo = (type) => {
+    return REQUEST_TYPE_UI[type] || { label: type || "General", color: "#6b7280" };
+};
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response(null, {
@@ -95,17 +111,23 @@ Deno.serve(async (req) => {
         const projectAttachments = allAttachments.filter(a => requestIds.has(a.request_id));
 
         // Strip unnecessary fields from response to reduce payload size
-        const minimalRequests = visibleRequests.map(r => ({
-            id: r.id,
-            title: r.title,
-            body: r.body,
-            request_type: r.request_type,
-            status: r.status,
-            due_date: r.due_date,
-            posted_at: r.posted_at,
-            created_date: r.created_date,
-            project_id: r.project_id
-        }));
+        // Add derived request_type_label and request_type_color for presentation
+        const minimalRequests = visibleRequests.map(r => {
+            const typeInfo = getRequestTypeInfo(r.request_type);
+            return {
+                id: r.id,
+                title: r.title,
+                body: r.body,
+                request_type: r.request_type,
+                request_type_label: typeInfo.label,
+                request_type_color: typeInfo.color,
+                status: r.status,
+                due_date: r.due_date,
+                posted_at: r.posted_at,
+                created_date: r.created_date,
+                project_id: r.project_id
+            };
+        });
 
         const minimalComments = projectComments.map(c => ({
             id: c.id,

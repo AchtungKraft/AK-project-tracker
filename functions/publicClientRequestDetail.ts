@@ -1,5 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Centralized request type UI mapping
+const REQUEST_TYPE_UI = {
+    question: { label: "Question", color: "#3b82f6" },
+    feedback_needed: { label: "Review Required", color: "#6366f1" },
+    design_review: { label: "Design Review", color: "#a855f7" },
+    client_need: { label: "Need From Client", color: "#f59e0b" },
+    todo_list: { label: "Task List", color: "#14b8a6" },
+    update: { label: "Project Update", color: "#6b7280" },
+    budget_review: { label: "Budget Review", color: "#e11d48" },
+    deliverable_review: { label: "Deliverable Review", color: "#10b981" }
+};
+
+const getRequestTypeInfo = (type) => {
+    return REQUEST_TYPE_UI[type] || { label: type || "General", color: "#6b7280" };
+};
+
 Deno.serve(async (req) => {
     const startTime = Date.now();
     
@@ -236,18 +252,23 @@ Deno.serve(async (req) => {
                 access_role: access.access_role,
                 client_contact_id: access.client_contact_id
             },
-            request: {
-                id: request.id,
-                title: request.title,
-                body: request.body,
-                request_type: request.request_type,
-                status: request.status,
-                due_date: request.due_date,
-                posted_at: request.posted_at,
-                project_id: request.project_id,
-                created_date: request.created_date,
-                creator: requestCreator
-            },
+            request: (() => {
+                const typeInfo = getRequestTypeInfo(request.request_type);
+                return {
+                    id: request.id,
+                    title: request.title,
+                    body: request.body,
+                    request_type: request.request_type,
+                    request_type_label: typeInfo.label,
+                    request_type_color: typeInfo.color,
+                    status: request.status,
+                    due_date: request.due_date,
+                    posted_at: request.posted_at,
+                    project_id: request.project_id,
+                    created_date: request.created_date,
+                    creator: requestCreator
+                };
+            })(),
             comments: enrichedComments,
             decisions: enrichedDecisions,
             attachments: minimalAttachments,
