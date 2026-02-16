@@ -70,9 +70,11 @@ export default function VendorInvoiceModal({
       purchase_line_item_id: li.id,
       part_id: li.part_id,
       qty_invoiced: li.qty_ordered || 0,
-      actual_unit_cost: li.unit_cost || 0,
-      extended_cost: (li.qty_ordered || 0) * (li.unit_cost || 0),
+      actual_unit_cost: li.unit_price || li.unit_cost || 0,
+      extended_cost: (li.qty_ordered || 0) * (li.unit_price || li.unit_cost || 0),
       freight_allocation: 0,
+      tariff_allocation: 0,
+      is_cost_locked: !!li.cost_locked_at,
     }));
   });
 
@@ -83,9 +85,11 @@ export default function VendorInvoiceModal({
         purchase_line_item_id: li.id,
         part_id: li.part_id,
         qty_invoiced: li.qty_ordered || 0,
-        actual_unit_cost: li.unit_cost || 0,
-        extended_cost: (li.qty_ordered || 0) * (li.unit_cost || 0),
+        actual_unit_cost: li.unit_price || li.unit_cost || 0,
+        extended_cost: (li.qty_ordered || 0) * (li.unit_price || li.unit_cost || 0),
         freight_allocation: 0,
+        tariff_allocation: 0,
+        is_cost_locked: !!li.cost_locked_at,
       })));
     }
   }, [lineItems, isEditing]);
@@ -148,10 +152,10 @@ export default function VendorInvoiceModal({
         }
       }
 
-      // Create line items
+      // Create line items and record charges via CommitmentService
       for (const line of invoiceLines) {
         if (line.qty_invoiced > 0) {
-          await base44.entities.VendorInvoiceLineItem.create({
+          const invoiceLineItem = await base44.entities.VendorInvoiceLineItem.create({
             invoice_id: invoiceRecord.id,
             purchase_line_item_id: line.purchase_line_item_id,
             part_id: line.part_id,
@@ -161,6 +165,21 @@ export default function VendorInvoiceModal({
             freight_allocation: line.freight_allocation || 0,
             landed_unit_cost: line.landed_unit_cost || line.actual_unit_cost,
           });
+          
+          // Route through CommitmentService to lock costs and create pool charges
+          if (line.purchase_line_item_id && (line.freight_allocation > 0 || line.tariff_allocation > 0)) {
+            try {
+              await base44.functions.invoke('commitmentService', {
+                action: 'recordVendorInvoiceCharge',
+                vendor_invoice_line_id: invoiceLineItem.id,
+                freight_allocation: line.freight_allocation || 0,
+                tariff_allocation: line.tariff_allocation || 0,
+              });
+            } catch (err) {
+              console.error('CommitmentService charge recording failed:', err);
+              // Non-blocking - invoice still created
+            }
+          }
         }
       }
 
@@ -170,6 +189,9 @@ export default function VendorInvoiceModal({
       queryClient.invalidateQueries({ queryKey: ['vendorInvoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoiceLineItems'] });
       queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
+      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+      queryClient.invalidateQueries({ queryKey: ['poolCharges'] });
       toast.success(isEditing ? 'Invoice updated' : 'Invoice created');
       onClose();
     },

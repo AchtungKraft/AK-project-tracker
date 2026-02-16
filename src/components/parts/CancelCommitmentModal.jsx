@@ -35,38 +35,30 @@ export default function CancelCommitmentModal({
 
   const cancelMutation = useMutation({
     mutationFn: async () => {
-      const user = await base44.auth.me();
-      
-      // Full cancellation
-      await base44.entities.PartCommitment.update(commitment.id, {
-        commitment_status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
-        cancelled_reason: reason || 'User requested cancellation',
-        cancelled_by: user.email,
-        commitment_version: (commitment.commitment_version || 1) + 1
-      });
-
-      // Audit log
-      await base44.entities.CommitmentAuditLog.create({
+      // Use CommitmentService for proper cancellation with credit handling
+      const response = await base44.functions.invoke('commitmentService', {
+        action: 'removeCommitment',
         commitment_id: commitment.id,
-        action_type: 'status_change',
-        previous_values: {
-          commitment_status: commitment.commitment_status,
-          qty_committed: commitment.qty_committed
-        },
-        new_values: {
-          commitment_status: 'cancelled',
-          cancelled_reason: reason
-        },
-        trigger_source: 'cancel',
-        triggered_by: user.email,
-        validation_passed: true
+        reason: reason || 'User requested cancellation',
       });
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Failed to cancel commitment');
+      }
+      
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      toast.success('Commitment cancelled');
+      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+      queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
+      
+      if (data.creditCreated) {
+        toast.success('Commitment cancelled - credit pool created for scope reduction');
+      } else {
+        toast.success('Commitment cancelled');
+      }
       onClose();
     },
     onError: (error) => {
