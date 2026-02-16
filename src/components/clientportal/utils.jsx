@@ -1,14 +1,81 @@
 import { CheckCircle2, AlertCircle, Clock, Archive, FileText } from "lucide-react";
 
+/**
+ * UI label and color configuration for request types
+ */
+export const REQUEST_TYPE_UI = {
+  question: {
+    label: "Question",
+    color: "bg-blue-500/20 text-blue-400 border-blue-500/50 border"
+  },
+  feedback_needed: {
+    label: "Review Required",
+    color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border"
+  },
+  design_review: {
+    label: "Design Review",
+    color: "bg-purple-500/20 text-purple-400 border-purple-500/50 border"
+  },
+  client_need: {
+    label: "Need From Client",
+    color: "bg-amber-500/20 text-amber-400 border-amber-500/50 border"
+  },
+  todo_list: {
+    label: "Task List",
+    color: "bg-teal-500/20 text-teal-400 border-teal-500/50 border"
+  },
+  // New types (behavior same as feedback_needed)
+  update: {
+    label: "Project Update",
+    color: "bg-gray-500/20 text-gray-400 border-gray-500/50 border"
+  },
+  budget_review: {
+    label: "Budget Review",
+    color: "bg-rose-500/20 text-rose-400 border-rose-500/50 border"
+  },
+  deliverable_review: {
+    label: "Deliverable Review",
+    color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50 border"
+  }
+};
+
+/**
+ * Behavior alias mapping - maps types to their behavior group
+ * decision: standard approve/changes_requested flow
+ * image_review: per-image decision flow
+ * checklist: todo-based completion flow
+ */
+export const REQUEST_TYPE_BEHAVIOR = {
+  question: "decision",
+  feedback_needed: "decision",
+  client_need: "decision",
+  design_review: "image_review",
+  todo_list: "checklist",
+  // New types mapped to existing behavior
+  update: "decision",
+  budget_review: "decision",
+  deliverable_review: "decision"
+};
+
+/**
+ * Types available for creating new requests (excludes legacy 'feedback_needed')
+ */
+export const CREATE_TYPE_OPTIONS = [
+  "update",
+  "question",
+  "client_need",
+  "design_review",
+  "budget_review",
+  "deliverable_review",
+  "todo_list"
+];
+
 export const getRequestTypeInfo = (type) => {
-  const map = {
-    question: { label: 'Question', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50 border' },
-    feedback_needed: { label: 'Feedback Needed', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 border' },
-    design_review: { label: 'Design Review', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50 border' },
-    client_need: { label: 'Client Need', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50 border' },
-    todo_list: { label: 'ToDo List', color: 'bg-teal-500/20 text-teal-400 border-teal-500/50 border' },
-  };
-  return map[type] || { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
+  const config = REQUEST_TYPE_UI[type];
+  if (config) {
+    return { label: config.label, color: config.color };
+  }
+  return { label: type.replace('_', ' '), color: 'bg-gray-500/20 text-gray-400 border-gray-500/50 border' };
 };
 
 export const getRequestState = (request, allDecisions, allAttachments) => {
