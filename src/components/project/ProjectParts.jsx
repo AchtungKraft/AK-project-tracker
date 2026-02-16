@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Search, Plus, Package, Trash2, FileText, DollarSign, ChevronDown, ChevronUp,
   CheckCircle2, ShoppingCart, Truck, Wrench, AlertTriangle, MoreHorizontal, Download, ExternalLink,
-  RefreshCw, Loader2
+  RefreshCw, Loader2, RotateCcw
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -640,6 +640,30 @@ export default function ProjectParts({ projectId }) {
                     <Wrench className="w-4 h-4 mr-2" /> Mark as Installed
                   </DropdownMenuItem>
                 )}
+                {hasInstalledParts && (
+                  <>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => {
+                        const installed = installedParts.filter(ip => 
+                          ip.project_id === projectId && 
+                          ip.part_id === req.part_id && 
+                          !ip.is_reversed
+                        );
+                        if (installed.length > 0) {
+                          setReversingInstall({
+                            installedPart: installed[0],
+                            part,
+                            commitment: req._commitment,
+                          });
+                        }
+                      }}
+                      className="text-orange-400"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" /> Reverse Installation
+                    </DropdownMenuItem>
+                  </>
+                )}
                 {req._toOrder > 0 && !isManagedByCommitments && (
                   <DropdownMenuItem onClick={() => setOrderPart(part)}>
                     <ShoppingCart className="w-4 h-4 mr-2" /> Order Part ({req._toOrder})
@@ -1120,6 +1144,16 @@ export default function ProjectParts({ projectId }) {
         projectId={financialDrawerContext?.projectId || projectId}
         financialStatus={financialDrawerContext?.financialStatus}
       />
+
+      {/* Reverse Installation Modal */}
+      {reversingInstall && (
+        <ReverseInstallationModal
+          installedPart={reversingInstall.installedPart}
+          part={reversingInstall.part}
+          commitment={reversingInstall.commitment}
+          onClose={() => setReversingInstall(null)}
+        />
+      )}
     </div>
   );
 }
