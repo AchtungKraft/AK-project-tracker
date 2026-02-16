@@ -646,33 +646,36 @@ function getDirectEntityWriteScan() {
 function getMissingUXSurfaces() {
   return {
     no_ui_surface: [
-      {
-        function: 'reverseInstalledPart',
-        severity: 'CRITICAL',
-        impact: 'Users cannot undo installations - reversal only via console',
-        recommended_ui: 'Create ReverseInstallationModal with reversal_type selector',
-        suggested_location: 'ProjectParts > InstalledParts section OR TaskPartsSection',
-      },
-      {
-        function: 'closePool',
-        severity: 'HIGH',
-        impact: 'Pools cannot be formally closed, only become inactive',
-        recommended_ui: 'Add "Close Pool" action to PoolDetailView',
-        suggested_location: 'PoolDetailView > Actions section',
-      },
-      {
-        function: 'transferPoolBalance',
-        severity: 'MEDIUM',
-        impact: 'Cannot move funds between projects',
-        recommended_ui: 'Add "Transfer Balance" modal in PoolDetailView',
-        suggested_location: 'PoolDetailView > Actions section',
-      },
+      // All critical functions now have UI surfaces
       {
         function: 'recalculateProjectExposure',
         severity: 'LOW',
         impact: 'Project-wide exposure recalc only callable via console',
         recommended_ui: 'Add "Recalculate All" button to ProjectFinancialDashboard',
         suggested_location: 'ProjectFinancialDashboard header',
+      },
+    ],
+    recently_implemented: [
+      {
+        function: 'reverseInstalledPart',
+        status: 'IMPLEMENTED',
+        component: 'components/project/ReverseInstallationModal.jsx',
+        location: 'ProjectParts > CommitmentCard dropdown > Reverse Installation',
+        implemented_date: '2026-02-16',
+      },
+      {
+        function: 'closePool',
+        status: 'IMPLEMENTED',
+        component: 'components/financial/ClosePoolModal.jsx',
+        location: 'PoolDetailView > Close Pool button',
+        implemented_date: '2026-02-16',
+      },
+      {
+        function: 'transferPoolBalance',
+        status: 'IMPLEMENTED',
+        component: 'components/financial/TransferPoolBalanceModal.jsx',
+        location: 'PoolDetailView > Transfer Balance button',
+        implemented_date: '2026-02-16',
       },
     ],
     console_only: [
