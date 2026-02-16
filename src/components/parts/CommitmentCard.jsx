@@ -7,7 +7,7 @@ import {
   CommitmentBillingBadge, 
   CommitmentSourceBadge 
 } from "./CommitmentStatusBadge";
-import { Package, MoreHorizontal, FileText, Trash2 } from "lucide-react";
+import { Package, MoreHorizontal, FileText, Trash2, ShoppingCart, RotateCcw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import FinancialStatusBadge from "../financial/FinancialStatusBadge";
+import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/getAllowedCommitmentActions";
 
 /**
  * CommitmentCard - Displays a single PartCommitment record
@@ -28,6 +30,8 @@ export default function CommitmentCard({
   onEdit,
   onCancel,
   onViewPO,
+  onCreatePO,
+  onReverseInstall,
   compact = false,
   financialStatus = null,
 }) {
@@ -42,6 +46,9 @@ export default function CommitmentCard({
     (commitment.qty_installed || 0) - 
     (commitment.qty_cancelled || 0)
   );
+
+  // Use centralized lifecycle gating
+  const allowedActions = getAllowedCommitmentActions(commitment);
 
   if (compact) {
     return (
@@ -136,37 +143,82 @@ export default function CommitmentCard({
           </div>
 
           {/* Actions */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-              {onEdit && (
-                <DropdownMenuItem onClick={() => onEdit(commitment)}>
-                  Edit Commitment
-                </DropdownMenuItem>
-              )}
-              {onViewPO && (commitment.order_line_item_ids || []).length > 0 && (
-                <DropdownMenuItem onClick={() => onViewPO(commitment)}>
-                  View Linked POs
-                </DropdownMenuItem>
-              )}
-              {onCancel && commitment.commitment_status !== 'cancelled' && commitment.commitment_status !== 'installed' && (
-                <>
-                  <DropdownMenuSeparator className="bg-gray-700" />
-                  <DropdownMenuItem 
-                    onClick={() => onCancel(commitment)}
-                    className="text-red-400"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Cancel Commitment
+          <TooltipProvider>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                {onEdit && allowedActions.canEdit && (
+                  <DropdownMenuItem onClick={() => onEdit(commitment)}>
+                    Edit Commitment
                   </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                )}
+                
+                {/* Create PO - only when allowed by lifecycle */}
+                {onCreatePO && allowedActions.canCreatePO && (
+                  <DropdownMenuItem onClick={() => onCreatePO(commitment)}>
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    Create PO
+                  </DropdownMenuItem>
+                )}
+                
+                {/* Show disabled PO option with reason if not allowed but handler exists */}
+                {onCreatePO && !allowedActions.canCreatePO && commitment.commitment_status !== 'cancelled' && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem disabled className="text-gray-500">
+                        <ShoppingCart className="w-4 h-4 mr-2" />
+                        Create PO
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {getActionBlockReason(commitment, 'canCreatePO')}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                
+                {onViewPO && (commitment.order_line_item_ids || []).length > 0 && (
+                  <DropdownMenuItem onClick={() => onViewPO(commitment)}>
+                    View Linked POs
+                  </DropdownMenuItem>
+                )}
+                
+                {/* Reverse Installation - only when allowed */}
+                {onReverseInstall && allowedActions.canReverseInstall && (
+                  <>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => onReverseInstall(commitment)}
+                      className="text-orange-400"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reverse Installation
+                    </DropdownMenuItem>
+                  </>
+                )}
+                
+                {/* Cancel - only when allowed by lifecycle */}
+                {onCancel && allowedActions.canCancel && (
+                  <>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => onCancel(commitment)}
+                      className="text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      {allowedActions.cancelRequiresInventoryReturn 
+                        ? 'Cancel (Requires Inventory Return)'
+                        : 'Cancel Commitment'
+                      }
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>
