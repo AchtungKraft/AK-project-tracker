@@ -777,46 +777,45 @@ function generateFullAudit() {
     missing_actions: config.missing_actions,
   }));
 
-  // Priority fixes
+  // Priority fixes - UPDATED after implementation sprint
   const prioritizedFixes = [
     {
       priority: 1,
-      issue: 'CRITICAL: No UI for reverseInstalledPart',
-      impact: 'Users cannot undo installations without console',
-      fix: 'Create ReverseInstallationModal component',
-      estimated_effort: 'Medium',
+      issue: 'RESOLVED: reverseInstalledPart now has UI',
+      status: 'COMPLETE',
+      component: 'components/project/ReverseInstallationModal.jsx',
     },
     {
       priority: 2,
-      issue: 'HIGH: No UI for closePool',
-      impact: 'Pools remain open indefinitely, no lifecycle completion',
-      fix: 'Add "Close Pool" button to PoolDetailView',
-      estimated_effort: 'Low',
+      issue: 'RESOLVED: closePool now has UI',
+      status: 'COMPLETE',
+      component: 'components/financial/ClosePoolModal.jsx',
     },
     {
       priority: 3,
-      issue: 'HIGH: No UI for transferPoolBalance',
-      impact: 'Cannot redistribute funds between projects',
-      fix: 'Add "Transfer Balance" modal to PoolDetailView',
-      estimated_effort: 'Medium',
+      issue: 'RESOLVED: transferPoolBalance now has UI',
+      status: 'COMPLETE',
+      component: 'components/financial/TransferPoolBalanceModal.jsx',
     },
     {
       priority: 4,
-      issue: 'MEDIUM: VendorInvoiceModal does direct PoolCharge.update',
-      impact: 'Bypasses guard for amount changes, risky',
-      fix: 'Route charge updates through CommitmentService reversal pattern',
-      estimated_effort: 'Low',
+      issue: 'RESOLVED: VendorInvoiceModal uses reversal pattern',
+      status: 'COMPLETE',
+      fix: 'Uses CommitmentActions.reversePoolCharge() for amount changes',
     },
     {
       priority: 5,
-      issue: 'MEDIUM: Exposure math not visible in ProjectParts',
-      impact: 'Users see coverage badge but not underlying exposure_gap',
-      fix: 'Add exposure detail tooltip or expand CommitmentCard',
-      estimated_effort: 'Low',
+      issue: 'RESOLVED: Exposure visibility improved',
+      status: 'COMPLETE',
+      components: [
+        'components/parts/ExposureDetailRow.jsx (expandable row)',
+        'components/financial/CoverageBadge.jsx (enhanced tooltip)',
+      ],
     },
     {
       priority: 6,
       issue: 'LOW: Pool impact hidden in VendorInvoiceModal',
+      status: 'PENDING',
       impact: 'Users don\'t see pool balance change preview',
       fix: 'Add pool balance preview section to modal',
       estimated_effort: 'Low',
