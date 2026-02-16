@@ -12,13 +12,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { CREATE_TYPE_OPTIONS, REQUEST_TYPE_UI } from "./utils";
 
 export default function CreateFeedbackRequestModal({ open, onClose, projectId, userId }) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     title: '',
     body: '',
-    request_type: 'question',
+    request_type: 'update',  // Default to the first option in CREATE_TYPE_OPTIONS
     due_date: '',
   });
 
@@ -28,7 +29,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
       queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequests'] });
       toast.success('Feedback request created');
       onClose();
-      setFormData({ title: '', body: '', request_type: 'question', due_date: '' });
+      setFormData({ title: '', body: '', request_type: 'update', due_date: '' });
     },
     onError: () => {
       toast.error('Failed to create feedback request');
@@ -68,11 +69,11 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="question">Question</SelectItem>
-                <SelectItem value="feedback_needed">Feedback Needed</SelectItem>
-                <SelectItem value="design_review">Design Review</SelectItem>
-                <SelectItem value="client_need">Client Need</SelectItem>
-                <SelectItem value="todo_list">ToDo List</SelectItem>
+                {CREATE_TYPE_OPTIONS.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {REQUEST_TYPE_UI[type]?.label || type}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
