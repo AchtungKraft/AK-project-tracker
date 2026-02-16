@@ -181,6 +181,34 @@ Deno.serve(async (req) => {
             last_viewed_at: new Date().toISOString()
         }).catch(() => {});
 
+        // 🔎 STRUCTURED REVIEW API DIAGNOSTIC
+        const structuredTypes = ['design_review', 'budget_review', 'deliverable_review'];
+        minimalRequests.forEach(r => {
+            if (structuredTypes.includes(r.request_type)) {
+                const reqAttachments = minimalAttachments.filter(a => a.request_id === r.id);
+                const reqDecisions = minimalDecisions.filter(d => d.request_id === r.id);
+                const attachmentLevelDecisions = reqDecisions.filter(d => d.target_type === 'attachment_image');
+                const requestLevelDecisions = reqDecisions.filter(d => d.target_type === 'request');
+                
+                console.log("🔎 STRUCTURED REVIEW API TRACE", {
+                    request_id: r.id,
+                    type: r.request_type,
+                    status: r.status,
+                    attachment_count: reqAttachments.length,
+                    image_attachments: reqAttachments.filter(a => a.attachment_type === 'image').length,
+                    total_decisions: reqDecisions.length,
+                    attachment_level_decisions: attachmentLevelDecisions.length,
+                    request_level_decisions: requestLevelDecisions.length,
+                    decision_breakdown: reqDecisions.map(d => ({
+                        id: d.id,
+                        target_type: d.target_type,
+                        decision: d.decision,
+                        target_attachment_id: d.target_attachment_id
+                    }))
+                });
+            }
+        });
+
         return Response.json({
             success: true,
             access: {

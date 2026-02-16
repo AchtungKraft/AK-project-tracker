@@ -245,6 +245,43 @@ Deno.serve(async (req) => {
         const executionTime = Date.now() - startTime;
         console.log(`[publicClientRequestDetail] ${executionTime}ms | Users:${users.length} Contacts:${clientContacts.length}`);
 
+        // 🔎 DETAIL STRUCTURED REVIEW DIAGNOSTIC
+        if (['design_review', 'budget_review', 'deliverable_review'].includes(request.request_type)) {
+            const attachmentDecisions = enrichedDecisions.filter(d => d.target_type === 'attachment_image');
+            const requestLevelDecisions = enrichedDecisions.filter(d => d.target_type === 'request');
+            const imageAttachments = minimalAttachments.filter(a => a.attachment_type === 'image');
+            
+            // Check which images have decisions
+            const imageDecisionMap = imageAttachments.map(img => {
+                const imgDecision = attachmentDecisions.find(d => d.target_attachment_id === img.id);
+                return {
+                    attachment_id: img.id,
+                    file_url: img.file_url?.substring(0, 50) + '...',
+                    has_decision: !!imgDecision,
+                    decision: imgDecision?.decision || null
+                };
+            });
+            
+            console.log("🔎 DETAIL STRUCTURED TRACE", {
+                request_id: request.id,
+                type: request.request_type,
+                request_status: request.status,
+                total_attachments: minimalAttachments.length,
+                image_attachments: imageAttachments.length,
+                attachment_decisions: attachmentDecisions.length,
+                request_level_decisions: requestLevelDecisions.length,
+                images_with_decisions: imageDecisionMap.filter(i => i.has_decision).length,
+                images_without_decisions: imageDecisionMap.filter(i => !i.has_decision).length,
+                image_decision_map: imageDecisionMap,
+                all_decisions: enrichedDecisions.map(d => ({
+                    id: d.id,
+                    target_type: d.target_type,
+                    decision: d.decision,
+                    target_attachment_id: d.target_attachment_id
+                }))
+            });
+        }
+
         return Response.json({
             success: true,
             access: {
