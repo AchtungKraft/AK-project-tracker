@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Plus, Trash2, Upload, DollarSign } from "lucide-react";
+import { FileText, Plus, Trash2, Upload, DollarSign, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { CommitmentActions } from "@/components/financial/financialMutationGuard";
 
 /**
  * VendorInvoiceModal - Create/edit vendor invoice attached to PO
@@ -127,6 +128,33 @@ export default function VendorInvoiceModal({
     })));
   };
 
+  // Fetch project pool for charges
+  const { data: projectPools = [] } = useQuery({
+    queryKey: ['projectPools', order?.project_id],
+    queryFn: async () => {
+      if (!order?.project_id) {
+        // Try to get project from commitment on line items
+        const commitmentIds = lineItems.map(li => li.commitment_id).filter(Boolean);
+        if (commitmentIds.length === 0) return [];
+        const commitments = await base44.entities.PartCommitment.list();
+        const projectCommitment = commitments.find(c => commitmentIds.includes(c.id));
+        if (!projectCommitment) return [];
+        return base44.entities.BillingPool.filter({ project_id: projectCommitment.project_id });
+      }
+      return base44.entities.BillingPool.filter({ project_id: order.project_id });
+    },
+    enabled: lineItems.length > 0,
+  });
+
+  // Get project_id from first commitment for pool charges
+  const getProjectId = async () => {
+    const commitmentIds = lineItems.map(li => li.commitment_id).filter(Boolean);
+    if (commitmentIds.length === 0) return null;
+    const commitments = await base44.entities.PartCommitment.list();
+    const projectCommitment = commitments.find(c => commitmentIds.includes(c.id));
+    return projectCommitment?.project_id || null;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       // Create or update invoice
@@ -152,6 +180,15 @@ export default function VendorInvoiceModal({
         }
       }
 
+      // Get project ID for pool charges
+      const projectId = await getProjectId();
+      const activePool = projectPools.find(p => ['draft', 'invoiced', 'paid'].includes(p.status));
+
+      // Track created charges for idempotency
+      const existingCharges = projectId 
+        ? await base44.entities.PoolCharge.filter({ project_id: projectId })
+        : [];
+
       // Create line items and record charges via CommitmentService
       for (const line of invoiceLines) {
         if (line.qty_invoiced > 0) {
@@ -167,10 +204,9 @@ export default function VendorInvoiceModal({
           });
           
           // Route through CommitmentService to lock costs and create pool charges
-          if (line.purchase_line_item_id && (line.freight_allocation > 0 || line.tariff_allocation > 0)) {
+          if (line.purchase_line_item_id) {
             try {
-              await base44.functions.invoke('commitmentService', {
-                action: 'recordVendorInvoiceCharge',
+              await CommitmentActions.recordVendorInvoiceCharge({
                 vendor_invoice_line_id: invoiceLineItem.id,
                 freight_allocation: line.freight_allocation || 0,
                 tariff_allocation: line.tariff_allocation || 0,
@@ -180,6 +216,82 @@ export default function VendorInvoiceModal({
               // Non-blocking - invoice still created
             }
           }
+
+          // Create idempotent pool charges for freight/tariff if pool exists
+          if (activePool && projectId) {
+            // Freight charge - idempotent via source_reference_id
+            if (line.freight_allocation > 0) {
+              const freightRefId = `vendor_invoice:${invoiceRecord.id}:freight:${line.purchase_line_item_id || line.part_id}`;
+              const existingFreight = existingCharges.find(c => 
+                c.source_reference_id === freightRefId && !c.is_reversed
+              );
+              
+              if (existingFreight) {
+                // Update if amount changed
+                if (Math.abs(existingFreight.amount - line.freight_allocation) > 0.01) {
+                  await base44.entities.PoolCharge.update(existingFreight.id, {
+                    amount: line.freight_allocation,
+                    description: `Freight for ${partsMap[line.part_id]?.part_name || 'part'} (updated)`,
+                  });
+                }
+              } else {
+                await base44.entities.PoolCharge.create({
+                  pool_id: activePool.id,
+                  project_id: projectId,
+                  related_vendor_invoice_id: invoiceRecord.id,
+                  related_po_line_id: line.purchase_line_item_id,
+                  charge_type: 'freight',
+                  description: `Freight for ${partsMap[line.part_id]?.part_name || 'part'}`,
+                  amount: line.freight_allocation,
+                  is_reversed: false,
+                  source_reference_id: freightRefId,
+                });
+              }
+            }
+
+            // Tariff charge - idempotent via source_reference_id
+            if (line.tariff_allocation > 0) {
+              const tariffRefId = `vendor_invoice:${invoiceRecord.id}:tariff:${line.purchase_line_item_id || line.part_id}`;
+              const existingTariff = existingCharges.find(c => 
+                c.source_reference_id === tariffRefId && !c.is_reversed
+              );
+              
+              if (existingTariff) {
+                // Update if amount changed
+                if (Math.abs(existingTariff.amount - line.tariff_allocation) > 0.01) {
+                  await base44.entities.PoolCharge.update(existingTariff.id, {
+                    amount: line.tariff_allocation,
+                    description: `Tariff/duty for ${partsMap[line.part_id]?.part_name || 'part'} (updated)`,
+                  });
+                }
+              } else {
+                await base44.entities.PoolCharge.create({
+                  pool_id: activePool.id,
+                  project_id: projectId,
+                  related_vendor_invoice_id: invoiceRecord.id,
+                  related_po_line_id: line.purchase_line_item_id,
+                  charge_type: 'tariff',
+                  description: `Tariff/duty for ${partsMap[line.part_id]?.part_name || 'part'}`,
+                  amount: line.tariff_allocation,
+                  is_reversed: false,
+                  source_reference_id: tariffRefId,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Create invoice-level charges (total freight/tax not per-line)
+      const freightCost = parseFloat(invoice.freight_cost) || 0;
+      const taxCost = parseFloat(invoice.tax_cost) || 0;
+      
+      if (activePool && projectId && (freightCost > 0 || taxCost > 0)) {
+        // Trigger pool recalculation
+        try {
+          await CommitmentActions.recalculatePoolBalance({ pool_id: activePool.id });
+        } catch (err) {
+          console.warn('Pool recalculation failed:', err);
         }
       }
 
@@ -192,6 +304,7 @@ export default function VendorInvoiceModal({
       queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
       queryClient.invalidateQueries({ queryKey: ['billingPools'] });
       queryClient.invalidateQueries({ queryKey: ['poolCharges'] });
+      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
       toast.success(isEditing ? 'Invoice updated' : 'Invoice created');
       onClose();
     },
@@ -353,17 +466,40 @@ export default function VendorInvoiceModal({
             </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <Label className="text-gray-300">Notes</Label>
-            <Textarea
-              value={invoice.notes}
-              onChange={(e) => setInvoice({ ...invoice, notes: e.target.value })}
-              placeholder="Invoice notes..."
-              className="bg-gray-800 border-gray-600"
-              rows={2}
-            />
+          {/* Tariff Input */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-gray-300">Tariff/Duty Cost</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={invoice.tariff_cost || 0}
+                onChange={(e) => setInvoice({ ...invoice, tariff_cost: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+                className="bg-gray-800 border-gray-600"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-300">Notes</Label>
+              <Textarea
+                value={invoice.notes}
+                onChange={(e) => setInvoice({ ...invoice, notes: e.target.value })}
+                placeholder="Invoice notes..."
+                className="bg-gray-800 border-gray-600"
+                rows={1}
+              />
+            </div>
           </div>
+
+          {/* Pool Warning */}
+          {projectPools.length === 0 && (
+            <div className="flex items-center gap-2 p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+              <p className="text-yellow-300 text-sm">
+                No billing pool found for this project. Freight/tariff charges will not be recorded.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">

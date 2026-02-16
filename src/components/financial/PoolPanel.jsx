@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,11 @@ import {
   Loader2,
   Plus,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PoolDetailView from "./PoolDetailView";
 
 /**
  * Pool status badge with appropriate styling
@@ -46,6 +48,18 @@ export default function PoolPanel({
   isRefreshing = false,
   compact = false,
 }) {
+  const [showDetailView, setShowDetailView] = useState(false);
+
+  if (showDetailView && pool) {
+    return (
+      <Card className="bg-gray-900/50 border-gray-700">
+        <CardContent className="p-4">
+          <PoolDetailView poolId={pool.id} onClose={() => setShowDetailView(false)} />
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!pool) {
     return (
       <Card className="bg-gray-900/50 border-gray-700">
@@ -121,6 +135,15 @@ export default function PoolPanel({
                 )}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDetailView(true)}
+              className="h-8 border-gray-600"
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              Details
+            </Button>
             {onCreateAllocation && (
               <Button
                 variant="outline"
