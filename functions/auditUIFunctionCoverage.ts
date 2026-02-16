@@ -906,6 +906,93 @@ function generateFullAudit() {
 }
 
 // ============================================================================
+// MISSING FUNCTIONS LIST GENERATOR
+// ============================================================================
+
+function generateMissingFunctionsList(functionInventory, uiMapping) {
+  const allFunctions = [
+    ...functionInventory.commitmentService.map(f => ({ ...f, source: 'commitmentService' })),
+    ...functionInventory.other_financial.map(f => ({ ...f, source: 'other_financial' })),
+  ];
+
+  const mappedFunctions = new Set(uiMapping.map(m => m.function));
+
+  const missingFunctions = allFunctions
+    .filter(f => !mappedFunctions.has(f.function))
+    .map(f => {
+      // Categorize the function
+      let category;
+      let expectedPage;
+      let expectedEntryPoint;
+      let priorityLevel;
+
+      // Lifecycle Control Gaps (A)
+      if (['reverseInstalledPart', 'closePool', 'transferPoolBalance'].includes(f.function)) {
+        category = 'A_LIFECYCLE_CONTROL';
+        priorityLevel = 'CRITICAL';
+        expectedPage = f.lifecycle_stage === 'billing' ? 'PoolDetailView' : 'ProjectParts';
+        expectedEntryPoint = 'Action button / dropdown';
+      }
+      // Administrative Functions (B)
+      else if (['recalculatePoolBalance', 'recalculateProjectExposure', 'validateLockConstraints'].includes(f.function)) {
+        category = 'B_ADMINISTRATIVE';
+        priorityLevel = 'LOW';
+        expectedPage = 'ProjectFinancialDashboard / PoolDetailView';
+        expectedEntryPoint = 'Admin actions section';
+      }
+      // Edge Case Flows (C)
+      else if (['getOrCreateCreditPool'].includes(f.function)) {
+        category = 'C_EDGE_CASE';
+        priorityLevel = 'ACCEPTABLE_MISSING';
+        expectedPage = 'N/A - Auto-triggered';
+        expectedEntryPoint = 'System automation';
+      }
+      // Core Workflow (should have UI)
+      else {
+        category = 'A_CORE_WORKFLOW';
+        priorityLevel = 'HIGH';
+        expectedPage = f.lifecycle_stage === 'billing' ? 'InvoiceWorkbench / PoolPanel' : 
+                       f.lifecycle_stage === 'procurement' ? 'PurchasingDashboard / ProjectParts' :
+                       f.lifecycle_stage === 'installation' ? 'ProjectParts' : 'Unknown';
+        expectedEntryPoint = 'Primary action button';
+      }
+
+      return {
+        functionName: f.function,
+        category,
+        expectedPage,
+        expectedEntryPoint,
+        lifecycleStage: f.lifecycle_stage,
+        priorityLevel,
+        entitiesMutated: f.entities_mutated,
+        source: f.source,
+      };
+    });
+
+  // Sort by priority
+  const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, ACCEPTABLE_MISSING: 4 };
+  missingFunctions.sort((a, b) => priorityOrder[a.priorityLevel] - priorityOrder[b.priorityLevel]);
+
+  return {
+    total_missing: missingFunctions.length,
+    by_category: {
+      lifecycle_control: missingFunctions.filter(f => f.category === 'A_LIFECYCLE_CONTROL'),
+      core_workflow: missingFunctions.filter(f => f.category === 'A_CORE_WORKFLOW'),
+      administrative: missingFunctions.filter(f => f.category === 'B_ADMINISTRATIVE'),
+      edge_case: missingFunctions.filter(f => f.category === 'C_EDGE_CASE'),
+    },
+    by_priority: {
+      critical: missingFunctions.filter(f => f.priorityLevel === 'CRITICAL'),
+      high: missingFunctions.filter(f => f.priorityLevel === 'HIGH'),
+      medium: missingFunctions.filter(f => f.priorityLevel === 'MEDIUM'),
+      low: missingFunctions.filter(f => f.priorityLevel === 'LOW'),
+      acceptable: missingFunctions.filter(f => f.priorityLevel === 'ACCEPTABLE_MISSING'),
+    },
+    full_list: missingFunctions,
+  };
+}
+
+// ============================================================================
 // SCORING ALGORITHM
 // ============================================================================
 
