@@ -142,6 +142,9 @@ export function getRequestGroupInfo(item, groupBy, projects = [], teamMembers = 
       design_review: 'Design Reviews',
       client_need: 'Client Needs',
       todo_list: 'To-Do Lists',
+      update: 'Project Updates',
+      budget_review: 'Budget Reviews',
+      deliverable_review: 'Deliverable Reviews',
     };
     return {
       key: item.request_type || 'unknown',
