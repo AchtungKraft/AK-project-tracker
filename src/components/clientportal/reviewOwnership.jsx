@@ -10,6 +10,8 @@
  * - 'done': Resolved (approved or archived)
  */
 
+import { isStructuredReview } from "./reviewBehavior";
+
 /**
  * Get the most recent client activity timestamp for a request
  * Client activity includes: comments from clients, decisions from clients
@@ -45,10 +47,11 @@ export function getLatestClientActivity(request, comments, decisions) {
 }
 
 /**
- * Check if there are pending or changes-requested image decisions for design reviews
+ * Check if there are pending or changes-requested image decisions for structured reviews
+ * (design_review, budget_review, deliverable_review)
  */
-export function hasUnresolvedDesignReviewImages(request, decisions, attachments) {
-  if (request.request_type !== 'design_review') return false;
+export function hasUnresolvedStructuredReviewImages(request, decisions, attachments) {
+  if (!isStructuredReview(request.request_type)) return false;
   
   const postedAt = request.posted_at ? new Date(request.posted_at) : null;
   const lastInternalView = request.last_viewed_by_internal_at 
@@ -162,9 +165,9 @@ export function getReviewOwnership(request, comments, decisions, attachments) {
     return { ownership: 'ak_needs_review', reason: 'client_replied' };
   }
   
-  // Check for design review unresolved images
-  if (hasUnresolvedDesignReviewImages(request, decisions, attachments)) {
-    return { ownership: 'ak_needs_review', reason: 'design_review_pending' };
+  // Check for structured review unresolved images
+  if (hasUnresolvedStructuredReviewImages(request, decisions, attachments)) {
+    return { ownership: 'ak_needs_review', reason: 'structured_review_pending' };
   }
   
   // If there's client activity but internal has viewed after it -> waiting on client
@@ -204,7 +207,8 @@ export function getOwnershipSortPriority(ownershipResult) {
       overdue: 1,
       changes_requested: 2,
       client_replied: 3,
-      design_review_pending: 4,
+      structured_review_pending: 4,
+      design_review_pending: 4, // Legacy alias
       never_viewed: 5,
       new_activity: 6
     };
