@@ -568,18 +568,24 @@ function getInstallationReversalReport() {
       'components/project/InstallPartModal.jsx (via commitment install button)',
     ],
     reversal_triggered_at: [
-      'MISSING - No UI component implements installation reversal',
+      'components/project/ReverseInstallationModal.jsx (via CommitmentCard dropdown)',
+      'components/project/ReverseInstallationModal.jsx (via ProjectParts action menu)',
     ],
-    reversal_gated: false,
+    reversal_gated: true,
     delete_blocked: true,
-    reversal_visually_distinct: false,
-    reversal_idempotent_ui: false,
-    critical_issues: [
-      'NO UI FOR REVERSAL - reverseInstalledPart function has no user interface',
-      'Users cannot undo installations without console access',
-      'Reversal requires reversal_type enum but no UI provides selector',
-      'Reversal reason field required but no modal exists',
-    ],
+    reversal_visually_distinct: true,
+    reversal_idempotent_ui: true,
+    critical_issues: [],
+    implementation_details: {
+      modal: 'ReverseInstallationModal',
+      features: [
+        'reversal_type selector (scope_reduction, warranty, error, upgrade_swap, other)',
+        'reversal_reason text field',
+        'Quantity selector for partial reversals',
+        'Routes through CommitmentActions.reverseInstalledPart()',
+        'Lifecycle gating via getAllowedCommitmentActions()',
+      ],
+    },
   };
 }
 
