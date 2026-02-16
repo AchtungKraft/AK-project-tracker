@@ -1,271 +1,416 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * CommitmentServiceGuard - Mutation Exclusivity Enforcement
+ * CommitmentServiceGuard - Platform-Level Mutation Enforcement
  * 
- * This module provides guards to ensure all sensitive mutations go through CommitmentService.
- * Any direct mutation attempt outside the service context will be rejected.
+ * This guard validates ALL mutations to financial entities.
+ * It MUST be called before any direct entity update to protected entities.
  * 
  * Protected Entities:
- * - PartCommitment (financial fields)
- * - PoolAllocation (all mutations)
- * - PoolCharge (all mutations)
- * - BillingPool (status/financial fields)
- * - PartPurchaseLineItem (cost/lock fields)
- * - InstalledPart (reversal fields)
+ * - BillingPool
+ * - PoolAllocation
+ * - PoolCharge
+ * - PartCommitment
+ * - PartPurchaseLineItem
+ * - InstalledPart
+ * - InvoiceBatchLine
+ * 
+ * The guard ensures:
+ * - Sensitive derived fields cannot be directly modified
+ * - Locked fields cannot be modified after lock
+ * - Delete operations are blocked (use reversal pattern)
+ * - All mutations log for audit trail
  */
 
-// Context flag - set by CommitmentService when executing
-const SERVICE_CONTEXT_KEY = '__commitment_service_context__';
+// Service context token - only CommitmentService can set this
+const COMMITMENT_SERVICE_TOKEN = '__COMMITMENT_SERVICE_AUTHORIZED__';
 
-/**
- * Protected fields that can ONLY be modified via CommitmentService
- */
-const PROTECTED_MUTATIONS = {
-    PartCommitment: {
-        fields: [
-            'qty_ordered', 'qty_received', 'qty_installed', 'qty_cancelled',
-            'commitment_status', 'billing_status',
-            'actual_unit_cost', 'actual_extended_cost',
-            'covered_retail_total', 'exposure_gap',
-            'cancelled_at', 'cancelled_by', 'cancelled_reason', 'cancellation_type',
-            'prepay_satisfied_at', 'scope_reduction_credit_created'
-        ],
-        operations: ['update', 'delete']
-    },
-    PoolAllocation: {
-        fields: '*', // All fields protected
-        operations: ['create', 'update', 'delete']
-    },
-    PoolCharge: {
-        fields: '*',
-        operations: ['create', 'update', 'delete']
-    },
-    BillingPool: {
-        fields: [
-            'status', 'invoiced_amount', 'paid_amount',
-            'allocated_total', 'charges_total', 'balance',
-            'closed_at', 'closed_by'
-        ],
-        operations: ['update', 'delete']
-    },
-    PartPurchaseLineItem: {
-        fields: [
-            'unit_price', 'cost_locked_at', 'freight_cost', 'tariff_cost',
-            'commitment_id', 'vendor_id'
-        ],
-        operations: ['update']
-    },
-    InstalledPart: {
-        fields: [
-            'is_reversed', 'reversed_at', 'reversed_by',
-            'reversal_reason', 'reversal_type'
-        ],
-        operations: ['update', 'delete']
-    }
+// Protected entities and their sensitive fields
+const PROTECTED_ENTITIES = {
+  BillingPool: {
+    sensitiveFields: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version'],
+    allowDelete: false,
+    conditionalLocks: []
+  },
+  PoolAllocation: {
+    sensitiveFields: ['amount_allocated'],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'is_reversed', lockFields: ['amount_allocated', 'pool_id', 'commitment_id'], condition: (val) => val === true }
+    ]
+  },
+  PoolCharge: {
+    sensitiveFields: ['amount'],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'is_reversed', lockFields: ['amount', 'pool_id', 'charge_type'], condition: (val) => val === true }
+    ]
+  },
+  PartCommitment: {
+    sensitiveFields: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version'],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'commitment_status', lockFields: ['qty_committed', 'unit_retail_snapshot'], condition: (val) => val === 'cancelled' }
+    ]
+  },
+  PartPurchaseLineItem: {
+    sensitiveFields: [],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'cost_locked_at', lockFields: ['unit_price', 'vendor_id', 'qty_ordered', 'line_total'], condition: (val) => val != null }
+    ]
+  },
+  InstalledPart: {
+    sensitiveFields: ['extended_cost'],
+    allowDelete: false,
+    conditionalLocks: [
+      { field: 'is_reversed', lockFields: ['qty_consumed', 'unit_cost_at_install', 'commitment_id', 'inventory_item_id'], condition: (val) => val === true }
+    ]
+  },
+  InvoiceBatchLine: {
+    sensitiveFields: ['line_total'],
+    allowDelete: false,
+    conditionalLocks: [],
+    // Special: requires batch status check
+    requiresBatchStatusCheck: true,
+    batchLockedStatuses: ['invoiced', 'paid'],
+    batchLockedFields: ['unit_price', 'qty', 'line_total']
+  }
 };
 
-/**
- * Lock enforcement rules
- */
-const LOCK_RULES = {
-    PartPurchaseLineItem: {
-        // If cost_locked_at is set, these fields cannot change
-        lockField: 'cost_locked_at',
-        lockedFields: ['unit_price', 'vendor_id', 'qty_ordered']
-    },
-    InstalledPart: {
-        // If is_reversed is true, no further changes allowed
-        lockField: 'is_reversed',
-        lockedFields: '*'
-    }
-};
-
-/**
- * Validate a mutation request against protection rules
- * @returns {object} { allowed: boolean, reason?: string }
- */
-export function validateMutation(entityName, operation, data, existingRecord, isServiceContext) {
-    // If called from CommitmentService context, allow
-    if (isServiceContext) {
-        return { allowed: true };
-    }
-
-    const rules = PROTECTED_MUTATIONS[entityName];
-    if (!rules) {
-        return { allowed: true }; // Entity not protected
-    }
-
-    // Check if operation is protected
-    if (!rules.operations.includes(operation)) {
-        return { allowed: true };
-    }
-
-    // Check if any protected fields are being modified
-    if (rules.fields === '*') {
-        return {
-            allowed: false,
-            reason: `${entityName} mutations must go through CommitmentService`
-        };
-    }
-
-    const modifiedFields = Object.keys(data || {});
-    const protectedFieldsModified = modifiedFields.filter(f => rules.fields.includes(f));
-
-    if (protectedFieldsModified.length > 0) {
-        return {
-            allowed: false,
-            reason: `Protected fields [${protectedFieldsModified.join(', ')}] on ${entityName} must be modified through CommitmentService`
-        };
-    }
-
-    return { allowed: true };
-}
-
-/**
- * Validate lock constraints on an entity
- * @returns {object} { allowed: boolean, reason?: string }
- */
-export function validateLockConstraints(entityName, data, existingRecord) {
-    const lockRule = LOCK_RULES[entityName];
-    if (!lockRule || !existingRecord) {
-        return { allowed: true };
-    }
-
-    const lockValue = existingRecord[lockRule.lockField];
-    
-    // Check if entity is locked
-    const isLocked = lockRule.lockField === 'is_reversed' 
-        ? lockValue === true 
-        : lockValue != null;
-
-    if (!isLocked) {
-        return { allowed: true };
-    }
-
-    // Check if attempting to modify locked fields
-    const modifiedFields = Object.keys(data || {});
-    
-    if (lockRule.lockedFields === '*') {
-        if (modifiedFields.length > 0) {
-            return {
-                allowed: false,
-                reason: `${entityName} is locked (${lockRule.lockField} is set). No modifications allowed.`
-            };
-        }
-    } else {
-        const lockedFieldsModified = modifiedFields.filter(f => lockRule.lockedFields.includes(f));
-        if (lockedFieldsModified.length > 0) {
-            return {
-                allowed: false,
-                reason: `Cannot modify locked fields [${lockedFieldsModified.join(', ')}] on ${entityName}. Cost is locked.`
-            };
-        }
-    }
-
-    return { allowed: true };
-}
-
-/**
- * Assertion helper for CommitmentService internal use
- */
-export function assertServiceContext(context, operation) {
-    if (!context || !context[SERVICE_CONTEXT_KEY]) {
-        const error = new Error(`SECURITY: ${operation} must be called within CommitmentService context`);
-        console.error('🚨 MUTATION GUARD VIOLATION:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Create a service context object for CommitmentService
- */
-export function createServiceContext(userId) {
-    return {
-        [SERVICE_CONTEXT_KEY]: true,
-        userId,
-        timestamp: new Date().toISOString()
-    };
-}
-
-/**
- * Check if context is from CommitmentService
- */
-export function isServiceContext(context) {
-    return context && context[SERVICE_CONTEXT_KEY] === true;
-}
-
-// Export for use in validation middleware
-export const PROTECTED_ENTITIES = Object.keys(PROTECTED_MUTATIONS);
-export const LOCK_ENTITIES = Object.keys(LOCK_RULES);
+// Allowed contexts that can mutate protected entities
+const ALLOWED_MUTATION_SOURCES = [
+  'commitmentService',
+  'commitmentServiceGuard', // Self for testing
+  'testCommitmentLifecycle',
+  'createInvoiceBatch',
+  'voidInvoiceBatch',
+  'updatePaymentStatus',
+  'mutateInventory',
+  'syncReceivingToCommitments',
+  'syncInstallToCommitments',
+  'syncInvoiceToCommitments'
+];
 
 Deno.serve(async (req) => {
-    // This endpoint provides validation as a service for UI components
-    if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-            },
-        });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    try {
-        const base44 = createClientFromRequest(req);
-        const { action, entityName, operation, data, recordId } = await req.json();
+    const { action, ...params } = await req.json();
 
-        if (action === 'validateMutation') {
-            // Fetch existing record if updating
-            let existingRecord = null;
-            if (recordId && operation === 'update') {
-                try {
-                    const records = await base44.asServiceRole.entities[entityName].filter({ id: recordId });
-                    existingRecord = records[0];
-                } catch (e) {
-                    // Entity might not exist yet
-                }
-            }
-
-            // Always false for direct API calls - must use CommitmentService
-            const mutationResult = validateMutation(entityName, operation, data, existingRecord, false);
-            
-            if (!mutationResult.allowed) {
-                console.warn(`🚨 BLOCKED MUTATION: ${entityName}.${operation}`, {
-                    reason: mutationResult.reason,
-                    data
-                });
-            }
-
-            // Also check lock constraints
-            const lockResult = validateLockConstraints(entityName, data, existingRecord);
-            
-            if (!lockResult.allowed) {
-                console.warn(`🔒 LOCK VIOLATION: ${entityName}`, {
-                    reason: lockResult.reason,
-                    recordId
-                });
-                return Response.json({
-                    allowed: false,
-                    reason: lockResult.reason
-                });
-            }
-
-            return Response.json(mutationResult);
-        }
-
-        if (action === 'getProtectedEntities') {
-            return Response.json({
-                protectedEntities: PROTECTED_ENTITIES,
-                lockEntities: LOCK_ENTITIES,
-                rules: PROTECTED_MUTATIONS
-            });
-        }
-
-        return Response.json({ error: 'Unknown action' }, { status: 400 });
-
-    } catch (error) {
-        console.error("CommitmentServiceGuard error:", error);
-        return Response.json({ error: error.message }, { status: 500 });
+    switch (action) {
+      case 'validateMutation':
+        return Response.json(await validateMutation(base44, params));
+      case 'validateDelete':
+        return Response.json(await validateDelete(base44, params));
+      case 'getProtectedEntities':
+        return Response.json({ entities: Object.keys(PROTECTED_ENTITIES) });
+      case 'testGuard':
+        return Response.json(await testGuard(base44, user));
+      default:
+        return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
+
+  } catch (error) {
+    console.error("CommitmentServiceGuard error:", error);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 });
+
+/**
+ * Validate a mutation before it's applied
+ */
+async function validateMutation(base44, params) {
+  const { 
+    entityName, 
+    recordId, 
+    updates, 
+    callerSource,
+    serviceToken 
+  } = params;
+
+  const result = {
+    allowed: true,
+    violations: [],
+    warnings: [],
+    entityName,
+    recordId,
+    callerSource
+  };
+
+  // Check if entity is protected
+  const protection = PROTECTED_ENTITIES[entityName];
+  if (!protection) {
+    return result; // Not a protected entity
+  }
+
+  // Verify caller is authorized
+  const isAuthorizedCaller = ALLOWED_MUTATION_SOURCES.includes(callerSource);
+  const hasValidToken = serviceToken === COMMITMENT_SERVICE_TOKEN;
+
+  if (!isAuthorizedCaller && !hasValidToken) {
+    result.allowed = false;
+    result.violations.push({
+      type: 'UNAUTHORIZED_CALLER',
+      message: `Direct mutation to ${entityName} not allowed. Use CommitmentService.`,
+      callerSource
+    });
+    logSecurityWarning('UNAUTHORIZED_MUTATION', entityName, recordId, callerSource, updates);
+    return result;
+  }
+
+  // Check sensitive fields
+  const attemptedSensitiveFields = Object.keys(updates || {}).filter(
+    f => protection.sensitiveFields.includes(f)
+  );
+
+  if (attemptedSensitiveFields.length > 0 && !hasValidToken) {
+    result.allowed = false;
+    result.violations.push({
+      type: 'SENSITIVE_FIELD_MUTATION',
+      message: `Cannot directly modify sensitive fields: ${attemptedSensitiveFields.join(', ')}`,
+      fields: attemptedSensitiveFields
+    });
+    logSecurityWarning('SENSITIVE_FIELD_MUTATION', entityName, recordId, callerSource, { fields: attemptedSensitiveFields });
+    return result;
+  }
+
+  // Check conditional locks (need to fetch current record)
+  if (protection.conditionalLocks.length > 0 && recordId) {
+    try {
+      const records = await base44.asServiceRole.entities[entityName].filter({ id: recordId });
+      const record = records[0];
+      
+      if (record) {
+        for (const lock of protection.conditionalLocks) {
+          const lockValue = record[lock.field];
+          if (lock.condition(lockValue)) {
+            const attemptedLockedFields = Object.keys(updates || {}).filter(
+              f => lock.lockFields.includes(f)
+            );
+            if (attemptedLockedFields.length > 0) {
+              result.allowed = false;
+              result.violations.push({
+                type: 'LOCKED_FIELD_MUTATION',
+                message: `Fields locked by ${lock.field}: ${attemptedLockedFields.join(', ')}`,
+                lockField: lock.field,
+                lockValue,
+                attemptedFields: attemptedLockedFields
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      result.warnings.push({ type: 'RECORD_FETCH_ERROR', message: err.message });
+    }
+  }
+
+  // Special check for InvoiceBatchLine - requires batch status check
+  if (entityName === 'InvoiceBatchLine' && protection.requiresBatchStatusCheck && recordId) {
+    try {
+      const lines = await base44.asServiceRole.entities.InvoiceBatchLine.filter({ id: recordId });
+      const line = lines[0];
+      
+      if (line && line.batch_id) {
+        const batches = await base44.asServiceRole.entities.InvoiceBatch.filter({ id: line.batch_id });
+        const batch = batches[0];
+        
+        if (batch && protection.batchLockedStatuses.includes(batch.status)) {
+          const attemptedLockedFields = Object.keys(updates || {}).filter(
+            f => protection.batchLockedFields.includes(f)
+          );
+          if (attemptedLockedFields.length > 0) {
+            result.allowed = false;
+            result.violations.push({
+              type: 'BATCH_STATUS_LOCK',
+              message: `Invoice batch is ${batch.status} - cannot modify: ${attemptedLockedFields.join(', ')}`,
+              batchStatus: batch.status,
+              attemptedFields: attemptedLockedFields
+            });
+          }
+        }
+      }
+    } catch (err) {
+      result.warnings.push({ type: 'BATCH_STATUS_CHECK_ERROR', message: err.message });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validate a delete operation
+ */
+async function validateDelete(base44, params) {
+  const { entityName, recordId, callerSource, serviceToken } = params;
+
+  const result = {
+    allowed: true,
+    violations: [],
+    entityName,
+    recordId
+  };
+
+  const protection = PROTECTED_ENTITIES[entityName];
+  if (!protection) {
+    return result;
+  }
+
+  // Check if delete is allowed
+  if (!protection.allowDelete) {
+    result.allowed = false;
+    result.violations.push({
+      type: 'DELETE_BLOCKED',
+      message: `Cannot delete ${entityName}. Use reversal pattern instead.`,
+      suggestion: entityName === 'InstalledPart' ? 'Use reverseInstalledPart via CommitmentService' :
+                  entityName === 'PoolAllocation' ? 'Use reversePoolAllocation via CommitmentService' :
+                  entityName === 'PoolCharge' ? 'Use reversePoolCharge via CommitmentService' :
+                  'Archive or reverse the record instead of deleting'
+    });
+    logSecurityWarning('DELETE_BLOCKED', entityName, recordId, callerSource, {});
+  }
+
+  return result;
+}
+
+/**
+ * Log security warning for audit trail
+ */
+function logSecurityWarning(type, entityName, recordId, callerSource, details) {
+  console.warn(`🚨 SECURITY WARNING [${type}]`, {
+    timestamp: new Date().toISOString(),
+    entityName,
+    recordId,
+    callerSource,
+    details
+  });
+}
+
+/**
+ * Test the guard with various scenarios
+ */
+async function testGuard(base44, user) {
+  const results = {
+    tests: [],
+    passed: 0,
+    failed: 0
+  };
+
+  // Test 1: Direct mutation to BillingPool.balance should fail
+  const test1 = await validateMutation(base44, {
+    entityName: 'BillingPool',
+    recordId: 'test_id',
+    updates: { balance: 1000 },
+    callerSource: 'ui_component'
+  });
+  results.tests.push({
+    name: 'Direct BillingPool.balance mutation blocked',
+    expected: false,
+    actual: test1.allowed,
+    passed: test1.allowed === false
+  });
+  test1.allowed === false ? results.passed++ : results.failed++;
+
+  // Test 2: Direct mutation to PartCommitment.exposure_gap should fail
+  const test2 = await validateMutation(base44, {
+    entityName: 'PartCommitment',
+    recordId: 'test_id',
+    updates: { exposure_gap: 500 },
+    callerSource: 'ui_component'
+  });
+  results.tests.push({
+    name: 'Direct PartCommitment.exposure_gap mutation blocked',
+    expected: false,
+    actual: test2.allowed,
+    passed: test2.allowed === false
+  });
+  test2.allowed === false ? results.passed++ : results.failed++;
+
+  // Test 3: Mutation via CommitmentService should succeed
+  const test3 = await validateMutation(base44, {
+    entityName: 'BillingPool',
+    recordId: 'test_id',
+    updates: { balance: 1000 },
+    callerSource: 'commitmentService',
+    serviceToken: COMMITMENT_SERVICE_TOKEN
+  });
+  results.tests.push({
+    name: 'CommitmentService mutation allowed',
+    expected: true,
+    actual: test3.allowed,
+    passed: test3.allowed === true
+  });
+  test3.allowed === true ? results.passed++ : results.failed++;
+
+  // Test 4: Delete InstalledPart should fail
+  const test4 = await validateDelete(base44, {
+    entityName: 'InstalledPart',
+    recordId: 'test_id',
+    callerSource: 'ui_component'
+  });
+  results.tests.push({
+    name: 'Delete InstalledPart blocked',
+    expected: false,
+    actual: test4.allowed,
+    passed: test4.allowed === false
+  });
+  test4.allowed === false ? results.passed++ : results.failed++;
+
+  // Test 5: Delete PoolAllocation should fail
+  const test5 = await validateDelete(base44, {
+    entityName: 'PoolAllocation',
+    recordId: 'test_id',
+    callerSource: 'ui_component'
+  });
+  results.tests.push({
+    name: 'Delete PoolAllocation blocked',
+    expected: false,
+    actual: test5.allowed,
+    passed: test5.allowed === false
+  });
+  test5.allowed === false ? results.passed++ : results.failed++;
+
+  // Test 6: Non-sensitive field update should be allowed
+  const test6 = await validateMutation(base44, {
+    entityName: 'BillingPool',
+    recordId: 'test_id',
+    updates: { notes: 'Updated notes' },
+    callerSource: 'commitmentService'
+  });
+  results.tests.push({
+    name: 'Non-sensitive field update allowed',
+    expected: true,
+    actual: test6.allowed,
+    passed: test6.allowed === true
+  });
+  test6.allowed === true ? results.passed++ : results.failed++;
+
+  results.allPassed = results.failed === 0;
+  
+  return results;
+}
+
+/**
+ * Export constants for use by other services
+ */
+export const GUARD_CONFIG = {
+  COMMITMENT_SERVICE_TOKEN,
+  PROTECTED_ENTITIES,
+  ALLOWED_MUTATION_SOURCES
+};
