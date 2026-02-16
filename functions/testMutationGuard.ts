@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
     // ============================================
 
     // Test 1: Direct mutation to BillingPool.balance should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct BillingPool.balance mutation blocked',
       'BillingPool',
       'test_pool_id',
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 2: Direct mutation to BillingPool.allocated_total should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct BillingPool.allocated_total mutation blocked',
       'BillingPool',
       'test_pool_id',
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 3: Direct mutation to BillingPool.charges_total should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct BillingPool.charges_total mutation blocked',
       'BillingPool',
       'test_pool_id',
@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 4: Direct mutation to PartCommitment.exposure_gap should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PartCommitment.exposure_gap mutation blocked',
       'PartCommitment',
       'test_commitment_id',
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 5: Direct mutation to PartCommitment.covered_retail_total should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PartCommitment.covered_retail_total mutation blocked',
       'PartCommitment',
       'test_commitment_id',
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 6: Direct mutation to PartCommitment.planned_retail_total should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PartCommitment.planned_retail_total mutation blocked',
       'PartCommitment',
       'test_commitment_id',
@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 7: Direct mutation to PartCommitment.invoiced_retail_total should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PartCommitment.invoiced_retail_total mutation blocked',
       'PartCommitment',
       'test_commitment_id',
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 8: Direct mutation to PoolAllocation.amount_allocated should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PoolAllocation.amount_allocated mutation blocked',
       'PoolAllocation',
       'test_allocation_id',
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 9: Direct mutation to PoolCharge.amount should be BLOCKED
-    await testGuard(
+    testGuard(
       'Direct PoolCharge.amount mutation blocked',
       'PoolCharge',
       'test_charge_id',
@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
     // ============================================
 
     // Test 10: Delete BillingPool should be BLOCKED
-    await testDeleteGuard(
+    testDeleteGuard(
       'Delete BillingPool blocked',
       'BillingPool',
       'test_pool_id',
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 11: Delete PoolAllocation should be BLOCKED
-    await testDeleteGuard(
+    testDeleteGuard(
       'Delete PoolAllocation blocked',
       'PoolAllocation',
       'test_allocation_id',
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 12: Delete PoolCharge should be BLOCKED
-    await testDeleteGuard(
+    testDeleteGuard(
       'Delete PoolCharge blocked',
       'PoolCharge',
       'test_charge_id',
@@ -238,7 +238,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 13: Delete InstalledPart should be BLOCKED
-    await testDeleteGuard(
+    testDeleteGuard(
       'Delete InstalledPart blocked',
       'InstalledPart',
       'test_installed_id',
@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 14: Delete PartCommitment should be BLOCKED
-    await testDeleteGuard(
+    testDeleteGuard(
       'Delete PartCommitment blocked',
       'PartCommitment',
       'test_commitment_id',
@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
     // ============================================
 
     // Test 15: CommitmentService can mutate BillingPool.balance
-    await testGuard(
+    testGuard(
       'CommitmentService BillingPool.balance mutation allowed',
       'BillingPool',
       'test_pool_id',
@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 16: CommitmentService can mutate PartCommitment.exposure_gap
-    await testGuard(
+    testGuard(
       'CommitmentService PartCommitment.exposure_gap mutation allowed',
       'PartCommitment',
       'test_commitment_id',
@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
     // ============================================
 
     // Test 17: BillingPool.notes update should be ALLOWED (from authorized caller)
-    await testGuard(
+    testGuard(
       'BillingPool.notes update allowed',
       'BillingPool',
       'test_pool_id',
@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 18: PartCommitment.notes update should be ALLOWED (from authorized caller)
-    await testGuard(
+    testGuard(
       'PartCommitment.notes update allowed',
       'PartCommitment',
       'test_commitment_id',
@@ -304,7 +304,7 @@ Deno.serve(async (req) => {
     );
 
     // Test 19: Non-protected entity update from UI should be ALLOWED
-    await testGuard(
+    testGuard(
       'Non-protected entity (Part) update allowed',
       'Part',
       'test_part_id',
