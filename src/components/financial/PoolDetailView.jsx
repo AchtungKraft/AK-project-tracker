@@ -24,12 +24,15 @@ import {
   Clock,
   X,
   Loader2,
-  Lock
+  Lock,
+  ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { CommitmentActions } from "./financialMutationGuard";
+import ClosePoolModal from "./ClosePoolModal";
+import TransferPoolBalanceModal from "./TransferPoolBalanceModal";
 
 /**
  * PoolDetailView - Detailed view of a billing pool with audit trail
@@ -45,6 +48,8 @@ export default function PoolDetailView({ poolId, onClose }) {
   const queryClient = useQueryClient();
   const [showReversalModal, setShowReversalModal] = useState(null);
   const [reversalReason, setReversalReason] = useState('');
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
 
   // Fetch pool
   const { data: pool, isLoading: loadingPool } = useQuery({
@@ -249,20 +254,45 @@ export default function PoolDetailView({ poolId, onClose }) {
             )}
           </div>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => recalculateMutation.mutate()}
-          disabled={recalculateMutation.isPending}
-          className="border-gray-600"
-        >
-          {recalculateMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
+        <div className="flex items-center gap-2">
+          {pool?.status !== 'closed' && (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowTransferModal(true)}
+                disabled={balance <= 0}
+                className="border-blue-600 text-blue-400 hover:bg-blue-900/30"
+              >
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Transfer
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowCloseModal(true)}
+                className="border-gray-600"
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Close Pool
+              </Button>
+            </>
           )}
-          Recalculate
-        </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => recalculateMutation.mutate()}
+            disabled={recalculateMutation.isPending}
+            className="border-gray-600"
+          >
+            {recalculateMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Recalculate
+          </Button>
+        </div>
       </div>
 
       {/* Overdrawn Warning */}
@@ -646,6 +676,22 @@ export default function PoolDetailView({ poolId, onClose }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Close Pool Modal */}
+      {showCloseModal && pool && (
+        <ClosePoolModal
+          pool={pool}
+          onClose={() => setShowCloseModal(false)}
+        />
+      )}
+
+      {/* Transfer Balance Modal */}
+      {showTransferModal && pool && (
+        <TransferPoolBalanceModal
+          pool={pool}
+          onClose={() => setShowTransferModal(false)}
+        />
       )}
     </div>
   );
