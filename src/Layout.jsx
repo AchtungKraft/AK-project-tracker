@@ -106,6 +106,11 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("TechSpecs"),
         icon: Settings,
       },
+      {
+        title: "Data Normalization",
+        url: createPageUrl("SupplyNormalization"),
+        icon: Settings,
+      },
     ];
   } else {
     return [

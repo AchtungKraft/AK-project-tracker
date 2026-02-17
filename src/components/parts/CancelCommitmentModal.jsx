@@ -22,7 +22,8 @@ export default function CancelCommitmentModal({
   commitment, 
   part,
   project,
-  onClose 
+  onClose,
+  onSuccess
 }) {
   const queryClient = useQueryClient();
   const [reason, setReason] = useState('');
@@ -53,12 +54,15 @@ export default function CancelCommitmentModal({
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
       queryClient.invalidateQueries({ queryKey: ['billingPools'] });
       queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
+      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
       
       if (data.creditCreated) {
         toast.success('Commitment cancelled - credit pool created for scope reduction');
       } else {
         toast.success('Commitment cancelled');
       }
+      onSuccess?.();
       onClose();
     },
     onError: (error) => {
@@ -88,7 +92,10 @@ export default function CancelCommitmentModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
       toast.success('Commitment quantity reduced');
+      onSuccess?.();
       onClose();
     },
     onError: (error) => {
