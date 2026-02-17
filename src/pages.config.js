@@ -75,12 +75,13 @@ import Reports from './pages/Reports';
 import SupplyDashboard from './pages/SupplyDashboard';
 import SupplyInstalled from './pages/SupplyInstalled';
 import SupplyLanding from './pages/SupplyLanding';
+import SupplyNormalization from './pages/SupplyNormalization';
 import SupplyOnOrder from './pages/SupplyOnOrder';
 import SupplyQueues from './pages/SupplyQueues';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import SupplyNormalization from './pages/SupplyNormalization';
+import TestDataCleanup from './pages/TestDataCleanup';
 import __Layout from './Layout.jsx';
 
 
@@ -113,12 +114,13 @@ export const PAGES = {
     "SupplyDashboard": SupplyDashboard,
     "SupplyInstalled": SupplyInstalled,
     "SupplyLanding": SupplyLanding,
+    "SupplyNormalization": SupplyNormalization,
     "SupplyOnOrder": SupplyOnOrder,
     "SupplyQueues": SupplyQueues,
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "SupplyNormalization": SupplyNormalization,
+    "TestDataCleanup": TestDataCleanup,
 }
 
 export const pagesConfig = {
