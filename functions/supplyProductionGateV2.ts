@@ -19,8 +19,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Run integrity audit
-    const auditResponse = await base44.functions.invoke('supplyIntegrityAudit', {});
+    // Run integrity audit using service role
+    const auditResponse = await base44.asServiceRole.functions.invoke('supplyIntegrityAudit', {});
     
     if (!auditResponse.data?.success) {
       return Response.json({
