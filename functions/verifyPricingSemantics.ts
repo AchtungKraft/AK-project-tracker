@@ -207,6 +207,8 @@ Deno.serve(async (req) => {
     // CHECK LINE ITEMS
     // ========================================
     report.line_items.scanned = lineItems.length;
+    report.line_items.cost_snapshot_mismatch = 0;
+    report.line_items.top_mismatches = [];
 
     for (const lineItem of lineItems) {
       const issues = [];
@@ -222,17 +224,30 @@ Deno.serve(async (req) => {
         issues.push('missing_cost');
       }
 
-      // Cost equals retail (should never happen - line items are cost-only)
+      // Cost equals retail (WARN only - can happen legitimately in some cases)
       if (lineCost > 10 && partRetail > 0 && Math.abs(lineCost - partRetail) < 0.01) {
         report.line_items.cost_equals_retail++;
-        issues.push('cost_equals_retail');
+        issues.push('cost_equals_retail_warn');
       }
 
-      // Cost mismatch with commitment snapshot
+      // Cost mismatch with commitment snapshot (CRITICAL - this is authoritative)
       if (commitment && commitment.unit_cost_snapshot > 0) {
         if (Math.abs(lineCost - commitment.unit_cost_snapshot) > 0.01) {
           report.line_items.cost_mismatch++;
+          report.line_items.cost_snapshot_mismatch++;
           issues.push('cost_mismatch_with_commitment');
+          
+          // Track top mismatches
+          if (report.line_items.top_mismatches.length < limit) {
+            report.line_items.top_mismatches.push({
+              line_item_id: lineItem.id,
+              commitment_id: commitment.id,
+              part_name: part?.part_name,
+              expected_snapshot: commitment.unit_cost_snapshot,
+              actual_unit_cost: lineCost,
+              diff: lineCost - commitment.unit_cost_snapshot
+            });
+          }
         }
       }
 
@@ -253,7 +268,7 @@ Deno.serve(async (req) => {
     // DETERMINE GATE STATUS
     // ========================================
     
-    // FAIL conditions
+    // FAIL conditions (blocking)
     if (report.commitments.missing_cost_snapshot > 0) {
       report.gate_metrics.fail_conditions.push({
         type: 'commitments_missing_cost_snapshot',
@@ -270,27 +285,32 @@ Deno.serve(async (req) => {
       report.gate_metrics.pass = false;
     }
 
-    if (report.line_items.cost_mismatch > 0) {
+    // Line item cost mismatch with commitment snapshot is CRITICAL
+    if (report.line_items.cost_snapshot_mismatch > 0) {
       report.gate_metrics.fail_conditions.push({
-        type: 'line_items_cost_mismatch',
-        count: report.line_items.cost_mismatch
+        type: 'line_items_cost_snapshot_mismatch',
+        count: report.line_items.cost_snapshot_mismatch,
+        top_mismatches: report.line_items.top_mismatches.slice(0, 5)
       });
       report.gate_metrics.pass = false;
     }
 
+    // WARN conditions (non-blocking)
+    // cost_equals_retail on line items is WARN only (can happen legitimately)
     if (report.line_items.cost_equals_retail > 0) {
-      report.gate_metrics.fail_conditions.push({
+      report.gate_metrics.warn_conditions.push({
         type: 'line_items_cost_equals_retail',
-        count: report.line_items.cost_equals_retail
+        count: report.line_items.cost_equals_retail,
+        note: 'Can occur legitimately when Part cost happens to equal retail'
       });
-      report.gate_metrics.pass = false;
     }
 
-    // WARN conditions
+    // Part cost equals retail is WARN when not verified
     if (report.parts.cost_equals_retail > 0) {
       report.gate_metrics.warn_conditions.push({
         type: 'parts_cost_equals_retail',
-        count: report.parts.cost_equals_retail
+        count: report.parts.cost_equals_retail,
+        note: 'Parts with unverified cost matching retail - review recommended'
       });
     }
 

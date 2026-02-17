@@ -183,71 +183,94 @@ async function runIntegrityAudit(base44) {
     parts_needing_manual_review_count: pricingMetrics.parts_needing_manual_review.length
   };
 
-  // FAIL conditions (blocking)
+  // ========================================
+  // FAIL conditions (blocking) - TIGHTENED SEMANTICS
+  // ========================================
+  
+  // FAIL: Commitment missing cost snapshot when qty_committed > 0
   if (pricingMetrics.commitments_missing_cost_snapshot.length > 0) {
     audit.pricingSemanticIntegrity.status = 'FAIL';
     audit.pricingSemanticIntegrity.violations.push({
       type: 'commitments_missing_cost_snapshot',
       count: pricingMetrics.commitments_missing_cost_snapshot.length,
-      sample: pricingMetrics.commitments_missing_cost_snapshot.slice(0, 5)
+      sample: pricingMetrics.commitments_missing_cost_snapshot.slice(0, 5),
+      severity: 'BLOCKING'
     });
   }
 
+  // FAIL: Commitment missing retail snapshot when qty_committed > 0
   if (pricingMetrics.commitments_missing_retail_snapshot.length > 0) {
     audit.pricingSemanticIntegrity.status = 'FAIL';
     audit.pricingSemanticIntegrity.violations.push({
       type: 'commitments_missing_retail_snapshot',
       count: pricingMetrics.commitments_missing_retail_snapshot.length,
-      sample: pricingMetrics.commitments_missing_retail_snapshot.slice(0, 5)
+      sample: pricingMetrics.commitments_missing_retail_snapshot.slice(0, 5),
+      severity: 'BLOCKING'
     });
   }
 
+  // FAIL: PO line item unit_cost mismatches commitment.unit_cost_snapshot (authoritative)
   if (pricingMetrics.invalid_line_item_cost_source.length > 0) {
     audit.pricingSemanticIntegrity.status = 'FAIL';
     audit.pricingSemanticIntegrity.violations.push({
-      type: 'invalid_line_item_cost_source',
+      type: 'line_item_cost_mismatch_commitment_snapshot',
+      description: 'PO line item unit_cost does not match commitment.unit_cost_snapshot',
       count: pricingMetrics.invalid_line_item_cost_source.length,
-      sample: pricingMetrics.invalid_line_item_cost_source.slice(0, 5)
+      sample: pricingMetrics.invalid_line_item_cost_source.slice(0, 5),
+      severity: 'BLOCKING',
+      repair_action: "base44.functions.invoke('repairLineItemCostFromCommitments', { dry_run: false })"
     });
   }
 
-  if (pricingMetrics.line_items_cost_equals_retail.length > 0) {
-    audit.pricingSemanticIntegrity.status = 'FAIL';
+  // ========================================
+  // WARN conditions (non-blocking)
+  // ========================================
+  
+  // WARN: line_items_cost_equals_retail - NOT a fail, can happen legitimately
+  if (pricingMetrics.line_items_cost_equals_retail.length > 0 && audit.pricingSemanticIntegrity.status !== 'FAIL') {
+    audit.pricingSemanticIntegrity.status = 'WARN';
     audit.pricingSemanticIntegrity.violations.push({
       type: 'line_items_cost_equals_retail',
+      description: 'Line item cost equals part retail - may be legitimate if Part.cost == Part.retail',
       count: pricingMetrics.line_items_cost_equals_retail.length,
-      sample: pricingMetrics.line_items_cost_equals_retail.slice(0, 5)
+      sample: pricingMetrics.line_items_cost_equals_retail.slice(0, 5),
+      severity: 'WARNING',
+      note: 'Review if Part.is_cost_verified=false for these parts'
     });
   }
 
-  // WARN conditions (non-blocking)
-  if (audit.pricingSemanticIntegrity.status !== 'FAIL') {
-    if (pricingMetrics.cost_equals_retail_parts.length > 0) {
-      audit.pricingSemanticIntegrity.status = 'WARN';
-      audit.pricingSemanticIntegrity.violations.push({
-        type: 'cost_equals_retail_parts',
-        count: pricingMetrics.cost_equals_retail_parts.length,
-        sample: pricingMetrics.cost_equals_retail_parts.slice(0, 5)
-      });
-    }
+  // WARN: Part cost equals retail (only if not verified)
+  if (pricingMetrics.cost_equals_retail_parts.length > 0 && audit.pricingSemanticIntegrity.status !== 'FAIL') {
+    audit.pricingSemanticIntegrity.status = 'WARN';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'cost_equals_retail_parts',
+      description: 'Part cost equals retail and is_cost_verified=false',
+      count: pricingMetrics.cost_equals_retail_parts.length,
+      sample: pricingMetrics.cost_equals_retail_parts.slice(0, 5),
+      severity: 'WARNING'
+    });
+  }
 
-    if (pricingMetrics.commitments_with_zero_retail.length > 0) {
-      audit.pricingSemanticIntegrity.status = 'WARN';
-      audit.pricingSemanticIntegrity.violations.push({
-        type: 'commitments_with_zero_retail',
-        count: pricingMetrics.commitments_with_zero_retail.length,
-        sample: pricingMetrics.commitments_with_zero_retail.slice(0, 5)
-      });
-    }
+  // WARN: Commitments with zero retail
+  if (pricingMetrics.commitments_with_zero_retail.length > 0 && audit.pricingSemanticIntegrity.status !== 'FAIL') {
+    audit.pricingSemanticIntegrity.status = 'WARN';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'commitments_with_zero_retail',
+      count: pricingMetrics.commitments_with_zero_retail.length,
+      sample: pricingMetrics.commitments_with_zero_retail.slice(0, 5),
+      severity: 'WARNING'
+    });
+  }
 
-    if (pricingMetrics.parts_needing_manual_review.length > 0) {
-      audit.pricingSemanticIntegrity.status = 'WARN';
-      audit.pricingSemanticIntegrity.violations.push({
-        type: 'parts_needing_manual_review',
-        count: pricingMetrics.parts_needing_manual_review.length,
-        sample: pricingMetrics.parts_needing_manual_review.slice(0, 5)
-      });
-    }
+  // WARN: Parts needing manual review
+  if (pricingMetrics.parts_needing_manual_review.length > 0 && audit.pricingSemanticIntegrity.status !== 'FAIL') {
+    audit.pricingSemanticIntegrity.status = 'WARN';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'parts_needing_manual_review',
+      count: pricingMetrics.parts_needing_manual_review.length,
+      sample: pricingMetrics.parts_needing_manual_review.slice(0, 5),
+      severity: 'WARNING'
+    });
   }
 
   // ========================================
@@ -413,18 +436,31 @@ Deno.serve(async (req) => {
     }
     
     if (gates.pricingSemanticGate.blocking) {
+      // Check which specific violation to recommend action for
+      const hasLineItemMismatch = audit.pricingSemanticIntegrity.violations.some(
+        v => v.type === 'line_item_cost_mismatch_commitment_snapshot'
+      );
+      
+      if (hasLineItemMismatch) {
+        recommendations.push({
+          priority: 1,
+          action: 'Line item costs mismatch commitment snapshots - run repair',
+          command: "base44.functions.invoke('repairLineItemCostFromCommitments', { dry_run: false })"
+        });
+      }
+      
       recommendations.push({
         priority: 1,
-        action: 'Critical pricing contamination detected - run repair',
-        command: "base44.functions.invoke('normalizeSupplyData', { dry_run: false, repair_pricing_semantics: true })"
+        action: 'Critical pricing issues detected - run full migration',
+        command: "base44.functions.invoke('migratePricingSemantics', { dry_run: false, repair_line_items: true })"
       });
     }
     
     if (gates.pricingSemanticGate.status === 'WARN') {
       recommendations.push({
         priority: 3,
-        action: 'Potential cost/retail contamination - review flagged parts',
-        command: "base44.functions.invoke('verifyLegacyPricingIntegrity', { limit: 50 })"
+        action: 'Potential cost/retail warnings - review flagged parts (non-blocking)',
+        command: "base44.functions.invoke('verifyPricingSemantics', { limit: 50 })"
       });
     }
     

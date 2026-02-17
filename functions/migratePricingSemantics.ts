@@ -91,14 +91,16 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const dry_run = body.dry_run !== false;
-    const limit = body.limit || 200;
+    const max_pages = body.max_pages || 50;
+    const page_size = body.page_size || 200;
     const batch_size = body.batch_size || 25;
     const delay_ms = body.delay_ms || 150;
+    const repair_line_items = body.repair_line_items !== false; // Default true
 
     const report = {
       timestamp: new Date().toISOString(),
       dry_run,
-      params: { limit, batch_size, delay_ms },
+      params: { max_pages, page_size, batch_size, delay_ms, repair_line_items },
       
       parts: {
         scanned: 0,
@@ -130,12 +132,12 @@ Deno.serve(async (req) => {
       summary: {}
     };
 
-    // Fetch all data
-    const [parts, commitments, lineItems] = await Promise.all([
-      base44.asServiceRole.entities.Part.filter({}, '-created_date', limit),
-      base44.asServiceRole.entities.PartCommitment.filter({}, '-created_date', limit * 2),
-      base44.asServiceRole.entities.PartPurchaseLineItem.filter({}, '-created_date', limit * 3)
-    ]);
+    // Fetch all data with pagination
+    const parts = await base44.asServiceRole.entities.Part.list();
+    const commitments = await base44.asServiceRole.entities.PartCommitment.list();
+    const lineItems = await base44.asServiceRole.entities.PartPurchaseLineItem.list();
+    
+    console.log(`📊 Loaded: ${parts.length} parts, ${commitments.length} commitments, ${lineItems.length} line items`);
 
     const partsMap = new Map(parts.map(p => [p.id, p]));
     const commitmentsMap = new Map(commitments.map(c => [c.id, c]));
@@ -413,6 +415,80 @@ Deno.serve(async (req) => {
     }
 
     // ========================================
+    // PHASE 4: REPAIR LINE ITEM COSTS FROM COMMITMENT SNAPSHOTS
+    // ========================================
+    if (repair_line_items) {
+      console.log('🔧 Phase 4: Repairing line item costs from commitment snapshots...');
+      
+      const lineItemRepairs = [];
+      const TOL = 0.01;
+      
+      for (const lineItem of lineItems) {
+        if (!lineItem.commitment_id) continue;
+        
+        const commitment = commitmentsMap.get(lineItem.commitment_id);
+        if (!commitment) continue;
+        
+        const snapshot = commitment.unit_cost_snapshot;
+        if (!snapshot || snapshot <= 0) continue;
+        
+        const currentCost = lineItem.unit_cost || lineItem.unit_price || 0;
+        const qty = lineItem.qty_ordered || 1;
+        const expectedExtended = snapshot * qty;
+        
+        const costMismatch = Math.abs(currentCost - snapshot) > TOL;
+        const extendedMismatch = Math.abs((lineItem.extended_cost || 0) - expectedExtended) > TOL;
+        const missingRef = lineItem.cost_source_reference !== `commitment:${commitment.id}`;
+        
+        if (costMismatch || extendedMismatch || missingRef) {
+          lineItemRepairs.push({
+            id: lineItem.id,
+            data: {
+              unit_cost: snapshot,
+              extended_cost: expectedExtended,
+              cost_source_reference: `commitment:${commitment.id}`
+            },
+            meta: {
+              old_cost: currentCost,
+              new_cost: snapshot,
+              old_extended: lineItem.extended_cost,
+              new_extended: expectedExtended
+            }
+          });
+        }
+      }
+      
+      report.line_item_repairs = {
+        found: lineItemRepairs.length,
+        applied: 0
+      };
+      
+      if (!dry_run && lineItemRepairs.length > 0) {
+        for (const repair of lineItemRepairs) {
+          try {
+            await base44.asServiceRole.entities.PartPurchaseLineItem.update(repair.id, repair.data);
+            report.line_item_repairs.applied++;
+          } catch (error) {
+            if (error.message?.includes('Rate limit')) {
+              await new Promise(r => setTimeout(r, 2000));
+              try {
+                await base44.asServiceRole.entities.PartPurchaseLineItem.update(repair.id, repair.data);
+                report.line_item_repairs.applied++;
+              } catch (e) {
+                report.errors.push({ line_item_repair: repair.id, error: e.message });
+              }
+            } else {
+              report.errors.push({ line_item_repair: repair.id, error: error.message });
+            }
+          }
+          await new Promise(r => setTimeout(r, 150));
+        }
+      }
+      
+      console.log(`✅ Line item repairs: ${report.line_item_repairs.applied}/${report.line_item_repairs.found}`);
+    }
+
+    // ========================================
     // SUMMARY
     // ========================================
     report.summary = {
@@ -437,6 +513,7 @@ Deno.serve(async (req) => {
         updated_unit_cost: report.line_items.updated_unit_cost,
         updated_extended_cost: report.line_items.updated_extended_cost
       },
+      line_item_repairs: report.line_item_repairs || { found: 0, applied: 0 },
       errors: report.errors.length
     };
 

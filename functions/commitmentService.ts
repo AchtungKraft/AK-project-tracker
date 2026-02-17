@@ -216,6 +216,9 @@ Deno.serve(async (req) => {
         case 'transferPoolBalance':
           result = await transferPoolBalance(txn, params);
           break;
+        case 'reconcileOrderCosts':
+          result = await reconcileOrderCosts(txn, params);
+          break;
         default:
           return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
       }
@@ -1449,6 +1452,78 @@ async function transferPoolBalance(txn, params) {
     source_pool_id,
     target_pool_id: targetPool.id,
     target_project_id
+  };
+}
+
+/**
+ * Reconcile all line item costs for an order from commitment snapshots
+ * This is a repair action that forces all line items to use authoritative snapshot values
+ */
+async function reconcileOrderCosts(txn, params) {
+  const { order_id, dry_run = false } = params;
+  
+  const lineItems = await txn.base44.asServiceRole.entities.PartPurchaseLineItem.filter({ order_id });
+  const commitments = await txn.base44.asServiceRole.entities.PartCommitment.list();
+  const commitmentsMap = new Map(commitments.map(c => [c.id, c]));
+  
+  const TOL = 0.01;
+  const repairs = [];
+  
+  for (const lineItem of lineItems) {
+    if (!lineItem.commitment_id) continue;
+    
+    const commitment = commitmentsMap.get(lineItem.commitment_id);
+    if (!commitment || !commitment.unit_cost_snapshot || commitment.unit_cost_snapshot <= 0) {
+      continue;
+    }
+    
+    const snapshot = commitment.unit_cost_snapshot;
+    const currentCost = lineItem.unit_cost || lineItem.unit_price || 0;
+    const qty = lineItem.qty_ordered || 1;
+    const expectedExtended = snapshot * qty;
+    
+    if (Math.abs(currentCost - snapshot) > TOL || 
+        Math.abs((lineItem.extended_cost || 0) - expectedExtended) > TOL) {
+      
+      const updateData = {
+        unit_cost: snapshot,
+        unit_price: snapshot, // Deprecated field
+        extended_cost: expectedExtended,
+        line_total: expectedExtended, // Deprecated field
+        cost_source_reference: `commitment:${commitment.id}`
+      };
+      
+      repairs.push({
+        line_item_id: lineItem.id,
+        old_cost: currentCost,
+        new_cost: snapshot,
+        old_extended: lineItem.extended_cost,
+        new_extended: expectedExtended
+      });
+      
+      if (!dry_run) {
+        txn.addRollback(async () => {
+          await txn.base44.asServiceRole.entities.PartPurchaseLineItem.update(lineItem.id, {
+            unit_cost: lineItem.unit_cost,
+            unit_price: lineItem.unit_price,
+            extended_cost: lineItem.extended_cost,
+            line_total: lineItem.line_total,
+            cost_source_reference: lineItem.cost_source_reference
+          });
+        });
+        
+        await txn.base44.asServiceRole.entities.PartPurchaseLineItem.update(lineItem.id, updateData);
+      }
+    }
+  }
+  
+  return {
+    order_id,
+    dry_run,
+    line_items_scanned: lineItems.length,
+    repairs_needed: repairs.length,
+    repairs_applied: dry_run ? 0 : repairs.length,
+    repairs
   };
 }
 
