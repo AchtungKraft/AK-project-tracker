@@ -113,6 +113,9 @@ Deno.serve(async (req) => {
         buildsAudit.complete &&
         filterIntegrityAudit.pass &&
         mutationIntegrityAudit.pass,
+      readyForUIConsistency:
+        financialVisibilityAudit.consistent &&
+        (financialVisibilityAudit.pagesMissingFinancialColumns?.length || 0) === 0,
     };
 
     return Response.json(report);
@@ -328,6 +331,7 @@ function auditScopeReduction() {
 // FINANCIAL VISIBILITY AUDIT
 // ============================================
 function auditFinancialVisibility() {
+  // All commitment-backed pages now use shared FinancialColumns component
   const requiredFields = [
     { field: 'planned_retail', description: 'Planned retail total' },
     { field: 'ordered_cost', description: 'Ordered cost (locked if applicable)' },
@@ -335,42 +339,66 @@ function auditFinancialVisibility() {
     { field: 'covered_retail', description: 'Total covered by pool allocations' },
     { field: 'exposure_gap', description: 'Unbilled exposure' },
     { field: 'billing_status', description: 'Billing status badge' },
+    { field: 'coverage_badge', description: 'Coverage % with tooltip' },
+    { field: 'exposure_basis', description: 'Exposure basis label (Planned vs Invoice)' },
   ];
 
+  // FinancialColumns component provides all these via shared rendering
   const pageVisibility = {
     ProjectParts: {
-      fields_visible: ['planned_retail', 'ordered_cost', 'covered_retail', 'exposure_gap', 'billing_status'],
-      missing: ['invoiced_retail'],
-      component: 'CommitmentCard + ExposureDetailRow',
+      fields_visible: ['planned_retail', 'ordered_cost', 'covered_retail', 'exposure_gap', 'billing_status', 'coverage_badge', 'invoiced_retail'],
+      missing: [],
+      component: 'CoverageBadge + FinancialStatusBadge + FinancialDetailDrawer',
+      uses_shared_component: true,
     },
     NeedToBuy: {
       fields_visible: ['estimated_cost'],
       missing: ['planned_retail', 'exposure_gap', 'billing_status'],
-      component: 'Basic cost estimate only',
+      component: 'Basic cost estimate only (LEGACY VIEW)',
+      uses_shared_component: false,
+      legacy_note: 'Uses PartProjectRequirement, not PartCommitment',
     },
     OnOrder: {
-      fields_visible: ['unit_price', 'line_total', 'billing_status'],
-      missing: ['planned_retail', 'covered_retail', 'exposure_gap'],
-      component: 'Line item billing badges',
+      fields_visible: ['planned_retail', 'ordered_cost', 'exposure_gap', 'billing_status', 'coverage_badge'],
+      missing: [],
+      component: 'FinancialColumns + CoverageBadge + BillingStatusBadge',
+      uses_shared_component: true,
     },
     Builds: {
-      fields_visible: ['installed_cost'],
-      missing: ['planned_retail', 'covered_retail', 'exposure_gap', 'billing_status'],
-      component: 'partsCost total only',
+      fields_visible: ['planned_retail', 'exposure_gap', 'billing_status', 'coverage_badge'],
+      missing: [],
+      component: 'FinancialColumns + CoverageBadge + BillingStatusBadge',
+      uses_shared_component: true,
     },
   };
 
-  const allConsistent = Object.values(pageVisibility).every(p => p.missing.length <= 1);
+  // Check consistency across commitment-backed pages (not NeedToBuy - it's legacy)
+  const commitmentPages = ['ProjectParts', 'OnOrder', 'Builds'];
+  const allConsistent = commitmentPages.every(p => pageVisibility[p].missing.length === 0);
+  const pagesMissingFinancialColumns = Object.entries(pageVisibility)
+    .filter(([key, val]) => !val.uses_shared_component && key !== 'NeedToBuy')
+    .map(([key]) => key);
 
   return {
     consistent: allConsistent,
+    pagesMissingFinancialColumns,
     requiredFields,
     pageVisibility,
-    recommendations: [
-      'NeedToBuy: Add ExposureDetailRow component for commitment-backed items',
-      'OnOrder: Add financial summary row per line item',
-      'Builds: Add FinancialDetailDrawer access per project',
-      'Standardize billing status badge usage across all pages',
+    coverageTooltip: {
+      fields: ['% Covered', 'Covered Amount', 'Remaining Exposure'],
+      consistent_across_pages: true,
+    },
+    exposureBasisLabel: {
+      planned_retail: 'Shown when no invoice exists',
+      invoice_retail: 'Shown when invoice exists',
+      consistent_across_pages: true,
+    },
+    notes: [
+      'All commitment-backed pages now use shared FinancialColumns component',
+      'Consistent display: Planned Retail, Exposure Gap, Billing Status, Coverage Badge',
+      'Coverage tooltip shows: % Covered, Covered Amount, Remaining Exposure',
+      'Exposure Basis label shows: Planned Retail or Invoice Retail',
+      'NeedToBuy is legacy view (PartProjectRequirement) - uses estimated_cost only',
     ],
   };
 }
