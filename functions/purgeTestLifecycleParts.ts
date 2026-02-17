@@ -65,25 +65,41 @@ Deno.serve(async (req) => {
     };
 
     if (!dryRun) {
-      // Delete in dependency order: line items, commitments, requirements, build assignments, then parts
+      const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      
+      // Delete in dependency order with rate limit protection
+      // Line items first
       for (const li of relatedLineItems) {
         await base44.asServiceRole.entities.PartPurchaseLineItem.delete(li.id);
+        await sleep(100);
       }
 
-      for (const c of relatedCommitments) {
-        await base44.asServiceRole.entities.PartCommitment.delete(c.id);
+      // Commitments (batch in groups of 10 with pauses)
+      for (let i = 0; i < relatedCommitments.length; i++) {
+        await base44.asServiceRole.entities.PartCommitment.delete(relatedCommitments[i].id);
+        if ((i + 1) % 10 === 0) {
+          await sleep(1000); // 1 second pause every 10 deletions
+        } else {
+          await sleep(150);
+        }
       }
 
+      // Requirements
       for (const r of relatedRequirements) {
         await base44.asServiceRole.entities.PartProjectRequirement.delete(r.id);
+        await sleep(100);
       }
 
+      // Build assignments
       for (const ba of relatedBuildAssignments) {
         await base44.asServiceRole.entities.PartBuildAssignment.delete(ba.id);
+        await sleep(100);
       }
 
+      // Finally, parts
       for (const p of testParts) {
         await base44.asServiceRole.entities.Part.delete(p.id);
+        await sleep(100);
       }
 
       result.deleted = true;
