@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,30 +16,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ShoppingCart, Search, Filter, Building2, FolderKanban, AlertTriangle,
-  DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
-  Plus, Package, RefreshCw, ArrowRight
+  ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
+  DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp,
+  Package, RefreshCw, ArrowRight
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CommitmentActions } from "@/components/financial/financialMutationGuard";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import { CoverageBadge, BillingStatusBadge } from "@/components/parts/FinancialColumns";
+import { CommitmentActionsDropdown } from "@/components/parts/CommitmentContext";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
+import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
- * Shows all commitments that need ordering across all projects
- * Enables vendor-grouped batch ordering
+ * 
+ * STRICT ENGINE REUSE:
+ * - Uses ONLY precomputed commitment fields (no UI-side financial math)
+ * - Uses getAllowedCommitmentActions for lifecycle gating
+ * - Uses CommitmentActionsDropdown for mutation routing
+ * - All mutations via CommitmentActions (no direct entity updates)
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
@@ -59,6 +57,7 @@ export default function GlobalNeedToOrder() {
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
+  const [cancelCommitment, setCancelCommitment] = useState(null);
 
   // Data Fetching
   const { data: commitments = [], isLoading: commitmentsLoading, refetch } = useQuery({
@@ -119,9 +118,11 @@ export default function GlobalNeedToOrder() {
       const poolBalance = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
 
       const qtyToOrder = (commitment.qty_committed || 0) - (commitment.qty_ordered || 0);
-      const plannedRetail = commitment.planned_retail_total || (qtyToOrder * (commitment.unit_retail_snapshot || part.default_retail || 0));
+      
+      // STRICT: Use ONLY precomputed fields - NO UI-side financial math
+      const plannedRetail = commitment.planned_retail_total || 0;
       const coveredRetail = commitment.covered_retail_total || 0;
-      const exposureGap = commitment.exposure_gap || (plannedRetail - coveredRetail);
+      const exposureGap = commitment.exposure_gap || 0;
 
       // Calculate coverage state
       const coveragePct = plannedRetail > 0 ? (coveredRetail / plannedRetail) * 100 : 0;
@@ -363,39 +364,15 @@ export default function GlobalNeedToOrder() {
             </Badge>
           )}
 
-          {/* Actions */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-              {item.canOrder && (
-                <DropdownMenuItem onClick={() => setOrderModalPart(item.part)} className="text-green-400">
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Create PO
-                </DropdownMenuItem>
-              )}
-              {allowed.canCreateDeltaOrder && (
-                <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Additional Order
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem 
-                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project?.id}&tab=parts`))}
-              >
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Go to Project
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-gray-700" />
-              <DropdownMenuItem className="text-blue-400">
-                <DollarSign className="w-4 h-4 mr-2" />
-                Allocate Pool
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Actions - REUSE CommitmentActionsDropdown */}
+          <CommitmentActionsDropdown
+            commitment={item.commitment}
+            part={item.part}
+            onCreatePO={() => setOrderModalPart(item.part)}
+            onDeltaOrder={() => setDeltaOrderCommitment(item)}
+            onCancel={() => setCancelCommitment(item)}
+            onViewFinancial={() => navigate(createPageUrl(`ProjectDetail?id=${item.project?.id}&tab=parts`))}
+          />
         </div>
       </div>
     );
@@ -682,6 +659,14 @@ export default function GlobalNeedToOrder() {
           commitment={deltaOrderCommitment.commitment}
           part={deltaOrderCommitment.part}
           onClose={() => setDeltaOrderCommitment(null)}
+        />
+      )}
+
+      {cancelCommitment && (
+        <CancelCommitmentModal
+          commitment={cancelCommitment.commitment}
+          part={cancelCommitment.part}
+          onClose={() => setCancelCommitment(null)}
         />
       )}
     </MobileSafeAreaContainer>
