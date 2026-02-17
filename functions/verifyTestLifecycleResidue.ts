@@ -1,5 +1,5 @@
 /**
- * verifyTestLifecycleResidue - Check for remaining TEST_PART_LIFECYCLE records
+ * verifyTestLifecycleResidue - Check for remaining TEST_PART_LIFECYCLE records (v2)
  * 
  * Returns counts of remaining test data across all relevant entities.
  */
