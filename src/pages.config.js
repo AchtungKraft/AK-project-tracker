@@ -80,6 +80,7 @@ import SupplyQueues from './pages/SupplyQueues';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
+import SupplyNormalization from './pages/SupplyNormalization';
 import __Layout from './Layout.jsx';
 
 
@@ -117,6 +118,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
+    "SupplyNormalization": SupplyNormalization,
 }
 
 export const pagesConfig = {
