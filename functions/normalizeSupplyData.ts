@@ -27,6 +27,22 @@ function applyPricingMatrix(cost) {
   return Math.round(retail);
 }
 
+// Batch update with rate limiting
+async function batchUpdate(base44, entityName, updates, batchSize = 5, delayMs = 100) {
+  const results = [];
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const batch = updates.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(({ id, data }) => base44.asServiceRole.entities[entityName].update(id, data))
+    );
+    results.push(...batchResults);
+    if (i + batchSize < updates.length) {
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
@@ -144,11 +160,13 @@ Deno.serve(async (req) => {
           flags,
           changes: updates
         });
-        
-        if (!dry_run) {
-          await base44.asServiceRole.entities.Part.update(part.id, updates);
-        }
       }
+    }
+    
+    // Apply part updates in batches
+    if (!dry_run && report.part_changes.length > 0) {
+      const partUpdates = report.part_changes.map(c => ({ id: c.part_id, data: c.changes }));
+      await batchUpdate(base44, 'Part', partUpdates);
     }
 
     // ========================================
@@ -231,13 +249,16 @@ Deno.serve(async (req) => {
           commitment_id: commitment.id,
           project_id: commitment.project_id,
           part_name: part.part_name,
-          diffs
+          diffs,
+          updates
         });
-        
-        if (!dry_run) {
-          await base44.asServiceRole.entities.PartCommitment.update(commitment.id, updates);
-        }
       }
+    }
+    
+    // Apply commitment updates in batches
+    if (!dry_run && report.commitment_changes.length > 0) {
+      const commitmentUpdates = report.commitment_changes.map(c => ({ id: c.commitment_id, data: c.updates }));
+      await batchUpdate(base44, 'PartCommitment', commitmentUpdates);
     }
 
     // ========================================
@@ -282,12 +303,23 @@ Deno.serve(async (req) => {
           fixes: updates
         });
         report.quantity_fixes++;
-        
-        if (!dry_run && Object.keys(updates).length > 0) {
-          updates.integrity_warning = true;
-          updates.integrity_warning_details = `Quantities adjusted: ${violations.map(v => v.type).join(', ')}`;
-          await base44.asServiceRole.entities.PartCommitment.update(commitment.id, updates);
-        }
+      }
+    }
+    
+    // Apply quantity fixes in batches
+    if (!dry_run && report.quantity_violations.length > 0) {
+      const qtyUpdates = report.quantity_violations
+        .filter(v => Object.keys(v.fixes).length > 0)
+        .map(v => ({
+          id: v.commitment_id,
+          data: {
+            ...v.fixes,
+            integrity_warning: true,
+            integrity_warning_details: `Quantities adjusted: ${v.violations.map(vv => vv.type).join(', ')}`
+          }
+        }));
+      if (qtyUpdates.length > 0) {
+        await batchUpdate(base44, 'PartCommitment', qtyUpdates);
       }
     }
 
@@ -347,13 +379,16 @@ Deno.serve(async (req) => {
           pool_id: pool.id,
           pool_name: pool.pool_name,
           project_id: pool.project_id,
-          diffs
+          diffs,
+          updates
         });
-        
-        if (!dry_run) {
-          await base44.asServiceRole.entities.BillingPool.update(pool.id, updates);
-        }
       }
+    }
+    
+    // Apply pool updates in batches
+    if (!dry_run && report.pool_changes.length > 0) {
+      const poolUpdates = report.pool_changes.map(c => ({ id: c.pool_id, data: c.updates }));
+      await batchUpdate(base44, 'BillingPool', poolUpdates);
     }
     
     // Check for multiple credit pools per project
