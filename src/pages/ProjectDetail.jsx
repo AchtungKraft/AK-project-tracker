@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Package, BookOpen, Users, Loader2, Edit2 } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2 } from "lucide-react";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +17,6 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 import ProjectOverview from "../components/project/ProjectOverview";
 import ProjectTasks from "../components/project/ProjectTasks";
-import ProjectParts from "../components/project/ProjectParts";
 import ProjectJournal from "../components/project/ProjectJournal";
 import ProjectClientPortal from "../components/project/ProjectClientPortal";
 
@@ -192,11 +191,15 @@ export default function ProjectDetail() {
               Tasks
             </TabsTrigger>
             <TabsTrigger 
-              value="parts"
+              value="supply"
               className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(createPageUrl("ProjectSupplyManager") + `?project_id=${projectId}`);
+              }}
             >
-              <Package className="w-4 h-4" />
-              Parts
+              <Layers className="w-4 h-4" />
+              Supply
             </TabsTrigger>
             <TabsTrigger 
               value="journal"
@@ -222,7 +225,7 @@ export default function ProjectDetail() {
                   <span className="flex items-center gap-2">
                     {activeTab === 'overview' && <><LayoutGrid className="w-4 h-4" /> Overview</>}
                     {activeTab === 'tasks' && <><ListChecks className="w-4 h-4" /> Tasks</>}
-                    {activeTab === 'parts' && <><Package className="w-4 h-4" /> Parts</>}
+                    {activeTab === 'supply' && <><Layers className="w-4 h-4" /> Supply</>}
                     {activeTab === 'journal' && <><BookOpen className="w-4 h-4" /> Journal</>}
                     {activeTab === 'clientportal' && <><Users className="w-4 h-4" /> Client Portal</>}
                   </span>
@@ -243,10 +246,10 @@ export default function ProjectDetail() {
                   <ListChecks className="w-4 h-4" /> Tasks
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('parts')}
-                  className={`gap-2 ${activeTab === 'parts' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                  onClick={() => navigate(createPageUrl("ProjectSupplyManager") + `?project_id=${projectId}`)}
+                  className="gap-2 text-gray-300"
                 >
-                  <Package className="w-4 h-4" /> Parts
+                  <Layers className="w-4 h-4" /> Supply
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => setActiveTab('journal')}
@@ -270,10 +273,6 @@ export default function ProjectDetail() {
 
           <TabsContent value="tasks" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectTasks projectId={projectId} sharedData={sharedData} />
-          </TabsContent>
-
-          <TabsContent value="parts" className={isMobile ? 'mt-3' : 'mt-6'}>
-            <ProjectParts projectId={projectId} />
           </TabsContent>
 
           <TabsContent value="journal" className={isMobile ? 'mt-3' : 'mt-6'}>
