@@ -65,12 +65,17 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canReduceQty = qty_installed === 0 || qty_committed > qty_installed;
   }
 
-  // CREATE PO - only for planned/ordered states with unordered qty
-  // NOT allowed for: installed, partially_received, received, allocated, cancelled, closed
-  const canOrderStates = ['planned', 'ordered'];
-  if (canOrderStates.includes(commitment_status) && unorderedQty > 0) {
+  // CREATE PO - only for planned state with unordered qty
+  // NOT allowed for: ordered, installed, partially_received, received, allocated, cancelled, closed
+  if (commitment_status === 'planned' && unorderedQty > 0) {
     actions.canCreatePO = true;
-    actions.canCreateDeltaOrder = qty_ordered > 0; // Only if already has orders
+  }
+
+  // DELTA ORDER - only for commitments that already have orders (ordered, partially_received, received)
+  // This creates additional PO lines for existing commitments
+  const canDeltaOrderStates = ['ordered', 'partially_received', 'received'];
+  if (canDeltaOrderStates.includes(commitment_status) && qty_ordered > 0) {
+    actions.canCreateDeltaOrder = true;
   }
 
   // RECEIVE - only if has ordered & unreceived
@@ -200,13 +205,21 @@ export function getActionBlockReason(commitment, action) {
     canCreatePO: () => {
       if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
       if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
-      if (['installed', 'partially_received', 'received', 'allocated'].includes(commitment?.commitment_status)) {
-        return `Cannot create PO for ${commitment.commitment_status} commitment`;
+      if (commitment?.commitment_status !== 'planned') {
+        return `Use "Additional Order" for ${commitment.commitment_status} commitments`;
       }
       if ((commitment?.qty_committed || 0) <= (commitment?.qty_ordered || 0)) {
         return 'All committed quantity already on order';
       }
       return 'Cannot create PO in current state';
+    },
+    canCreateDeltaOrder: () => {
+      if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
+      if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
+      if (commitment?.commitment_status === 'planned') return 'Use Create PO for planned commitments';
+      if (commitment?.commitment_status === 'installed') return 'Cannot add orders after installation';
+      if ((commitment?.qty_ordered || 0) === 0) return 'No existing orders to add to';
+      return 'Cannot create delta order in current state';
     },
     canCancel: () => {
       if ((commitment?.qty_installed || 0) > 0) return 'Cannot cancel: parts already installed';
