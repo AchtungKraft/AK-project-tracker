@@ -136,6 +136,10 @@ async function runIntegrityAudit(base44) {
     }
   }
 
+  // Track legacy line item status
+  pricingMetrics.legacy_line_items_unlinked = [];
+  pricingMetrics.extended_cost_mismatch = [];
+
   // Check line items for cost source validity
   for (const lineItem of lineItems) {
     const commitment = commitmentsMap.get(lineItem.commitment_id);
@@ -143,8 +147,9 @@ async function runIntegrityAudit(base44) {
 
     const lineCost = lineItem.unit_cost || lineItem.unit_price || 0;
 
-    // invalid_line_item_cost_source: line cost !== commitment snapshot (authoritative)
-    if (commitment && commitment.unit_cost_snapshot > 0 && lineCost > 0) {
+    // FAIL CONDITION: line item with commitment_id where unit_cost != commitment.unit_cost_snapshot
+    // Only check if commitment_id is set (legacy items may not have it)
+    if (lineItem.commitment_id && commitment && commitment.unit_cost_snapshot > 0 && lineCost > 0) {
       if (Math.abs(lineCost - commitment.unit_cost_snapshot) > 0.01) {
         pricingMetrics.invalid_line_item_cost_source.push({
           line_item_id: lineItem.id,
@@ -155,9 +160,31 @@ async function runIntegrityAudit(base44) {
           diff: lineCost - commitment.unit_cost_snapshot
         });
       }
+      
+      // FAIL CONDITION: extended_cost != unit_cost * qty
+      const expectedExtended = commitment.unit_cost_snapshot * (lineItem.qty_ordered || 1);
+      if (Math.abs((lineItem.extended_cost || 0) - expectedExtended) > 0.01) {
+        pricingMetrics.extended_cost_mismatch.push({
+          line_item_id: lineItem.id,
+          commitment_id: commitment.id,
+          part_name: part?.part_name,
+          expected_extended: expectedExtended,
+          actual_extended: lineItem.extended_cost
+        });
+      }
     }
 
-    // line_items_cost_equals_retail: line cost should NEVER equal retail
+    // WARN: line items with legacy_link_status != 'linked'
+    if (lineItem.is_legacy && lineItem.legacy_link_status !== 'linked') {
+      pricingMetrics.legacy_line_items_unlinked.push({
+        line_item_id: lineItem.id,
+        part_name: part?.part_name,
+        legacy_link_status: lineItem.legacy_link_status,
+        legacy_reason: lineItem.legacy_reason
+      });
+    }
+
+    // WARN: line_items_cost_equals_retail (can happen legitimately)
     if (part && lineCost > 10) {
       const partRetail = getRetailEffective(part);
       if (partRetail > 0 && Math.abs(lineCost - partRetail) < 0.01) {
@@ -179,7 +206,9 @@ async function runIntegrityAudit(base44) {
     zero_retail_commitments_count: pricingMetrics.commitments_with_zero_retail.length,
     missing_cost_reference_count: pricingMetrics.commitments_missing_cost_reference.length,
     invalid_line_item_cost_count: pricingMetrics.invalid_line_item_cost_source.length,
+    extended_cost_mismatch_count: pricingMetrics.extended_cost_mismatch.length,
     line_items_cost_equals_retail_count: pricingMetrics.line_items_cost_equals_retail.length,
+    legacy_line_items_unlinked_count: pricingMetrics.legacy_line_items_unlinked.length,
     parts_needing_manual_review_count: pricingMetrics.parts_needing_manual_review.length
   };
 
@@ -210,6 +239,7 @@ async function runIntegrityAudit(base44) {
   }
 
   // FAIL: PO line item unit_cost mismatches commitment.unit_cost_snapshot (authoritative)
+  // Only for line items that HAVE a commitment_id
   if (pricingMetrics.invalid_line_item_cost_source.length > 0) {
     audit.pricingSemanticIntegrity.status = 'FAIL';
     audit.pricingSemanticIntegrity.violations.push({
@@ -217,6 +247,19 @@ async function runIntegrityAudit(base44) {
       description: 'PO line item unit_cost does not match commitment.unit_cost_snapshot',
       count: pricingMetrics.invalid_line_item_cost_source.length,
       sample: pricingMetrics.invalid_line_item_cost_source.slice(0, 5),
+      severity: 'BLOCKING',
+      repair_action: "base44.functions.invoke('repairLineItemCostFromCommitments', { dry_run: false })"
+    });
+  }
+
+  // FAIL: PO line item extended_cost mismatches unit_cost * qty
+  if (pricingMetrics.extended_cost_mismatch.length > 0) {
+    audit.pricingSemanticIntegrity.status = 'FAIL';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'line_item_extended_cost_mismatch',
+      description: 'PO line item extended_cost does not match unit_cost * qty_ordered',
+      count: pricingMetrics.extended_cost_mismatch.length,
+      sample: pricingMetrics.extended_cost_mismatch.slice(0, 5),
       severity: 'BLOCKING',
       repair_action: "base44.functions.invoke('repairLineItemCostFromCommitments', { dry_run: false })"
     });
@@ -270,6 +313,19 @@ async function runIntegrityAudit(base44) {
       count: pricingMetrics.parts_needing_manual_review.length,
       sample: pricingMetrics.parts_needing_manual_review.slice(0, 5),
       severity: 'WARNING'
+    });
+  }
+
+  // WARN: Legacy line items not linked
+  if (pricingMetrics.legacy_line_items_unlinked.length > 0 && audit.pricingSemanticIntegrity.status !== 'FAIL') {
+    audit.pricingSemanticIntegrity.status = 'WARN';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'legacy_line_items_unlinked',
+      description: 'Legacy line items without commitment linkage',
+      count: pricingMetrics.legacy_line_items_unlinked.length,
+      sample: pricingMetrics.legacy_line_items_unlinked.slice(0, 5),
+      severity: 'WARNING',
+      repair_action: "base44.functions.invoke('migrateLegacyLineItemsToCommitments', { dry_run: false })"
     });
   }
 

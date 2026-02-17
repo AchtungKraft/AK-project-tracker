@@ -231,7 +231,8 @@ Deno.serve(async (req) => {
       }
 
       // Cost mismatch with commitment snapshot (CRITICAL - this is authoritative)
-      if (commitment && commitment.unit_cost_snapshot > 0) {
+      // Only check if commitment_id is set (legacy items may not have it)
+      if (lineItem.commitment_id && commitment && commitment.unit_cost_snapshot > 0) {
         if (Math.abs(lineCost - commitment.unit_cost_snapshot) > 0.01) {
           report.line_items.cost_mismatch++;
           report.line_items.cost_snapshot_mismatch++;
@@ -249,6 +250,22 @@ Deno.serve(async (req) => {
             });
           }
         }
+        
+        // Extended cost validation
+        const expectedExtended = commitment.unit_cost_snapshot * (lineItem.qty_ordered || 1);
+        if (Math.abs((lineItem.extended_cost || 0) - expectedExtended) > 0.01) {
+          report.line_items.extended_cost_mismatch = (report.line_items.extended_cost_mismatch || 0) + 1;
+          issues.push('extended_cost_mismatch');
+        }
+      }
+
+      // Track legacy link status (WARN only)
+      if (lineItem.is_legacy) {
+        report.line_items.legacy_count = (report.line_items.legacy_count || 0) + 1;
+        if (lineItem.legacy_link_status !== 'linked') {
+          report.line_items.legacy_unlinked = (report.line_items.legacy_unlinked || 0) + 1;
+          issues.push(`legacy_${lineItem.legacy_link_status || 'unlinked'}`);
+        }
       }
 
       if (issues.length > 0 && report.top_offenders.line_items.length < limit) {
@@ -259,7 +276,8 @@ Deno.serve(async (req) => {
           issues,
           unit_cost: lineCost,
           commitment_cost_snapshot: commitment?.unit_cost_snapshot,
-          part_retail: partRetail
+          part_retail: partRetail,
+          legacy_link_status: lineItem.legacy_link_status
         });
       }
     }
@@ -318,6 +336,15 @@ Deno.serve(async (req) => {
       report.gate_metrics.warn_conditions.push({
         type: 'parts_needs_cost_review',
         count: report.parts.needs_cost_review
+      });
+    }
+
+    // Legacy line items not linked (WARN only)
+    if (report.line_items.legacy_unlinked > 0) {
+      report.gate_metrics.warn_conditions.push({
+        type: 'legacy_line_items_unlinked',
+        count: report.line_items.legacy_unlinked,
+        note: 'Legacy line items without commitment linkage - run migrateLegacyLineItemsToCommitments'
       });
     }
 
