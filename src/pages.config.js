@@ -67,12 +67,13 @@ import PartsTracker from './pages/PartsTracker';
 import PortalStatsEmbed from './pages/PortalStatsEmbed';
 import PriorityDashboard from './pages/PriorityDashboard';
 import ProjectDetail from './pages/ProjectDetail';
+import ProjectFinancialReport from './pages/ProjectFinancialReport';
 import Projects from './pages/Projects';
 import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import ProjectFinancialReport from './pages/ProjectFinancialReport';
+import GlobalNeedToOrder from './pages/GlobalNeedToOrder';
 import __Layout from './Layout.jsx';
 
 
@@ -97,12 +98,13 @@ export const PAGES = {
     "PortalStatsEmbed": PortalStatsEmbed,
     "PriorityDashboard": PriorityDashboard,
     "ProjectDetail": ProjectDetail,
+    "ProjectFinancialReport": ProjectFinancialReport,
     "Projects": Projects,
     "Reports": Reports,
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "ProjectFinancialReport": ProjectFinancialReport,
+    "GlobalNeedToOrder": GlobalNeedToOrder,
 }
 
 export const pagesConfig = {

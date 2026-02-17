@@ -1,0 +1,689 @@
+import React, { useState, useMemo } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ShoppingCart, Search, Filter, Building2, FolderKanban, AlertTriangle,
+  DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
+  Plus, Package, RefreshCw, ArrowRight
+} from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CommitmentActions } from "@/components/financial/financialMutationGuard";
+import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
+import { CoverageBadge, BillingStatusBadge } from "@/components/parts/FinancialColumns";
+import OrderPartModal from "@/components/parts/OrderPartModal";
+import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
+import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
+import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+
+/**
+ * GlobalNeedToOrder - Cross-Project Procurement Queue
+ * Shows all commitments that need ordering across all projects
+ * Enables vendor-grouped batch ordering
+ */
+export default function GlobalNeedToOrder() {
+  const navigate = useNavigate();
+  const urlParams = new URLSearchParams(window.location.search);
+  const filterProjectId = urlParams.get('project_id');
+  const filterVendorId = urlParams.get('vendor_id');
+  const filterProcurementState = urlParams.get('state');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [groupMode, setGroupMode] = useState('vendor'); // 'vendor', 'project', 'coverage'
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState(filterProjectId || 'all');
+  const [selectedVendorFilter, setSelectedVendorFilter] = useState(filterVendorId || 'all');
+  const [coverageFilter, setCoverageFilter] = useState('all'); // 'all', 'covered', 'partial', 'uncovered'
+  const [prepayFilter, setPrepayFilter] = useState('all'); // 'all', 'required', 'not_required'
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const [orderModalPart, setOrderModalPart] = useState(null);
+  const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
+  const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
+
+  // Data Fetching
+  const { data: commitments = [], isLoading: commitmentsLoading, refetch } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.list()
+  });
+
+  const { data: requirements = [] } = useQuery({
+    queryKey: ['partProjectRequirements'],
+    queryFn: () => base44.entities.PartProjectRequirement.list()
+  });
+
+  const { data: parts = [] } = useQuery({
+    queryKey: ['parts'],
+    queryFn: () => base44.entities.Part.list()
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list()
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => base44.entities.Vendor.list()
+  });
+
+  const { data: pools = [] } = useQuery({
+    queryKey: ['billingPools'],
+    queryFn: () => base44.entities.BillingPool.list()
+  });
+
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ['partPurchaseLineItems'],
+    queryFn: () => base44.entities.PartPurchaseLineItem.list()
+  });
+
+  // Build items that need ordering
+  const needToOrderItems = useMemo(() => {
+    const items = [];
+
+    // From commitments: planned status OR qty_committed > qty_ordered
+    commitments.forEach(commitment => {
+      if (commitment.commitment_status === 'cancelled') return;
+
+      const needsOrder = 
+        commitment.commitment_status === 'planned' ||
+        (commitment.qty_committed || 0) > (commitment.qty_ordered || 0);
+
+      if (!needsOrder) return;
+
+      const part = parts.find(p => p.id === commitment.part_id);
+      if (!part) return;
+
+      const project = projects.find(p => p.id === commitment.project_id);
+      const vendor = vendors.find(v => v.id === part.default_vendor_id);
+      const projectPools = pools.filter(p => p.project_id === commitment.project_id && p.status !== 'closed');
+      const poolBalance = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
+
+      const qtyToOrder = (commitment.qty_committed || 0) - (commitment.qty_ordered || 0);
+      const plannedRetail = commitment.planned_retail_total || (qtyToOrder * (commitment.unit_retail_snapshot || part.default_retail || 0));
+      const coveredRetail = commitment.covered_retail_total || 0;
+      const exposureGap = commitment.exposure_gap || (plannedRetail - coveredRetail);
+
+      // Calculate coverage state
+      const coveragePct = plannedRetail > 0 ? (coveredRetail / plannedRetail) * 100 : 0;
+      const coverageState = coveragePct >= 100 ? 'covered' : coveragePct > 0 ? 'partial' : 'uncovered';
+
+      // Can order? Must have coverage or prepay satisfied
+      const requiresPrepay = commitment.requires_prepay || false;
+      const prepayOk = !requiresPrepay || commitment.prepay_satisfied_at;
+      const canOrder = (coverageState === 'covered' || poolBalance >= exposureGap) && prepayOk;
+
+      items.push({
+        id: commitment.id,
+        type: 'commitment',
+        commitment,
+        part,
+        project,
+        vendor,
+        qtyToOrder,
+        plannedRetail,
+        coveredRetail,
+        exposureGap,
+        coverageState,
+        poolBalance,
+        requiresPrepay,
+        prepayOk,
+        canOrder,
+        estimatedCost: qtyToOrder * (part.default_cost || 0),
+      });
+    });
+
+    return items;
+  }, [commitments, parts, projects, vendors, pools]);
+
+  // Apply filters
+  const filteredItems = useMemo(() => {
+    return needToOrderItems.filter(item => {
+      // Search filter
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matchesSearch = 
+          item.part?.part_name?.toLowerCase().includes(term) ||
+          item.part?.vendor_part_number?.toLowerCase().includes(term) ||
+          item.project?.name?.toLowerCase().includes(term) ||
+          item.vendor?.vendor_name?.toLowerCase().includes(term);
+        if (!matchesSearch) return false;
+      }
+
+      // Project filter
+      if (selectedProjectFilter !== 'all' && item.project?.id !== selectedProjectFilter) return false;
+
+      // Vendor filter
+      if (selectedVendorFilter !== 'all' && item.vendor?.id !== selectedVendorFilter) return false;
+
+      // Coverage filter
+      if (coverageFilter !== 'all' && item.coverageState !== coverageFilter) return false;
+
+      // Prepay filter
+      if (prepayFilter === 'required' && !item.requiresPrepay) return false;
+      if (prepayFilter === 'not_required' && item.requiresPrepay) return false;
+
+      return true;
+    });
+  }, [needToOrderItems, searchTerm, selectedProjectFilter, selectedVendorFilter, coverageFilter, prepayFilter]);
+
+  // Group items
+  const groupedItems = useMemo(() => {
+    const groups = {};
+
+    filteredItems.forEach(item => {
+      let groupKey, groupLabel, groupColor;
+
+      if (groupMode === 'vendor') {
+        groupKey = item.vendor?.id || 'unassigned';
+        groupLabel = item.vendor?.vendor_name || 'No Vendor Assigned';
+        groupColor = '#3B82F6';
+      } else if (groupMode === 'project') {
+        groupKey = item.project?.id || 'general';
+        groupLabel = item.project?.name || 'General / AK Stock';
+        groupColor = '#EF4444';
+      } else {
+        groupKey = item.coverageState;
+        groupLabel = item.coverageState === 'covered' ? '✓ Fully Covered' :
+                     item.coverageState === 'partial' ? '◐ Partially Covered' : '○ Uncovered';
+        groupColor = item.coverageState === 'covered' ? '#10B981' :
+                     item.coverageState === 'partial' ? '#F59E0B' : '#EF4444';
+      }
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          id: groupKey,
+          label: groupLabel,
+          color: groupColor,
+          items: [],
+          totalQty: 0,
+          totalExposure: 0,
+          totalCost: 0,
+          canOrderCount: 0,
+        };
+      }
+
+      groups[groupKey].items.push(item);
+      groups[groupKey].totalQty += item.qtyToOrder;
+      groups[groupKey].totalExposure += item.exposureGap;
+      groups[groupKey].totalCost += item.estimatedCost;
+      if (item.canOrder) groups[groupKey].canOrderCount++;
+    });
+
+    return Object.values(groups).sort((a, b) => {
+      if (groupMode === 'coverage') {
+        const order = { covered: 0, partial: 1, uncovered: 2 };
+        return (order[a.id] || 3) - (order[b.id] || 3);
+      }
+      return a.label.localeCompare(b.label);
+    });
+  }, [filteredItems, groupMode]);
+
+  // Summary stats
+  const totalQty = filteredItems.reduce((sum, i) => sum + i.qtyToOrder, 0);
+  const totalExposure = filteredItems.reduce((sum, i) => sum + i.exposureGap, 0);
+  const totalCost = filteredItems.reduce((sum, i) => sum + i.estimatedCost, 0);
+  const canOrderCount = filteredItems.filter(i => i.canOrder).length;
+  const blockedCount = filteredItems.filter(i => !i.canOrder).length;
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleItemSelection = (itemId) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const selectAllInGroup = (groupItems) => {
+    const orderableIds = groupItems.filter(i => i.canOrder).map(i => i.id);
+    const allSelected = orderableIds.every(id => selectedItems.has(id));
+    
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        orderableIds.forEach(id => next.delete(id));
+      } else {
+        orderableIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const getSelectedItemsData = () => {
+    return filteredItems.filter(item => selectedItems.has(item.id));
+  };
+
+  // Unique values for filters
+  const projectsWithItems = [...new Set(needToOrderItems.map(i => i.project?.id).filter(Boolean))];
+  const vendorsWithItems = [...new Set(needToOrderItems.map(i => i.vendor?.id).filter(Boolean))];
+
+  const renderItem = (item) => {
+    const allowed = getAllowedCommitmentActions(item.commitment);
+
+    return (
+      <div 
+        key={item.id}
+        className={`p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0 ${
+          !item.canOrder ? 'opacity-60' : ''
+        }`}
+      >
+        <Checkbox
+          checked={selectedItems.has(item.id)}
+          onCheckedChange={() => toggleItemSelection(item.id)}
+          disabled={!item.canOrder}
+        />
+
+        {item.part?.featured_photo && (
+          <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
+            <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-medium truncate">{item.part?.part_name}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {item.part?.vendor_part_number && <span className="font-mono">{item.part.vendor_part_number}</span>}
+            {groupMode !== 'project' && item.project && <span>· {item.project.name}</span>}
+            {groupMode !== 'vendor' && item.vendor && <span>· {item.vendor.vendor_name}</span>}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Qty to Order */}
+          <div className="text-center w-16">
+            <p className="text-xs text-gray-500">Order</p>
+            <p className="text-white font-bold">×{item.qtyToOrder}</p>
+          </div>
+
+          {/* Exposure */}
+          <div className="text-center w-20">
+            <p className="text-xs text-gray-500">Exposure</p>
+            <p className={item.exposureGap > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
+              ${item.exposureGap.toFixed(0)}
+            </p>
+          </div>
+
+          {/* Pool Balance */}
+          <div className="text-center w-20">
+            <p className="text-xs text-gray-500">Pool</p>
+            <p className={item.poolBalance >= item.exposureGap ? 'text-green-400' : 'text-yellow-400'}>
+              ${item.poolBalance.toFixed(0)}
+            </p>
+          </div>
+
+          {/* Coverage Badge */}
+          {item.commitment && <CoverageBadge commitment={item.commitment} compact />}
+
+          {/* Prepay Indicator */}
+          {item.requiresPrepay && (
+            <Badge variant="outline" className={item.prepayOk ? 'border-green-600 text-green-400' : 'border-red-600 text-red-400'}>
+              {item.prepayOk ? '✓ Prepaid' : '⚠ Prepay Req'}
+            </Badge>
+          )}
+
+          {/* Can Order Indicator */}
+          {item.canOrder ? (
+            <Badge className="bg-green-600 text-white">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              Ready
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-red-600 text-red-400">
+              <XCircle className="w-3 h-3 mr-1" />
+              Blocked
+            </Badge>
+          )}
+
+          {/* Actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+              {item.canOrder && (
+                <DropdownMenuItem onClick={() => setOrderModalPart(item.part)} className="text-green-400">
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Create PO
+                </DropdownMenuItem>
+              )}
+              {allowed.canCreateDeltaOrder && (
+                <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Additional Order
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project?.id}&tab=parts`))}
+              >
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Go to Project
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-gray-700" />
+              <DropdownMenuItem className="text-blue-400">
+                <DollarSign className="w-4 h-4 mr-2" />
+                Allocate Pool
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <MobileSafeAreaContainer>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-3 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                GLOBAL PROCUREMENT QUEUE
+              </h1>
+              <p className="text-sm text-gray-400">Cross-project ordering with financial visibility</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => refetch()}
+                variant="outline"
+                size="sm"
+                className="border-gray-700 text-white gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </Button>
+              {selectedItems.size > 0 && (
+                <Button
+                  onClick={() => setShowBatchOrderModal(true)}
+                  className="bg-green-600 hover:bg-green-700 gap-2"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  Create Batch PO ({selectedItems.size})
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Items to Order</p>
+                <p className="text-2xl font-bold text-white">{filteredItems.length}</p>
+                <p className="text-xs text-gray-400">{totalQty} qty total</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Est. Cost</p>
+                <p className="text-2xl font-bold text-yellow-400">${totalCost.toFixed(0)}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Total Exposure</p>
+                <p className="text-2xl font-bold text-red-400">${totalExposure.toFixed(0)}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-black/40 border-green-900/30 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Ready to Order</p>
+                <p className="text-2xl font-bold text-green-400">{canOrderCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-black/40 border-red-900/30 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Blocked</p>
+                <p className="text-2xl font-bold text-red-400">{blockedCount}</p>
+                <p className="text-xs text-gray-400">need coverage/prepay</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filters */}
+          <Card className="bg-black/40 border-gray-800">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search parts, projects, vendors..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900/50 border-gray-700 text-white"
+                  />
+                </div>
+
+                {/* Project Filter */}
+                <Select value={selectedProjectFilter} onValueChange={setSelectedProjectFilter}>
+                  <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
+                    <FolderKanban className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="All Projects" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    {projects.filter(p => projectsWithItems.includes(p.id)).map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Vendor Filter */}
+                <Select value={selectedVendorFilter} onValueChange={setSelectedVendorFilter}>
+                  <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
+                    <Building2 className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="All Vendors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Vendors</SelectItem>
+                    {vendors.filter(v => vendorsWithItems.includes(v.id)).map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Coverage Filter */}
+                <Select value={coverageFilter} onValueChange={setCoverageFilter}>
+                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white">
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Coverage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Coverage</SelectItem>
+                    <SelectItem value="covered">✓ Covered</SelectItem>
+                    <SelectItem value="partial">◐ Partial</SelectItem>
+                    <SelectItem value="uncovered">○ Uncovered</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Prepay Filter */}
+                <Select value={prepayFilter} onValueChange={setPrepayFilter}>
+                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Prepay" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Items</SelectItem>
+                    <SelectItem value="required">Prepay Required</SelectItem>
+                    <SelectItem value="not_required">No Prepay</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Group Mode */}
+                <Tabs value={groupMode} onValueChange={setGroupMode}>
+                  <TabsList className="bg-gray-900/50 border border-gray-700">
+                    <TabsTrigger value="vendor" className="data-[state=active]:bg-blue-900/30 gap-1.5">
+                      <Building2 className="w-3.5 h-3.5" />
+                      Vendor
+                    </TabsTrigger>
+                    <TabsTrigger value="project" className="data-[state=active]:bg-red-900/30 gap-1.5">
+                      <FolderKanban className="w-3.5 h-3.5" />
+                      Project
+                    </TabsTrigger>
+                    <TabsTrigger value="coverage" className="data-[state=active]:bg-green-900/30 gap-1.5">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Coverage
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Grouped Items List */}
+          {commitmentsLoading ? (
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
+            </Card>
+          ) : filteredItems.length === 0 ? (
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-8 text-center">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
+                <p className="text-gray-400">No items need ordering</p>
+                <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {groupedItems.map(group => {
+                const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
+                const allOrderable = group.items.filter(i => i.canOrder);
+                const allSelected = allOrderable.length > 0 && allOrderable.every(i => selectedItems.has(i.id));
+
+                return (
+                  <Card key={group.id} className="bg-black/40 border-gray-800 overflow-hidden">
+                    <CardHeader 
+                      className="p-3 cursor-pointer hover:bg-gray-800/30 transition-colors"
+                      onClick={() => toggleGroup(group.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={allSelected}
+                            onCheckedChange={() => selectAllInGroup(group.items)}
+                            onClick={(e) => e.stopPropagation()}
+                            disabled={allOrderable.length === 0}
+                          />
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: group.color }}
+                          />
+                          <div>
+                            <p className="text-white font-medium">{group.label}</p>
+                            <p className="text-xs text-gray-500">
+                              {group.items.length} items · {group.totalQty} qty · 
+                              <span className="text-green-400 ml-1">{group.canOrderCount} ready</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500">Exposure</p>
+                            <p className="text-red-400 font-medium">${group.totalExposure.toFixed(0)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500">Est. Cost</p>
+                            <p className="text-yellow-400 font-medium">${group.totalCost.toFixed(0)}</p>
+                          </div>
+                          {group.canOrderCount > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-green-600 text-green-400 hover:bg-green-900/30"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Select all orderable in this group and open batch modal
+                                const ids = group.items.filter(i => i.canOrder).map(i => i.id);
+                                setSelectedItems(new Set(ids));
+                                setShowBatchOrderModal(true);
+                              }}
+                            >
+                              <ShoppingCart className="w-3 h-3 mr-1" />
+                              Order All
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    {isExpanded && (
+                      <CardContent className="p-0 border-t border-gray-800">
+                        {group.items.map(item => renderItem(item))}
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {orderModalPart && (
+        <OrderPartModal
+          part={orderModalPart}
+          onClose={() => setOrderModalPart(null)}
+        />
+      )}
+
+      {showBatchOrderModal && (
+        <CreateBatchOrderModal
+          selectedItems={getSelectedItemsData().map(item => ({
+            id: item.id,
+            part: item.part,
+            requirement: { project_id: item.project?.id },
+            qty_to_order: item.qtyToOrder,
+            estimated_cost: item.estimatedCost,
+          }))}
+          onClose={() => setShowBatchOrderModal(false)}
+          onSuccess={() => {
+            setSelectedItems(new Set());
+            refetch();
+          }}
+        />
+      )}
+
+      {deltaOrderCommitment && (
+        <DeltaOrderModal
+          commitment={deltaOrderCommitment.commitment}
+          part={deltaOrderCommitment.part}
+          onClose={() => setDeltaOrderCommitment(null)}
+        />
+      )}
+    </MobileSafeAreaContainer>
+  );
+}
