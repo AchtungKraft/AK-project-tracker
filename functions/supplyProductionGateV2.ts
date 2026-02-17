@@ -111,17 +111,6 @@ Deno.serve(async (req) => {
     // Run inline integrity audit
     const audit = await runIntegrityAudit(base44);
     
-    if (!auditResponse.data?.success) {
-      return Response.json({
-        success: false,
-        gate_status: 'ERROR',
-        message: 'Failed to run integrity audit',
-        error: auditResponse.data?.error
-      });
-    }
-
-    const audit = auditResponse.data.audit;
-    
     // Build gate result
     const gates = {
       timestamp: new Date().toISOString(),
