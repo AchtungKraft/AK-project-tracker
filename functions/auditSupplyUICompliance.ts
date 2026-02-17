@@ -58,6 +58,10 @@ Deno.serve(async (req) => {
         pass: false,
         pages: [],
       },
+      endToEndTests: {
+        pass: false,
+        tests: [],
+      },
     };
 
     // 1. Check screens implemented (Base44 auto-routes based on page file names)
