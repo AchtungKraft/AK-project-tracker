@@ -219,6 +219,9 @@ Deno.serve(async (req) => {
         case 'reconcileOrderCosts':
           result = await reconcileOrderCosts(txn, params);
           break;
+        case 'addPartToProject':
+          result = await addPartToProject(txn, params);
+          break;
         default:
           return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
       }
@@ -1524,6 +1527,118 @@ async function reconcileOrderCosts(txn, params) {
     repairs_needed: repairs.length,
     repairs_applied: dry_run ? 0 : repairs.length,
     repairs
+  };
+}
+
+/**
+ * ADD PART TO PROJECT - CANONICAL ENTRY POINT
+ * Creates a PartCommitment with service-authored pricing snapshots.
+ * This is the ONLY way to add parts to project execution.
+ */
+async function addPartToProject(txn, params) {
+  const { project_id, part_id, qty_committed, notes, source_surface, requested_by } = params;
+
+  if (!project_id) throw new Error('project_id is required');
+  if (!part_id) throw new Error('part_id is required');
+  if (!qty_committed || qty_committed < 1) throw new Error('qty_committed must be at least 1');
+
+  // Load Part
+  const parts = await txn.base44.asServiceRole.entities.Part.filter({ id: part_id });
+  const part = parts[0];
+  if (!part) throw new Error('Part not found');
+
+  // Check for existing commitment (same project + part)
+  const existingCommitments = await txn.base44.asServiceRole.entities.PartCommitment.filter({
+    project_id,
+    part_id,
+    commitment_status: { $nin: ['cancelled', 'closed'] }
+  });
+
+  if (existingCommitments.length > 0) {
+    // Return existing commitment instead of creating duplicate
+    return {
+      commitment: existingCommitments[0],
+      created: false,
+      message: 'Commitment already exists for this project/part combination'
+    };
+  }
+
+  // Compute pricing snapshots (SERVICE-AUTHORED - UI MUST NOT SET THESE)
+  const unit_cost_snapshot = part.cost || part.default_cost || 0;
+  const unit_retail_snapshot = part.retail_override || part.retail_matrix_price || part.default_retail || 0;
+  
+  // Calculate totals
+  const planned_cost_total = unit_cost_snapshot * qty_committed;
+  const planned_retail_total = unit_retail_snapshot * qty_committed;
+
+  // Determine if needs cost review
+  const needs_cost_review = unit_cost_snapshot <= 0;
+  let pricing_integrity_status = 'ok';
+  if (needs_cost_review) {
+    pricing_integrity_status = 'missing_cost';
+  } else if (unit_retail_snapshot <= 0) {
+    pricing_integrity_status = 'missing_retail';
+  }
+
+  // Create the PartCommitment
+  const commitment = await txn.base44.asServiceRole.entities.PartCommitment.create({
+    project_id,
+    part_id,
+    qty_committed,
+    qty_ordered: 0,
+    qty_received: 0,
+    qty_allocated: 0,
+    qty_installed: 0,
+    qty_cancelled: 0,
+    commitment_status: 'planned',
+    source_type: source_surface === 'migration:requirements' ? 'requirement' : 'manual_attachment',
+    billing_status: 'billable',
+    unit_cost_snapshot,
+    unit_retail_snapshot,
+    planned_cost_total,
+    planned_retail_total,
+    covered_retail_total: 0,
+    exposure_gap: planned_retail_total,
+    pricing_integrity_status,
+    commitment_version: 1,
+    notes: notes || null
+  });
+
+  txn.addRollback(async () => {
+    await txn.base44.asServiceRole.entities.PartCommitment.delete(commitment.id);
+  });
+
+  txn.recordMutation('PartCommitment', commitment.id, null, { created: true });
+
+  // Queue lifecycle event
+  txn.queueLifecycleEvent({
+    commitment_id: commitment.id,
+    event_type: 'COMMITMENT_CREATED',
+    previous_state: null,
+    new_state: JSON.stringify({ 
+      qty_committed, 
+      unit_cost_snapshot, 
+      unit_retail_snapshot,
+      source_surface 
+    }),
+    trigger_source: source_surface || 'USER_ACTION',
+    user_id: txn.user.id,
+    part_id,
+    project_id,
+    notes: `Part added to project via ${source_surface || 'UI'}`
+  });
+
+  console.log(`✅ Created commitment ${commitment.id} for part ${part.part_name} on project ${project_id}`);
+  console.log(`   Cost snapshot: $${unit_cost_snapshot}, Retail snapshot: $${unit_retail_snapshot}`);
+  if (needs_cost_review) {
+    console.log(`   ⚠️ Part needs cost review before ordering`);
+  }
+
+  return {
+    commitment,
+    created: true,
+    needs_cost_review,
+    pricing_integrity_status
   };
 }
 
