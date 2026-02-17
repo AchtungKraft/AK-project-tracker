@@ -19,6 +19,9 @@ import { toast } from "sonner";
 /**
  * AddToNeedToBuyModal - Creates a general (non-project) part requirement
  * for the "General / AK Stock" purchasing list
+ * 
+ * ⚠️ LEGACY: Creates PartProjectRequirement with project_id=null
+ * Consider using inventory reorder system instead for stock management
  */
 export default function AddToNeedToBuyModal({ part, onClose }) {
   const queryClient = useQueryClient();

@@ -16,8 +16,11 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 /**
  * OrderPartModal - Create or add to an order for a specific part
- * Creates PartPurchaseLineItem linked to an Order
- * Optionally links to PartProjectRequirements and updates qty_ordered
+ * 
+ * ⚠️ LEGACY WARNING: This modal currently creates PartPurchaseLineItem directly
+ * without routing through CommitmentService. Use ProjectSupplyManager for canonical PO creation.
+ * 
+ * TODO: Either deprecate this modal OR require commitment_id and route through CommitmentService.createPO
  */
 export default function OrderPartModal({ part, onClose, onPartClick }) {
   const queryClient = useQueryClient();

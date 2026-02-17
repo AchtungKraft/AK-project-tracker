@@ -13,9 +13,10 @@ import { Loader2, Plus, Wrench } from "lucide-react";
 
 
 /**
- * AddToBuildModal - Add a part requirement to a project/build
- * Creates a PartProjectRequirement with intent only
- * Does NOT allocate inventory or create orders
+ * AddToBuildModal - Add a part to a project/build (CANONICAL)
+ * Routes through CommitmentService.addPartToProject to create PartCommitment
+ * Optionally allocates inventory immediately if available
+ * MIGRATION: No longer creates PartProjectRequirement or PartBuildAssignment directly
  */
 export default function AddToBuildModal({ part, onClose }) {
   const queryClient = useQueryClient();
