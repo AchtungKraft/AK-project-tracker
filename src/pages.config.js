@@ -77,9 +77,7 @@ import SupplyOnOrder from './pages/SupplyOnOrder';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import SupplyLanding from './pages/SupplyLanding';
 import ProjectSupplyManager from './pages/ProjectSupplyManager';
-import SupplyQueues from './pages/SupplyQueues';
 import __Layout from './Layout.jsx';
 
 
@@ -114,9 +112,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "SupplyLanding": SupplyLanding,
     "ProjectSupplyManager": ProjectSupplyManager,
-    "SupplyQueues": SupplyQueues,
 }
 
 export const pagesConfig = {
