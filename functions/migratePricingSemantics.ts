@@ -48,15 +48,17 @@ function getCostEffective(part) {
   return 0;
 }
 
-// Batch update with rate limiting
-async function batchUpdate(base44, entityName, updates, batchSize = 25, delayMs = 150) {
+// Batch update with rate limiting - sequential within batch to avoid rate limits
+async function batchUpdate(base44, entityName, updates, batchSize = 10, delayMs = 300) {
   const results = [];
   for (let i = 0; i < updates.length; i += batchSize) {
     const batch = updates.slice(i, i + batchSize);
-    const batchResults = await Promise.all(
-      batch.map(({ id, data }) => base44.asServiceRole.entities[entityName].update(id, data))
-    );
-    results.push(...batchResults);
+    // Execute sequentially within batch to avoid rate limits
+    for (const { id, data } of batch) {
+      const result = await base44.asServiceRole.entities[entityName].update(id, data);
+      results.push(result);
+      await new Promise(r => setTimeout(r, 50)); // Small delay between each
+    }
     if (i + batchSize < updates.length) {
       await new Promise(r => setTimeout(r, delayMs));
     }
