@@ -16,6 +16,7 @@ import DeltaOrderModal from "./DeltaOrderModal";
 import CancelCommitmentModal from "./CancelCommitmentModal";
 import { CommitmentActions } from "../financial/financialMutationGuard";
 import { getAllowedCommitmentActions } from "../lifecycle/getAllowedCommitmentActions";
+import { FinancialColumns, CoverageBadge, BillingStatusBadge, ExposureBasisLabel } from "./FinancialColumns";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -479,6 +480,14 @@ export default function OnOrder({ onPartClick }) {
             </p>
             <p className="text-xs text-gray-500">${item.value.toFixed(2)}</p>
           </div>
+          
+          {/* Financial Columns */}
+          {item.commitment && (
+            <div className="flex items-center gap-2">
+              <CoverageBadge commitment={item.commitment} compact />
+              <BillingStatusBadge commitment={item.commitment} />
+            </div>
+          )}
           
           <Button
             size="sm"

@@ -18,6 +18,7 @@ import BuildExportActions from "../inventory/BuildExportActions";
 import { CommitmentActions } from "../financial/financialMutationGuard";
 import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
 import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
+import { FinancialColumns, CoverageBadge, BillingStatusBadge, ExposureBasisLabel } from "./FinancialColumns";
 
 /**
  * BuildsDashboard - Shows projects with their part requirements
@@ -271,6 +272,13 @@ export default function BuildsDashboard({ onPartClick }) {
           <span className="text-gray-400 w-24 text-right">
             {item.qty_installed}/{item.qty_allocated}/{item.qty_needed}
           </span>
+          {/* Financial Columns */}
+          {item.commitment && (
+            <div className="flex items-center gap-1.5">
+              <CoverageBadge commitment={item.commitment} compact />
+              <BillingStatusBadge commitment={item.commitment} />
+            </div>
+          )}
           {showInstallAction && canInstall(item) && (
             <Button
               size="sm"
