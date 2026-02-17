@@ -69,17 +69,17 @@ import PortalStatsEmbed from './pages/PortalStatsEmbed';
 import PriorityDashboard from './pages/PriorityDashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import ProjectFinancialReport from './pages/ProjectFinancialReport';
+import ProjectSupplyManager from './pages/ProjectSupplyManager';
 import Projects from './pages/Projects';
 import Reports from './pages/Reports';
 import SupplyDashboard from './pages/SupplyDashboard';
 import SupplyInstalled from './pages/SupplyInstalled';
+import SupplyLanding from './pages/SupplyLanding';
 import SupplyOnOrder from './pages/SupplyOnOrder';
+import SupplyQueues from './pages/SupplyQueues';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import ProjectSupplyManager from './pages/ProjectSupplyManager';
-import SupplyLanding from './pages/SupplyLanding';
-import SupplyQueues from './pages/SupplyQueues';
 import __Layout from './Layout.jsx';
 
 
@@ -106,17 +106,17 @@ export const PAGES = {
     "PriorityDashboard": PriorityDashboard,
     "ProjectDetail": ProjectDetail,
     "ProjectFinancialReport": ProjectFinancialReport,
+    "ProjectSupplyManager": ProjectSupplyManager,
     "Projects": Projects,
     "Reports": Reports,
     "SupplyDashboard": SupplyDashboard,
     "SupplyInstalled": SupplyInstalled,
+    "SupplyLanding": SupplyLanding,
     "SupplyOnOrder": SupplyOnOrder,
+    "SupplyQueues": SupplyQueues,
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "ProjectSupplyManager": ProjectSupplyManager,
-    "SupplyLanding": SupplyLanding,
-    "SupplyQueues": SupplyQueues,
 }
 
 export const pagesConfig = {

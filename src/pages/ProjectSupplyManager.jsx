@@ -49,6 +49,8 @@ import CreatePoolModal from "@/components/financial/CreatePoolModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
 import ReverseInstallationModal from "@/components/project/ReverseInstallationModal";
 import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
+import AllocatePoolModal from "@/components/financial/AllocatePoolModal";
+import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
@@ -82,6 +84,8 @@ export default function ProjectSupplyManager() {
   const [installModal, setInstallModal] = useState(null);
   const [reverseInstallModal, setReverseInstallModal] = useState(null);
   const [receiveModal, setReceiveModal] = useState(null);
+  const [allocateModal, setAllocateModal] = useState(null);
+  const [cancelModal, setCancelModal] = useState(null);
 
   // Data Fetching
   const { data: project, isLoading: projectLoading } = useQuery({
@@ -416,14 +420,20 @@ export default function ProjectSupplyManager() {
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem className="text-blue-400">
+                <DropdownMenuItem 
+                  onClick={() => setAllocateModal(commitment)} 
+                  className="text-blue-400"
+                >
                   <DollarSign className="w-4 h-4 mr-2" />
                   Allocate Pool
                 </DropdownMenuItem>
                 {allowed.canCancel && (
                   <>
                     <DropdownMenuSeparator className="bg-gray-700" />
-                    <DropdownMenuItem className="text-red-400">
+                    <DropdownMenuItem 
+                      onClick={() => setCancelModal(commitment)}
+                      className="text-red-400"
+                    >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Remove
                     </DropdownMenuItem>
@@ -1041,6 +1051,28 @@ export default function ProjectSupplyManager() {
             refetchCommitments();
             setReceiveModal(null);
           }}
+        />
+      )}
+
+      {allocateModal && (
+        <AllocatePoolModal
+          projectId={projectId}
+          commitment={allocateModal}
+          onClose={() => setAllocateModal(null)}
+          onSuccess={() => {
+            refetchCommitments();
+            refetchPools();
+            queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
+          }}
+        />
+      )}
+
+      {cancelModal && (
+        <CancelCommitmentModal
+          commitment={cancelModal}
+          part={cancelModal.part}
+          project={project}
+          onClose={() => setCancelModal(null)}
         />
       )}
     </MobileSafeAreaContainer>
