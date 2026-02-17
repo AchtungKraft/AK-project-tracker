@@ -12,6 +12,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import EditOrderModal from "./EditOrderModal";
+import DeltaOrderModal from "./DeltaOrderModal";
+import CancelCommitmentModal from "./CancelCommitmentModal";
+import { CommitmentActions } from "../financial/financialMutationGuard";
+import { getAllowedCommitmentActions } from "../lifecycle/getAllowedCommitmentActions";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, Plus, XCircle } from "lucide-react";
 
 /**
  * OnOrder - Shows parts that have been ordered but not yet received
@@ -24,6 +36,13 @@ export default function OnOrder({ onPartClick }) {
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [editingOrder, setEditingOrder] = useState(null);
+  const [deltaOrderItem, setDeltaOrderItem] = useState(null);
+  const [cancelCommitmentItem, setCancelCommitmentItem] = useState(null);
+
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.list()
+  });
 
   const { data: requirements = [], isLoading } = useQuery({
     queryKey: ['partProjectRequirements'],
@@ -74,6 +93,13 @@ export default function OnOrder({ onPartClick }) {
         
         const qtyPending = (li.qty_ordered || 0) - (li.qty_received || 0);
         
+        // Find associated commitment
+        const commitment = li.commitment_id 
+          ? commitments.find(c => c.id === li.commitment_id)
+          : requirement?.id 
+            ? commitments.find(c => c.requirement_id === requirement.id && c.commitment_status !== 'cancelled')
+            : null;
+
         return {
           lineItem: li,
           part,
@@ -81,6 +107,7 @@ export default function OnOrder({ onPartClick }) {
           vendor,
           requirement,
           project,
+          commitment,
           qtyPending,
           qtyOrdered: li.qty_ordered || 0,
           qtyReceived: li.qty_received || 0,
@@ -90,7 +117,7 @@ export default function OnOrder({ onPartClick }) {
         };
       })
       .filter(item => item.part);
-  }, [lineItems, parts, orders, vendors, requirements, projects]);
+  }, [lineItems, parts, orders, vendors, requirements, projects, commitments]);
 
   // Filter by search
   const filteredItems = useMemo(() => {
@@ -399,6 +426,7 @@ export default function OnOrder({ onPartClick }) {
   const renderLineItem = (item) => {
     const part = item.part;
     const billing = getEffectiveBilling(item.lineItem, item.order);
+    const allowed = item.commitment ? getAllowedCommitmentActions(item.commitment) : {};
     
     return (
       <div 
@@ -487,6 +515,62 @@ export default function OnOrder({ onPartClick }) {
             <CheckCircle className="w-3 h-3 mr-1" />
             Receive {item.qtyPending}
           </Button>
+
+          {/* Actions Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-gray-400 hover:text-white"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+              {allowed.canCreateDeltaOrder && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeltaOrderItem(item);
+                  }}
+                  className="text-purple-400"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Additional Order
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveToNeedToBuyMutation.mutate({
+                    lineItem: item.lineItem,
+                    part: item.part,
+                    qtyToMove: item.qtyPending,
+                  });
+                }}
+              >
+                <Undo2 className="w-4 h-4 mr-2" />
+                Move Back to Need To Buy
+              </DropdownMenuItem>
+              {item.commitment && allowed.canCancel && (
+                <>
+                  <DropdownMenuSeparator className="bg-gray-700" />
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCancelCommitmentItem(item);
+                    }}
+                    className="text-red-400"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancel Commitment
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     );
@@ -756,6 +840,22 @@ export default function OnOrder({ onPartClick }) {
         <EditOrderModal
           order={editingOrder}
           onClose={() => setEditingOrder(null)}
+        />
+      )}
+
+      {deltaOrderItem && deltaOrderItem.commitment && (
+        <DeltaOrderModal
+          commitment={deltaOrderItem.commitment}
+          part={deltaOrderItem.part}
+          onClose={() => setDeltaOrderItem(null)}
+        />
+      )}
+
+      {cancelCommitmentItem && cancelCommitmentItem.commitment && (
+        <CancelCommitmentModal
+          commitment={cancelCommitmentItem.commitment}
+          part={cancelCommitmentItem.part}
+          onClose={() => setCancelCommitmentItem(null)}
         />
       )}
     </div>
