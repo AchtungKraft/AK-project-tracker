@@ -45,26 +45,22 @@ Deno.serve(async (req) => {
       targetProject = projects[0];
     }
 
+    // Fetch all commitments and filter for planned status
+    const allCommitments = await base44.asServiceRole.entities.PartCommitment.list();
+    const plannedCommitments = allCommitments.filter(c => c.commitment_status === 'planned');
+
     if (!targetProject) {
-      // Find any project with planned commitments
-      const allCommitments = await base44.asServiceRole.entities.PartCommitment.filter({
-        commitment_status: 'planned'
-      });
-      
-      if (allCommitments.length === 0) {
+      if (plannedCommitments.length === 0) {
         test.status = 'SKIP';
         test.errors.push('No planned commitments found to test');
         return Response.json({ success: true, test });
       }
 
-      targetCommitment = allCommitments[0];
+      targetCommitment = plannedCommitments[0];
       const projects = await base44.asServiceRole.entities.Project.filter({ id: targetCommitment.project_id });
       targetProject = projects[0];
     } else {
-      const projectCommitments = await base44.asServiceRole.entities.PartCommitment.filter({
-        project_id: targetProject.id,
-        commitment_status: 'planned'
-      });
+      const projectCommitments = plannedCommitments.filter(c => c.project_id === targetProject.id);
       targetCommitment = projectCommitments[0];
     }
 
