@@ -100,8 +100,8 @@ Deno.serve(async (req) => {
     let createdPool = false;
 
     if (!testPool) {
-      // Create test pool via CommitmentService
-      const createResult = await base44.functions.invoke('commitmentService', {
+      // Create test pool via CommitmentService (using service role context)
+      const createResult = await base44.asServiceRole.functions.invoke('commitmentService', {
         action: 'createBillingPool',
         project_id: targetProject.id,
         pool_name: 'Test Pool (Round Trip Verification)',
@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     }
 
     // Step 3: Allocate funds to commitment
-    const allocateResult = await base44.functions.invoke('commitmentService', {
+    const allocateResult = await base44.asServiceRole.functions.invoke('commitmentService', {
       action: 'allocatePool',
       pool_id: testPool.id,
       commitment_id: targetCommitment.id,
@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
 
     // Step 5: Cleanup (reverse allocation)
     if (cleanup && allocationId) {
-      const reverseResult = await base44.functions.invoke('commitmentService', {
+      const reverseResult = await base44.asServiceRole.functions.invoke('commitmentService', {
         action: 'reversePoolAllocation',
         allocation_id: allocationId,
         reason: 'Round trip test cleanup'
