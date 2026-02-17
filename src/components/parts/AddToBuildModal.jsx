@@ -64,16 +64,28 @@ export default function AddToBuildModal({ part, onClose }) {
         throw new Error('Please select a project');
       }
 
-      // Check if requirement already exists for this part/project combination
-      const existing = existingRequirements.find(r => r.project_id === formData.project_id);
-      if (existing) {
-        throw new Error('This part is already added to this build. Update the existing requirement instead.');
+      const qtyNeeded = Number(formData.qty_needed) || 1;
+
+      // Create commitment via CommitmentService (CANONICAL)
+      const response = await base44.functions.invoke('commitmentService', {
+        action: 'addPartToProject',
+        project_id: formData.project_id,
+        part_id: part.id,
+        qty_committed: qtyNeeded,
+        notes: formData.notes || null,
+        source_surface: 'AddToBuildModal',
+        requested_by: 'user'
+      });
+
+      const commitmentData = response.data;
+      if (!commitmentData.success) {
+        throw new Error(commitmentData.error || 'Failed to add part to project');
       }
 
-      const qtyNeeded = Number(formData.qty_needed) || 1;
+      const commitment = commitmentData.commitment;
+
+      // Handle immediate inventory allocation if requested
       let qtyAllocated = 0;
-      
-      // If allocateImmediately is checked, attempt allocation from inventory
       if (allocateImmediately && inventoryItems.length > 0) {
         let remainingToAllocate = qtyNeeded;
         
@@ -85,7 +97,6 @@ export default function AddToBuildModal({ part, onClose }) {
           
           const toAllocate = Math.min(available, remainingToAllocate);
           
-          // Update inventory item - increase reserved
           await base44.entities.InventoryItem.update(item.id, {
             quantity_reserved: (item.quantity_reserved || 0) + toAllocate
           });
@@ -93,59 +104,28 @@ export default function AddToBuildModal({ part, onClose }) {
           qtyAllocated += toAllocate;
           remainingToAllocate -= toAllocate;
         }
+
+        // Update commitment with allocated qty
+        if (qtyAllocated > 0) {
+          await base44.entities.PartCommitment.update(commitment.id, {
+            qty_allocated: qtyAllocated
+          });
+        }
       }
-
-      // Determine status based on allocation and need-to-order flag
-      let status = 'Needed';
-      if (qtyAllocated >= qtyNeeded) {
-        status = 'Allocated';
-      } else if (qtyAllocated > 0) {
-        status = 'Partially Allocated';
-      }
-
-      // Create the requirement
-      const requirement = await base44.entities.PartProjectRequirement.create({
-        part_id: part.id,
-        project_id: formData.project_id,
-        qty_needed: qtyNeeded,
-        qty_allocated: qtyAllocated,
-        qty_ordered: 0,
-        qty_installed: 0,
-        status: status,
-        priority: flagNeedToOrder ? 'High' : formData.priority,
-        notes: formData.notes || null,
-      });
-
-      // Create PartBuildAssignment - inherit pricing from Part
-      const defaultCost = part.default_cost || 0;
-      const defaultRetail = part.default_retail || 0;
       
-      await base44.entities.PartBuildAssignment.create({
-        part_id: part.id,
-        project_id: formData.project_id,
-        qty_needed: qtyNeeded,
-        qty_reserved: qtyAllocated,
-        needed_status: qtyAllocated >= qtyNeeded ? 'On-Hand' : 'Need to Buy',
-        notes: formData.notes || null,
-        default_cost: defaultCost,
-        unit_retail: defaultRetail,
-        applied_markup_pct: part.applied_markup_pct || null,
-        pricing_source: part.pricing_mode === 'manual' ? 'override' : 'matrix',
-        pricing_locked: false
-      });
-      
-      return { qtyAllocated };
+      return { commitment, qtyAllocated, needs_cost_review: commitmentData.needs_cost_review };
     },
-    onSuccess: ({ qtyAllocated }) => {
+    onSuccess: ({ commitment, qtyAllocated, needs_cost_review }) => {
+      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       
       let message = 'Part added to build';
       if (qtyAllocated > 0) {
-        message += ` (${qtyAllocated} allocated from inventory)`;
+        message += ` (${qtyAllocated} allocated)`;
       }
-      if (flagNeedToOrder) {
-        message += ' - flagged for ordering';
+      if (needs_cost_review) {
+        message += ' ⚠️ Cost review needed';
       }
       toast.success(message);
       onClose();
