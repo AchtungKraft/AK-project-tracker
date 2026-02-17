@@ -1,20 +1,23 @@
 import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, DollarSign,
-  ArrowRight, Eye, Building2
+  ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, Eye
 } from "lucide-react";
 
 /**
  * ProjectSupplyDashboard - Portfolio-level supply chain overview
- * Shows all projects with supply metrics and drilldown actions
+ * 
+ * STRICT ENGINE REUSE:
+ * - Uses ONLY precomputed commitment fields (exposure_gap, covered_retail_total, etc.)
+ * - NO UI-side financial calculations
+ * - Drilldowns route to pages that use CommitmentActions
  */
 export default function ProjectSupplyDashboard({ projects, statuses }) {
   const navigate = useNavigate();
@@ -51,11 +54,12 @@ export default function ProjectSupplyDashboard({ projects, statuses }) {
       const installed = projectCommitments.filter(c => c.commitment_status === 'installed').length;
       const total = projectCommitments.length;
 
-      // Financial metrics
+      // STRICT: Financial metrics from PRECOMPUTED fields ONLY
       const totalExposure = projectCommitments.reduce((sum, c) => sum + (c.exposure_gap || 0), 0);
       const totalPlannedRetail = projectCommitments.reduce((sum, c) => sum + (c.planned_retail_total || 0), 0);
       const totalCovered = projectCommitments.reduce((sum, c) => sum + (c.covered_retail_total || 0), 0);
       const poolBalance = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
+      // NOTE: No derived calculations - all values come from entity fields
 
       // Open POs (not fully received)
       const openPOs = new Set(
