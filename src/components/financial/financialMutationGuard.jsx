@@ -1,11 +1,15 @@
 /**
+ * CANONICAL SUPPLY FLOW ENFORCED
+ * All project part mutations must go through CommitmentService.
+ * Direct entity writes are blocked.
+ * 
  * Financial Mutation Guard - Client-Side Enforcement
  * 
  * This module provides client-side guards for UI components.
  * It prevents direct mutations to protected financial and lifecycle entities.
  * 
  * USAGE:
- * import { guardedUpdate, guardedDelete, isProtectedEntity, CommitmentActions } from '@/components/financial/financialMutationGuard';
+ * import { guardedUpdate, guardedDelete, isProtectedEntity, CommitmentActions, blockLegacyCreate } from '@/components/financial/financialMutationGuard';
  * 
  * // Instead of: base44.entities.BillingPool.update(id, data)
  * // Use: await guardedUpdate('BillingPool', id, data) // Will throw if not allowed
@@ -27,6 +31,16 @@ const PROTECTED_ENTITIES = [
   'InvoiceBatch',
   'InvoiceBatchLine',
   'Part' // Added for cost field protection
+];
+
+// FROZEN entities - NO creates allowed from UI
+const FROZEN_ENTITIES = [
+  'PartBuildAssignment',  // DEPRECATED: Use PartCommitment
+];
+
+// SOFT FROZEN entities - creates only via CommitmentService
+const SOFT_FROZEN_ENTITIES = [
+  'PartProjectRequirement', // Only CommitmentService can create (for migration/planning artifacts)
 ];
 
 // Sensitive fields that should NEVER be directly modified from UI
@@ -61,6 +75,41 @@ const SAFE_UI_FIELDS = {
  */
 export function isProtectedEntity(entityName) {
   return PROTECTED_ENTITIES.includes(entityName);
+}
+
+/**
+ * Check if an entity is frozen (no creates allowed)
+ */
+export function isFrozenEntity(entityName) {
+  return FROZEN_ENTITIES.includes(entityName);
+}
+
+/**
+ * Check if an entity is soft-frozen (creates only via CommitmentService)
+ */
+export function isSoftFrozenEntity(entityName) {
+  return SOFT_FROZEN_ENTITIES.includes(entityName);
+}
+
+/**
+ * Block legacy entity creation - throws error for frozen entities
+ * Call this BEFORE any direct .create() call on legacy entities
+ * @throws Error if entity is frozen
+ */
+export function blockLegacyCreate(entityName, callerSurface = 'unknown') {
+  if (isFrozenEntity(entityName)) {
+    throw new Error(
+      `Direct mutation blocked: ${entityName} is deprecated and locked. ` +
+      `Use CommitmentService.addPartToProject instead. (caller: ${callerSurface})`
+    );
+  }
+  
+  if (isSoftFrozenEntity(entityName)) {
+    throw new Error(
+      `Direct mutation blocked: ${entityName} creates must go through CommitmentService. ` +
+      `Use CommitmentService.addPartToProject instead. (caller: ${callerSurface})`
+    );
+  }
 }
 
 /**
@@ -219,6 +268,8 @@ export async function commitmentAction(action, params) {
 
 // Export action helpers for common operations
 export const CommitmentActions = {
+  // CANONICAL ENTRY POINT for adding parts to projects
+  addPartToProject: (params) => commitmentAction('addPartToProject', params),
   createPO: (params) => commitmentAction('createPO', params),
   createDeltaOrder: (params) => commitmentAction('createDeltaOrder', params),
   createBillingPool: (params) => commitmentAction('createBillingPool', params),

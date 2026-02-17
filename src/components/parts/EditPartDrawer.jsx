@@ -655,31 +655,8 @@ export default function EditPartDrawer({ partId, onClose }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-gray-400 text-xs">Default Cost</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editedPart.default_cost || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, default_cost: parseFloat(e.target.value) || 0 })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Reference price"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label className="text-gray-400 text-xs">Default Retail</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editedPart.default_retail || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, default_retail: parseFloat(e.target.value) || 0 })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Sell price"
-                      />
-                    </div>
-                  </div>
+                  {/* Pricing fields are admin-only. Retail is matrix-driven. */}
+                  {/* Cost editing removed for non-admin users to prevent pricing contamination */}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -783,14 +760,15 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <p className="text-white">{vendors.find(v => v.id === part?.default_vendor_id)?.vendor_name || '-'}</p>
                     </div>
                   </div>
+                  {/* Pricing is managed through Admin Config - not editable here */}
                   <div className="grid grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Default Cost</p>
-                      <p className="text-white">${part?.default_cost || '0.00'}</p>
+                      <p className="text-xs text-gray-500 mb-1">Cost (Admin)</p>
+                      <p className="text-white">${part?.cost || part?.default_cost || '0.00'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Default Retail</p>
-                      <p className="text-white">${part?.default_retail || '0.00'}</p>
+                      <p className="text-xs text-gray-500 mb-1">Retail (Matrix)</p>
+                      <p className="text-white">${part?.retail_matrix_price || part?.retail_override || part?.default_retail || '0.00'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Reorder Point</p>
