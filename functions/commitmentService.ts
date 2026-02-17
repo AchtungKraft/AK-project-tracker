@@ -13,6 +13,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * - Centralized recalculation prevents circular updates
  * 
  * Exposed Methods:
+ * - addPartToProject(project_id, part_id, qty_committed, notes, source_surface) **CANONICAL ENTRY**
  * - createPO(commitment_id, vendor_id, unit_cost, qty)
  * - createDeltaOrder(commitment_id, vendor_id, unit_cost, qty)
  * - createBillingPool(project_id, pool_name, invoiced_amount)
