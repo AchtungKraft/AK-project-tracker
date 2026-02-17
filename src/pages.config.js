@@ -56,6 +56,7 @@ import ClientProjectPortal from './pages/ClientProjectPortal';
 import ClientProjects from './pages/ClientProjects';
 import Dashboard from './pages/Dashboard';
 import FinancialExceptionDashboard from './pages/FinancialExceptionDashboard';
+import GlobalNeedToOrder from './pages/GlobalNeedToOrder';
 import Home from './pages/Home';
 import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
 import MyPriorities from './pages/MyPriorities';
@@ -70,13 +71,12 @@ import ProjectDetail from './pages/ProjectDetail';
 import ProjectFinancialReport from './pages/ProjectFinancialReport';
 import Projects from './pages/Projects';
 import Reports from './pages/Reports';
+import SupplyDashboard from './pages/SupplyDashboard';
+import SupplyInstalled from './pages/SupplyInstalled';
+import SupplyOnOrder from './pages/SupplyOnOrder';
 import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
-import GlobalNeedToOrder from './pages/GlobalNeedToOrder';
-import SupplyDashboard from './pages/SupplyDashboard';
-import SupplyOnOrder from './pages/SupplyOnOrder';
-import SupplyInstalled from './pages/SupplyInstalled';
 import SupplyLanding from './pages/SupplyLanding';
 import ProjectSupplyManager from './pages/ProjectSupplyManager';
 import SupplyQueues from './pages/SupplyQueues';
@@ -93,6 +93,7 @@ export const PAGES = {
     "ClientProjects": ClientProjects,
     "Dashboard": Dashboard,
     "FinancialExceptionDashboard": FinancialExceptionDashboard,
+    "GlobalNeedToOrder": GlobalNeedToOrder,
     "Home": Home,
     "InventoryMutationMonitor": InventoryMutationMonitor,
     "MyPriorities": MyPriorities,
@@ -107,13 +108,12 @@ export const PAGES = {
     "ProjectFinancialReport": ProjectFinancialReport,
     "Projects": Projects,
     "Reports": Reports,
+    "SupplyDashboard": SupplyDashboard,
+    "SupplyInstalled": SupplyInstalled,
+    "SupplyOnOrder": SupplyOnOrder,
     "Tasks": Tasks,
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
-    "GlobalNeedToOrder": GlobalNeedToOrder,
-    "SupplyDashboard": SupplyDashboard,
-    "SupplyOnOrder": SupplyOnOrder,
-    "SupplyInstalled": SupplyInstalled,
     "SupplyLanding": SupplyLanding,
     "ProjectSupplyManager": ProjectSupplyManager,
     "SupplyQueues": SupplyQueues,

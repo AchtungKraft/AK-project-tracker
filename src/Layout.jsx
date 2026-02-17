@@ -14,6 +14,8 @@ import {
   ListChecks,
   X,
   AlertTriangle,
+  Truck,
+  Layers,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -61,6 +63,23 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("ClientPortalHub"),
         icon: Building2,
       },
+      { divider: true },
+      {
+        title: "Supply Dashboard",
+        url: createPageUrl("SupplyLanding"),
+        icon: Layers,
+      },
+      {
+        title: "Order Queue",
+        url: createPageUrl("GlobalNeedToOrder"),
+        icon: Truck,
+      },
+      {
+        title: "Work Queues",
+        url: createPageUrl("SupplyQueues"),
+        icon: ListChecks,
+      },
+      { divider: true },
       {
         title: "Parts Tracker",
         url: createPageUrl("PartsTracker"),
@@ -76,11 +95,6 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("FinancialExceptionDashboard"),
         icon: AlertTriangle,
       },
-      {
-        title: "Lifecycle Diagnostic",
-        url: createPageUrl("PartsLifecycleDiagnostic"),
-        icon: ListChecks,
-      },
       { divider: true },
       {
         title: "Admin Config",
@@ -91,11 +105,6 @@ const getNavigationItems = (isAchtungKraft) => {
         title: "Tech Specs",
         url: createPageUrl("TechSpecs"),
         icon: Settings,
-      },
-      {
-        title: "Portal Stats",
-        url: createPageUrl("PortalStatsEmbed"),
-        icon: ListChecks,
       },
     ];
   } else {
