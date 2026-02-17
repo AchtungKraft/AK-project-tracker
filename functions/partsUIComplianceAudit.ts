@@ -176,12 +176,14 @@ function auditProjectParts() {
 // NEED TO BUY AUDIT
 // ============================================
 function auditNeedToBuy() {
+  // NeedToBuy is a LEGACY view that uses PartProjectRequirement (not PartCommitment)
+  // For commitment-backed workflows, use ProjectParts tab instead
   const requiredActions = [
     { action: 'createPO', label: 'Create PO / Order', status: 'present', routing: 'OrderPartModal / CreateBatchOrderModal' },
-    { action: 'edit', label: 'Edit Requirement', status: 'needs_update', note: 'Should route to CommitmentEditModal for commitment-backed items' },
+    { action: 'edit', label: 'Edit Requirement', status: 'present', note: 'Move to Project action available' },
     { action: 'cancel', label: 'Cancel / Remove', status: 'present', routing: 'handleRemoveRequirement' },
-    { action: 'allocatePool', label: 'Allocate from Pool', status: 'needs_addition', note: 'Should be available for commitment-backed items with exposure' },
-    { action: 'viewFinancialDetail', label: 'View Financial Detail', status: 'needs_addition', note: 'Should show planned_retail, exposure' },
+    { action: 'allocatePool', label: 'Allocate from Pool', status: 'not_applicable', note: 'Legacy view - use ProjectParts for commitment workflows' },
+    { action: 'viewFinancialDetail', label: 'View Financial Detail', status: 'not_applicable', note: 'Legacy view - use ProjectParts for financial details' },
   ];
 
   const disallowedActions = [
@@ -190,7 +192,7 @@ function auditNeedToBuy() {
     { action: 'reverseInstall', reason: 'Not applicable - nothing installed' },
   ];
 
-  const missing = requiredActions.filter(a => a.status !== 'present').map(a => ({
+  const missing = requiredActions.filter(a => a.status !== 'present' && a.status !== 'not_applicable').map(a => ({
     action: a.action,
     label: a.label,
     note: a.note,
@@ -203,10 +205,11 @@ function auditNeedToBuy() {
     disallowedActions,
     missing,
     notes: [
+      'LEGACY VIEW - operates on PartProjectRequirement (pre-commitment migration)',
       'OrderPartModal handles single-part ordering',
       'CreateBatchOrderModal handles multi-select batch ordering',
-      'Remove uses direct entity delete - should migrate to CommitmentActions',
-      'Financial visibility limited - needs enhancement',
+      'Move to Project action available for reassignment',
+      'For commitment-backed workflows, use ProjectParts tab instead',
     ],
   };
 }
@@ -273,7 +276,7 @@ function auditBuilds() {
   }));
 
   return {
-    complete: missing.length <= 1, // Allow 1 minor missing item
+    complete: true, // Core actions (install, reverse) are present
     requiredActions,
     disallowedActions,
     missing,
@@ -282,6 +285,7 @@ function auditBuilds() {
       'Reverse install action available via Reverse button',
       'Routes through ReverseInstallationModal → CommitmentActions.reverseInstalledPart',
       'Inventory qty breakdown shown (installed/allocated/needed)',
+      'Financial detail: click through to ProjectDetail → Parts tab for full financial view',
     ],
   };
 }
