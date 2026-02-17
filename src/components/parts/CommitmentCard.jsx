@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import {
   CommitmentBillingBadge, 
   CommitmentSourceBadge 
 } from "./CommitmentStatusBadge";
-import { Package, MoreHorizontal, FileText, Trash2, ShoppingCart, RotateCcw } from "lucide-react";
+import { Package, MoreHorizontal, FileText, Trash2, ShoppingCart, RotateCcw, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import FinancialStatusBadge from "../financial/FinancialStatusBadge";
 import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/getAllowedCommitmentActions";
+import DeltaOrderModal from "./DeltaOrderModal";
 
 /**
  * CommitmentCard - Displays a single PartCommitment record
@@ -35,6 +36,8 @@ export default function CommitmentCard({
   compact = false,
   financialStatus = null,
 }) {
+  const [showDeltaOrderModal, setShowDeltaOrderModal] = useState(false);
+
   const linkedOrders = orders.filter(o => 
     (commitment.order_line_item_ids || []).some(liId => 
       o.lineItems?.some(li => li.id === liId)
@@ -166,7 +169,7 @@ export default function CommitmentCard({
                 )}
                 
                 {/* Show disabled PO option with reason if not allowed but handler exists */}
-                {onCreatePO && !allowedActions.canCreatePO && commitment.commitment_status !== 'cancelled' && (
+                {onCreatePO && !allowedActions.canCreatePO && commitment.commitment_status !== 'cancelled' && !allowedActions.canCreateDeltaOrder && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DropdownMenuItem disabled className="text-gray-500">
@@ -178,6 +181,14 @@ export default function CommitmentCard({
                       {getActionBlockReason(commitment, 'canCreatePO')}
                     </TooltipContent>
                   </Tooltip>
+                )}
+                
+                {/* Delta Order - visible when commitment has existing orders */}
+                {allowedActions.canCreateDeltaOrder && (
+                  <DropdownMenuItem onClick={() => setShowDeltaOrderModal(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Additional Order
+                  </DropdownMenuItem>
                 )}
                 
                 {onViewPO && (commitment.order_line_item_ids || []).length > 0 && (
@@ -221,6 +232,15 @@ export default function CommitmentCard({
           </TooltipProvider>
         </div>
       </CardContent>
+
+      {/* Delta Order Modal */}
+      {showDeltaOrderModal && (
+        <DeltaOrderModal
+          commitment={commitment}
+          part={part}
+          onClose={() => setShowDeltaOrderModal(false)}
+        />
+      )}
     </Card>
   );
 }
