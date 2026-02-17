@@ -43,42 +43,35 @@ export default function AddRequirementModal({ projectId, onClose }) {
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
-      const part = parts.find(p => p.id === data.part_id);
       const qtyNeeded = Number(data.qty_needed) || 1;
-      const defaultCost = part?.default_cost || 0;
-      
-      // Create the requirement
-      await base44.entities.PartProjectRequirement.create({
-        ...data,
+
+      // Create commitment via CommitmentService (CANONICAL)
+      const response = await base44.functions.invoke('commitmentService', {
+        action: 'addPartToProject',
         project_id: projectId,
-        qty_needed: qtyNeeded,
-        qty_allocated: 0,
-        qty_ordered: 0,
-        qty_installed: 0,
-        status: 'Needed'
+        part_id: data.part_id,
+        qty_committed: qtyNeeded,
+        notes: data.notes || null,
+        source_surface: 'AddRequirementModal',
+        requested_by: 'user'
       });
 
-      // Create PartBuildAssignment - inherit pricing from Part
-      const defaultRetail = part?.default_retail || 0;
-      
-      await base44.entities.PartBuildAssignment.create({
-        part_id: data.part_id,
-        project_id: projectId,
-        qty_needed: qtyNeeded,
-        qty_reserved: 0,
-        needed_status: 'Need to Buy',
-        notes: data.notes || null,
-        default_cost: defaultCost,
-        unit_retail: defaultRetail,
-        applied_markup_pct: part?.applied_markup_pct || null,
-        pricing_source: part?.pricing_mode === 'manual' ? 'override' : 'matrix',
-        pricing_locked: false
-      });
+      const commitmentData = response.data;
+      if (!commitmentData.success) {
+        throw new Error(commitmentData.error || 'Failed to add part to project');
+      }
+
+      return commitmentData;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
-      toast.success('Part requirement added');
+      
+      let message = 'Part added to project';
+      if (result.needs_cost_review) {
+        message += ' ⚠️ Cost review needed';
+      }
+      toast.success(message);
       onClose();
     },
     onError: (error) => {
