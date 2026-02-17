@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PoolDetailView from "./PoolDetailView";
+import CreatePoolModal from "./CreatePoolModal";
 
 /**
  * Pool status badge with appropriate styling
@@ -43,12 +44,15 @@ function PoolStatusBadge({ status }) {
  */
 export default function PoolPanel({ 
   pool,
+  projectId,
   onRefresh,
   onCreateAllocation,
+  onPoolCreated,
   isRefreshing = false,
   compact = false,
 }) {
   const [showDetailView, setShowDetailView] = useState(false);
+  const [showCreatePoolModal, setShowCreatePoolModal] = useState(false);
 
   if (showDetailView && pool) {
     return (
@@ -62,11 +66,29 @@ export default function PoolPanel({
 
   if (!pool) {
     return (
-      <Card className="bg-gray-900/50 border-gray-700">
-        <CardContent className="p-4 text-center text-gray-500">
-          No billing pool configured
-        </CardContent>
-      </Card>
+      <>
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardContent className="p-4 text-center">
+            <p className="text-gray-500 mb-3">No billing pool configured</p>
+            {projectId && (
+              <Button
+                onClick={() => setShowCreatePoolModal(true)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Pool
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+        {showCreatePoolModal && projectId && (
+          <CreatePoolModal
+            projectId={projectId}
+            onClose={() => setShowCreatePoolModal(false)}
+            onSuccess={onPoolCreated}
+          />
+        )}
+      </>
     );
   }
 
