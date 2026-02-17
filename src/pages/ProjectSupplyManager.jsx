@@ -51,6 +51,8 @@ import ReverseInstallationModal from "@/components/project/ReverseInstallationMo
 import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
 import AllocatePoolModal from "@/components/financial/AllocatePoolModal";
 import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
+import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
+import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
@@ -86,6 +88,7 @@ export default function ProjectSupplyManager() {
   const [receiveModal, setReceiveModal] = useState(null);
   const [allocateModal, setAllocateModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
+  const [actionsEnabled, setActionsEnabled] = useState(true);
 
   // Data Fetching
   const { data: project, isLoading: projectLoading } = useQuery({
@@ -384,7 +387,7 @@ export default function ProjectSupplyManager() {
           <TableCell>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={!actionsEnabled}>
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -505,6 +508,13 @@ export default function ProjectSupplyManager() {
               </Button>
             </div>
           </div>
+
+          {/* Integrity Banner */}
+          <SupplyIntegrityBanner 
+            onGateStatusChange={setActionsEnabled}
+            showFixControls={true}
+            compact={false}
+          />
 
           {/* Summary Row */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -666,19 +676,30 @@ export default function ProjectSupplyManager() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pools.map(pool => (
                   <Card key={pool.id} className={`bg-black/40 ${pool.status === 'overdrawn' ? 'border-red-600' : 'border-gray-800'}`}>
-                    <CardHeader className="p-4 pb-2">
-                      <div className="flex items-center justify-between">
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
                         <CardTitle className="text-white text-base">{pool.pool_name}</CardTitle>
                         <Badge variant="outline" className={
                           pool.status === 'paid' ? 'border-green-600 text-green-400' :
                           pool.status === 'invoiced' ? 'border-yellow-600 text-yellow-400' :
                           pool.status === 'overdrawn' ? 'border-red-600 text-red-400' :
+                          pool.status === 'closed' ? 'border-gray-500 text-gray-400' :
                           'border-gray-600 text-gray-400'
                         }>
                           {pool.status}
                         </Badge>
                       </div>
-                    </CardHeader>
+                      <PoolActionsMenu 
+                        pool={pool} 
+                        disabled={!actionsEnabled}
+                        onRefresh={() => {
+                          refetchPools();
+                          queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+                        }}
+                      />
+                    </div>
+                  </CardHeader>
                     <CardContent className="p-4 pt-0 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Invoiced</span>
@@ -1073,6 +1094,14 @@ export default function ProjectSupplyManager() {
           part={cancelModal.part}
           project={project}
           onClose={() => setCancelModal(null)}
+          onSuccess={() => {
+            refetchCommitments();
+            refetchPools();
+            queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+            queryClient.invalidateQueries({ queryKey: ['projectPools'] });
+            setCancelModal(null);
+            toast.success('Commitment removed');
+          }}
         />
       )}
     </MobileSafeAreaContainer>
