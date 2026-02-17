@@ -36,36 +36,44 @@ async function runIntegrityAudit(base44) {
   };
 
   // ========================================
-  // PRICING SEMANTIC GATE (NEW)
+  // PRICING SEMANTIC GATE (V2 - Cost vs Retail Independence)
   // ========================================
   const pricingMetrics = {
     cost_equals_retail_parts: [],
+    commitments_missing_cost_snapshot: [],
+    commitments_missing_retail_snapshot: [],
     commitments_with_zero_retail: [],
     commitments_missing_cost_reference: [],
     invalid_line_item_cost_source: [],
-    parts_needing_manual_review: []
+    parts_needing_manual_review: [],
+    line_items_cost_equals_retail: []
   };
+
+  // Helper to get effective values
+  const getCostEffective = (part) => part.cost || part.default_cost || 0;
+  const getRetailEffective = (part) => part.retail_override || part.retail_matrix_price || part.default_retail || 0;
 
   // Check parts for cost=retail contamination
   for (const part of parts) {
-    // Skip archived/inactive parts
     if (part.is_archived || !part.is_active) continue;
     
+    const cost = getCostEffective(part);
+    const retail = getRetailEffective(part);
+    
     // cost_equals_retail_parts: cost === retail AND retail > 0 AND NOT verified
-    if (part.default_cost && part.default_retail &&
-        Math.abs(part.default_cost - part.default_retail) < 0.01 &&
-        part.default_retail > 0 &&
+    if (cost > 10 && retail > 0 &&
+        Math.abs(cost - retail) < 0.01 &&
         part.is_cost_verified !== true) {
       pricingMetrics.cost_equals_retail_parts.push({
         part_id: part.id,
         part_name: part.part_name,
-        cost: part.default_cost,
-        retail: part.default_retail
+        cost: cost,
+        retail: retail
       });
     }
 
     // Track parts needing manual review
-    if (part.needs_manual_cost_review) {
+    if (part.needs_cost_review) {
       pricingMetrics.parts_needing_manual_review.push({
         part_id: part.id,
         part_name: part.part_name
@@ -78,9 +86,30 @@ async function runIntegrityAudit(base44) {
     if (commitment.commitment_status === 'cancelled') continue;
 
     const part = partsMap.get(commitment.part_id);
+    const qty = commitment.qty_committed || 0;
 
-    // commitments_with_zero_retail: qty_committed > 0 AND planned_retail_total <= 0
-    if ((commitment.qty_committed || 0) > 0 && 
+    // commitments_missing_cost_snapshot: qty > 0 AND snapshot null/0
+    if (qty > 0 && (!commitment.unit_cost_snapshot || commitment.unit_cost_snapshot <= 0)) {
+      pricingMetrics.commitments_missing_cost_snapshot.push({
+        commitment_id: commitment.id,
+        project_id: commitment.project_id,
+        part_name: part?.part_name,
+        qty_committed: qty
+      });
+    }
+
+    // commitments_missing_retail_snapshot: qty > 0 AND snapshot null/0
+    if (qty > 0 && (!commitment.unit_retail_snapshot || commitment.unit_retail_snapshot <= 0)) {
+      pricingMetrics.commitments_missing_retail_snapshot.push({
+        commitment_id: commitment.id,
+        project_id: commitment.project_id,
+        part_name: part?.part_name,
+        qty_committed: qty
+      });
+    }
+
+    // commitments_with_zero_retail: qty > 0 AND planned_retail_total <= 0
+    if (qty > 0 && 
         (commitment.planned_retail_total === null || 
          commitment.planned_retail_total === undefined || 
          commitment.planned_retail_total <= 0)) {
@@ -88,40 +117,55 @@ async function runIntegrityAudit(base44) {
         commitment_id: commitment.id,
         project_id: commitment.project_id,
         part_name: part?.part_name,
-        qty_committed: commitment.qty_committed,
+        qty_committed: qty,
         planned_retail_total: commitment.planned_retail_total
       });
     }
 
-    // commitments_missing_cost_reference: qty_committed > 0 AND part has no cost
-    if ((commitment.qty_committed || 0) > 0 && 
-        (part?.default_cost === null || part?.default_cost === undefined)) {
-      pricingMetrics.commitments_missing_cost_reference.push({
-        commitment_id: commitment.id,
-        project_id: commitment.project_id,
-        part_id: commitment.part_id,
-        part_name: part?.part_name
-      });
+    // commitments_missing_cost_reference: part has no cost at all
+    if (qty > 0 && part) {
+      const partCost = getCostEffective(part);
+      if (partCost <= 0) {
+        pricingMetrics.commitments_missing_cost_reference.push({
+          commitment_id: commitment.id,
+          project_id: commitment.project_id,
+          part_id: commitment.part_id,
+          part_name: part?.part_name
+        });
+      }
     }
   }
 
   // Check line items for cost source validity
   for (const lineItem of lineItems) {
     const commitment = commitmentsMap.get(lineItem.commitment_id);
-    const part = commitment ? partsMap.get(commitment.part_id) : null;
+    const part = commitment ? partsMap.get(commitment.part_id) : partsMap.get(lineItem.part_id);
 
-    // invalid_line_item_cost_source: unit_cost !== part.cost (with tolerance)
-    if (part && lineItem.unit_price !== null && lineItem.unit_price !== undefined &&
-        part.default_cost !== null && part.default_cost !== undefined) {
-      // Only flag if significant mismatch (> $0.01 difference)
-      if (Math.abs(lineItem.unit_price - part.default_cost) > 0.01) {
+    const lineCost = lineItem.unit_cost || lineItem.unit_price || 0;
+
+    // invalid_line_item_cost_source: line cost !== commitment snapshot (authoritative)
+    if (commitment && commitment.unit_cost_snapshot > 0 && lineCost > 0) {
+      if (Math.abs(lineCost - commitment.unit_cost_snapshot) > 0.01) {
         pricingMetrics.invalid_line_item_cost_source.push({
           line_item_id: lineItem.id,
-          part_id: part.id,
-          part_name: part.part_name,
-          line_unit_cost: lineItem.unit_price,
-          part_cost: part.default_cost,
-          diff: lineItem.unit_price - part.default_cost
+          commitment_id: commitment.id,
+          part_name: part?.part_name,
+          line_unit_cost: lineCost,
+          commitment_cost_snapshot: commitment.unit_cost_snapshot,
+          diff: lineCost - commitment.unit_cost_snapshot
+        });
+      }
+    }
+
+    // line_items_cost_equals_retail: line cost should NEVER equal retail
+    if (part && lineCost > 10) {
+      const partRetail = getRetailEffective(part);
+      if (partRetail > 0 && Math.abs(lineCost - partRetail) < 0.01) {
+        pricingMetrics.line_items_cost_equals_retail.push({
+          line_item_id: lineItem.id,
+          part_name: part?.part_name,
+          line_cost: lineCost,
+          part_retail: partRetail
         });
       }
     }
@@ -130,19 +174,31 @@ async function runIntegrityAudit(base44) {
   // Determine pricing semantic status
   audit.pricingSemanticIntegrity.metrics = {
     cost_equals_retail_count: pricingMetrics.cost_equals_retail_parts.length,
+    missing_cost_snapshot_count: pricingMetrics.commitments_missing_cost_snapshot.length,
+    missing_retail_snapshot_count: pricingMetrics.commitments_missing_retail_snapshot.length,
     zero_retail_commitments_count: pricingMetrics.commitments_with_zero_retail.length,
     missing_cost_reference_count: pricingMetrics.commitments_missing_cost_reference.length,
     invalid_line_item_cost_count: pricingMetrics.invalid_line_item_cost_source.length,
+    line_items_cost_equals_retail_count: pricingMetrics.line_items_cost_equals_retail.length,
     parts_needing_manual_review_count: pricingMetrics.parts_needing_manual_review.length
   };
 
   // FAIL conditions (blocking)
-  if (pricingMetrics.commitments_missing_cost_reference.length > 0) {
+  if (pricingMetrics.commitments_missing_cost_snapshot.length > 0) {
     audit.pricingSemanticIntegrity.status = 'FAIL';
     audit.pricingSemanticIntegrity.violations.push({
-      type: 'commitments_missing_cost_reference',
-      count: pricingMetrics.commitments_missing_cost_reference.length,
-      sample: pricingMetrics.commitments_missing_cost_reference.slice(0, 5)
+      type: 'commitments_missing_cost_snapshot',
+      count: pricingMetrics.commitments_missing_cost_snapshot.length,
+      sample: pricingMetrics.commitments_missing_cost_snapshot.slice(0, 5)
+    });
+  }
+
+  if (pricingMetrics.commitments_missing_retail_snapshot.length > 0) {
+    audit.pricingSemanticIntegrity.status = 'FAIL';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'commitments_missing_retail_snapshot',
+      count: pricingMetrics.commitments_missing_retail_snapshot.length,
+      sample: pricingMetrics.commitments_missing_retail_snapshot.slice(0, 5)
     });
   }
 
@@ -152,6 +208,15 @@ async function runIntegrityAudit(base44) {
       type: 'invalid_line_item_cost_source',
       count: pricingMetrics.invalid_line_item_cost_source.length,
       sample: pricingMetrics.invalid_line_item_cost_source.slice(0, 5)
+    });
+  }
+
+  if (pricingMetrics.line_items_cost_equals_retail.length > 0) {
+    audit.pricingSemanticIntegrity.status = 'FAIL';
+    audit.pricingSemanticIntegrity.violations.push({
+      type: 'line_items_cost_equals_retail',
+      count: pricingMetrics.line_items_cost_equals_retail.length,
+      sample: pricingMetrics.line_items_cost_equals_retail.slice(0, 5)
     });
   }
 
@@ -172,6 +237,15 @@ async function runIntegrityAudit(base44) {
         type: 'commitments_with_zero_retail',
         count: pricingMetrics.commitments_with_zero_retail.length,
         sample: pricingMetrics.commitments_with_zero_retail.slice(0, 5)
+      });
+    }
+
+    if (pricingMetrics.parts_needing_manual_review.length > 0) {
+      audit.pricingSemanticIntegrity.status = 'WARN';
+      audit.pricingSemanticIntegrity.violations.push({
+        type: 'parts_needing_manual_review',
+        count: pricingMetrics.parts_needing_manual_review.length,
+        sample: pricingMetrics.parts_needing_manual_review.slice(0, 5)
       });
     }
   }
