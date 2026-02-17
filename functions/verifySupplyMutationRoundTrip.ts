@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
 
     if (!targetProject || !targetCommitment) {
       test.status = 'SKIP';
-      test.errors.push('Could not find suitable project/commitment for test');
+      test.errors.push(`Could not find suitable project/commitment for test. plannedCommitments=${plannedCommitments.length}, targetProject=${!!targetProject}, targetCommitment=${!!targetCommitment}`);
       return Response.json({ success: true, test });
     }
 
