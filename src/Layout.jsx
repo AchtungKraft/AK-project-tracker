@@ -14,6 +14,11 @@ import {
   ListChecks,
   X,
   AlertTriangle,
+  Truck,
+  ChevronDown,
+  ChevronRight,
+  ShoppingCart,
+  CheckCircle2,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -60,6 +65,17 @@ const getNavigationItems = (isAchtungKraft) => {
         title: "Client Portal",
         url: createPageUrl("ClientPortalHub"),
         icon: Building2,
+      },
+      {
+        title: "Supply",
+        icon: Truck,
+        isExpandable: true,
+        subItems: [
+          { title: "Dashboard", url: createPageUrl("SupplyDashboard"), icon: LayoutDashboard },
+          { title: "Need to Order", url: createPageUrl("GlobalNeedToOrder"), icon: ShoppingCart },
+          { title: "On Order", url: createPageUrl("SupplyOnOrder"), icon: Truck },
+          { title: "Installed", url: createPageUrl("SupplyInstalled"), icon: CheckCircle2 },
+        ],
       },
       {
         title: "Parts Tracker",
@@ -257,7 +273,12 @@ export default function Layout({ children, currentPageName }) {
     return localStorage.getItem('achtung_view_as_company') || null;
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState({ Supply: true });
   const isMobile = useIsMobile();
+
+  const toggleMenu = (title) => {
+    setExpandedMenus(prev => ({ ...prev, [title]: !prev[title] }));
+  };
 
   useEffect(() => {
     const fetchUserAndTeamMember = async () => {
@@ -563,38 +584,84 @@ export default function Layout({ children, currentPageName }) {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                    {navigationItems.map((item, index) => (
-                      item.divider ? (
-                        <div key={`divider-${index}`} className="my-2 border-t border-gray-700/50" />
-                      ) : (
+                    {navigationItems.map((item, index) => {
+                      if (item.divider) {
+                        return <div key={`divider-${index}`} className="my-2 border-t border-gray-700/50" />;
+                      }
+                      
+                      // Expandable menu with sub-items
+                      if (item.isExpandable && item.subItems) {
+                        const isExpanded = expandedMenus[item.title];
+                        const isAnySubActive = item.subItems.some(sub => location.pathname === sub.url);
+                        
+                        return (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton
+                              onClick={() => toggleMenu(item.title)}
+                              className={cn(
+                                "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5 w-full justify-between",
+                                isAnySubActive && "bg-red-950/50 text-red-400"
+                              )}
+                            >
+                              <div className="flex items-center gap-2">
+                                <item.icon className="w-4 h-4" />
+                                <span className="font-medium text-sm">{item.title}</span>
+                              </div>
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </SidebarMenuButton>
+                            {isExpanded && (
+                              <div className="ml-4 mt-1 space-y-0.5 border-l border-gray-700/50 pl-2">
+                                {item.subItems.map((subItem) => (
+                                  <SidebarMenuButton
+                                    key={subItem.title}
+                                    asChild
+                                    className={cn(
+                                      "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg",
+                                      location.pathname === subItem.url && "bg-red-600 text-white"
+                                    )}
+                                  >
+                                    <Link to={subItem.url} className="flex items-center gap-2 px-2 py-1.5">
+                                      <subItem.icon className="w-3.5 h-3.5" />
+                                      <span className="font-medium text-xs">{subItem.title}</span>
+                                    </Link>
+                                  </SidebarMenuButton>
+                                ))}
+                              </div>
+                            )}
+                          </SidebarMenuItem>
+                        );
+                      }
+                      
+                      // Regular menu item
+                      return (
                         <SidebarMenuItem key={item.title}>
-<SidebarMenuButton
-  asChild
-  className={cn(
-    "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
-    !item.external && location.pathname === item.url && "bg-red-600 text-white"
-  )}
->
-  {item.external ? (
-    <a
-      href={item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 px-2 py-1.5"
-    >
-      <item.icon className="w-4 h-4" />
-      <span className="font-medium text-sm">{item.title}</span>
-    </a>
-  ) : (
-    <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
-      <item.icon className="w-4 h-4" />
-      <span className="font-medium text-sm">{item.title}</span>
-    </Link>
-  )}
-</SidebarMenuButton>
+                          <SidebarMenuButton
+                            asChild
+                            className={cn(
+                              "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
+                              !item.external && location.pathname === item.url && "bg-red-600 text-white"
+                            )}
+                          >
+                            {item.external ? (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-2 py-1.5"
+                              >
+                                <item.icon className="w-4 h-4" />
+                                <span className="font-medium text-sm">{item.title}</span>
+                              </a>
+                            ) : (
+                              <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
+                                <item.icon className="w-4 h-4" />
+                                <span className="font-medium text-sm">{item.title}</span>
+                              </Link>
+                            )}
+                          </SidebarMenuButton>
                         </SidebarMenuItem>
-                      )
-                    ))}
+                      );
+                    })}
                   </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
