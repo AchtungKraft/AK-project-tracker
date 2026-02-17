@@ -183,8 +183,32 @@ export default function ProjectSupplyManager() {
     queryFn: () => base44.entities.Location.list()
   });
 
+  // Build O(1) parts lookup map
+  const partsMap = useMemo(() => {
+    const map = new Map();
+    for (const p of parts) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [parts]);
+
+  // Safe category resolver - never returns undefined/null
+  const resolveCategory = (part) => {
+    if (!part) return 'Uncategorized';
+    const raw = part.category;
+    if (!raw || typeof raw !== 'string' || raw.trim() === '') {
+      return 'Uncategorized';
+    }
+    return raw.trim();
+  };
+
   // Filtered data
   const activeCommitments = commitments.filter(c => c.commitment_status !== 'cancelled');
+  
+  // Detect orphan commitments (missing part references)
+  const orphanCommitments = useMemo(() => {
+    return activeCommitments.filter(c => !partsMap.has(c.part_id));
+  }, [activeCommitments, partsMap]);
 
   // Calculate metrics
   const metrics = useMemo(() => {
@@ -227,7 +251,7 @@ export default function ProjectSupplyManager() {
   // Enrich commitments with part data
   const enrichedCommitments = useMemo(() => {
     return activeCommitments.map(commitment => {
-      const part = parts.find(p => p.id === commitment.part_id);
+      const part = partsMap.get(commitment.part_id) || null;
       const vendor = part ? vendors.find(v => v.id === part.default_vendor_id) : null;
       const allowed = getAllowedCommitmentActions(commitment);
       const lifecycleState = getCommitmentLifecycleState(commitment);
@@ -237,6 +261,7 @@ export default function ProjectSupplyManager() {
       return {
         ...commitment,
         part,
+        category: resolveCategory(part),
         vendor,
         allowed,
         lifecycleState,
@@ -244,7 +269,7 @@ export default function ProjectSupplyManager() {
         installedParts: commitmentInstalled,
       };
     });
-  }, [activeCommitments, parts, vendors, lineItems, installedParts]);
+  }, [activeCommitments, partsMap, vendors, lineItems, installedParts]);
 
   // Filter commitments for each tab
   const getFilteredCommitments = (tabFilter) => {
@@ -291,39 +316,26 @@ export default function ProjectSupplyManager() {
     return filtered;
   };
 
-  // Safe category resolver - never returns undefined/null
-  const getSafeCategory = (part) => {
-    if (!part) return 'Uncategorized';
-
-    const value = part.category;
-
-    if (!value || typeof value !== 'string' || value.trim() === '') {
-      return 'Uncategorized';
-    }
-
-    return value.trim();
-  };
-
-  // Group commitments by category
-  const groupCommitments = (commitments) => {
+  // Group commitments by category (uses pre-resolved c.category)
+  const groupCommitments = (filtered) => {
     if (groupBy === 'none') {
-      return { All: commitments };
+      return { All: filtered };
     }
 
     if (groupBy === 'category') {
-      return commitments.reduce((acc, c) => {
-        const category = getSafeCategory(c.part);
+      return filtered.reduce((acc, c) => {
+        const key = c.category || 'Uncategorized';
 
-        if (!acc[category]) {
-          acc[category] = [];
+        if (!acc[key]) {
+          acc[key] = [];
         }
 
-        acc[category].push(c);
+        acc[key].push(c);
         return acc;
       }, {});
     }
 
-    return { All: commitments };
+    return { All: filtered };
   };
 
   // Render grouped commitment rows
@@ -583,6 +595,14 @@ export default function ProjectSupplyManager() {
             showFixControls={true}
             compact={false}
           />
+
+          {/* Orphan Commitments Warning */}
+          {orphanCommitments.length > 0 && (
+            <div className="bg-red-900/30 border border-red-600 text-red-400 p-3 rounded flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <span>{orphanCommitments.length} commitment(s) reference missing Parts. Data integrity issue detected.</span>
+            </div>
+          )}
 
           {/* Summary Row */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
