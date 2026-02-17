@@ -604,6 +604,14 @@ export default function ProjectSupplyManager() {
             </div>
           )}
 
+          {/* Uncategorized Parts Warning */}
+          {enrichedCommitments.some(c => c.category === 'Uncategorized') && (
+            <div className="bg-yellow-900/30 border border-yellow-600 text-yellow-400 p-3 rounded flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span>Some parts are Uncategorized. Update Part.category for proper grouping.</span>
+            </div>
+          )}
+
           {/* Summary Row */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <Card className="bg-black/40 border-gray-800">
