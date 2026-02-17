@@ -1,17 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-/**
- * backfillPartCategories - Backfill null/empty categories with "Uncategorized"
- * 
- * Usage:
- *   dry_run=true  - Preview what would be updated
- *   dry_run=false - Actually update the records
- */
+const DEFAULT_CATEGORY = 'Uncategorized';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
-      status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -29,65 +22,42 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const dry_run = body.dry_run !== false; // Default to dry_run=true for safety
+    const dryRun = body.dry_run === true; // Default to false for this function
 
-    const parts = await base44.asServiceRole.entities.Part.list();
-    
-    const partsToUpdate = [];
-    
-    for (const part of parts) {
-      const category = part.category;
-      
-      // Check if category is null, undefined, or empty string
-      if (!category || (typeof category === 'string' && category.trim() === '')) {
-        partsToUpdate.push({
-          id: part.id,
-          part_name: part.part_name,
-          current_category: category,
-          new_category: 'Uncategorized'
-        });
-      }
-    }
+    // Fetch all parts
+    const allParts = await base44.asServiceRole.entities.Part.list();
 
-    // Perform updates if not dry run
-    let updated = 0;
-    const errors = [];
-
-    if (!dry_run) {
-      for (const item of partsToUpdate) {
-        try {
-          await base44.asServiceRole.entities.Part.update(item.id, {
-            category: 'Uncategorized'
-          });
-          updated++;
-        } catch (err) {
-          errors.push({
-            part_id: item.id,
-            part_name: item.part_name,
-            error: err.message
-          });
-        }
-      }
-    }
-
-    return Response.json({
-      status: 'OK',
-      dry_run,
-      parts_scanned: parts.length,
-      parts_needing_update: partsToUpdate.length,
-      parts_updated: dry_run ? 0 : updated,
-      errors: errors.length > 0 ? errors : undefined,
-      sample_updates: partsToUpdate.slice(0, 10),
-      message: dry_run 
-        ? `Found ${partsToUpdate.length} parts with null/empty category. Run with dry_run=false to update.`
-        : `Updated ${updated} of ${partsToUpdate.length} parts to category="Uncategorized".`
+    // Find parts with missing/empty/whitespace-only categories
+    const partsNeedingBackfill = allParts.filter(p => {
+      const cat = p.category;
+      return cat === null || cat === undefined || (typeof cat === 'string' && cat.trim() === '');
     });
 
+    const result = {
+      dry_run: dryRun,
+      scanned: allParts.length,
+      needs_update: partsNeedingBackfill.length,
+      updated: 0,
+      details: partsNeedingBackfill.map(p => ({
+        id: p.id,
+        part_name: p.part_name,
+        current_category: p.category
+      }))
+    };
+
+    if (!dryRun) {
+      for (const part of partsNeedingBackfill) {
+        await base44.asServiceRole.entities.Part.update(part.id, {
+          category: DEFAULT_CATEGORY
+        });
+        result.updated++;
+      }
+    }
+
+    return Response.json(result);
+
   } catch (error) {
-    console.error('backfillPartCategories error:', error);
-    return Response.json({
-      status: 'ERROR',
-      error: error.message
-    }, { status: 500 });
+    console.error('Error in backfillPartCategories:', error);
+    return Response.json({ error: error.message }, { status: 500 });
   }
 });

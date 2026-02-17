@@ -1,16 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-/**
- * verifyPartCategoryIntegrity - Check all Parts have valid category
- * 
- * Returns PASS if all parts have non-empty category
- * Returns FAIL if any parts have null/undefined/empty category
- */
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
-      status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -27,37 +19,74 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const parts = await base44.asServiceRole.entities.Part.list();
+    // Fetch all parts and commitments
+    const allParts = await base44.asServiceRole.entities.Part.list();
+    const allCommitments = await base44.asServiceRole.entities.PartCommitment.list();
 
-    const invalid = parts.filter(p =>
-      !p.category ||
-      typeof p.category !== 'string' ||
-      p.category.trim() === ''
+    // Build part lookup map
+    const partsMap = new Map();
+    for (const p of allParts) {
+      partsMap.set(p.id, p);
+    }
+
+    // Count parts with null categories
+    const nullCategoryParts = allParts.filter(p => p.category === null || p.category === undefined);
+
+    // Count parts with empty string categories
+    const emptyCategoryParts = allParts.filter(p => 
+      typeof p.category === 'string' && p.category.trim() === ''
     );
 
-    const invalidSamples = invalid.slice(0, 10).map(p => ({
-      id: p.id,
-      part_name: p.part_name,
-      category: p.category,
-      is_archived: p.is_archived
-    }));
+    // Count parts with whitespace-only categories
+    const whitespaceCategoryParts = allParts.filter(p =>
+      typeof p.category === 'string' && p.category.length > 0 && p.category.trim() === ''
+    );
 
-    return Response.json({
-      status: invalid.length === 0 ? 'PASS' : 'FAIL',
-      parts_scanned: parts.length,
-      invalid_parts: invalid.length,
-      execution_safe: invalid.length === 0,
-      invalid_samples: invalid.length > 0 ? invalidSamples : undefined,
-      repair_action: invalid.length > 0 
-        ? "base44.functions.invoke('backfillPartCategories', { dry_run: false })"
-        : undefined
+    // Count commitments that reference missing parts
+    const commitmentsWithMissingPart = allCommitments.filter(c => !partsMap.has(c.part_id));
+
+    // Count commitments whose parts have invalid categories
+    const commitmentsWithInvalidCategory = allCommitments.filter(c => {
+      const part = partsMap.get(c.part_id);
+      if (!part) return false; // Already counted in missing
+      const cat = part.category;
+      return cat === null || cat === undefined || (typeof cat === 'string' && cat.trim() === '');
     });
 
+    // Get distinct categories for analysis
+    const distinctCategories = [...new Set(allParts.map(p => p.category))];
+
+    // Determine pass/fail status
+    const hasCategoryIssues = nullCategoryParts.length > 0 || emptyCategoryParts.length > 0;
+    const hasOrphanCommitments = commitmentsWithMissingPart.length > 0;
+    const status = (hasCategoryIssues || hasOrphanCommitments) ? 'FAIL' : 'PASS';
+
+    const result = {
+      status,
+      total_parts: allParts.length,
+      total_commitments: allCommitments.length,
+      null_category_parts: nullCategoryParts.length,
+      empty_category_parts: emptyCategoryParts.length,
+      whitespace_category_parts: whitespaceCategoryParts.length,
+      commitments_with_missing_part: commitmentsWithMissingPart.length,
+      commitments_with_invalid_category: commitmentsWithInvalidCategory.length,
+      distinct_categories: distinctCategories,
+      details: {
+        null_category_part_ids: nullCategoryParts.map(p => ({ id: p.id, name: p.part_name })),
+        empty_category_part_ids: emptyCategoryParts.map(p => ({ id: p.id, name: p.part_name })),
+        orphan_commitment_ids: commitmentsWithMissingPart.map(c => ({ id: c.id, part_id: c.part_id })),
+        invalid_category_commitment_ids: commitmentsWithInvalidCategory.map(c => ({
+          id: c.id,
+          part_id: c.part_id,
+          part_name: partsMap.get(c.part_id)?.part_name
+        }))
+      }
+    };
+
+    return Response.json(result);
+
   } catch (error) {
-    console.error('verifyPartCategoryIntegrity error:', error);
-    return Response.json({
-      status: 'ERROR',
-      error: error.message
-    }, { status: 500 });
+    console.error('Error in verifyPartCategoryIntegrity:', error);
+    return Response.json({ error: error.message }, { status: 500 });
   }
 });
