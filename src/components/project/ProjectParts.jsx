@@ -761,12 +761,15 @@ export default function ProjectParts({ projectId }) {
             </div>
           </div>
 
-          {/* Pool Panel - Show billing pool status */}
-          {primaryPool && (
-            <div className="mb-4">
-              <PoolPanel pool={primaryPool} compact />
-            </div>
-          )}
+          {/* Pool Panel - Show billing pool status or Create Pool button */}
+          <div className="mb-4">
+            <PoolPanel 
+              pool={primaryPool} 
+              projectId={projectId}
+              onPoolCreated={() => queryClient.invalidateQueries({ queryKey: ['billingPools', projectId] })}
+              compact 
+            />
+          </div>
 
           {/* Coverage Summary */}
           {commitments.length > 0 && (
