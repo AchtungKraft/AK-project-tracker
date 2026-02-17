@@ -109,23 +109,24 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     onSuccess: async (newPart) => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       
-      // If projectId is provided, create a PartProjectRequirement (NOT PartBuildAssignment)
+      // If projectId is provided, create commitment via CommitmentService
       if (projectId) {
         try {
-          await base44.entities.PartProjectRequirement.create({
-            part_id: newPart.id,
+          const response = await base44.functions.invoke('commitmentService', {
+            action: 'addPartToProject',
             project_id: projectId,
-            qty_needed: 1,
-            qty_allocated: 0,
-            qty_ordered: 0,
-            qty_installed: 0,
-            status: 'Needed',
-            priority: 'Normal',
-            notes: ""
+            part_id: newPart.id,
+            qty_committed: 1,
+            notes: null,
+            source_surface: 'UnifiedAddPartModal',
+            requested_by: 'user'
           });
-          queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+
+          if (response.data?.success) {
+            queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
+          }
         } catch (error) {
-          console.error('Failed to create project requirement:', error);
+          console.error('Failed to create commitment:', error);
         }
       }
       

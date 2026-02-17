@@ -39,14 +39,42 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   });
 
   const createRequirementMutation = useMutation({
-    mutationFn: (data) => base44.entities.PartProjectRequirement.create(data),
-    onSuccess: () => {
+    mutationFn: async () => {
+      if (!selectedPartId) {
+        throw new Error('Please select a part');
+      }
+
+      // Create commitment via CommitmentService (CANONICAL)
+      const response = await base44.functions.invoke('commitmentService', {
+        action: 'addPartToProject',
+        project_id: projectId,
+        part_id: selectedPartId,
+        qty_committed: qtyNeeded,
+        notes: notes || null,
+        source_surface: 'AddPartToProjectModal',
+        requested_by: 'user'
+      });
+
+      const commitmentData = response.data;
+      if (!commitmentData.success) {
+        throw new Error(commitmentData.error || 'Failed to add part to project');
+      }
+
+      return commitmentData;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      toast.success('Part requirement added');
+      
+      let message = 'Part added to project';
+      if (result.needs_cost_review) {
+        message += ' ⚠️ Cost review needed';
+      }
+      toast.success(message);
       onClose();
     },
     onError: (error) => {
-      toast.error('Failed to add requirement: ' + error.message);
+      toast.error('Failed to add part: ' + error.message);
     }
   });
 
@@ -61,29 +89,7 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
   };
 
   const handleAddExisting = () => {
-    if (!selectedPartId) {
-      toast.error('Please select a part');
-      return;
-    }
-
-    // Check if already exists
-    const existing = existingRequirements.find(r => r.part_id === selectedPartId);
-    if (existing) {
-      toast.error('This part already has a requirement for this project');
-      return;
-    }
-
-    createRequirementMutation.mutate({
-      part_id: selectedPartId,
-      project_id: projectId,
-      qty_needed: qtyNeeded,
-      qty_allocated: 0,
-      qty_ordered: 0,
-      qty_installed: 0,
-      status: 'Needed',
-      priority: priority,
-      notes: notes
-    });
+    createRequirementMutation.mutate();
   };
 
   return (
