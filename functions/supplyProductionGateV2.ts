@@ -415,6 +415,18 @@ Deno.serve(async (req) => {
     // Run inline integrity audit
     const audit = await runIntegrityAudit(base44);
     
+    // Run category integrity check
+    const parts = await base44.asServiceRole.entities.Part.list();
+    const invalidCategoryParts = parts.filter(p =>
+      !p.category ||
+      typeof p.category !== 'string' ||
+      p.category.trim() === ''
+    );
+    const categoryIntegrity = {
+      status: invalidCategoryParts.length === 0 ? 'PASS' : 'WARN',
+      invalid_count: invalidCategoryParts.length
+    };
+    
     // Build gate result
     const gates = {
       timestamp: new Date().toISOString(),
@@ -466,6 +478,14 @@ Deno.serve(async (req) => {
         status: audit.orphanIntegrity.status,
         violations_count: audit.orphanIntegrity.violations.length,
         blocking: audit.orphanIntegrity.status === 'FAIL'
+      },
+      
+      // Gate 7: Part category integrity (non-blocking)
+      categoryGate: {
+        description: 'All parts must have valid category for grouping',
+        status: categoryIntegrity.status,
+        invalid_count: categoryIntegrity.invalid_count,
+        blocking: false // Non-blocking, but visible
       }
     };
 
@@ -551,6 +571,14 @@ Deno.serve(async (req) => {
         manual: true
       });
     }
+    
+    if (gates.categoryGate.status === 'WARN') {
+      recommendations.push({
+        priority: 6,
+        action: `${gates.categoryGate.invalid_count} parts missing category - run backfill`,
+        command: "base44.functions.invoke('backfillPartCategories', { dry_run: false })"
+      });
+    }
 
     return Response.json({
       success: true,
@@ -564,7 +592,7 @@ Deno.serve(async (req) => {
       recommendations: recommendations.sort((a, b) => a.priority - b.priority),
       
       summary: {
-        total_gates: 6,
+        total_gates: 7,
         passed: Object.values(gates).filter(g => g.status === 'PASS').length,
         warned: Object.values(gates).filter(g => g.status === 'WARN').length,
         failed: blocking_gates.length,

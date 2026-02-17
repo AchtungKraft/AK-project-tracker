@@ -67,7 +67,7 @@ const SAFE_UI_FIELDS = {
   InstalledPart: ['notes'],
   InvoiceBatch: ['notes', 'batch_name'],
   InvoiceBatchLine: ['description', 'notes'],
-  Part: ['part_name', 'vendor_part_number', 'notes', 'photos', 'featured_photo', 'order_url', 'retail_matrix_price', 'retail_override', 'default_retail', 'pricing_mode', 'applied_markup_pct', 'reorder_point', 'reorder_quantity', 'is_active', 'part_type', 'is_archived', 'archived_at', 'archived_by', 'archive_reason', 'archived_context', 'requires_vendor_purchase', 'requires_vendor_payment', 'requires_client_billing', 'affects_inventory', 'affects_margin', 'is_asset_recovery', 'production_cost', 'handling_fee', 'resale_value', 'car_make_id', 'car_model_id', 'car_year_id', 'part_category_id', 'default_vendor_id']
+  Part: ['part_name', 'vendor_part_number', 'category', 'notes', 'photos', 'featured_photo', 'order_url', 'retail_matrix_price', 'retail_override', 'default_retail', 'pricing_mode', 'applied_markup_pct', 'reorder_point', 'reorder_quantity', 'is_active', 'part_type', 'is_archived', 'archived_at', 'archived_by', 'archive_reason', 'archived_context', 'requires_vendor_purchase', 'requires_vendor_payment', 'requires_client_billing', 'affects_inventory', 'affects_margin', 'is_asset_recovery', 'production_cost', 'handling_fee', 'resale_value', 'car_make_id', 'car_model_id', 'car_year_id', 'part_category_id', 'default_vendor_id']
 };
 
 /**
@@ -127,10 +127,28 @@ export function isSafeField(entityName, fieldName) {
 }
 
 /**
+ * Validate Part category is not empty
+ * @throws Error if Part.category is empty
+ */
+function validatePartCategory(entityName, data) {
+  if (entityName === 'Part') {
+    // Check if category is being set to empty/null
+    if (data.hasOwnProperty('category')) {
+      if (!data.category || (typeof data.category === 'string' && data.category.trim() === '')) {
+        throw new Error('Part.category is required and cannot be empty.');
+      }
+    }
+  }
+}
+
+/**
  * Validate an update operation before executing
  * @throws Error if mutation is not allowed
  */
 export async function validateUpdate(entityName, recordId, updates, userRole = null) {
+  // Validate Part category constraint
+  validatePartCategory(entityName, updates);
+  
   if (!isProtectedEntity(entityName)) {
     return { allowed: true };
   }

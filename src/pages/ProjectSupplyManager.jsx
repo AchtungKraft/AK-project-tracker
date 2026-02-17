@@ -291,6 +291,19 @@ export default function ProjectSupplyManager() {
     return filtered;
   };
 
+  // Safe category resolver - never returns undefined/null
+  const getSafeCategory = (part) => {
+    if (!part) return 'Uncategorized';
+
+    const value = part.category;
+
+    if (!value || typeof value !== 'string' || value.trim() === '') {
+      return 'Uncategorized';
+    }
+
+    return value.trim();
+  };
+
   // Group commitments by category
   const groupCommitments = (commitments) => {
     if (groupBy === 'none') {
@@ -299,12 +312,12 @@ export default function ProjectSupplyManager() {
 
     if (groupBy === 'category') {
       return commitments.reduce((acc, c) => {
-        const category =
-          c.part?.category ||
-          c.part?.part_category ||
-          'Uncategorized';
+        const category = getSafeCategory(c.part);
 
-        if (!acc[category]) acc[category] = [];
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+
         acc[category].push(c);
         return acc;
       }, {});
