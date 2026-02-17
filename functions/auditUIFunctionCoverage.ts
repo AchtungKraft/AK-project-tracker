@@ -140,6 +140,9 @@ function getFunctionInventory() {
         creates_lifecycle_event: false,
         atomic: true,
         guarded: true,
+        admin_only: true,
+        console_only: true,
+        note: 'Administrative function - no direct UI needed',
       },
       {
         function: 'getOrCreateCreditPool',
@@ -149,6 +152,9 @@ function getFunctionInventory() {
         creates_lifecycle_event: false,
         atomic: true,
         guarded: true,
+        internal_only: true,
+        allowed_callers: ['removeCommitment'],
+        note: 'Auto-triggered by cancellation flow, no UI needed',
       },
       {
         function: 'closePool',
@@ -205,6 +211,9 @@ function getFunctionInventory() {
         creates_lifecycle_event: true,
         atomic: true,
         guarded: false,
+        admin_only: true,
+        console_only: true,
+        note: 'Direct inventory mutations only via install/receive flows, no general UI',
       },
     ]
   };
@@ -224,9 +233,37 @@ function getUIFunctionMapping() {
       route: '/ProjectDetail?id=...',
       component: 'components/project/ProjectParts.jsx',
       trigger_type: 'Action Menu',
-      visible_when: 'commitment_status = planned OR ordered (no existing PO)',
+      visible_when: 'commitment_status = planned (no existing orders)',
       role_restrictions: 'None (team members)',
       confirmation_dialog: false,
+      success_feedback: 'Toast + query invalidation',
+      error_feedback: true,
+      idempotent_ui: true,
+    },
+    {
+      function: 'createDeltaOrder',
+      page: 'ProjectDetail > Parts Tab',
+      page_file: 'pages/ProjectDetail.jsx',
+      route: '/ProjectDetail?id=...',
+      component: 'components/parts/DeltaOrderModal.jsx',
+      trigger_type: 'Dropdown > Additional Order',
+      visible_when: 'commitment_status in [ordered, partially_received, received] AND qty_ordered > 0',
+      role_restrictions: 'None',
+      confirmation_dialog: true,
+      success_feedback: 'Toast + query invalidation',
+      error_feedback: true,
+      idempotent_ui: true,
+    },
+    {
+      function: 'createBillingPool',
+      page: 'ProjectDetail > Parts Tab',
+      page_file: 'pages/ProjectDetail.jsx',
+      route: '/ProjectDetail?id=...',
+      component: 'components/financial/CreatePoolModal.jsx',
+      trigger_type: 'PoolPanel > Create Pool button',
+      visible_when: 'Always (when no pool exists)',
+      role_restrictions: 'None',
+      confirmation_dialog: true,
       success_feedback: 'Toast + query invalidation',
       error_feedback: true,
       idempotent_ui: true,
@@ -920,32 +957,39 @@ function generateMissingFunctionsList(functionInventory, uiMapping) {
   const missingFunctions = allFunctions
     .filter(f => !mappedFunctions.has(f.function))
     .map(f => {
-      // Categorize the function
+      // Categorize the function based on its properties
       let category;
       let expectedPage;
       let expectedEntryPoint;
       let priorityLevel;
 
-      // Lifecycle Control Gaps (A)
-      if (['reverseInstalledPart', 'closePool', 'transferPoolBalance'].includes(f.function)) {
+      // Internal-only functions (auto-triggered, no UI needed)
+      if (f.internal_only) {
+        category = 'C_INTERNAL';
+        priorityLevel = 'ACCEPTABLE_MISSING';
+        expectedPage = 'N/A - Auto-triggered';
+        expectedEntryPoint = `System automation (allowed: ${f.allowed_callers?.join(', ') || 'internal'})`;
+      }
+      // Admin/Console-only functions
+      else if (f.admin_only || f.console_only) {
+        category = 'B_ADMINISTRATIVE';
+        priorityLevel = 'LOW';
+        expectedPage = 'Console / Backend';
+        expectedEntryPoint = 'Admin console only';
+      }
+      // Lifecycle Control Gaps (critical if missing)
+      else if (['reverseInstalledPart', 'closePool', 'transferPoolBalance'].includes(f.function)) {
         category = 'A_LIFECYCLE_CONTROL';
         priorityLevel = 'CRITICAL';
         expectedPage = f.lifecycle_stage === 'billing' ? 'PoolDetailView' : 'ProjectParts';
         expectedEntryPoint = 'Action button / dropdown';
       }
-      // Administrative Functions (B)
-      else if (['recalculatePoolBalance', 'recalculateProjectExposure', 'validateLockConstraints'].includes(f.function)) {
+      // Recalculation functions (admin utility)
+      else if (['recalculatePoolBalance', 'recalculateProjectExposure'].includes(f.function)) {
         category = 'B_ADMINISTRATIVE';
         priorityLevel = 'LOW';
         expectedPage = 'ProjectFinancialDashboard / PoolDetailView';
         expectedEntryPoint = 'Admin actions section';
-      }
-      // Edge Case Flows (C)
-      else if (['getOrCreateCreditPool'].includes(f.function)) {
-        category = 'C_EDGE_CASE';
-        priorityLevel = 'ACCEPTABLE_MISSING';
-        expectedPage = 'N/A - Auto-triggered';
-        expectedEntryPoint = 'System automation';
       }
       // Core Workflow (should have UI)
       else {
@@ -966,6 +1010,7 @@ function generateMissingFunctionsList(functionInventory, uiMapping) {
         priorityLevel,
         entitiesMutated: f.entities_mutated,
         source: f.source,
+        note: f.note || null,
       };
     });
 
@@ -973,13 +1018,36 @@ function generateMissingFunctionsList(functionInventory, uiMapping) {
   const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, ACCEPTABLE_MISSING: 4 };
   missingFunctions.sort((a, b) => priorityOrder[a.priorityLevel] - priorityOrder[b.priorityLevel]);
 
+  // Calculate weighted coverage score
+  const coreFunctions = allFunctions.filter(f => !f.internal_only && !f.admin_only && !f.console_only);
+  const adminFunctions = allFunctions.filter(f => f.admin_only || f.console_only);
+  const internalFunctions = allFunctions.filter(f => f.internal_only);
+  
+  const coreWithUI = coreFunctions.filter(f => mappedFunctions.has(f.function)).length;
+  const adminWithUI = adminFunctions.filter(f => mappedFunctions.has(f.function)).length;
+  const internalWithUI = internalFunctions.filter(f => mappedFunctions.has(f.function)).length;
+  
+  const coreCoverage = coreFunctions.length > 0 ? (coreWithUI / coreFunctions.length * 100) : 100;
+  const adminCoverage = adminFunctions.length > 0 ? (adminWithUI / adminFunctions.length * 100) : 100;
+  const internalCoverage = internalFunctions.length > 0 ? (internalWithUI / internalFunctions.length * 100) : 100;
+  
+  // Weighted score: CORE 70%, ADMIN 10%, INTERNAL 20%
+  const weightedScore = (coreCoverage * 0.7) + (adminCoverage * 0.1) + (internalCoverage * 0.2);
+
   return {
     total_missing: missingFunctions.length,
+    coverage_by_type: {
+      core: { total: coreFunctions.length, with_ui: coreWithUI, coverage_pct: coreCoverage.toFixed(1) },
+      admin: { total: adminFunctions.length, with_ui: adminWithUI, coverage_pct: adminCoverage.toFixed(1) },
+      internal: { total: internalFunctions.length, with_ui: internalWithUI, coverage_pct: internalCoverage.toFixed(1) },
+    },
+    weighted_coverage_score: weightedScore.toFixed(1),
+    production_ready: coreCoverage >= 100 && weightedScore >= 90,
     by_category: {
       lifecycle_control: missingFunctions.filter(f => f.category === 'A_LIFECYCLE_CONTROL'),
       core_workflow: missingFunctions.filter(f => f.category === 'A_CORE_WORKFLOW'),
       administrative: missingFunctions.filter(f => f.category === 'B_ADMINISTRATIVE'),
-      edge_case: missingFunctions.filter(f => f.category === 'C_EDGE_CASE'),
+      internal: missingFunctions.filter(f => f.category === 'C_INTERNAL'),
     },
     by_priority: {
       critical: missingFunctions.filter(f => f.priorityLevel === 'CRITICAL'),
