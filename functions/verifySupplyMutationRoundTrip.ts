@@ -56,9 +56,17 @@ Deno.serve(async (req) => {
         return Response.json({ success: true, test });
       }
 
-      targetCommitment = plannedCommitments[0];
-      const projects = await base44.asServiceRole.entities.Project.filter({ id: targetCommitment.project_id });
-      targetProject = projects[0];
+      // Find a commitment with valid project_id
+      for (const c of plannedCommitments) {
+        if (c.project_id) {
+          const projects = await base44.asServiceRole.entities.Project.filter({ id: c.project_id });
+          if (projects.length > 0) {
+            targetCommitment = c;
+            targetProject = projects[0];
+            break;
+          }
+        }
+      }
     } else {
       const projectCommitments = plannedCommitments.filter(c => c.project_id === targetProject.id);
       targetCommitment = projectCommitments[0];
