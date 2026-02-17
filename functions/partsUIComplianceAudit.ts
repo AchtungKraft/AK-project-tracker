@@ -216,11 +216,11 @@ function auditNeedToBuy() {
 // ============================================
 function auditOnOrder() {
   const requiredActions = [
-    { action: 'deltaOrder', label: 'Additional Order', status: 'needs_addition', note: 'Should be available via dropdown for each line item commitment' },
+    { action: 'deltaOrder', label: 'Additional Order', status: 'present', routing: 'DeltaOrderModal via dropdown' },
     { action: 'receive', label: 'Receive', status: 'present', routing: 'receiveLineItemMutation' },
     { action: 'viewPODetail', label: 'View PO Detail', status: 'present', routing: 'EditOrderModal' },
     { action: 'allocatePool', label: 'Allocate from Pool', status: 'needs_addition', note: 'Should be available for commitment-backed items' },
-    { action: 'scopeReduction', label: 'Scope Reduction', status: 'partial', note: 'moveToNeedToBuyMutation exists but not full cancellation' },
+    { action: 'scopeReduction', label: 'Scope Reduction', status: 'present', routing: 'CancelCommitmentModal via dropdown' },
   ];
 
   const disallowedActions = [
@@ -254,7 +254,7 @@ function auditOnOrder() {
 function auditBuilds() {
   const requiredActions = [
     { action: 'install', label: 'Install', status: 'present', routing: 'InstallPartModal' },
-    { action: 'reverseInstall', label: 'Reverse Installation', status: 'needs_addition', note: 'Should be available for installed items' },
+    { action: 'reverseInstall', label: 'Reverse Installation', status: 'present', routing: 'ReverseInstallationModal' },
     { action: 'viewFinancialDetail', label: 'View Financial Detail', status: 'needs_addition', note: 'Should show cost/retail/margin' },
     { action: 'viewInventoryAllocation', label: 'View Inventory Allocation', status: 'partial', note: 'Qty shown but no allocation details' },
   ];

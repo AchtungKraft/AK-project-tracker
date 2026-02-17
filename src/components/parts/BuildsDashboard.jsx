@@ -156,14 +156,15 @@ export default function BuildsDashboard({ onPartClick }) {
       }
       
       const item = {
-        requirement: req,
-        part,
-        qty_needed: req.qty_needed || 0,
-        qty_allocated: req.qty_allocated || 0,
-        qty_ordered: req.qty_ordered || 0,
-        qty_installed: req.qty_installed || 0,
-        pricingIntegrity,
-      };
+                requirement: req,
+                part,
+                commitment,
+                qty_needed: req.qty_needed || 0,
+                qty_allocated: req.qty_allocated || 0,
+                qty_ordered: req.qty_ordered || 0,
+                qty_installed: req.qty_installed || 0,
+                pricingIntegrity,
+              };
       
       // Determine status bucket
       if (item.qty_installed >= item.qty_needed) {
