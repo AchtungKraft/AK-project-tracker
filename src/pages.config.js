@@ -74,6 +74,12 @@ import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import GlobalNeedToOrder from './pages/GlobalNeedToOrder';
+import SupplyDashboard from './pages/SupplyDashboard';
+import SupplyOnOrder from './pages/SupplyOnOrder';
+import SupplyInstalled from './pages/SupplyInstalled';
+import SupplyLanding from './pages/SupplyLanding';
+import ProjectSupplyManager from './pages/ProjectSupplyManager';
+import SupplyQueues from './pages/SupplyQueues';
 import __Layout from './Layout.jsx';
 
 
@@ -105,6 +111,12 @@ export const PAGES = {
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
     "GlobalNeedToOrder": GlobalNeedToOrder,
+    "SupplyDashboard": SupplyDashboard,
+    "SupplyOnOrder": SupplyOnOrder,
+    "SupplyInstalled": SupplyInstalled,
+    "SupplyLanding": SupplyLanding,
+    "ProjectSupplyManager": ProjectSupplyManager,
+    "SupplyQueues": SupplyQueues,
 }
 
 export const pagesConfig = {
