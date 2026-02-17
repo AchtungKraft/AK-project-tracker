@@ -87,7 +87,12 @@ Deno.serve(async (req) => {
     const locationsMap = new Map(locations.map(l => [l.id, l]));
     const ordersMap = new Map(orders.map(o => [o.id, o]));
 
-    // Enrich commitments
+    // Calculate total pool balance for funding checks
+    const totalPoolBalance = pools
+      .filter(p => p.status !== 'closed')
+      .reduce((sum, p) => sum + (p.balance || 0), 0);
+
+    // Enrich commitments with ALL lifecycle logic
     const enrichedCommitments = commitments
       .filter(c => c.commitment_status !== 'cancelled')
       .map(commitment => {
@@ -97,12 +102,56 @@ Deno.serve(async (req) => {
         const commitmentInstalled = projectInstalled.filter(ip => ip.commitment_id === commitment.id && !ip.is_reversed);
         const commitmentAllocations = projectAllocations.filter(a => a.commitment_id === commitment.id && !a.is_reversed);
 
-        // Calculate derived fields
-        const remaining = Math.max(0, (commitment.qty_committed || 0) - (commitment.qty_installed || 0) - (commitment.qty_cancelled || 0));
-        const unorderedQty = Math.max(0, (commitment.qty_committed || 0) - (commitment.qty_ordered || 0));
-        const unreceived = Math.max(0, (commitment.qty_ordered || 0) - (commitment.qty_received || 0));
-        const unallocated = Math.max(0, (commitment.qty_received || 0) - (commitment.qty_allocated || 0));
-        const uninstalled = Math.max(0, (commitment.qty_allocated || 0) - (commitment.qty_installed || 0));
+        // Canonical quantity calculations
+        const qtyCommitted = commitment.qty_committed || 0;
+        const qtyOrdered = commitment.qty_ordered || 0;
+        const qtyReceived = commitment.qty_received || 0;
+        const qtyAllocated = commitment.qty_allocated || 0;
+        const qtyInstalled = commitment.qty_installed || 0;
+        const qtyCancelled = commitment.qty_cancelled || 0;
+
+        const remaining = Math.max(0, qtyCommitted - qtyInstalled - qtyCancelled);
+        const unorderedQty = Math.max(0, qtyCommitted - qtyOrdered);
+        const unreceived = Math.max(0, qtyOrdered - qtyReceived);
+        const unallocated = Math.max(0, qtyReceived - qtyAllocated);
+        const uninstalled = Math.max(0, qtyAllocated - qtyInstalled);
+
+        // Financial calculations
+        const exposureGap = commitment.exposure_gap || 0;
+        const plannedRetail = commitment.planned_retail_total || 0;
+        const coveredRetail = commitment.covered_retail_total || 0;
+        const coveragePercent = plannedRetail > 0 ? Math.round((coveredRetail / plannedRetail) * 100) : 0;
+
+        // Lifecycle gating logic (CANONICAL - UI must not recalculate)
+        const isFundingBlocked = exposureGap > totalPoolBalance && exposureGap > 0;
+        const isPrepayRequired = commitment.requires_prepay === true;
+        const isPrepayBlocked = isPrepayRequired && commitment.billing_status !== 'CLIENT_PAID';
+        
+        // Readiness conditions
+        const canOrder = unorderedQty > 0 && !isFundingBlocked && !isPrepayBlocked;
+        const canReceive = unreceived > 0;
+        const canAllocate = unallocated > 0;
+        const canInstall = uninstalled > 0;
+        const canCancel = qtyInstalled === 0;
+        const canEdit = commitment.commitment_status !== 'installed';
+
+        // Determine lifecycle phase
+        let lifecyclePhase = 'plan';
+        if (qtyInstalled >= qtyCommitted && qtyCommitted > 0) {
+          lifecyclePhase = 'complete';
+        } else if (qtyInstalled > 0) {
+          lifecyclePhase = 'installing';
+        } else if (qtyAllocated > 0) {
+          lifecyclePhase = 'allocated';
+        } else if (qtyReceived > 0) {
+          lifecyclePhase = 'received';
+        } else if (qtyOrdered > 0) {
+          lifecyclePhase = 'ordered';
+        } else if (isFundingBlocked) {
+          lifecyclePhase = 'funding_blocked';
+        } else if (isPrepayBlocked) {
+          lifecyclePhase = 'prepay_blocked';
+        }
 
         return {
           ...commitment,
@@ -117,10 +166,19 @@ Deno.serve(async (req) => {
             unreceived,
             unallocated,
             uninstalled,
-            canOrder: unorderedQty > 0 && commitment.commitment_status === 'planned',
-            canReceive: unreceived > 0,
-            canAllocate: unallocated > 0,
-            canInstall: uninstalled > 0,
+            coveragePercent,
+            lifecyclePhase,
+            // Gating flags (UI renders these, does not calculate)
+            isFundingBlocked,
+            isPrepayRequired,
+            isPrepayBlocked,
+            // Action availability (UI renders these, does not calculate)
+            canOrder,
+            canReceive,
+            canAllocate,
+            canInstall,
+            canCancel,
+            canEdit,
           }
         };
       });
