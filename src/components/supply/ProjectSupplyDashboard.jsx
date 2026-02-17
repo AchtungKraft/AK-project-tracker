@@ -1,43 +1,23 @@
 import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, Eye
+  ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, DollarSign,
+  ArrowRight, Eye, Building2
 } from "lucide-react";
 
 /**
  * ProjectSupplyDashboard - Portfolio-level supply chain overview
- * 
- * STRICT ENGINE REUSE:
- * - Uses ONLY precomputed commitment fields (exposure_gap, covered_retail_total, etc.)
- * - NO UI-side financial calculations
- * - Drilldowns route to pages that use CommitmentActions
+ * Shows all projects with supply metrics and drilldown actions
  */
-export default function ProjectSupplyDashboard({ projects: propProjects, statuses: propStatuses }) {
+export default function ProjectSupplyDashboard({ projects, statuses }) {
   const navigate = useNavigate();
-
-  // Fetch projects if not provided as props
-  const { data: fetchedProjects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
-    enabled: !propProjects
-  });
-
-  // Fetch statuses if not provided as props
-  const { data: fetchedStatuses = [] } = useQuery({
-    queryKey: ['statusList'],
-    queryFn: () => base44.entities.StatusList.list(),
-    enabled: !propStatuses
-  });
-
-  const projects = propProjects || fetchedProjects;
-  const statuses = propStatuses || fetchedStatuses;
 
   const { data: commitments = [] } = useQuery({
     queryKey: ['partCommitments'],
@@ -71,12 +51,11 @@ export default function ProjectSupplyDashboard({ projects: propProjects, statuse
       const installed = projectCommitments.filter(c => c.commitment_status === 'installed').length;
       const total = projectCommitments.length;
 
-      // STRICT: Financial metrics from PRECOMPUTED fields ONLY
+      // Financial metrics
       const totalExposure = projectCommitments.reduce((sum, c) => sum + (c.exposure_gap || 0), 0);
       const totalPlannedRetail = projectCommitments.reduce((sum, c) => sum + (c.planned_retail_total || 0), 0);
       const totalCovered = projectCommitments.reduce((sum, c) => sum + (c.covered_retail_total || 0), 0);
       const poolBalance = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
-      // NOTE: No derived calculations - all values come from entity fields
 
       // Open POs (not fully received)
       const openPOs = new Set(
