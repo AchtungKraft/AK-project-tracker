@@ -76,6 +76,7 @@ export default function ProjectSupplyManager() {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [groupBy, setGroupBy] = useState('none'); // values: 'none' | 'category'
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -288,6 +289,60 @@ export default function ProjectSupplyManager() {
     }
 
     return filtered;
+  };
+
+  // Group commitments by category
+  const groupCommitments = (commitments) => {
+    if (groupBy === 'none') {
+      return { All: commitments };
+    }
+
+    if (groupBy === 'category') {
+      return commitments.reduce((acc, c) => {
+        const category =
+          c.part?.category ||
+          c.part?.part_category ||
+          'Uncategorized';
+
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(c);
+        return acc;
+      }, {});
+    }
+
+    return { All: commitments };
+  };
+
+  // Render grouped commitment rows
+  const renderGroupedCommitments = (tabFilter, showActions = true) => {
+    const filtered = getFilteredCommitments(tabFilter);
+    const grouped = groupCommitments(filtered);
+
+    return Object.entries(grouped).map(([groupName, groupItems]) => (
+      <React.Fragment key={groupName}>
+        {groupBy !== 'none' && (
+          <TableRow className="bg-gray-900/70">
+            <TableCell colSpan={11} className="text-sm font-semibold text-gray-300 py-2">
+              {groupName} ({groupItems.length})
+            </TableCell>
+          </TableRow>
+        )}
+
+        {groupItems.map(c => renderCommitmentRow(c, showActions))}
+
+        {groupBy !== 'none' && (
+          <TableRow className="bg-gray-900/40 border-t border-gray-800">
+            <TableCell colSpan={7} />
+            <TableCell className="text-right text-gray-400 text-sm">
+              ${groupItems
+                .reduce((sum, c) => sum + (c.planned_retail_total || 0), 0)
+                .toFixed(0)}
+            </TableCell>
+            <TableCell colSpan={3} />
+          </TableRow>
+        )}
+      </React.Fragment>
+    ));
   };
 
   const handleRefresh = async () => {
@@ -620,22 +675,31 @@ export default function ProjectSupplyManager() {
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-white">Planned Requirements</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                        <Input
-                          placeholder="Search..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
-                        />
-                      </div>
-                      <Button size="sm" className="bg-red-600 hover:bg-red-700 gap-1">
-                        <Plus className="w-4 h-4" />
-                        Add Part
-                      </Button>
+                  <CardTitle className="text-white">Planned Requirements</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Select value={groupBy} onValueChange={setGroupBy}>
+                      <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
+                        <SelectValue placeholder="Group By" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 border-gray-700">
+                        <SelectItem value="none">No Grouping</SelectItem>
+                        <SelectItem value="category">Category</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="relative w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                      <Input
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                      />
                     </div>
+                    <Button size="sm" className="bg-red-600 hover:bg-red-700 gap-1">
+                      <Plus className="w-4 h-4" />
+                      Add Part
+                    </Button>
+                  </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -663,7 +727,7 @@ export default function ProjectSupplyManager() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        getFilteredCommitments('plan').map(c => renderCommitmentRow(c))
+                        renderGroupedCommitments('plan')
                       )}
                     </TableBody>
                   </Table>
@@ -759,27 +823,36 @@ export default function ProjectSupplyManager() {
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-white">Ready to Order</CardTitle>
-                      <CardDescription>Items gated by coverage and prepay requirements</CardDescription>
+                  <div>
+                    <CardTitle className="text-white">Ready to Order</CardTitle>
+                    <CardDescription>Items gated by coverage and prepay requirements</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={groupBy} onValueChange={setGroupBy}>
+                      <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
+                        <SelectValue placeholder="Group By" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 border-gray-700">
+                        <SelectItem value="none">No Grouping</SelectItem>
+                        <SelectItem value="category">Category</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="relative w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                      <Input
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                      />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                        <Input
-                          placeholder="Search..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
-                        />
-                      </div>
-                      {selectedItems.size > 0 && (
-                        <Button className="bg-green-600 hover:bg-green-700 gap-1">
-                          <ShoppingCart className="w-4 h-4" />
-                          Create PO ({selectedItems.size})
-                        </Button>
-                      )}
-                    </div>
+                    {selectedItems.size > 0 && (
+                      <Button className="bg-green-600 hover:bg-green-700 gap-1">
+                        <ShoppingCart className="w-4 h-4" />
+                        Create PO ({selectedItems.size})
+                      </Button>
+                    )}
+                  </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -807,7 +880,7 @@ export default function ProjectSupplyManager() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        getFilteredCommitments('buy').map(c => renderCommitmentRow(c))
+                        renderGroupedCommitments('buy')
                       )}
                     </TableBody>
                   </Table>
@@ -820,14 +893,25 @@ export default function ProjectSupplyManager() {
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-white">Receiving Queue</CardTitle>
-                    <div className="relative w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                      <Input
-                        placeholder="Search..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
-                      />
+                    <div className="flex items-center gap-2">
+                      <Select value={groupBy} onValueChange={setGroupBy}>
+                        <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
+                          <SelectValue placeholder="Group By" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-700">
+                          <SelectItem value="none">No Grouping</SelectItem>
+                          <SelectItem value="category">Category</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Input
+                          placeholder="Search..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -856,7 +940,7 @@ export default function ProjectSupplyManager() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        getFilteredCommitments('receive').map(c => renderCommitmentRow(c))
+                        renderGroupedCommitments('receive')
                       )}
                     </TableBody>
                   </Table>
@@ -869,14 +953,25 @@ export default function ProjectSupplyManager() {
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-white">Installation Queue</CardTitle>
-                    <div className="relative w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                      <Input
-                        placeholder="Search..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
-                      />
+                    <div className="flex items-center gap-2">
+                      <Select value={groupBy} onValueChange={setGroupBy}>
+                        <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
+                          <SelectValue placeholder="Group By" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-700">
+                          <SelectItem value="none">No Grouping</SelectItem>
+                          <SelectItem value="category">Category</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Input
+                          placeholder="Search..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -905,7 +1000,7 @@ export default function ProjectSupplyManager() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        getFilteredCommitments('install').map(c => renderCommitmentRow(c))
+                        renderGroupedCommitments('install')
                       )}
                     </TableBody>
                   </Table>
