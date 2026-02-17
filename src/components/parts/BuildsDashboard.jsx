@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Search, Package, CheckCircle2, AlertTriangle, Wrench, Eye, 
-  ChevronDown, ChevronUp, ShoppingCart, Truck, Download, FileSpreadsheet, Printer
+  ChevronDown, ChevronUp, ShoppingCart, Truck, Download, FileSpreadsheet, Printer, Undo2
 } from "lucide-react";
 import InstallPartModal from "../project/InstallPartModal";
+import ReverseInstallationModal from "../project/ReverseInstallationModal";
 import BuildExportActions from "../inventory/BuildExportActions";
+import { CommitmentActions } from "../financial/financialMutationGuard";
 import { getPricingIntegrity, getPricingRowHighlight, PRICING_STATUS } from "../inventory/pricingIntegrityUtils";
 import { PricingIntegrityCell, PricingWarningIcon } from "../inventory/PricingStatusBadge";
 
@@ -25,6 +27,7 @@ export default function BuildsDashboard({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProject, setExpandedProject] = useState(null);
   const [installRequirement, setInstallRequirement] = useState(null);
+  const [reverseInstallItem, setReverseInstallItem] = useState(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
@@ -227,6 +230,10 @@ export default function BuildsDashboard({ onPartClick }) {
     return allocatedNotInstalled > 0;
   };
 
+  const canReverseInstall = (item) => {
+    return (item.qty_installed || 0) > 0;
+  };
+
   const renderPartRow = (item, showStatus = true, showInstallAction = false) => {
     const rowHighlight = getPricingRowHighlight(item.pricingIntegrity?.status);
     
@@ -275,6 +282,20 @@ export default function BuildsDashboard({ onPartClick }) {
             >
               <Download className="w-3 h-3 mr-1" />
               Install
+            </Button>
+          )}
+          {canReverseInstall(item) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 border-orange-700 text-orange-400 hover:bg-orange-900/30"
+              onClick={(e) => {
+                e.stopPropagation();
+                setReverseInstallItem(item);
+              }}
+            >
+              <Undo2 className="w-3 h-3 mr-1" />
+              Reverse
             </Button>
           )}
         </div>
@@ -574,6 +595,15 @@ export default function BuildsDashboard({ onPartClick }) {
         <InstallPartModal
           requirement={installRequirement}
           onClose={() => setInstallRequirement(null)}
+        />
+      )}
+
+      {reverseInstallItem && (
+        <ReverseInstallationModal
+          commitment={reverseInstallItem.commitment}
+          part={reverseInstallItem.part}
+          projectId={reverseInstallItem.requirement?.project_id}
+          onClose={() => setReverseInstallItem(null)}
         />
       )}
     </div>
