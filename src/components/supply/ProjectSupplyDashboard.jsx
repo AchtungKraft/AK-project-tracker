@@ -19,8 +19,25 @@ import {
  * - NO UI-side financial calculations
  * - Drilldowns route to pages that use CommitmentActions
  */
-export default function ProjectSupplyDashboard({ projects, statuses }) {
+export default function ProjectSupplyDashboard({ projects: propProjects, statuses: propStatuses }) {
   const navigate = useNavigate();
+
+  // Fetch projects if not provided as props
+  const { data: fetchedProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list(),
+    enabled: !propProjects
+  });
+
+  // Fetch statuses if not provided as props
+  const { data: fetchedStatuses = [] } = useQuery({
+    queryKey: ['statusList'],
+    queryFn: () => base44.entities.StatusList.list(),
+    enabled: !propStatuses
+  });
+
+  const projects = propProjects || fetchedProjects;
+  const statuses = propStatuses || fetchedStatuses;
 
   const { data: commitments = [] } = useQuery({
     queryKey: ['partCommitments'],
