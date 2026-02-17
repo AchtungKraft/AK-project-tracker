@@ -13,6 +13,10 @@ import { Loader2, Plus, Wrench } from "lucide-react";
 
 
 /**
+ * CANONICAL SUPPLY FLOW ENFORCED
+ * All project part mutations must go through CommitmentService.
+ * Direct entity writes are blocked.
+ * 
  * AddToBuildModal - Add a part to a project/build (CANONICAL)
  * Routes through CommitmentService.addPartToProject to create PartCommitment
  * Optionally allocates inventory immediately if available

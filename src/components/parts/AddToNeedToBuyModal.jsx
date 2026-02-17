@@ -17,11 +17,16 @@ import { ShoppingCart, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 
 /**
+ * CANONICAL SUPPLY FLOW ENFORCED
+ * All project part mutations must go through CommitmentService.
+ * Direct entity writes are blocked.
+ * 
  * AddToNeedToBuyModal - Creates a general (non-project) part requirement
  * for the "General / AK Stock" purchasing list
  * 
- * ⚠️ LEGACY: Creates PartProjectRequirement with project_id=null
- * Consider using inventory reorder system instead for stock management
+ * ⚠️ EXCEPTION: This modal creates PartProjectRequirement with project_id=null
+ * This is ALLOWED because general stock requirements are outside the commitment system.
+ * For project-linked parts, use AddToBuildModal which routes through CommitmentService.
  */
 export default function AddToNeedToBuyModal({ part, onClose }) {
   const queryClient = useQueryClient();

@@ -109,6 +109,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     onSuccess: async (newPart) => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       
+      // CANONICAL SUPPLY FLOW ENFORCED
       // If projectId is provided, create commitment via CommitmentService
       if (projectId) {
         try {

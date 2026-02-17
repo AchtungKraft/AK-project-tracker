@@ -15,12 +15,20 @@ import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionSta
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 /**
+ * CANONICAL SUPPLY FLOW ENFORCED
+ * All project part mutations must go through CommitmentService.
+ * Direct entity writes are blocked.
+ * 
  * OrderPartModal - Create or add to an order for a specific part
  * 
- * ⚠️ LEGACY WARNING: This modal currently creates PartPurchaseLineItem directly
- * without routing through CommitmentService. Use ProjectSupplyManager for canonical PO creation.
+ * ⚠️ LEGACY WARNING: This modal creates PartPurchaseLineItem directly.
+ * For project-linked orders, use ProjectSupplyManager which routes through CommitmentService.createPO
  * 
- * TODO: Either deprecate this modal OR require commitment_id and route through CommitmentService.createPO
+ * This modal is kept for:
+ * - General stock orders (no project linkage)
+ * - Quick orders without commitment tracking
+ * 
+ * BLOCKED: UI-provided unit_price is IGNORED - cost must come from Part.cost
  */
 export default function OrderPartModal({ part, onClose, onPartClick }) {
   const queryClient = useQueryClient();
@@ -143,15 +151,24 @@ export default function OrderPartModal({ part, onClose, onPartClick }) {
       }
 
       // Create the line item
+      // COST ENFORCEMENT: Always use Part.cost, IGNORE UI-provided unit_price
+      const partCost = part.cost ?? part.default_cost ?? 0;
+      const qty = Number(formData.qty_ordered) || 1;
+      
       const lineItem = await base44.entities.PartPurchaseLineItem.create({
         order_id: orderId,
         part_id: part.id,
-        qty_ordered: Number(formData.qty_ordered) || 1,
+        qty_ordered: qty,
         qty_received: 0,
-        unit_price: formData.unit_price ? Number(formData.unit_price) : null,
-        line_total: formData.unit_price ? Number(formData.unit_price) * (Number(formData.qty_ordered) || 1) : null,
+        unit_cost: partCost, // Use canonical cost field
+        unit_price: partCost, // Deprecated but kept for compatibility
+        extended_cost: partCost * qty,
+        line_total: partCost * qty, // Deprecated but kept for compatibility
+        cost_source_reference: 'part_cost',
         status: 'Pending',
         notes: formData.notes || null,
+        is_legacy: true, // Mark as legacy (not from CommitmentService)
+        legacy_reason: 'Created via OrderPartModal without commitment',
         // Link to first requirement if any selected (for tracking)
         requirement_id: linkedRequirements.length > 0 ? linkedRequirements[0] : null,
       });

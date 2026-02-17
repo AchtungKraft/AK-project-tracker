@@ -38,6 +38,11 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     queryFn: () => base44.entities.InventoryItem.list(),
   });
 
+  /**
+   * CANONICAL SUPPLY FLOW ENFORCED
+   * All project part mutations must go through CommitmentService.
+   * Direct entity writes are blocked.
+   */
   const createRequirementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedPartId) {

@@ -13,6 +13,11 @@ import { toast } from "sonner";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 
 
+/**
+ * CANONICAL SUPPLY FLOW ENFORCED
+ * All project part mutations must go through CommitmentService.
+ * Direct entity writes are blocked.
+ */
 export default function AddRequirementModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
