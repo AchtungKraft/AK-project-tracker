@@ -111,6 +111,11 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("SupplyNormalization"),
         icon: Settings,
       },
+      {
+        title: "Portal Stats",
+        url: createPageUrl("PortalStatsEmbed"),
+        icon: BarChart3,
+      },
     ];
   } else {
     return [
