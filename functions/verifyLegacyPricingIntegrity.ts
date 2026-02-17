@@ -117,9 +117,8 @@ Deno.serve(async (req) => {
     }
 
     // Fetch all active commitments
-    const commitments = await base44.asServiceRole.entities.PartCommitment.filter({
-      commitment_status: { $nin: ['cancelled'] }
-    });
+    const allCommitments = await base44.asServiceRole.entities.PartCommitment.list();
+    const commitments = allCommitments.filter(c => c.commitment_status !== 'cancelled');
     report.commitments_scanned = commitments.length;
 
     for (const commitment of commitments) {
