@@ -51,19 +51,17 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Load all data
-    const [lineItems, commitments, orders, parts] = await Promise.all([
-      base44.asServiceRole.entities.PartPurchaseLineItem.list(),
-      base44.asServiceRole.entities.PartCommitment.list(),
-      base44.asServiceRole.entities.Order.list(),
-      base44.asServiceRole.entities.Part.list()
+    // Load data in parallel but limit scope for performance
+    const [lineItems, commitments, orders] = await Promise.all([
+      base44.asServiceRole.entities.PartPurchaseLineItem.filter({}, '-created_date', 500),
+      base44.asServiceRole.entities.PartCommitment.filter({}, '-created_date', 1000),
+      base44.asServiceRole.entities.Order.filter({}, '-created_date', 500)
     ]);
 
     console.log(`📊 Loaded: ${lineItems.length} line items, ${commitments.length} commitments, ${orders.length} orders`);
 
     // Build lookup maps
     const ordersMap = new Map(orders.map(o => [o.id, o]));
-    const partsMap = new Map(parts.map(p => [p.id, p]));
     
     // Build commitment index by project_id + part_id
     const commitmentsByProjectPart = new Map();
@@ -85,7 +83,6 @@ Deno.serve(async (req) => {
     const pendingUpdates = [];
 
     for (const lineItem of orphanLineItems) {
-      const part = partsMap.get(lineItem.part_id);
       const order = ordersMap.get(lineItem.order_id);
       
       // Determine project_id from order or requirement
@@ -198,7 +195,7 @@ Deno.serve(async (req) => {
         
         report.linked_items.push({
           line_item_id: lineItem.id,
-          part_name: part?.part_name,
+          part_id: lineItem.part_id,
           commitment_id: matchedCommitment.id,
           project_id: matchedCommitment.project_id,
           reason: matchReason,
@@ -218,7 +215,6 @@ Deno.serve(async (req) => {
         
         report.quarantined_items.push({
           line_item_id: lineItem.id,
-          part_name: part?.part_name,
           part_id: lineItem.part_id,
           order_id: lineItem.order_id,
           reason: matchReason
