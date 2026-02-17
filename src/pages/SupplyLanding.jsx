@@ -19,13 +19,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, DollarSign,
   ArrowRight, Eye, Building2, RefreshCw, Search, LayoutGrid, List,
-  Wallet, AlertCircle, Clock, Wrench, FolderKanban, Filter
+  Wallet, AlertCircle, Clock, Wrench, FolderKanban, Filter, Loader2
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 
 /**
- * Supply Landing - Portfolio-level supply chain overview (Screen 1)
- * Route: /supply
+ * Supply Landing - Portfolio-level supply chain overview
+ * 
+ * CANONICAL: Uses getPortfolioSupplyState backend read model
+ * UI renders precomputed metrics only - NO lifecycle math here
  */
 export default function SupplyLanding() {
   const navigate = useNavigate();
@@ -35,14 +37,18 @@ export default function SupplyLanding() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('cards');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Data Fetching
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date')
+  // Canonical data source - backend read model
+  const { data: supplyState, isLoading, isRefetching, refetch } = useQuery({
+    queryKey: ['portfolioSupplyState'],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('getPortfolioSupplyState', {});
+      return response.data;
+    },
+    staleTime: 30000, // 30 seconds
   });
 
+  // Reference data for filters (lightweight)
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list()
@@ -53,158 +59,43 @@ export default function SupplyLanding() {
     queryFn: () => base44.entities.ProjectType.list()
   });
 
-  const { data: commitments = [] } = useQuery({
-    queryKey: ['partCommitments'],
-    queryFn: () => base44.entities.PartCommitment.list()
-  });
-
-  const { data: pools = [] } = useQuery({
-    queryKey: ['billingPools'],
-    queryFn: () => base44.entities.BillingPool.list()
-  });
-
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list()
-  });
-
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list()
-  });
-
-  const { data: installedParts = [] } = useQuery({
-    queryKey: ['installedParts'],
-    queryFn: () => base44.entities.InstalledPart.list()
-  });
-
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+  const projects = supplyState?.projects || [];
+  const portfolio = supplyState?.portfolio || {};
 
-  // Calculate comprehensive supply metrics per project
-  const projectMetrics = useMemo(() => {
-    return projects.map(project => {
-      const projectCommitments = commitments.filter(c => c.project_id === project.id && c.commitment_status !== 'cancelled');
-      const projectRequirements = requirements.filter(r => r.project_id === project.id);
-      const projectPools = pools.filter(p => p.project_id === project.id);
-      const projectInstalled = installedParts.filter(ip => !ip.is_reversed && projectCommitments.some(c => c.id === ip.commitment_id));
-
-      // Commitment lifecycle counts
-      const byStatus = {
-        planned: projectCommitments.filter(c => c.commitment_status === 'planned').length,
-        ordered: projectCommitments.filter(c => c.commitment_status === 'ordered').length,
-        partiallyReceived: projectCommitments.filter(c => c.commitment_status === 'partially_received').length,
-        received: projectCommitments.filter(c => c.commitment_status === 'received').length,
-        allocated: projectCommitments.filter(c => c.commitment_status === 'allocated').length,
-        installed: projectCommitments.filter(c => c.commitment_status === 'installed').length,
-      };
-
-      // Requirements summary
-      const reqTotal = projectRequirements.length;
-      const reqInStock = projectRequirements.filter(r => r.needed_status === 'On-Hand').length;
-      const reqToBuy = projectRequirements.filter(r => r.needed_status === 'Need to Buy').length;
-
-      // Financial metrics
-      const totalPlannedRetail = projectCommitments.reduce((sum, c) => sum + (c.planned_retail_total || 0), 0);
-      const totalCovered = projectCommitments.reduce((sum, c) => sum + (c.covered_retail_total || 0), 0);
-      const totalExposure = projectCommitments.reduce((sum, c) => sum + (c.exposure_gap || 0), 0);
-      const totalInvoiced = projectCommitments.reduce((sum, c) => sum + (c.invoiced_retail_total || 0), 0);
-
-      // Pool metrics
-      const poolPaid = projectPools.reduce((sum, p) => sum + (p.paid_amount || 0), 0);
-      const poolAvailable = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
-      const hasOverdrawn = projectPools.some(p => p.status === 'overdrawn' || (p.balance || 0) < 0);
-
-      // Coverage percentage
-      const coveragePct = totalPlannedRetail > 0 ? Math.round((totalCovered / totalPlannedRetail) * 100) : 0;
-
-      // Procurement metrics
-      const needsOrder = projectCommitments.filter(c => 
-        c.commitment_status === 'planned' || 
-        (c.qty_committed || 0) > (c.qty_ordered || 0)
-      ).length;
-
-      const onOrder = projectCommitments.filter(c => 
-        ['ordered', 'partially_received'].includes(c.commitment_status)
-      ).length;
-
-      const receivedPendingPutaway = projectCommitments.filter(c => 
-        c.commitment_status === 'received' && (c.qty_received || 0) > (c.qty_allocated || 0)
-      ).length;
-
-      // Install metrics
-      const totalQtyCommitted = projectCommitments.reduce((sum, c) => sum + (c.qty_committed || 0), 0);
-      const totalQtyInstalled = projectCommitments.reduce((sum, c) => sum + (c.qty_installed || 0), 0);
-      const installPct = totalQtyCommitted > 0 ? Math.round((totalQtyInstalled / totalQtyCommitted) * 100) : 0;
-
-      // Alert flags
-      const alerts = {
-        prepayBlocking: projectCommitments.some(c => c.requires_prepay && !c.prepay_satisfied_at && c.commitment_status === 'planned'),
-        poolOverdrawn: hasOverdrawn,
-        unreceivedItems: onOrder > 0,
-        unallocatedInventory: receivedPendingPutaway > 0,
-        installedUncovered: projectCommitments.some(c => c.commitment_status === 'installed' && (c.exposure_gap || 0) > 0),
-      };
-      const alertCount = Object.values(alerts).filter(Boolean).length;
-
-      return {
-        project,
-        byStatus,
-        reqTotal,
-        reqInStock,
-        reqToBuy,
-        totalPlannedRetail,
-        totalCovered,
-        totalExposure,
-        totalInvoiced,
-        poolPaid,
-        poolAvailable,
-        hasOverdrawn,
-        coveragePct,
-        needsOrder,
-        onOrder,
-        receivedPendingPutaway,
-        installPct,
-        alerts,
-        alertCount,
-        total: projectCommitments.length,
-      };
-    });
-  }, [projects, commitments, requirements, pools, installedParts]);
-
-  // Apply filters
-  const filteredMetrics = useMemo(() => {
-    return projectMetrics.filter(({ project }) => {
+  // Apply local filters to precomputed data (no lifecycle recalculation)
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        if (!project.name?.toLowerCase().includes(term) && 
-            !project.client_name?.toLowerCase().includes(term)) {
+        if (!p.project_name?.toLowerCase().includes(term) && 
+            !p.client_name?.toLowerCase().includes(term)) {
           return false;
         }
       }
-      if (statusFilter !== 'all' && project.status_id !== statusFilter) return false;
-      if (typeFilter !== 'all' && project.project_type_id !== typeFilter) return false;
+      if (statusFilter !== 'all' && p.status_id !== statusFilter) return false;
+      if (typeFilter !== 'all' && p.project_type_id !== typeFilter) return false;
       return true;
     });
-  }, [projectMetrics, searchTerm, statusFilter, typeFilter]);
+  }, [projects, searchTerm, statusFilter, typeFilter]);
 
-  // Portfolio totals
-  const portfolioTotals = useMemo(() => ({
-    totalProjects: filteredMetrics.length,
-    totalCommitments: filteredMetrics.reduce((sum, p) => sum + p.total, 0),
-    totalNeedsOrder: filteredMetrics.reduce((sum, p) => sum + p.needsOrder, 0),
-    totalOnOrder: filteredMetrics.reduce((sum, p) => sum + p.onOrder, 0),
-    totalExposure: filteredMetrics.reduce((sum, p) => sum + p.totalExposure, 0),
-    totalPoolAvailable: filteredMetrics.reduce((sum, p) => sum + p.poolAvailable, 0),
-    alertProjects: filteredMetrics.filter(p => p.alertCount > 0).length,
-  }), [filteredMetrics]);
+  // Filtered portfolio totals (simple sum of precomputed values)
+  const filteredTotals = useMemo(() => ({
+    totalProjects: filteredProjects.length,
+    totalCommitments: filteredProjects.reduce((sum, p) => sum + p.total_commitments, 0),
+    totalNeedsOrder: filteredProjects.reduce((sum, p) => sum + p.needs_order_count, 0),
+    totalOnOrder: filteredProjects.reduce((sum, p) => sum + p.on_order_count, 0),
+    totalExposure: filteredProjects.reduce((sum, p) => sum + p.total_exposure, 0),
+    totalPoolAvailable: filteredProjects.reduce((sum, p) => sum + p.total_pool_balance, 0),
+    alertProjects: filteredProjects.filter(p => p.alerts.length > 0).length,
+  }), [filteredProjects]);
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await queryClient.invalidateQueries();
-    setIsRefreshing(false);
+    await refetch();
   };
 
   const handleDrilldown = (projectId, view) => {
+    // All drilldowns route to canonical supply surface
     switch (view) {
       case 'supply':
         navigate(createPageUrl(`ProjectSupplyManager?project_id=${projectId}`));
@@ -216,41 +107,38 @@ export default function SupplyLanding() {
         navigate(createPageUrl(`ProjectSupplyManager?project_id=${projectId}&tab=fund`));
         break;
       case 'open_pos':
-        navigate(createPageUrl(`SupplyOnOrder?project_id=${projectId}`));
+        navigate(createPageUrl(`ProjectSupplyManager?project_id=${projectId}&tab=buy`));
         break;
       default:
         navigate(createPageUrl(`ProjectSupplyManager?project_id=${projectId}`));
     }
   };
 
-  const renderProjectCard = ({ project, ...metrics }) => {
-    const status = statuses.find(s => s.id === project.status_id);
-    const projectType = projectTypes.find(t => t.id === project.project_type_id);
-
+  const renderProjectCard = (projectData) => {
     return (
       <Card 
-        key={project.id}
+        key={projectData.project_id}
         className="bg-black/40 border-gray-800 hover:border-red-900/50 transition-colors cursor-pointer"
-        onClick={() => handleDrilldown(project.id, 'supply')}
+        onClick={() => handleDrilldown(projectData.project_id, 'supply')}
       >
         <CardHeader className="p-4 pb-2">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
-              <CardTitle className="text-white text-base truncate">{project.name}</CardTitle>
-              {project.client_name && (
-                <p className="text-xs text-gray-400 truncate">{project.client_name}</p>
+              <CardTitle className="text-white text-base truncate">{projectData.project_name}</CardTitle>
+              {projectData.client_name && (
+                <p className="text-xs text-gray-400 truncate">{projectData.client_name}</p>
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              {metrics.alertCount > 0 && (
+              {projectData.alerts.length > 0 && (
                 <Badge variant="outline" className="border-red-600 text-red-400 text-xs">
                   <AlertCircle className="w-3 h-3 mr-1" />
-                  {metrics.alertCount}
+                  {projectData.alerts.length}
                 </Badge>
               )}
-              {status && (
-                <Badge style={{ backgroundColor: status.color }} className="text-white text-xs shrink-0">
-                  {status.label}
+              {projectData.status_label && (
+                <Badge style={{ backgroundColor: projectData.status_color }} className="text-white text-xs shrink-0">
+                  {projectData.status_label}
                 </Badge>
               )}
             </div>
@@ -258,72 +146,72 @@ export default function SupplyLanding() {
         </CardHeader>
 
         <CardContent className="p-4 pt-0 space-y-3">
-          {/* Progress Bars */}
+          {/* Progress Bars - render precomputed values */}
           <div className="space-y-2">
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-500">Coverage</span>
-                <span className={metrics.coveragePct >= 100 ? 'text-green-400' : metrics.coveragePct > 50 ? 'text-yellow-400' : 'text-red-400'}>
-                  {metrics.coveragePct}%
+                <span className={projectData.coverage_percent >= 100 ? 'text-green-400' : projectData.coverage_percent > 50 ? 'text-yellow-400' : 'text-red-400'}>
+                  {projectData.coverage_percent}%
                 </span>
               </div>
-              <Progress value={metrics.coveragePct} className="h-1.5" />
+              <Progress value={projectData.coverage_percent} className="h-1.5" />
             </div>
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-500">Installed</span>
-                <span className="text-white">{metrics.installPct}%</span>
+                <span className="text-white">{projectData.install_percent}%</span>
               </div>
-              <Progress value={metrics.installPct} className="h-1.5" />
+              <Progress value={projectData.install_percent} className="h-1.5" />
             </div>
           </div>
 
-          {/* Status Grid */}
+          {/* Status Grid - render precomputed counts */}
           <div className="grid grid-cols-5 gap-1 text-center">
             <div className="p-1 bg-gray-800/50 rounded">
               <p className="text-xs text-gray-500">Plan</p>
-              <p className="text-sm font-bold text-gray-300">{metrics.byStatus.planned}</p>
+              <p className="text-sm font-bold text-gray-300">{projectData.status_counts.planned}</p>
             </div>
             <div className="p-1 bg-purple-900/20 rounded">
               <p className="text-xs text-gray-500">Order</p>
-              <p className="text-sm font-bold text-purple-400">{metrics.byStatus.ordered}</p>
+              <p className="text-sm font-bold text-purple-400">{projectData.status_counts.ordered}</p>
             </div>
             <div className="p-1 bg-blue-900/20 rounded">
               <p className="text-xs text-gray-500">Recv</p>
-              <p className="text-sm font-bold text-blue-400">{metrics.byStatus.received}</p>
+              <p className="text-sm font-bold text-blue-400">{projectData.status_counts.received}</p>
             </div>
             <div className="p-1 bg-cyan-900/20 rounded">
               <p className="text-xs text-gray-500">Alloc</p>
-              <p className="text-sm font-bold text-cyan-400">{metrics.byStatus.allocated}</p>
+              <p className="text-sm font-bold text-cyan-400">{projectData.status_counts.allocated}</p>
             </div>
             <div className="p-1 bg-green-900/20 rounded">
               <p className="text-xs text-gray-500">Inst</p>
-              <p className="text-sm font-bold text-green-400">{metrics.byStatus.installed}</p>
+              <p className="text-sm font-bold text-green-400">{projectData.status_counts.installed}</p>
             </div>
           </div>
 
-          {/* Financial Summary */}
+          {/* Financial Summary - render precomputed values */}
           <div className="flex items-center justify-between p-2 bg-gray-800/30 rounded text-xs">
             <div className="flex items-center gap-3">
-              {metrics.needsOrder > 0 && (
+              {projectData.needs_order_count > 0 && (
                 <button 
                   className="flex items-center gap-1 text-red-400 hover:text-red-300"
-                  onClick={(e) => { e.stopPropagation(); handleDrilldown(project.id, 'needs_order'); }}
+                  onClick={(e) => { e.stopPropagation(); handleDrilldown(projectData.project_id, 'needs_order'); }}
                 >
                   <ShoppingCart className="w-3 h-3" />
-                  <span>{metrics.needsOrder}</span>
+                  <span>{projectData.needs_order_count}</span>
                 </button>
               )}
-              {metrics.totalExposure > 0 && (
+              {projectData.total_exposure > 0 && (
                 <button 
                   className="flex items-center gap-1 text-yellow-400 hover:text-yellow-300"
-                  onClick={(e) => { e.stopPropagation(); handleDrilldown(project.id, 'financial'); }}
+                  onClick={(e) => { e.stopPropagation(); handleDrilldown(projectData.project_id, 'financial'); }}
                 >
                   <AlertTriangle className="w-3 h-3" />
-                  <span>${metrics.totalExposure.toFixed(0)}</span>
+                  <span>${projectData.total_exposure.toFixed(0)}</span>
                 </button>
               )}
-              {metrics.hasOverdrawn && (
+              {projectData.has_overdrawn_pool && (
                 <span className="flex items-center gap-1 text-red-400">
                   <Wallet className="w-3 h-3" />
                   OD
@@ -331,23 +219,26 @@ export default function SupplyLanding() {
               )}
             </div>
             <span className="text-gray-500">
-              Pool: <span className={metrics.poolAvailable >= 0 ? 'text-green-400' : 'text-red-400'}>
-                ${metrics.poolAvailable.toFixed(0)}
+              Pool: <span className={projectData.total_pool_balance >= 0 ? 'text-green-400' : 'text-red-400'}>
+                ${projectData.total_pool_balance.toFixed(0)}
               </span>
             </span>
           </div>
 
-          {/* Alert Pills */}
-          {metrics.alertCount > 0 && (
+          {/* Alert Pills - render precomputed alerts */}
+          {projectData.alerts.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {metrics.alerts.prepayBlocking && (
-                <Badge variant="outline" className="border-orange-600/50 text-orange-400 text-xs">Prepay Block</Badge>
+              {projectData.alerts.includes('FUNDING_BLOCKED') && (
+                <Badge variant="outline" className="border-red-600/50 text-red-400 text-xs">Funding Blocked</Badge>
               )}
-              {metrics.alerts.installedUncovered && (
-                <Badge variant="outline" className="border-red-600/50 text-red-400 text-xs">Uncovered Install</Badge>
+              {projectData.alerts.includes('POOL_OVERDRAWN') && (
+                <Badge variant="outline" className="border-red-600/50 text-red-400 text-xs">Pool Overdrawn</Badge>
               )}
-              {metrics.alerts.unallocatedInventory && (
-                <Badge variant="outline" className="border-blue-600/50 text-blue-400 text-xs">Needs Location</Badge>
+              {projectData.alerts.includes('PARTIAL_COVERAGE') && (
+                <Badge variant="outline" className="border-orange-600/50 text-orange-400 text-xs">Partial Coverage</Badge>
+              )}
+              {projectData.is_funding_blocked && (
+                <Badge variant="outline" className="border-yellow-600/50 text-yellow-400 text-xs">Prepay Block</Badge>
               )}
             </div>
           )}
@@ -374,9 +265,9 @@ export default function SupplyLanding() {
                 variant="outline"
                 size="sm"
                 className="border-gray-700 text-white gap-2"
-                disabled={isRefreshing}
+                disabled={isLoading || isRefetching}
               >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${isRefetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button
@@ -389,18 +280,18 @@ export default function SupplyLanding() {
             </div>
           </div>
 
-          {/* Portfolio Summary */}
+          {/* Portfolio Summary - render precomputed totals */}
           <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Projects</p>
-                <p className="text-2xl font-bold text-white">{portfolioTotals.totalProjects}</p>
+                <p className="text-2xl font-bold text-white">{filteredTotals.totalProjects}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Commitments</p>
-                <p className="text-2xl font-bold text-blue-400">{portfolioTotals.totalCommitments}</p>
+                <p className="text-2xl font-bold text-blue-400">{filteredTotals.totalCommitments}</p>
               </CardContent>
             </Card>
             <Card 
@@ -409,36 +300,36 @@ export default function SupplyLanding() {
             >
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Needs Order</p>
-                <p className="text-2xl font-bold text-red-400">{portfolioTotals.totalNeedsOrder}</p>
+                <p className="text-2xl font-bold text-red-400">{filteredTotals.totalNeedsOrder}</p>
               </CardContent>
             </Card>
             <Card 
               className="bg-black/40 border-purple-900/30 cursor-pointer hover:bg-purple-900/10"
-              onClick={() => navigate(createPageUrl('SupplyOnOrder'))}
+              onClick={() => navigate(createPageUrl('SupplyQueues?queue=on_order'))}
             >
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">On Order</p>
-                <p className="text-2xl font-bold text-purple-400">{portfolioTotals.totalOnOrder}</p>
+                <p className="text-2xl font-bold text-purple-400">{filteredTotals.totalOnOrder}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Pool Available</p>
-                <p className={`text-2xl font-bold ${portfolioTotals.totalPoolAvailable >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ${portfolioTotals.totalPoolAvailable.toFixed(0)}
+                <p className={`text-2xl font-bold ${filteredTotals.totalPoolAvailable >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${filteredTotals.totalPoolAvailable.toFixed(0)}
                 </p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Exposure</p>
-                <p className="text-2xl font-bold text-yellow-400">${portfolioTotals.totalExposure.toFixed(0)}</p>
+                <p className="text-2xl font-bold text-yellow-400">${filteredTotals.totalExposure.toFixed(0)}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-orange-900/30">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">With Alerts</p>
-                <p className="text-2xl font-bold text-orange-400">{portfolioTotals.alertProjects}</p>
+                <p className="text-2xl font-bold text-orange-400">{filteredTotals.alertProjects}</p>
               </CardContent>
             </Card>
           </div>
@@ -496,13 +387,11 @@ export default function SupplyLanding() {
           </Card>
 
           {/* Project Cards/List */}
-          {projectsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <Card key={i} className="bg-black/40 border-gray-800 h-64 animate-pulse" />
-              ))}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-red-500" />
             </div>
-          ) : filteredMetrics.length === 0 ? (
+          ) : filteredProjects.length === 0 ? (
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-8 text-center">
                 <FolderKanban className="w-12 h-12 mx-auto mb-3 text-gray-600" />
@@ -511,7 +400,7 @@ export default function SupplyLanding() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredMetrics.map(renderProjectCard)}
+              {filteredProjects.map(renderProjectCard)}
             </div>
           )}
 
@@ -541,7 +430,7 @@ export default function SupplyLanding() {
                 <Button
                   variant="outline"
                   className="border-purple-900/50 text-purple-400 hover:bg-purple-900/20 justify-start gap-2"
-                  onClick={() => navigate(createPageUrl('SupplyOnOrder'))}
+                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=on_order'))}
                 >
                   <Truck className="w-4 h-4" />
                   On Order
@@ -549,7 +438,7 @@ export default function SupplyLanding() {
                 <Button
                   variant="outline"
                   className="border-blue-900/50 text-blue-400 hover:bg-blue-900/20 justify-start gap-2"
-                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=ready_receive'))}
+                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=ready_to_receive'))}
                 >
                   <Package className="w-4 h-4" />
                   Ready to Receive
@@ -557,7 +446,7 @@ export default function SupplyLanding() {
                 <Button
                   variant="outline"
                   className="border-cyan-900/50 text-cyan-400 hover:bg-cyan-900/20 justify-start gap-2"
-                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=unassigned_location'))}
+                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=unassigned_inventory'))}
                 >
                   <Clock className="w-4 h-4" />
                   Needs Location
@@ -565,7 +454,7 @@ export default function SupplyLanding() {
                 <Button
                   variant="outline"
                   className="border-emerald-900/50 text-emerald-400 hover:bg-emerald-900/20 justify-start gap-2"
-                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=ready_install'))}
+                  onClick={() => navigate(createPageUrl('SupplyQueues?queue=ready_to_install'))}
                 >
                   <Wrench className="w-4 h-4" />
                   Ready to Install
