@@ -505,26 +505,27 @@ async function validateInvariants(txn) {
 
 /**
  * Create a Purchase Order for a commitment
- * ENFORCES: Line item unit_cost MUST equal Part.default_cost
+ * ENFORCES: Line item unit_cost from commitment.unit_cost_snapshot (which came from Part.cost)
  */
 async function createPO(txn, params) {
   const { commitment_id, vendor_id, qty, order_id } = params;
-  // Note: unit_cost param is IGNORED - we always use Part.default_cost
+  // Note: unit_cost param is IGNORED - we use commitment snapshot
 
   // Fetch commitment
   const commitments = await txn.base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
   const commitment = commitments[0];
   if (!commitment) throw new Error('Commitment not found');
 
-  // Fetch part to get authoritative cost
+  // Fetch part for reference
   const parts = await txn.base44.asServiceRole.entities.Part.filter({ id: commitment.part_id });
   const part = parts[0];
   if (!part) throw new Error('Part not found');
 
-  // Use Part.default_cost as the ONLY source of cost truth
-  const unit_cost = part.default_cost || 0;
+  // Use commitment.unit_cost_snapshot as authoritative cost (set at commitment creation)
+  // Fallback to Part.cost only if snapshot missing
+  const unit_cost = commitment.unit_cost_snapshot || part.cost || part.default_cost || 0;
   if (unit_cost <= 0) {
-    throw new Error(`Cannot create PO: Part "${part.part_name}" has no valid cost. Set cost before ordering.`);
+    throw new Error(`Cannot create PO: Part "${part.part_name}" has no valid cost. Set cost and reprice commitment before ordering.`);
   }
 
   // Optimistic lock check
@@ -542,7 +543,7 @@ async function createPO(txn, params) {
     throw new Error('Cannot create PO: cost already locked by vendor invoice');
   }
 
-  // Create PO line item - unit_price ALWAYS from Part.default_cost
+  // Create PO line item with cost fields (NOT retail)
   const lineItem = await txn.base44.asServiceRole.entities.PartPurchaseLineItem.create({
     order_id,
     part_id: commitment.part_id,
@@ -550,8 +551,11 @@ async function createPO(txn, params) {
     vendor_id,
     qty_ordered: qty,
     qty_received: 0,
-    unit_price: unit_cost, // From Part.default_cost, NOT from params
-    line_total: qty * unit_cost,
+    unit_cost: unit_cost, // From commitment snapshot (authoritative)
+    unit_price: unit_cost, // Deprecated field for compatibility
+    extended_cost: qty * unit_cost,
+    line_total: qty * unit_cost, // Deprecated field for compatibility
+    cost_source_reference: commitment_id,
     status: 'Ordered',
     is_delta_order: false
   });
@@ -606,30 +610,30 @@ async function createPO(txn, params) {
 
 /**
  * Create a Delta (additional) Order for existing commitment
- * ENFORCES: Line item unit_cost MUST equal Part.default_cost
+ * ENFORCES: Line item unit_cost from commitment.unit_cost_snapshot
  */
 async function createDeltaOrder(txn, params) {
   const { commitment_id, vendor_id, qty, order_id, reason } = params;
-  // Note: unit_cost param is IGNORED - we always use Part.default_cost
+  // Note: unit_cost param is IGNORED - we use commitment snapshot
 
   const commitments = await txn.base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
   const commitment = commitments[0];
   if (!commitment) throw new Error('Commitment not found');
 
-  // Fetch part to get authoritative cost
+  // Fetch part for reference
   const parts = await txn.base44.asServiceRole.entities.Part.filter({ id: commitment.part_id });
   const part = parts[0];
   if (!part) throw new Error('Part not found');
 
-  // Use Part.default_cost as the ONLY source of cost truth
-  const unit_cost = part.default_cost || 0;
+  // Use commitment.unit_cost_snapshot as authoritative
+  const unit_cost = commitment.unit_cost_snapshot || part.cost || part.default_cost || 0;
   if (unit_cost <= 0) {
     throw new Error(`Cannot create delta order: Part "${part.part_name}" has no valid cost.`);
   }
 
   const currentVersion = commitment.commitment_version || 1;
 
-  // Create PO line item - unit_price ALWAYS from Part.default_cost
+  // Create PO line item with cost fields (NOT retail)
   const lineItem = await txn.base44.asServiceRole.entities.PartPurchaseLineItem.create({
     order_id,
     part_id: commitment.part_id,
@@ -637,8 +641,11 @@ async function createDeltaOrder(txn, params) {
     vendor_id,
     qty_ordered: qty,
     qty_received: 0,
-    unit_price: unit_cost, // From Part.default_cost, NOT from params
-    line_total: qty * unit_cost,
+    unit_cost: unit_cost, // From commitment snapshot
+    unit_price: unit_cost, // Deprecated field
+    extended_cost: qty * unit_cost,
+    line_total: qty * unit_cost, // Deprecated field
+    cost_source_reference: commitment_id,
     status: 'Ordered',
     is_delta_order: true,
     notes: `Delta order: ${reason || 'Additional quantity needed'}`
