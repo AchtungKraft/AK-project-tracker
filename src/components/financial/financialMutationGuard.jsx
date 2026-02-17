@@ -127,6 +127,16 @@ export function isSafeField(entityName, fieldName) {
 }
 
 /**
+ * Validate Part creation has required category
+ * @throws Error if Part.category is missing or empty on create
+ */
+export function validatePartCreate(data) {
+  if (!data.category || (typeof data.category === 'string' && data.category.trim() === '')) {
+    throw new Error('Part.category is required. Please provide a category for this part.');
+  }
+}
+
+/**
  * Validate Part category is not empty
  * @throws Error if Part.category is empty
  */
