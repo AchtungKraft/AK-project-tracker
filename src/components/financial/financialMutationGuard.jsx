@@ -25,20 +25,22 @@ const PROTECTED_ENTITIES = [
   'PartPurchaseLineItem',
   'InstalledPart',
   'InvoiceBatch',
-  'InvoiceBatchLine'
+  'InvoiceBatchLine',
+  'Part' // Added for cost field protection
 ];
 
 // Sensitive fields that should NEVER be directly modified from UI
-// INCLUDES: Financial fields + Lifecycle-impacting fields
+// INCLUDES: Financial fields + Lifecycle-impacting fields + Cost fields (ADMIN ONLY)
 const SENSITIVE_FIELDS = {
   BillingPool: ['balance', 'allocated_total', 'charges_total', 'paid_amount', 'invoiced_amount', 'pool_version', 'status'],
   PoolAllocation: ['amount_allocated', 'is_reversed', 'reversed_at', 'reversed_by'],
   PoolCharge: ['amount', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason'],
-  PartCommitment: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version', 'qty_committed', 'commitment_status', 'qty_cancelled', 'cancelled_at', 'cancelled_by', 'cancelled_reason'],
-  PartPurchaseLineItem: ['line_total', 'status'],
+  PartCommitment: ['covered_retail_total', 'exposure_gap', 'planned_retail_total', 'invoiced_retail_total', 'commitment_version', 'qty_committed', 'commitment_status', 'qty_cancelled', 'cancelled_at', 'cancelled_by', 'cancelled_reason', 'unit_cost_snapshot', 'actual_unit_cost', 'actual_extended_cost'],
+  PartPurchaseLineItem: ['line_total', 'status', 'unit_price'], // unit_price (cost) protected
   InstalledPart: ['extended_cost', 'is_reversed', 'reversed_at', 'reversed_by', 'reversal_reason', 'reversal_type', 'qty_consumed'],
   InvoiceBatch: ['status', 'total_amount', 'line_count', 'qb_export_id', 'qb_exported_at', 'qb_invoice_number', 'voided_at', 'payment_received_at', 'payment_sync_status'],
-  InvoiceBatchLine: ['line_total', 'qb_status', 'qb_line_id']
+  InvoiceBatchLine: ['line_total', 'qb_status', 'qb_line_id'],
+  Part: ['default_cost', 'is_cost_verified', 'cost_source', 'cost_verified_at', 'cost_verified_by'] // Cost fields require admin
 };
 
 // Fields that are safe to update from UI (non-financial, non-lifecycle)
@@ -50,7 +52,8 @@ const SAFE_UI_FIELDS = {
   PartPurchaseLineItem: ['notes'],
   InstalledPart: ['notes'],
   InvoiceBatch: ['notes', 'batch_name'],
-  InvoiceBatchLine: ['description', 'notes']
+  InvoiceBatchLine: ['description', 'notes'],
+  Part: ['part_name', 'vendor_part_number', 'notes', 'photos', 'featured_photo', 'order_url', 'default_retail', 'pricing_mode', 'applied_markup_pct', 'reorder_point', 'reorder_quantity', 'is_active', 'part_type', 'is_archived', 'archived_at', 'archived_by', 'archive_reason', 'archived_context', 'requires_vendor_purchase', 'requires_vendor_payment', 'requires_client_billing', 'affects_inventory', 'affects_margin', 'is_asset_recovery', 'production_cost', 'handling_fee', 'resale_value', 'car_make_id', 'car_model_id', 'car_year_id', 'part_category_id', 'default_vendor_id', 'needs_manual_cost_review'] // Note: default_cost NOT included - requires admin
 };
 
 /**
@@ -78,12 +81,27 @@ export function isSafeField(entityName, fieldName) {
  * Validate an update operation before executing
  * @throws Error if mutation is not allowed
  */
-export async function validateUpdate(entityName, recordId, updates) {
+export async function validateUpdate(entityName, recordId, updates, userRole = null) {
   if (!isProtectedEntity(entityName)) {
     return { allowed: true };
   }
 
   const sensitiveAttempted = Object.keys(updates).filter(f => isSensitiveField(entityName, f));
+  
+  // Special handling for Part.default_cost - requires admin role
+  if (entityName === 'Part' && sensitiveAttempted.includes('default_cost')) {
+    if (userRole !== 'admin') {
+      throw new Error(
+        `Part cost can only be modified by administrators. ` +
+        `Contact an admin to update the cost field.`
+      );
+    }
+    // Admin can update cost - remove from sensitive list for this check
+    const nonCostSensitive = sensitiveAttempted.filter(f => f !== 'default_cost');
+    if (nonCostSensitive.length === 0) {
+      return { allowed: true, adminCostUpdate: true };
+    }
+  }
   
   if (sensitiveAttempted.length > 0) {
     throw new Error(

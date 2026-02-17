@@ -4,10 +4,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * MASTER NORMALIZATION FUNCTION
  * Repairs legacy pricing, recalculates commitments, reconciles pools
  * 
+ * NEW: repairPricingSemantics phase for cost/retail contamination repair
+ * 
  * @param {boolean} dry_run - If true, only logs changes without writing
+ * @param {boolean} repair_pricing_semantics - If true, runs semantic pricing repair
  */
 
-// Deterministic pricing matrix
+// Deterministic pricing matrix (retail from cost - NEVER cost from retail)
 function applyPricingMatrix(cost) {
   if (cost === null || cost === undefined || cost <= 0) {
     return 0;
@@ -28,7 +31,7 @@ function applyPricingMatrix(cost) {
 }
 
 // Batch update with rate limiting
-async function batchUpdate(base44, entityName, updates, batchSize = 5, delayMs = 100) {
+async function batchUpdate(base44, entityName, updates, batchSize = 25, delayMs = 200) {
   const results = [];
   for (let i = 0; i < updates.length; i += batchSize) {
     const batch = updates.slice(i, i + batchSize);
@@ -58,10 +61,22 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const dry_run = body.dry_run !== false; // Default to true for safety
+    const repair_pricing_semantics = body.repair_pricing_semantics === true;
 
     const report = {
       timestamp: new Date().toISOString(),
       dry_run,
+      repair_pricing_semantics,
+      
+      // Step 0: Pricing Semantic Repair (NEW)
+      pricing_semantic_repair: {
+        parts_scanned: 0,
+        parts_fixed: 0,
+        parts_flagged_manual_review: 0,
+        commitments_recalculated: 0,
+        line_items_corrected: 0,
+        changes: []
+      },
       
       // Step 1: Part Pricing
       parts_scanned: 0,
@@ -106,7 +121,7 @@ Deno.serve(async (req) => {
     // ========================================
     // FETCH ALL DATA
     // ========================================
-    const [parts, commitments, pools, allocations, charges, installedParts, lineItems, requirements] = await Promise.all([
+    const [parts, commitments, pools, allocations, charges, installedParts, lineItems, requirements, vendors] = await Promise.all([
       base44.asServiceRole.entities.Part.list(),
       base44.asServiceRole.entities.PartCommitment.list(),
       base44.asServiceRole.entities.BillingPool.list(),
@@ -114,13 +129,152 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.PoolCharge.list(),
       base44.asServiceRole.entities.InstalledPart.list(),
       base44.asServiceRole.entities.PartPurchaseLineItem.list(),
-      base44.asServiceRole.entities.PartProjectRequirement.list()
+      base44.asServiceRole.entities.PartProjectRequirement.list(),
+      base44.asServiceRole.entities.Vendor.list()
     ]);
 
     const partsMap = new Map(parts.map(p => [p.id, p]));
     const poolsMap = new Map(pools.map(p => [p.id, p]));
     const commitmentsMap = new Map(commitments.map(c => [c.id, c]));
     const requirementsMap = new Map(requirements.map(r => [r.id, r]));
+    const vendorsMap = new Map(vendors.map(v => [v.id, v]));
+
+    // ========================================
+    // STEP 0: PRICING SEMANTIC REPAIR (NEW)
+    // ========================================
+    if (repair_pricing_semantics) {
+      report.pricing_semantic_repair.parts_scanned = parts.length;
+      
+      const partSemanticUpdates = [];
+      const lineItemUpdates = [];
+      const commitmentRetailUpdates = [];
+      
+      // STEP 0.1: Identify and repair cost=retail contaminated parts
+      for (const part of parts) {
+        if (part.is_archived || !part.is_active) continue;
+        
+        // Detect contamination: cost === retail AND retail > 0 AND NOT verified
+        const isSuspicious = part.default_cost && part.default_retail &&
+          Math.abs(part.default_cost - part.default_retail) < 0.01 &&
+          part.default_retail > 0 &&
+          part.is_cost_verified !== true;
+        
+        if (!isSuspicious) continue;
+        
+        const updates = {};
+        let repairStrategy = 'flagged_for_review';
+        
+        // Try to get cost from vendor
+        if (part.default_vendor_id) {
+          const vendor = vendorsMap.get(part.default_vendor_id);
+          // Note: vendors typically don't have a default_cost field,
+          // but we check in case it was added
+          if (vendor && vendor.default_cost && vendor.default_cost > 0) {
+            updates.default_cost = vendor.default_cost;
+            updates.is_cost_verified = true;
+            updates.cost_source = 'vendor_default';
+            updates.cost_verified_at = new Date().toISOString();
+            updates.cost_verified_by = user.id;
+            updates.needs_manual_cost_review = false;
+            repairStrategy = 'vendor_default';
+            report.pricing_semantic_repair.parts_fixed++;
+          }
+        }
+        
+        // If no vendor cost available, flag for manual review
+        if (!updates.default_cost) {
+          updates.needs_manual_cost_review = true;
+          updates.cost_source = 'unknown';
+          report.pricing_semantic_repair.parts_flagged_manual_review++;
+          // DO NOT modify cost - leave as-is until manually reviewed
+        }
+        
+        report.pricing_semantic_repair.changes.push({
+          part_id: part.id,
+          part_name: part.part_name,
+          original_cost: part.default_cost,
+          original_retail: part.default_retail,
+          repair_strategy: repairStrategy,
+          updates
+        });
+        
+        if (Object.keys(updates).length > 0) {
+          partSemanticUpdates.push({ id: part.id, data: updates });
+        }
+      }
+      
+      // STEP 0.2: Recalculate commitment planned_retail_total for repaired parts
+      // (covered_retail_total is NOT modified - pool allocations remain unchanged)
+      for (const commitment of commitments) {
+        if (commitment.commitment_status === 'cancelled') continue;
+        
+        const part = partsMap.get(commitment.part_id);
+        if (!part) continue;
+        
+        // Check if this part was repaired
+        const partRepair = report.pricing_semantic_repair.changes.find(c => c.part_id === part.id);
+        if (!partRepair) continue;
+        
+        // Recalculate planned_retail_total using part.retail (which wasn't changed)
+        const qty = commitment.qty_committed || 0;
+        const retail = commitment.unit_retail_snapshot || part.default_retail || 0;
+        const calculatedPlanned = qty * retail;
+        
+        if (Math.abs((commitment.planned_retail_total || 0) - calculatedPlanned) > 0.01) {
+          const newExposure = calculatedPlanned - (commitment.covered_retail_total || 0);
+          
+          commitmentRetailUpdates.push({
+            id: commitment.id,
+            data: {
+              planned_retail_total: calculatedPlanned,
+              exposure_gap: Math.max(0, newExposure)
+            }
+          });
+          report.pricing_semantic_repair.commitments_recalculated++;
+        }
+      }
+      
+      // STEP 0.3: Repair line items where unit_cost !== part.cost
+      for (const lineItem of lineItems) {
+        const commitment = commitmentsMap.get(lineItem.commitment_id);
+        if (!commitment) continue;
+        
+        const part = partsMap.get(commitment.part_id);
+        if (!part) continue;
+        
+        // Check if this part was repaired and has verified cost
+        const partRepair = report.pricing_semantic_repair.changes.find(c => c.part_id === part.id);
+        if (!partRepair || !partRepair.updates.is_cost_verified) continue;
+        
+        const expectedCost = partRepair.updates.default_cost || part.default_cost;
+        
+        // If line item cost doesn't match part cost, update it
+        if (lineItem.unit_price !== null && 
+            Math.abs(lineItem.unit_price - expectedCost) > 0.01) {
+          lineItemUpdates.push({
+            id: lineItem.id,
+            data: {
+              unit_price: expectedCost,
+              line_total: (lineItem.qty_ordered || 0) * expectedCost
+            }
+          });
+          report.pricing_semantic_repair.line_items_corrected++;
+        }
+      }
+      
+      // Apply semantic updates
+      if (!dry_run) {
+        if (partSemanticUpdates.length > 0) {
+          await batchUpdate(base44, 'Part', partSemanticUpdates);
+        }
+        if (commitmentRetailUpdates.length > 0) {
+          await batchUpdate(base44, 'PartCommitment', commitmentRetailUpdates);
+        }
+        if (lineItemUpdates.length > 0) {
+          await batchUpdate(base44, 'PartPurchaseLineItem', lineItemUpdates);
+        }
+      }
+    }
 
     // ========================================
     // STEP 1: PART PRICING NORMALIZATION
@@ -140,13 +294,14 @@ Deno.serve(async (req) => {
       
       const effectiveCost = updates.default_cost ?? part.default_cost ?? 0;
       
-      // Check retail
+      // Check retail - NEVER derive cost from retail
       if (part.default_retail === null || part.default_retail === undefined) {
         updates.default_retail = applyPricingMatrix(effectiveCost);
         updates.pricing_mode = 'matrix';
         flags.push('matrix_normalized');
         report.pricing_flags.matrix_normalized.push({ id: part.id, name: part.part_name, new_retail: updates.default_retail });
       } else if (part.default_retail < effectiveCost && effectiveCost > 0) {
+        // Retail below cost - set retail to at least cost (margin protection)
         updates.default_retail = effectiveCost;
         flags.push('retail_below_cost');
         report.pricing_flags.retail_below_cost.push({ id: part.id, name: part.part_name, old_retail: part.default_retail, new_retail: effectiveCost });
@@ -478,6 +633,13 @@ Deno.serve(async (req) => {
     // SUMMARY
     // ========================================
     report.summary = {
+      pricing_semantic_repair: repair_pricing_semantics ? {
+        parts_scanned: report.pricing_semantic_repair.parts_scanned,
+        parts_fixed: report.pricing_semantic_repair.parts_fixed,
+        parts_flagged_manual_review: report.pricing_semantic_repair.parts_flagged_manual_review,
+        commitments_recalculated: report.pricing_semantic_repair.commitments_recalculated,
+        line_items_corrected: report.pricing_semantic_repair.line_items_corrected
+      } : null,
       parts: { scanned: report.parts_scanned, fixed: report.parts_fixed },
       commitments: { scanned: report.commitments_scanned, recalculated: report.commitments_recalculated },
       quantities: { violations: report.quantity_violations.length, fixes: report.quantity_fixes },
