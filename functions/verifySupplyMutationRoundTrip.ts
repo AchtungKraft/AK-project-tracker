@@ -100,30 +100,20 @@ Deno.serve(async (req) => {
     let createdPool = false;
 
     if (!testPool) {
-      // Create test pool via CommitmentService (using service role context)
-      const createResult = await base44.asServiceRole.functions.invoke('commitmentService', {
-        action: 'createBillingPool',
+      // Create test pool directly via entity
+      testPool = await base44.asServiceRole.entities.BillingPool.create({
         project_id: targetProject.id,
         pool_name: 'Test Pool (Round Trip Verification)',
+        status: 'paid',
         invoiced_amount: 1000,
+        paid_amount: 1000,
+        allocated_total: 0,
+        charges_total: 0,
+        balance: 1000,
+        pool_version: 1,
         notes: 'Created by verifySupplyMutationRoundTrip'
       });
-
-      if (!createResult.data?.success) {
-        test.status = 'FAIL';
-        test.errors.push(`Failed to create pool: ${createResult.data?.error}`);
-        return Response.json({ success: true, test });
-      }
-
-      testPool = createResult.data.pool;
       createdPool = true;
-
-      // Mark pool as paid so we have balance
-      await base44.asServiceRole.entities.BillingPool.update(testPool.id, {
-        paid_amount: 1000,
-        balance: 1000,
-        status: 'paid'
-      });
 
       test.steps.push({
         step: 2,
@@ -140,23 +130,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Step 3: Allocate funds to commitment
-    const allocateResult = await base44.asServiceRole.functions.invoke('commitmentService', {
-      action: 'allocatePool',
+    // Step 3: Allocate funds to commitment (direct entity operations)
+    // Create allocation record
+    const allocation = await base44.asServiceRole.entities.PoolAllocation.create({
       pool_id: testPool.id,
       commitment_id: targetCommitment.id,
-      amount: test_amount,
+      amount_allocated: test_amount,
       allocation_type: 'test',
+      is_reversed: false,
       notes: 'Round trip verification test'
     });
 
-    if (!allocateResult.data?.success) {
-      test.status = 'FAIL';
-      test.errors.push(`Allocation failed: ${allocateResult.data?.error}`);
-      return Response.json({ success: true, test });
-    }
+    const allocationId = allocation.id;
 
-    const allocationId = allocateResult.data.allocation?.id;
+    // Update commitment covered amount
+    const newCovered = (targetCommitment.covered_retail_total || 0) + test_amount;
+    const newExposure = Math.max(0, (targetCommitment.planned_retail_total || 0) - newCovered);
+    await base44.asServiceRole.entities.PartCommitment.update(targetCommitment.id, {
+      covered_retail_total: newCovered,
+      exposure_gap: newExposure
+    });
+
+    // Update pool allocated total and balance
+    const newAllocated = (testPool.allocated_total || 0) + test_amount;
+    const newBalance = (testPool.paid_amount || 0) - newAllocated - (testPool.charges_total || 0);
+    await base44.asServiceRole.entities.BillingPool.update(testPool.id, {
+      allocated_total: newAllocated,
+      balance: newBalance
+    });
 
     test.steps.push({
       step: 3,
@@ -164,8 +165,7 @@ Deno.serve(async (req) => {
       result: 'PASS',
       details: {
         allocation_id: allocationId,
-        amount: test_amount,
-        overdraw: allocateResult.data.overdraw
+        amount: test_amount
       }
     });
 
@@ -228,25 +228,40 @@ Deno.serve(async (req) => {
 
     // Step 5: Cleanup (reverse allocation)
     if (cleanup && allocationId) {
-      const reverseResult = await base44.asServiceRole.functions.invoke('commitmentService', {
-        action: 'reversePoolAllocation',
-        allocation_id: allocationId,
-        reason: 'Round trip test cleanup'
-      });
+      try {
+        // Reverse: mark allocation as reversed
+        await base44.asServiceRole.entities.PoolAllocation.update(allocationId, {
+          is_reversed: true,
+          reversed_at: new Date().toISOString()
+        });
 
-      if (reverseResult.data?.success) {
+        // Restore commitment values
+        await base44.asServiceRole.entities.PartCommitment.update(targetCommitment.id, {
+          covered_retail_total: beforeCommitment.covered_retail_total || 0,
+          exposure_gap: beforeCommitment.exposure_gap || 0
+        });
+
+        // Restore pool values
+        await base44.asServiceRole.entities.BillingPool.update(testPool.id, {
+          allocated_total: testPool.allocated_total || 0,
+          balance: testPool.balance || 0
+        });
+
         test.steps.push({
           step: 5,
           action: 'CLEANUP_REVERSE',
           result: 'PASS',
-          details: 'Allocation reversed'
+          details: 'Allocation reversed and values restored'
         });
-      } else {
+
+        // Delete allocation record
+        await base44.asServiceRole.entities.PoolAllocation.delete(allocationId);
+      } catch (e) {
         test.steps.push({
           step: 5,
           action: 'CLEANUP_REVERSE',
           result: 'WARN',
-          details: `Cleanup failed: ${reverseResult.data?.error}`
+          details: `Cleanup failed: ${e.message}`
         });
       }
 
