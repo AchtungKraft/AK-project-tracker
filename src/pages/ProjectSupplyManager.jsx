@@ -676,10 +676,8 @@ export default function ProjectSupplyManager() {
       if (created_orders.length > 0) {
         toast.success(`PO ${created_orders[0].po_number} created`);
       } else if (blocked.length > 0) {
-        // Extract reason with fallbacks: message → reason → reason_code → default
-        const blockedItem = blocked[0];
-        const reason = blockedItem.message || blockedItem.reason || blockedItem.reason_code || 'Unknown reason';
-        toast.warning(`Order blocked: ${reason}`);
+        // Show guided resolution modal instead of toast
+        setBlockedItems(blocked);
       } else {
         // Silent failure fallback - neither created nor blocked
         toast.error('No orders created - check commitment eligibility');
