@@ -537,6 +537,139 @@ export default function ProjectSupplyManager() {
     window.history.replaceState({}, '', url.toString());
   };
 
+  // === UNIFIED SUPPLY EXECUTION ENGINE - PO CREATION ===
+  
+  // Bulk PO creation - preview first
+  const handleBulkPOPreview = async () => {
+    if (selectedItems.size === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    
+    setIsBulkPOLoading(true);
+    try {
+      const result = await base44.functions.invoke('createPurchaseOrdersFromCommitments', {
+        project_id: projectId,
+        commitment_ids: Array.from(selectedItems),
+        mode: 'BULK',
+        allow_multi_vendor: true,
+        dry_run: true
+      });
+
+      if (result.data?.error) {
+        toast.error(result.data.error);
+        return;
+      }
+
+      setBulkPOPreviewData(result.data);
+      setShowBulkPOPreview(true);
+    } catch (error) {
+      toast.error('Failed to preview PO: ' + error.message);
+    } finally {
+      setIsBulkPOLoading(false);
+    }
+  };
+
+  // Execute bulk PO creation
+  const handleBulkPOExecute = async () => {
+    setIsBulkPOLoading(true);
+    try {
+      const result = await base44.functions.invoke('createPurchaseOrdersFromCommitments', {
+        project_id: projectId,
+        commitment_ids: Array.from(selectedItems),
+        mode: 'BULK',
+        allow_multi_vendor: true,
+        dry_run: false
+      });
+
+      if (result.data?.error) {
+        toast.error(result.data.error);
+        return;
+      }
+
+      const { created_orders = [], blocked = [], summary = {} } = result.data;
+      
+      // Success feedback
+      if (created_orders.length > 0) {
+        const poNumbers = created_orders.map(o => o.po_number).join(', ');
+        toast.success(`Created ${created_orders.length} PO(s): ${poNumbers}`, {
+          description: `${summary.eligible_count} line items ordered`
+        });
+      }
+      
+      if (blocked.length > 0) {
+        toast.warning(`${blocked.length} items blocked`, {
+          description: blocked.slice(0, 3).map(b => b.message).join('; ')
+        });
+      }
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['projectCommitments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['projectLineItems', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      
+      // Clear selection
+      setSelectedItems(new Set());
+      setShowBulkPOPreview(false);
+      setBulkPOPreviewData(null);
+      
+      // Refresh data
+      refetchCommitments();
+    } catch (error) {
+      toast.error('Failed to create PO: ' + error.message);
+    } finally {
+      setIsBulkPOLoading(false);
+    }
+  };
+
+  // Single row PO creation
+  const handleSinglePOCreate = async (commitment, overrideVendorId = null) => {
+    const part = partMap.get(commitment.part_id);
+    const vendorId = overrideVendorId || part?.default_vendor_id;
+    
+    // If no vendor, show vendor picker
+    if (!vendorId) {
+      setVendorPickerCommitment(commitment);
+      return;
+    }
+
+    setActionsEnabled(false);
+    try {
+      const result = await base44.functions.invoke('createPurchaseOrdersFromCommitments', {
+        project_id: projectId,
+        commitment_ids: [commitment.id],
+        mode: 'SINGLE',
+        allow_multi_vendor: false,
+        override_vendor_id: overrideVendorId,
+        dry_run: false
+      });
+
+      if (result.data?.error) {
+        toast.error(result.data.error);
+        return;
+      }
+
+      const { created_orders = [], blocked = [] } = result.data;
+      
+      if (created_orders.length > 0) {
+        toast.success(`PO ${created_orders[0].po_number} created`);
+      } else if (blocked.length > 0) {
+        toast.warning(`Order blocked: ${blocked[0].message}`);
+      }
+
+      // Invalidate and refresh
+      queryClient.invalidateQueries({ queryKey: ['projectCommitments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['projectLineItems', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      refetchCommitments();
+    } catch (error) {
+      toast.error('Failed to create PO: ' + error.message);
+    } finally {
+      setActionsEnabled(true);
+      setVendorPickerCommitment(null);
+    }
+  };
+
   // Compute next step label from commitment state
   const getNextStepLabel = (commitment) => {
     const { qty_committed = 0, qty_reserved = 0, qty_to_order = 0, qty_ordered = 0, qty_received = 0, qty_installed = 0, billing_status } = commitment;
