@@ -151,6 +151,27 @@ export default function PartsListView({
     setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
+  // Build a map of category name -> category for matching
+  const categoryNameMap = useMemo(() => {
+    const map = {};
+    categories.forEach(cat => {
+      if (cat.name) {
+        map[cat.name.toLowerCase()] = cat;
+      }
+    });
+    return map;
+  }, [categories]);
+
+  // Helper to get the category ID for a part (supports both part_category_id and category string)
+  const getPartCategoryId = (part) => {
+    if (part.part_category_id) return part.part_category_id;
+    if (part.category) {
+      const cat = categoryNameMap[part.category.toLowerCase()];
+      return cat?.id;
+    }
+    return null;
+  };
+
   // Group parts hierarchically by category
   const buildHierarchicalGroups = () => {
     if (!showGrouping) {
@@ -164,7 +185,7 @@ export default function PartsListView({
     const groups = [];
 
     // Group for parts with no category
-    const noCategoryParts = parts.filter(p => !p.part_category_id);
+    const noCategoryParts = parts.filter(p => !getPartCategoryId(p));
     if (noCategoryParts.length > 0) {
       groups.push({
         label: 'No Category',
@@ -180,11 +201,11 @@ export default function PartsListView({
         .filter(c => c.parent_id === parent.id && c.active)
         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      const parentParts = parts.filter(p => p.part_category_id === parent.id);
+      const parentParts = parts.filter(p => getPartCategoryId(p) === parent.id);
       const children = [];
 
       childCategories.forEach(child => {
-        const childParts = parts.filter(p => p.part_category_id === child.id);
+        const childParts = parts.filter(p => getPartCategoryId(p) === child.id);
         if (childParts.length > 0) {
           children.push({
             label: child.name,
