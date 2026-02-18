@@ -55,6 +55,7 @@ import AllocatePoolModal from "@/components/financial/AllocatePoolModal";
 import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
+import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
 import { CoverageBadge as CoverageBadgeNew, CoverageBadgeInline } from "@/components/parts/CoverageBadge";
@@ -105,6 +106,9 @@ export default function ProjectSupplyManager() {
   const [isBulkPOLoading, setIsBulkPOLoading] = useState(false);
   const [singlePOCommitment, setSinglePOCommitment] = useState(null);
   const [vendorPickerCommitment, setVendorPickerCommitment] = useState(null);
+  
+  // Blocked items resolution state
+  const [blockedItems, setBlockedItems] = useState(null);
 
   // Data Fetching
   const { data: project, isLoading: projectLoading } = useQuery({
