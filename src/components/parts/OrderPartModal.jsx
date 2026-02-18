@@ -452,7 +452,7 @@ export default function OrderPartModal({
               <Button
                 type="submit"
                 className="bg-red-600 hover:bg-red-700"
-                disabled={createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder)}
+                disabled={createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder) || isBlockedByProjectGuard}
               >
                 {createOrderMutation.isPending ? (
                   <>
