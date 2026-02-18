@@ -57,6 +57,7 @@ import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawe
 import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
 import { CoverageBadge as CoverageBadgeNew, CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
+import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
