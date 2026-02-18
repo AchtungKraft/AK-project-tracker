@@ -108,6 +108,12 @@ export function CoverageBadge({
     >
       <Icon className={cn("w-3 h-3", config.iconColor)} />
       {displayLabel}
+      {poAdjustmentRequired && (
+        <AlertTriangle className="w-3 h-3 text-amber-300 ml-0.5" />
+      )}
+      {undoAvailable && (
+        <Undo2 className="w-3 h-3 text-blue-300 ml-0.5" />
+      )}
     </Badge>
   );
 
