@@ -183,6 +183,11 @@ export default function ProjectSupplyManager() {
     queryFn: () => base44.entities.Location.list()
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ['partCategories'],
+    queryFn: () => base44.entities.PartCategory.list()
+  });
+
   // Build O(1) parts lookup map
   const partsMap = useMemo(() => {
     const map = new Map();
@@ -192,14 +197,31 @@ export default function ProjectSupplyManager() {
     return map;
   }, [parts]);
 
-  // Safe category resolver - never returns undefined/null
+  // Build O(1) categories lookup map
+  const categoriesMap = useMemo(() => {
+    const map = new Map();
+    for (const c of categories) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [categories]);
+
+  // Safe category resolver - uses part_category_id to lookup PartCategory name
   const resolveCategory = (part) => {
     if (!part) return 'Uncategorized';
-    const raw = part.category;
-    if (!raw || typeof raw !== 'string' || raw.trim() === '') {
-      return 'Uncategorized';
+    
+    // Primary: use part_category_id reference
+    if (part.part_category_id) {
+      const category = categoriesMap.get(part.part_category_id);
+      if (category) return category.name;
     }
-    return raw.trim();
+    
+    // Fallback: legacy string category field
+    if (part.category && typeof part.category === 'string' && part.category.trim() !== '') {
+      return part.category.trim();
+    }
+    
+    return 'Uncategorized';
   };
 
   // Filtered data
