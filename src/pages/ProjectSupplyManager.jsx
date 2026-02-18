@@ -600,9 +600,16 @@ export default function ProjectSupplyManager() {
       }
       
       if (blocked.length > 0) {
+        // Extract reasons with fallbacks
+        const reasons = blocked.slice(0, 3).map(b => b.message || b.reason || b.reason_code || 'Unknown').join('; ');
         toast.warning(`${blocked.length} items blocked`, {
-          description: blocked.slice(0, 3).map(b => b.message).join('; ')
+          description: reasons
         });
+      }
+      
+      // Silent failure fallback
+      if (created_orders.length === 0 && blocked.length === 0) {
+        toast.error('No orders created - check commitment eligibility');
       }
 
       // Invalidate queries
@@ -626,7 +633,7 @@ export default function ProjectSupplyManager() {
 
   // Single row PO creation
   const handleSinglePOCreate = async (commitment, overrideVendorId = null) => {
-    const part = partMap.get(commitment.part_id);
+    const part = partsMap.get(commitment.part_id);
     const vendorId = overrideVendorId || part?.default_vendor_id;
     
     // If no vendor, show vendor picker
@@ -646,6 +653,9 @@ export default function ProjectSupplyManager() {
         dry_run: false
       });
 
+      // DEBUG: Log result for diagnostics (remove after confirming)
+      console.log('[PO Create Single] Result:', JSON.stringify(result.data, null, 2));
+
       if (result.data?.error) {
         toast.error(result.data.error);
         return;
@@ -656,7 +666,13 @@ export default function ProjectSupplyManager() {
       if (created_orders.length > 0) {
         toast.success(`PO ${created_orders[0].po_number} created`);
       } else if (blocked.length > 0) {
-        toast.warning(`Order blocked: ${blocked[0].message}`);
+        // Extract reason with fallbacks: message → reason → reason_code → default
+        const blockedItem = blocked[0];
+        const reason = blockedItem.message || blockedItem.reason || blockedItem.reason_code || 'Unknown reason';
+        toast.warning(`Order blocked: ${reason}`);
+      } else {
+        // Silent failure fallback - neither created nor blocked
+        toast.error('No orders created - check commitment eligibility');
       }
 
       // Invalidate and refresh
@@ -1629,7 +1645,7 @@ export default function ProjectSupplyManager() {
       {vendorPickerCommitment && (
         <VendorPickerModal
           commitment={vendorPickerCommitment}
-          part={partMap.get(vendorPickerCommitment.part_id)}
+          part={partsMap.get(vendorPickerCommitment.part_id)}
           vendors={vendors}
           onClose={() => setVendorPickerCommitment(null)}
           onSelect={(vendorId) => handleSinglePOCreate(vendorPickerCommitment, vendorId)}
