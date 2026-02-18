@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * Phase 9.7d — Safe Undo Engine
+ * Phase 9.7d — Safe Undo Engine for Commitment Actions
  * 
  * Undoes the most recent reversible action on a commitment.
  * 
