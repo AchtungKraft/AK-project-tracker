@@ -621,6 +621,13 @@ export default function ProjectSupplyManager() {
             {commitment.qty_installed || 0}
           </span>
         </TableCell>
+        {/* Coverage */}
+        <TableCell>
+          <CoverageBadgeInline 
+            coverage={commitment.coverage}
+            onClick={() => setQtyManagerDrawer(commitment)}
+          />
+        </TableCell>
         {/* Next Step */}
         <TableCell>
           <Badge 
