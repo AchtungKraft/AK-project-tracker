@@ -54,6 +54,8 @@ const ACTION_TYPES = {
 const QuantityStateMatrix = ({ commitment }) => {
   const {
     qty_committed = 0,
+    qty_reserved = 0,
+    qty_to_order = 0,
     qty_ordered = 0,
     qty_received = 0,
     qty_installed = 0,
@@ -62,19 +64,50 @@ const QuantityStateMatrix = ({ commitment }) => {
 
   const stages = [
     { label: 'Needed', value: qty_committed, color: 'bg-gray-500', icon: Package },
-    { label: 'Ordered', value: qty_ordered, color: 'bg-purple-500', icon: ShoppingCart },
+    { label: 'Reserved', value: qty_reserved, color: 'bg-cyan-500', icon: Package },
+    { label: 'To Order', value: qty_to_order, color: 'bg-purple-500', icon: ShoppingCart },
+    { label: 'Ordered', value: qty_ordered, color: 'bg-purple-600', icon: ShoppingCart },
     { label: 'Received', value: qty_received, color: 'bg-blue-500', icon: Truck },
     { label: 'Installed', value: qty_installed, color: 'bg-green-500', icon: Wrench },
   ];
 
+  // Coverage = reserved + received
+  const covered = qty_reserved + qty_received;
+  const coveragePct = qty_committed > 0 ? Math.round((covered / qty_committed) * 100) : 0;
+
   const remaining = {
-    toOrder: Math.max(0, qty_committed - qty_ordered),
+    toOrder: qty_to_order,
     toReceive: Math.max(0, qty_ordered - qty_received),
-    toInstall: Math.max(0, qty_received - qty_installed)
+    toInstall: Math.max(0, (qty_reserved + qty_received) - qty_installed)
   };
 
   return (
     <div className="space-y-4">
+      {/* Coverage summary */}
+      <div className="bg-gray-800/50 rounded-lg p-3">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm text-gray-400">Coverage</span>
+          <span className={cn(
+            "text-sm font-bold",
+            coveragePct >= 100 ? "text-green-400" : coveragePct > 0 ? "text-yellow-400" : "text-red-400"
+          )}>
+            {coveragePct}%
+          </span>
+        </div>
+        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className={cn(
+              "h-full rounded-full transition-all",
+              coveragePct >= 100 ? "bg-green-500" : coveragePct > 0 ? "bg-yellow-500" : "bg-red-500"
+            )}
+            style={{ width: `${Math.min(100, coveragePct)}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {covered} of {qty_committed} covered (reserved + received)
+        </p>
+      </div>
+
       {/* Progress bars */}
       <div className="space-y-2">
         {stages.map((stage, idx) => {
