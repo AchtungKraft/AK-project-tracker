@@ -163,19 +163,109 @@ async function releaseReservations(base44, commitmentId, qtyToRelease, userId, r
 }
 
 // ============================================
-// LIFECYCLE STATE HELPERS
+// INVARIANT VALIDATOR (Phase 9.7c)
 // ============================================
 
+/**
+ * Validates commitment quantity invariants
+ * Returns { ok, coverage, violations, suggested_actions }
+ */
+function validateCommitmentQtyInvariant(state, options = {}) {
+  const { allow_overcoverage = true, allow_overship = true, strict_install_check = false } = options;
+
+  const qty_needed = Math.max(0, Math.floor(state.qty_needed ?? state.qty_committed ?? 0));
+  const qty_reserved = Math.max(0, Math.floor(state.qty_reserved ?? 0));
+  const qty_ordered = Math.max(0, Math.floor(state.qty_ordered ?? 0));
+  const qty_received = Math.max(0, Math.floor(state.qty_received ?? 0));
+  const qty_installed = Math.max(0, Math.floor(state.qty_installed ?? 0));
+  const qty_to_order_stored = state.qty_to_order ?? null;
+
+  // Coverage = reserved + max(ordered, received)
+  const coverage_total = qty_reserved + Math.max(qty_ordered, qty_received);
+  const available_to_install = qty_reserved + qty_received;
+  const gap_qty = Math.max(0, qty_needed - coverage_total);
+  const overage_qty = Math.max(0, coverage_total - qty_needed);
+  const qty_to_order_derived = gap_qty;
+  const poAdjustmentRequired = overage_qty > 0 && (qty_ordered > qty_needed || qty_received > qty_needed);
+
+  let coverage_status;
+  if (qty_needed === 0) {
+    coverage_status = coverage_total > 0 ? 'OVER' : 'FULL';
+  } else if (coverage_total === 0) {
+    coverage_status = 'NONE';
+  } else if (coverage_total < qty_needed) {
+    coverage_status = 'PARTIAL';
+  } else if (coverage_total === qty_needed) {
+    coverage_status = 'FULL';
+  } else {
+    coverage_status = 'OVER';
+  }
+
+  const violations = [];
+
+  // Check negatives in original state
+  const checkNegative = (name) => {
+    if ((state[name] ?? 0) < 0) {
+      violations.push({ code: 'NEGATIVE_QTY', severity: 'BLOCKING', message: `${name} cannot be negative`, fields: [name] });
+    }
+  };
+  ['qty_needed', 'qty_committed', 'qty_reserved', 'qty_ordered', 'qty_received', 'qty_installed', 'qty_to_order'].forEach(checkNegative);
+
+  if (qty_reserved > qty_needed && qty_needed > 0) {
+    violations.push({ code: 'RESERVED_GT_NEEDED', severity: allow_overcoverage ? 'WARNING' : 'BLOCKING', message: `Reserved (${qty_reserved}) exceeds needed (${qty_needed})`, fields: ['qty_reserved'] });
+  }
+  if (coverage_status === 'OVER' && qty_needed > 0) {
+    violations.push({ code: 'COVERAGE_OVER_NEEDED', severity: allow_overcoverage ? 'WARNING' : 'BLOCKING', message: `Coverage (${coverage_total}) exceeds needed (${qty_needed})`, fields: [] });
+  }
+  if (qty_received > qty_ordered && qty_ordered > 0) {
+    violations.push({ code: 'RECEIVED_GT_ORDERED', severity: allow_overship ? 'WARNING' : 'BLOCKING', message: `Received exceeds ordered`, fields: [] });
+  }
+  if (qty_installed > available_to_install) {
+    violations.push({ code: 'INSTALLED_GT_AVAILABLE', severity: strict_install_check ? 'BLOCKING' : 'WARNING', message: `Installed exceeds available`, fields: [] });
+  }
+  if (qty_installed > qty_needed && qty_needed > 0) {
+    violations.push({ code: 'INSTALLED_GT_NEEDED', severity: 'WARNING', message: `Installed exceeds needed`, fields: [] });
+  }
+  if (poAdjustmentRequired) {
+    violations.push({ code: 'PO_ADJUSTMENT_REQUIRED', severity: 'WARNING', message: `PO adjustment may be required`, fields: [] });
+  }
+  if (qty_to_order_stored !== null && qty_to_order_stored !== qty_to_order_derived) {
+    violations.push({ code: 'QTY_TO_ORDER_DRIFT', severity: 'WARNING', message: `qty_to_order drift detected`, fields: ['qty_to_order'] });
+  }
+
+  const suggested_actions = [];
+  if (gap_qty > 0) {
+    suggested_actions.push({ action_type: 'RESERVE_STOCK', label: `Reserve ${gap_qty} from inventory`, params: { qty: gap_qty } });
+    suggested_actions.push({ action_type: 'ADD_TO_ORDER_QUEUE', label: `Add ${gap_qty} to order queue`, params: { qty: gap_qty } });
+  }
+  if (overage_qty > 0 && qty_reserved > 0) {
+    suggested_actions.push({ action_type: 'RELEASE_RESERVATION', label: `Release ${Math.min(qty_reserved, overage_qty)} reserved`, params: { qty: Math.min(qty_reserved, overage_qty) } });
+  }
+  if (poAdjustmentRequired) {
+    suggested_actions.push({ action_type: 'ADJUST_PO', label: `Adjust PO to match needed qty`, params: { reduce_by: overage_qty } });
+  }
+
+  return {
+    ok: !violations.some(v => v.severity === 'BLOCKING'),
+    coverage: { qty_needed, qty_reserved, qty_ordered, qty_received, qty_installed, coverage_total, qty_to_order: qty_to_order_derived, gap_qty, overage_qty, coverage_status, poAdjustmentRequired, available_to_install },
+    violations,
+    suggested_actions
+  };
+}
+
+// Legacy coverage status computation (for backward compatibility)
 function computeCoverageStatus(commitment) {
-  const needed = commitment.qty_committed || 0;
-  const reserved = commitment.qty_reserved || 0;
-  const received = commitment.qty_received || 0;
-  const covered = reserved + received;
-  
-  if (needed <= 0) return 'FULLY_COVERED';
-  if (covered >= needed) return 'FULLY_COVERED';
-  if (covered > 0) return 'PARTIALLY_COVERED';
-  return 'NOT_COVERED';
+  const validation = validateCommitmentQtyInvariant({
+    qty_needed: commitment.qty_committed,
+    qty_committed: commitment.qty_committed,
+    qty_reserved: commitment.qty_reserved,
+    qty_ordered: commitment.qty_ordered,
+    qty_received: commitment.qty_received,
+    qty_installed: commitment.qty_installed
+  });
+  // Map to legacy format
+  const statusMap = { 'FULL': 'FULLY_COVERED', 'PARTIAL': 'PARTIALLY_COVERED', 'NONE': 'NOT_COVERED', 'OVER': 'FULLY_COVERED' };
+  return statusMap[validation.coverage.coverage_status] || 'NOT_COVERED';
 }
 
 function computeLifecycleState(commitment, part) {
