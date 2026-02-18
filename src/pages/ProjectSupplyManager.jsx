@@ -1342,6 +1342,20 @@ export default function ProjectSupplyManager() {
           }}
         />
       )}
+
+      {qtyManagerDrawer && (
+        <CommitmentQuantityDrawer
+          open={!!qtyManagerDrawer}
+          onClose={() => setQtyManagerDrawer(null)}
+          commitment={qtyManagerDrawer}
+          part={qtyManagerDrawer.part}
+          onSuccess={() => {
+            refetchCommitments();
+            refetchPools();
+            queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+          }}
+        />
+      )}
     </MobileSafeAreaContainer>
   );
 }
