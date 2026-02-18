@@ -1238,9 +1238,13 @@ export default function ProjectSupplyManager() {
                       />
                     </div>
                     {selectedItems.size > 0 && (
-                      <Button className="bg-green-600 hover:bg-green-700 gap-1">
+                      <Button 
+                        className="bg-green-600 hover:bg-green-700 gap-1"
+                        onClick={handleBulkPOPreview}
+                        disabled={isBulkPOLoading}
+                      >
                         <ShoppingCart className="w-4 h-4" />
-                        Create PO ({selectedItems.size})
+                        {isBulkPOLoading ? 'Loading...' : `Create PO (${selectedItems.size})`}
                       </Button>
                     )}
                   </div>
