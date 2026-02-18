@@ -76,9 +76,33 @@ export default function ReceiveInventoryModal({
     }
   });
 
-  // Use centralized mutation service
+  // Use UNIFIED SUPPLY EXECUTION ENGINE when commitment is provided
   const createInventoryMutation = useMutation({
     mutationFn: async (data) => {
+      // If commitment provided, use unified engine for lifecycle + invariant enforcement
+      if (commitment) {
+        const response = await base44.functions.invoke('applyReceivingToOrderAndCommitment', {
+          commitment_id: commitment.id,
+          part_id: part.id,
+          order_id: orderId || null,
+          line_item_id: commitment.order_line_item_ids?.[0] || null,
+          qty_received: data.quantity,
+          location_id: data.location_id || null,
+          unit_cost: data.purchase_cost,
+          lot_number: data.lot_number || null,
+          notes: data.notes || null,
+          source_type: data.source_type,
+          requires_inspection: data.requires_inspection,
+        });
+        
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+        
+        return response.data;
+      }
+      
+      // Legacy path for non-commitment receiving (general inventory)
       const response = await base44.functions.invoke('mutateInventory', {
         mutation_type: 'receive',
         part_id: part.id,
@@ -86,7 +110,7 @@ export default function ReceiveInventoryModal({
         to_location_id: data.location_id || null,
         unit_cost: data.purchase_cost,
         order_id: orderId || null,
-        line_item_id: null, // Can be passed if receiving from specific line item
+        line_item_id: null,
         lot_number: data.lot_number || null,
         notes: data.notes || null,
         source_type: data.source_type,
@@ -99,12 +123,25 @@ export default function ReceiveInventoryModal({
       
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryAuditLogs'] });
+      
+      // Additional invalidations for commitment-linked receiving
+      if (commitment) {
+        queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+        queryClient.invalidateQueries({ queryKey: ['projectLineItems'] });
+        queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      }
+      
       toast.success(`${formData.quantity} units added to inventory`);
       setShowConfirmModal(false);
-      onOpenChange(false);
+      
+      // Call onSuccess callback if provided
+      if (onSuccess) onSuccess(result);
+      
+      handleClose();
     },
     onError: (error) => {
       toast.error("Failed to add inventory: " + error.message);
