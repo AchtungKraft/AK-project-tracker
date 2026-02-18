@@ -46,12 +46,12 @@ export default function SupplyQueues() {
 
   // Fetch queue data from backend read model
   const { data: queueData, isLoading, refetch } = useQuery({
-    queryKey: ['globalSupplyQueues'],
+    queryKey: ['globalSupplyQueues', activeQueue],
     queryFn: async () => {
-      const response = await base44.functions.invoke('getGlobalSupplyQueues', {});
+      const response = await base44.functions.invoke('getGlobalSupplyQueues', { queue: activeQueue });
       return response.data;
     },
-    staleTime: 30000,
+    staleTime: 60000, // Cache for 60s to reduce API calls
   });
 
   const summary = queueData?.summary || {};
