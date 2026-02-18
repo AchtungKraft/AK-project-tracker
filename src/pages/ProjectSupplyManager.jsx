@@ -96,6 +96,13 @@ export default function ProjectSupplyManager() {
   const [cancelModal, setCancelModal] = useState(null);
   const [actionsEnabled, setActionsEnabled] = useState(true);
   const [qtyManagerDrawer, setQtyManagerDrawer] = useState(null);
+  
+  // Unified PO creation states
+  const [showBulkPOPreview, setShowBulkPOPreview] = useState(false);
+  const [bulkPOPreviewData, setBulkPOPreviewData] = useState(null);
+  const [isBulkPOLoading, setIsBulkPOLoading] = useState(false);
+  const [singlePOCommitment, setSinglePOCommitment] = useState(null);
+  const [vendorPickerCommitment, setVendorPickerCommitment] = useState(null);
 
   // Data Fetching
   const { data: project, isLoading: projectLoading } = useQuery({
