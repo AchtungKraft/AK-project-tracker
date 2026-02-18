@@ -76,7 +76,7 @@ export default function ProjectSupplyManager() {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [groupBy, setGroupBy] = useState('none'); // values: 'none' | 'category'
+  const [groupBy, setGroupBy] = useState('category'); // values: 'none' | 'category'
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -206,22 +206,29 @@ export default function ProjectSupplyManager() {
     return map;
   }, [categories]);
 
-  // Safe category resolver - uses part_category_id to lookup PartCategory name
-  const resolveCategory = (part) => {
-    if (!part) return 'Uncategorized';
+  // Safe category resolver - returns full category object for color/hierarchy support
+  const resolveCategoryObj = (part) => {
+    if (!part) return null;
     
     // Primary: use part_category_id reference
     if (part.part_category_id) {
-      const category = categoriesMap.get(part.part_category_id);
-      if (category) return category.name;
+      return categoriesMap.get(part.part_category_id) || null;
     }
     
-    // Fallback: legacy string category field
-    if (part.category && typeof part.category === 'string' && part.category.trim() !== '') {
-      return part.category.trim();
-    }
+    return null;
+  };
+
+  // Get category display name with parent hierarchy
+  const getCategoryDisplayName = (categoryObj) => {
+    if (!categoryObj) return 'Uncategorized';
     
-    return 'Uncategorized';
+    if (categoryObj.parent_id) {
+      const parent = categoriesMap.get(categoryObj.parent_id);
+      if (parent) {
+        return `${parent.name} → ${categoryObj.name}`;
+      }
+    }
+    return categoryObj.name;
   };
 
   // Filtered data
@@ -280,10 +287,15 @@ export default function ProjectSupplyManager() {
       const commitmentLineItems = lineItems.filter(li => li.commitment_id === commitment.id);
       const commitmentInstalled = installedParts.filter(ip => ip.commitment_id === commitment.id && !ip.is_reversed);
 
+      const categoryObj = resolveCategoryObj(part);
       return {
         ...commitment,
         part,
-        category: resolveCategory(part),
+        categoryObj,
+        categoryId: categoryObj?.id || 'uncategorized',
+        categoryName: getCategoryDisplayName(categoryObj),
+        categoryColor: categoryObj?.color || '#6B7280',
+        categoryParentId: categoryObj?.parent_id || null,
         vendor,
         allowed,
         lifecycleState,
@@ -338,50 +350,104 @@ export default function ProjectSupplyManager() {
     return filtered;
   };
 
-  // Group commitments by category (uses pre-resolved c.category)
+  // Group commitments by category with hierarchy support
   const groupCommitments = (filtered) => {
     if (groupBy === 'none') {
-      return { All: filtered };
+      return [{ key: 'all', name: 'All', color: null, items: filtered, isChild: false }];
     }
 
     if (groupBy === 'category') {
-      return filtered.reduce((acc, c) => {
-        const key = c.category || 'Uncategorized';
-
-        if (!acc[key]) {
-          acc[key] = [];
+      // Group by category ID
+      const byCategory = {};
+      for (const c of filtered) {
+        const key = c.categoryId || 'uncategorized';
+        if (!byCategory[key]) {
+          byCategory[key] = {
+            key,
+            categoryObj: c.categoryObj,
+            name: c.categoryName,
+            color: c.categoryColor,
+            parentId: c.categoryParentId,
+            items: []
+          };
         }
+        byCategory[key].items.push(c);
+      }
 
-        acc[key].push(c);
-        return acc;
-      }, {});
+      // Sort: parents first, then children grouped under parents
+      const groups = Object.values(byCategory);
+      
+      // Separate parents and children
+      const parents = groups.filter(g => !g.parentId);
+      const children = groups.filter(g => g.parentId);
+      
+      // Sort parents by name
+      parents.sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Build final ordered list with children after their parents
+      const ordered = [];
+      for (const parent of parents) {
+        ordered.push({ ...parent, isChild: false });
+        const childGroups = children.filter(c => c.parentId === parent.key);
+        childGroups.sort((a, b) => a.name.localeCompare(b.name));
+        for (const child of childGroups) {
+          ordered.push({ ...child, isChild: true });
+        }
+      }
+      
+      // Add orphan children (parent not in current view)
+      const usedChildIds = new Set(ordered.filter(g => g.isChild).map(g => g.key));
+      for (const child of children) {
+        if (!usedChildIds.has(child.key)) {
+          ordered.push({ ...child, isChild: true });
+        }
+      }
+      
+      // Add uncategorized at the end if present
+      const uncategorized = groups.find(g => g.key === 'uncategorized');
+      if (uncategorized && !ordered.find(g => g.key === 'uncategorized')) {
+        ordered.push({ ...uncategorized, isChild: false });
+      }
+      
+      return ordered;
     }
 
-    return { All: filtered };
+    return [{ key: 'all', name: 'All', color: null, items: filtered, isChild: false }];
   };
 
   // Render grouped commitment rows
   const renderGroupedCommitments = (tabFilter, showActions = true) => {
     const filtered = getFilteredCommitments(tabFilter);
-    const grouped = groupCommitments(filtered);
+    const groups = groupCommitments(filtered);
 
-    return Object.entries(grouped).map(([groupName, groupItems]) => (
-      <React.Fragment key={groupName}>
+    return groups.map((group) => (
+      <React.Fragment key={group.key}>
         {groupBy !== 'none' && (
-          <TableRow className="bg-gray-900/70">
-            <TableCell colSpan={11} className="text-sm font-semibold text-gray-300 py-2">
-              {groupName} ({groupItems.length})
+          <TableRow className="bg-gray-900/70 border-l-4" style={{ borderLeftColor: group.color || '#6B7280' }}>
+            <TableCell colSpan={11} className="py-2">
+              <div className={`flex items-center gap-2 ${group.isChild ? 'pl-6' : ''}`}>
+                {group.color && (
+                  <div 
+                    className="w-3 h-3 rounded-full flex-shrink-0" 
+                    style={{ backgroundColor: group.color }}
+                  />
+                )}
+                <span className="text-sm font-semibold" style={{ color: group.color || '#D1D5DB' }}>
+                  {group.isChild ? '↳ ' : ''}{group.categoryObj?.name || group.name}
+                </span>
+                <span className="text-xs text-gray-500">({group.items.length})</span>
+              </div>
             </TableCell>
           </TableRow>
         )}
 
-        {groupItems.map(c => renderCommitmentRow(c, showActions))}
+        {group.items.map(c => renderCommitmentRow(c, showActions))}
 
         {groupBy !== 'none' && (
           <TableRow className="bg-gray-900/40 border-t border-gray-800">
             <TableCell colSpan={7} />
-            <TableCell className="text-right text-gray-400 text-sm">
-              ${groupItems
+            <TableCell className="text-right text-sm" style={{ color: group.color || '#9CA3AF' }}>
+              ${group.items
                 .reduce((sum, c) => sum + (c.planned_retail_total || 0), 0)
                 .toFixed(0)}
             </TableCell>
@@ -627,7 +693,7 @@ export default function ProjectSupplyManager() {
           )}
 
           {/* Uncategorized Parts Warning */}
-          {enrichedCommitments.some(c => c.category === 'Uncategorized') && (
+          {enrichedCommitments.some(c => c.categoryId === 'uncategorized') && (
             <div className="bg-yellow-900/30 border border-yellow-600 text-yellow-400 p-3 rounded flex items-center gap-2">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               <span>Some parts are Uncategorized. Update Part.category for proper grouping.</span>
