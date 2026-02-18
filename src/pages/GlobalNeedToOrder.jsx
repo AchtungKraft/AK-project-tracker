@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,14 +23,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  ShoppingCart, Search, Filter, Building2, FolderKanban, AlertTriangle,
+  ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
   DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
-  Plus, Package, RefreshCw, ArrowRight
+  Plus, RefreshCw, ArrowRight
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CommitmentActions } from "@/components/financial/financialMutationGuard";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
-import { CoverageBadge, BillingStatusBadge } from "@/components/parts/FinancialColumns";
+import { CoverageBadge } from "@/components/parts/FinancialColumns";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
@@ -38,147 +37,56 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
- * Shows all commitments that need ordering across all projects
- * Enables vendor-grouped batch ordering
+ * Uses consolidated backend function to avoid rate limits
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const filterProjectId = urlParams.get('project_id');
   const filterVendorId = urlParams.get('vendor_id');
-  const filterProcurementState = urlParams.get('state');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [groupMode, setGroupMode] = useState('vendor'); // 'vendor', 'project', 'coverage'
+  const [groupMode, setGroupMode] = useState('vendor');
   const [selectedProjectFilter, setSelectedProjectFilter] = useState(filterProjectId || 'all');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState(filterVendorId || 'all');
-  const [coverageFilter, setCoverageFilter] = useState('all'); // 'all', 'covered', 'partial', 'uncovered'
-  const [prepayFilter, setPrepayFilter] = useState('all'); // 'all', 'required', 'not_required'
+  const [coverageFilter, setCoverageFilter] = useState('all');
+  const [prepayFilter, setPrepayFilter] = useState('all');
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
 
-  // Data Fetching
-  const { data: commitments = [], isLoading: commitmentsLoading, refetch } = useQuery({
-    queryKey: ['partCommitments'],
-    queryFn: () => base44.entities.PartCommitment.list()
+  // Single consolidated API call
+  const { data: queueData, isLoading, refetch } = useQuery({
+    queryKey: ['globalOrderQueue'],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('getGlobalOrderQueue', {});
+      return response.data;
+    },
+    staleTime: 30000,
   });
 
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list()
-  });
-
-  const { data: parts = [] } = useQuery({
-    queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list()
-  });
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list()
-  });
-
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list()
-  });
-
-  const { data: pools = [] } = useQuery({
-    queryKey: ['billingPools'],
-    queryFn: () => base44.entities.BillingPool.list()
-  });
-
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list()
-  });
-
-  // Build items that need ordering
-  const needToOrderItems = useMemo(() => {
-    const items = [];
-
-    // From commitments: planned status OR qty_committed > qty_ordered
-    commitments.forEach(commitment => {
-      if (commitment.commitment_status === 'cancelled') return;
-
-      const needsOrder = 
-        commitment.commitment_status === 'planned' ||
-        (commitment.qty_committed || 0) > (commitment.qty_ordered || 0);
-
-      if (!needsOrder) return;
-
-      const part = parts.find(p => p.id === commitment.part_id);
-      if (!part) return;
-
-      const project = projects.find(p => p.id === commitment.project_id);
-      const vendor = vendors.find(v => v.id === part.default_vendor_id);
-      const projectPools = pools.filter(p => p.project_id === commitment.project_id && p.status !== 'closed');
-      const poolBalance = projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
-
-      const qtyToOrder = (commitment.qty_committed || 0) - (commitment.qty_ordered || 0);
-      const plannedRetail = commitment.planned_retail_total || (qtyToOrder * (commitment.unit_retail_snapshot || part.default_retail || 0));
-      const coveredRetail = commitment.covered_retail_total || 0;
-      const exposureGap = commitment.exposure_gap || (plannedRetail - coveredRetail);
-
-      // Calculate coverage state
-      const coveragePct = plannedRetail > 0 ? (coveredRetail / plannedRetail) * 100 : 0;
-      const coverageState = coveragePct >= 100 ? 'covered' : coveragePct > 0 ? 'partial' : 'uncovered';
-
-      // Can order? Must have coverage or prepay satisfied
-      const requiresPrepay = commitment.requires_prepay || false;
-      const prepayOk = !requiresPrepay || commitment.prepay_satisfied_at;
-      const canOrder = (coverageState === 'covered' || poolBalance >= exposureGap) && prepayOk;
-
-      items.push({
-        id: commitment.id,
-        type: 'commitment',
-        commitment,
-        part,
-        project,
-        vendor,
-        qtyToOrder,
-        plannedRetail,
-        coveredRetail,
-        exposureGap,
-        coverageState,
-        poolBalance,
-        requiresPrepay,
-        prepayOk,
-        canOrder,
-        estimatedCost: qtyToOrder * (part.default_cost || 0),
-      });
-    });
-
-    return items;
-  }, [commitments, parts, projects, vendors, pools]);
+  const needToOrderItems = queueData?.items || [];
+  const summary = queueData?.summary || {};
+  const filterOptions = queueData?.filters || { projects: [], vendors: [] };
 
   // Apply filters
   const filteredItems = useMemo(() => {
     return needToOrderItems.filter(item => {
-      // Search filter
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const matchesSearch = 
-          item.part?.part_name?.toLowerCase().includes(term) ||
-          item.part?.vendor_part_number?.toLowerCase().includes(term) ||
-          item.project?.name?.toLowerCase().includes(term) ||
-          item.vendor?.vendor_name?.toLowerCase().includes(term);
+          item.part_name?.toLowerCase().includes(term) ||
+          item.vendor_part_number?.toLowerCase().includes(term) ||
+          item.project_name?.toLowerCase().includes(term) ||
+          item.vendor_name?.toLowerCase().includes(term);
         if (!matchesSearch) return false;
       }
 
-      // Project filter
-      if (selectedProjectFilter !== 'all' && item.project?.id !== selectedProjectFilter) return false;
-
-      // Vendor filter
-      if (selectedVendorFilter !== 'all' && item.vendor?.id !== selectedVendorFilter) return false;
-
-      // Coverage filter
+      if (selectedProjectFilter !== 'all' && item.project_id !== selectedProjectFilter) return false;
+      if (selectedVendorFilter !== 'all' && item.vendor_id !== selectedVendorFilter) return false;
       if (coverageFilter !== 'all' && item.coverageState !== coverageFilter) return false;
-
-      // Prepay filter
       if (prepayFilter === 'required' && !item.requiresPrepay) return false;
       if (prepayFilter === 'not_required' && item.requiresPrepay) return false;
 
@@ -194,12 +102,12 @@ export default function GlobalNeedToOrder() {
       let groupKey, groupLabel, groupColor;
 
       if (groupMode === 'vendor') {
-        groupKey = item.vendor?.id || 'unassigned';
-        groupLabel = item.vendor?.vendor_name || 'No Vendor Assigned';
+        groupKey = item.vendor_id || 'unassigned';
+        groupLabel = item.vendor_name || 'No Vendor Assigned';
         groupColor = '#3B82F6';
       } else if (groupMode === 'project') {
-        groupKey = item.project?.id || 'general';
-        groupLabel = item.project?.name || 'General / AK Stock';
+        groupKey = item.project_id || 'general';
+        groupLabel = item.project_name || 'General / AK Stock';
         groupColor = '#EF4444';
       } else {
         groupKey = item.coverageState;
@@ -238,7 +146,7 @@ export default function GlobalNeedToOrder() {
     });
   }, [filteredItems, groupMode]);
 
-  // Summary stats
+  // Stats from filtered items
   const totalQty = filteredItems.reduce((sum, i) => sum + i.qtyToOrder, 0);
   const totalExposure = filteredItems.reduce((sum, i) => sum + i.exposureGap, 0);
   const totalCost = filteredItems.reduce((sum, i) => sum + i.estimatedCost, 0);
@@ -282,12 +190,16 @@ export default function GlobalNeedToOrder() {
     return filteredItems.filter(item => selectedItems.has(item.id));
   };
 
-  // Unique values for filters
-  const projectsWithItems = [...new Set(needToOrderItems.map(i => i.project?.id).filter(Boolean))];
-  const vendorsWithItems = [...new Set(needToOrderItems.map(i => i.vendor?.id).filter(Boolean))];
-
   const renderItem = (item) => {
-    const allowed = getAllowedCommitmentActions(item.commitment);
+    const commitment = {
+      id: item.commitment_id,
+      commitment_status: item.commitment_status,
+      qty_committed: item.qty_committed,
+      qty_ordered: item.qty_ordered,
+      qty_received: item.qty_received,
+      qty_installed: item.qty_installed,
+    };
+    const allowed = getAllowedCommitmentActions(commitment);
 
     return (
       <div 
@@ -302,29 +214,27 @@ export default function GlobalNeedToOrder() {
           disabled={!item.canOrder}
         />
 
-        {item.part?.featured_photo && (
+        {item.featured_photo && (
           <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-            <img src={item.part.featured_photo} alt="" className="w-full h-full object-contain" />
+            <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
           </div>
         )}
 
         <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">{item.part?.part_name}</p>
+          <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            {item.part?.vendor_part_number && <span className="font-mono">{item.part.vendor_part_number}</span>}
-            {groupMode !== 'project' && item.project && <span>· {item.project.name}</span>}
-            {groupMode !== 'vendor' && item.vendor && <span>· {item.vendor.vendor_name}</span>}
+            {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
+            {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
+            {groupMode !== 'vendor' && item.vendor_name && <span>· {item.vendor_name}</span>}
           </div>
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Qty to Order */}
           <div className="text-center w-16">
             <p className="text-xs text-gray-500">Order</p>
             <p className="text-white font-bold">×{item.qtyToOrder}</p>
           </div>
 
-          {/* Exposure */}
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Exposure</p>
             <p className={item.exposureGap > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
@@ -332,7 +242,6 @@ export default function GlobalNeedToOrder() {
             </p>
           </div>
 
-          {/* Pool Balance */}
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Pool</p>
             <p className={item.poolBalance >= item.exposureGap ? 'text-green-400' : 'text-yellow-400'}>
@@ -340,17 +249,14 @@ export default function GlobalNeedToOrder() {
             </p>
           </div>
 
-          {/* Coverage Badge */}
-          {item.commitment && <CoverageBadge commitment={item.commitment} compact />}
+          <CoverageBadge commitment={commitment} compact />
 
-          {/* Prepay Indicator */}
           {item.requiresPrepay && (
             <Badge variant="outline" className={item.prepayOk ? 'border-green-600 text-green-400' : 'border-red-600 text-red-400'}>
               {item.prepayOk ? '✓ Prepaid' : '⚠ Prepay Req'}
             </Badge>
           )}
 
-          {/* Can Order Indicator */}
           {item.canOrder ? (
             <Badge className="bg-green-600 text-white">
               <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -363,7 +269,6 @@ export default function GlobalNeedToOrder() {
             </Badge>
           )}
 
-          {/* Actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -372,7 +277,7 @@ export default function GlobalNeedToOrder() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
               {item.canOrder && (
-                <DropdownMenuItem onClick={() => setOrderModalPart(item.part)} className="text-green-400">
+                <DropdownMenuItem onClick={() => setOrderModalPart({ id: item.part_id, part_name: item.part_name })} className="text-green-400">
                   <ShoppingCart className="w-4 h-4 mr-2" />
                   Create PO
                 </DropdownMenuItem>
@@ -384,7 +289,7 @@ export default function GlobalNeedToOrder() {
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem 
-                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project?.id}&tab=parts`))}
+                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
               >
                 <ArrowRight className="w-4 h-4 mr-2" />
                 Go to Project
@@ -456,13 +361,13 @@ export default function GlobalNeedToOrder() {
                 <p className="text-2xl font-bold text-red-400">${totalExposure.toFixed(0)}</p>
               </CardContent>
             </Card>
-            <Card className="bg-black/40 border-green-900/30 border-gray-800">
+            <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Ready to Order</p>
                 <p className="text-2xl font-bold text-green-400">{canOrderCount}</p>
               </CardContent>
             </Card>
-            <Card className="bg-black/40 border-red-900/30 border-gray-800">
+            <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Blocked</p>
                 <p className="text-2xl font-bold text-red-400">{blockedCount}</p>
@@ -475,7 +380,6 @@ export default function GlobalNeedToOrder() {
           <Card className="bg-black/40 border-gray-800">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center gap-3">
-                {/* Search */}
                 <div className="relative flex-1 min-w-[200px] max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                   <Input
@@ -486,7 +390,6 @@ export default function GlobalNeedToOrder() {
                   />
                 </div>
 
-                {/* Project Filter */}
                 <Select value={selectedProjectFilter} onValueChange={setSelectedProjectFilter}>
                   <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
                     <FolderKanban className="w-4 h-4 mr-2" />
@@ -494,13 +397,12 @@ export default function GlobalNeedToOrder() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Projects</SelectItem>
-                    {projects.filter(p => projectsWithItems.includes(p.id)).map(p => (
+                    {filterOptions.projects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                {/* Vendor Filter */}
                 <Select value={selectedVendorFilter} onValueChange={setSelectedVendorFilter}>
                   <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
                     <Building2 className="w-4 h-4 mr-2" />
@@ -508,13 +410,12 @@ export default function GlobalNeedToOrder() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Vendors</SelectItem>
-                    {vendors.filter(v => vendorsWithItems.includes(v.id)).map(v => (
+                    {filterOptions.vendors.map(v => (
                       <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                {/* Coverage Filter */}
                 <Select value={coverageFilter} onValueChange={setCoverageFilter}>
                   <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white">
                     <DollarSign className="w-4 h-4 mr-2" />
@@ -528,7 +429,6 @@ export default function GlobalNeedToOrder() {
                   </SelectContent>
                 </Select>
 
-                {/* Prepay Filter */}
                 <Select value={prepayFilter} onValueChange={setPrepayFilter}>
                   <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white">
                     <AlertTriangle className="w-4 h-4 mr-2" />
@@ -541,7 +441,6 @@ export default function GlobalNeedToOrder() {
                   </SelectContent>
                 </Select>
 
-                {/* Group Mode */}
                 <Tabs value={groupMode} onValueChange={setGroupMode}>
                   <TabsList className="bg-gray-900/50 border border-gray-700">
                     <TabsTrigger value="vendor" className="data-[state=active]:bg-blue-900/30 gap-1.5">
@@ -563,7 +462,7 @@ export default function GlobalNeedToOrder() {
           </Card>
 
           {/* Grouped Items List */}
-          {commitmentsLoading ? (
+          {isLoading ? (
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
             </Card>
@@ -625,7 +524,6 @@ export default function GlobalNeedToOrder() {
                               className="border-green-600 text-green-400 hover:bg-green-900/30"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Select all orderable in this group and open batch modal
                                 const ids = group.items.filter(i => i.canOrder).map(i => i.id);
                                 setSelectedItems(new Set(ids));
                                 setShowBatchOrderModal(true);
@@ -664,8 +562,8 @@ export default function GlobalNeedToOrder() {
         <CreateBatchOrderModal
           selectedItems={getSelectedItemsData().map(item => ({
             id: item.id,
-            part: item.part,
-            requirement: { project_id: item.project?.id },
+            part: { id: item.part_id, part_name: item.part_name },
+            requirement: { project_id: item.project_id },
             qty_to_order: item.qtyToOrder,
             estimated_cost: item.estimatedCost,
           }))}
@@ -679,8 +577,13 @@ export default function GlobalNeedToOrder() {
 
       {deltaOrderCommitment && (
         <DeltaOrderModal
-          commitment={deltaOrderCommitment.commitment}
-          part={deltaOrderCommitment.part}
+          commitment={{
+            id: deltaOrderCommitment.commitment_id,
+            commitment_status: deltaOrderCommitment.commitment_status,
+            qty_committed: deltaOrderCommitment.qty_committed,
+            qty_ordered: deltaOrderCommitment.qty_ordered,
+          }}
+          part={{ id: deltaOrderCommitment.part_id, part_name: deltaOrderCommitment.part_name }}
           onClose={() => setDeltaOrderCommitment(null)}
         />
       )}
