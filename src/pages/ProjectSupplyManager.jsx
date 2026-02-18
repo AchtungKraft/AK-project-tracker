@@ -809,7 +809,7 @@ export default function ProjectSupplyManager() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
                 {allowed.canCreatePO && (
-                  <DropdownMenuItem onClick={() => setOrderModalPart(part)} className="text-green-400">
+                  <DropdownMenuItem onClick={() => handleSinglePOCreate(commitment)} className="text-green-400">
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Create PO
                   </DropdownMenuItem>
