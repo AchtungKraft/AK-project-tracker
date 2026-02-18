@@ -181,7 +181,7 @@ export default function ReceiveInventoryModal({
   const activeLocations = locations.filter(l => l.active);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg bg-gray-900 border-gray-700">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
