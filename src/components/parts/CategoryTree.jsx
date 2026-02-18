@@ -15,14 +15,32 @@ export default function CategoryTree({
 }) {
   const [showEmptyCategories, setShowEmptyCategories] = React.useState(false);
 
+  // Build a map of category name -> category id for matching
+  const categoryNameToId = useMemo(() => {
+    const map = {};
+    categories.forEach(cat => {
+      if (cat.name) {
+        map[cat.name.toLowerCase()] = cat.id;
+      }
+    });
+    return map;
+  }, [categories]);
+
   // Calculate part counts for each category (including descendants)
   const categoryCounts = useMemo(() => {
     const counts = {};
     
-    // Direct counts
+    // Direct counts - match by category string name or part_category_id
     parts.forEach(part => {
-      if (part.part_category_id) {
-        counts[part.part_category_id] = (counts[part.part_category_id] || 0) + 1;
+      let categoryId = part.part_category_id;
+      
+      // If no part_category_id, try to match by category string name
+      if (!categoryId && part.category) {
+        categoryId = categoryNameToId[part.category.toLowerCase()];
+      }
+      
+      if (categoryId) {
+        counts[categoryId] = (counts[categoryId] || 0) + 1;
       }
     });
 
@@ -45,7 +63,7 @@ export default function CategoryTree({
     });
 
     return counts;
-  }, [parts, categories]);
+  }, [parts, categories, categoryNameToId]);
 
   // Filter categories based on search
   const filteredCategories = useMemo(() => {
