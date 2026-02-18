@@ -79,13 +79,11 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ProjectType.filter({ active: true })
         ]);
 
-        // Fetch all projects in parallel
+        // Fetch all projects in a single query using $in operator
         const projectIds = accesses.map(a => a.project_id);
-        const projectPromises = projectIds.map(id => 
-            base44.asServiceRole.entities.Project.filter({ id })
-        );
-        const projectResults = await Promise.all(projectPromises);
-        const projects = projectResults.flat();
+        const projects = projectIds.length > 0 
+            ? await base44.asServiceRole.entities.Project.filter({ id: { $in: projectIds } })
+            : [];
 
         // Return minimal data
         const minimalContact = {
