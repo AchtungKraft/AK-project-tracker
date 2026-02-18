@@ -1608,6 +1608,206 @@ export default function ProjectSupplyManager() {
           }}
         />
       )}
+
+      {/* Bulk PO Preview Modal */}
+      {showBulkPOPreview && bulkPOPreviewData && (
+        <BulkPOPreviewModal
+          preview={bulkPOPreviewData}
+          onClose={() => {
+            setShowBulkPOPreview(false);
+            setBulkPOPreviewData(null);
+          }}
+          onConfirm={handleBulkPOExecute}
+          isLoading={isBulkPOLoading}
+          vendors={vendors}
+        />
+      )}
+
+      {/* Vendor Picker for single PO when part has no default vendor */}
+      {vendorPickerCommitment && (
+        <VendorPickerModal
+          commitment={vendorPickerCommitment}
+          part={partMap.get(vendorPickerCommitment.part_id)}
+          vendors={vendors}
+          onClose={() => setVendorPickerCommitment(null)}
+          onSelect={(vendorId) => handleSinglePOCreate(vendorPickerCommitment, vendorId)}
+        />
+      )}
     </MobileSafeAreaContainer>
   );
 }
+
+// === BULK PO PREVIEW MODAL ===
+function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading, vendors }) {
+  const vendorMap = new Map(vendors.map(v => [v.id, v]));
+  const vendorGroups = preview.preview?.vendor_groups || [];
+  const blocked = preview.blocked || [];
+  const summary = preview.summary || {};
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border-gray-700 max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-green-400" />
+            Create Purchase Orders
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="p-3 bg-green-900/30 rounded-lg">
+              <p className="text-2xl font-bold text-green-400">{summary.order_count || vendorGroups.length}</p>
+              <p className="text-xs text-gray-400">Orders to Create</p>
+            </div>
+            <div className="p-3 bg-blue-900/30 rounded-lg">
+              <p className="text-2xl font-bold text-blue-400">{summary.eligible_count}</p>
+              <p className="text-xs text-gray-400">Line Items</p>
+            </div>
+            <div className="p-3 bg-yellow-900/30 rounded-lg">
+              <p className="text-2xl font-bold text-yellow-400">{blocked.length}</p>
+              <p className="text-xs text-gray-400">Blocked</p>
+            </div>
+          </div>
+
+          {/* Vendor Groups */}
+          {vendorGroups.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-300">Orders by Vendor:</p>
+              {vendorGroups.map((group, idx) => (
+                <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-medium">{group.vendor_name}</span>
+                    <Badge variant="outline" className="border-green-600 text-green-400">
+                      {group.commitment_count} items
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-sm text-gray-400">
+                    <span>Total Qty: {group.total_qty}</span>
+                    <span>Est. Cost: ${group.estimated_cost?.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Blocked Items */}
+          {blocked.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-yellow-400 flex items-center gap-1">
+                <AlertTriangle className="w-4 h-4" />
+                Blocked Items ({blocked.length}):
+              </p>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {blocked.map((item, idx) => (
+                  <div key={idx} className="p-2 bg-yellow-900/20 rounded text-sm">
+                    <span className="text-white">{item.part_name || 'Unknown Part'}</span>
+                    <span className="text-yellow-400 ml-2">- {item.message}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} className="border-gray-600">
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={isLoading || vendorGroups.length === 0}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {isLoading ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Create {vendorGroups.length} PO(s)
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// === VENDOR PICKER MODAL ===
+function VendorPickerModal({ commitment, part, vendors, onClose, onSelect }) {
+  const [selectedVendor, setSelectedVendor] = useState('');
+  const activeVendors = vendors.filter(v => v.active);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-white">Select Vendor</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5" />
+              <div>
+                <p className="text-sm text-yellow-200">No default vendor for this part</p>
+                <p className="text-xs text-yellow-400/70">
+                  Please select a vendor to create the purchase order.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-gray-800/50 rounded-lg">
+            <p className="text-white font-medium">{part?.part_name}</p>
+            {part?.vendor_part_number && (
+              <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
+            )}
+            <p className="text-sm text-gray-400 mt-1">
+              Qty to Order: <span className="text-purple-400">{commitment.qty_to_order}</span>
+            </p>
+          </div>
+
+          <div>
+            <Label className="text-gray-300">Vendor</Label>
+            <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
+                <SelectValue placeholder="Select vendor..." />
+              </SelectTrigger>
+              <SelectContent>
+                {activeVendors.map(v => (
+                  <SelectItem key={v.id} value={v.id}>
+                    <span style={{ color: v.color }}>{v.vendor_name}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} className="border-gray-600">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onSelect(selectedVendor)}
+            disabled={!selectedVendor}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Create PO
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Import Dialog components at the top of the file
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
