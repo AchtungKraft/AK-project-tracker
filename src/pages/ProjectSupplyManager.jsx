@@ -1809,7 +1809,3 @@ function VendorPickerModal({ commitment, part, vendors, onClose, onSelect }) {
     </Dialog>
   );
 }
-
-// Import Dialog components at the top of the file
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
