@@ -232,6 +232,23 @@ export default function OrderPartModal({
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
+          {/* PROJECT GUARD BANNER */}
+          {isBlockedByProjectGuard && (
+            <div className="p-4 bg-red-900/30 border border-red-600 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-red-200 font-medium">Legacy Flow Disabled</p>
+                  <p className="text-sm text-red-300/70 mt-1">
+                    This ordering flow is disabled for project-linked parts. 
+                    Use the "Create PO" button in the Project Supply Manager instead, 
+                    which routes through the Unified Supply Execution Engine.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Part Info */}
           <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
             <button
