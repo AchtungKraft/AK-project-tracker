@@ -474,10 +474,10 @@ export default function OrderPartModal({
   const mobileFooter = (
     <MobilePrimaryActionStack
       primaryAction={{
-        label: createOrderMutation.isPending ? 'Adding...' : 'Add to Order',
+        label: isBlockedByProjectGuard ? 'Blocked' : (createOrderMutation.isPending ? 'Adding...' : 'Add to Order'),
         onClick: handleSubmit,
         icon: Plus,
-        disabled: createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder),
+        disabled: createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder) || isBlockedByProjectGuard,
         loading: createOrderMutation.isPending,
       }}
       secondaryActions={[
