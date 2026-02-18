@@ -223,7 +223,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
     }
     
     const relevantCategoryIds = getAllDescendantCategoryIds(selectedCategoryId, categories);
-    const matchesCategory = relevantCategoryIds.includes(part.part_category_id);
+    const partCategoryId = getPartCategoryId(part);
+    const matchesCategory = partCategoryId && relevantCategoryIds.includes(partCategoryId);
     
     return matchesSearch && matchesCategory;
   });
