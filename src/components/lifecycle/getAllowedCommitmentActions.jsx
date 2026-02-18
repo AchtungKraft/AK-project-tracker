@@ -127,6 +127,39 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canRecordVendorInvoice = true;
   }
 
+  // QUANTITY MUTATION ACTIONS
+  // Increase qty - allowed unless closed/cancelled
+  if (commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+    actions.canIncreaseQty = true;
+  }
+
+  // Decrease qty - only if can reduce below ordered/installed
+  const maxDecrease = qty_committed - Math.max(qty_ordered, qty_installed);
+  if (maxDecrease > 0) {
+    actions.canDecreaseQty = true;
+  }
+
+  // Cancel unordered qty - only if has unordered qty
+  if (unorderedQty > 0) {
+    actions.canCancelUnorderedQty = true;
+  }
+
+  // Reallocate to project - only if has uninstalled qty
+  const maxMove = qty_committed - qty_installed;
+  if (maxMove > 0 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+    actions.canReallocateToProject = true;
+  }
+
+  // Split commitment - need at least 2 qty
+  if (qty_committed > 1 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+    actions.canSplitCommitment = true;
+  }
+
+  // DERIVED STATE FLAGS
+  // These indicate issues that need attention
+  actions.isOverordered = qty_ordered > qty_committed;
+  actions.poAdjustmentRequired = actions.isOverordered;
+
   return actions;
 }
 
@@ -144,6 +177,13 @@ function getDefaultActions() {
     canEditNotes: false,
     canReduceQty: false,
     
+    // Quantity mutation actions
+    canIncreaseQty: false,
+    canDecreaseQty: false,
+    canCancelUnorderedQty: false,
+    canReallocateToProject: false,
+    canSplitCommitment: false,
+    
     // Procurement lifecycle
     canCreatePO: false,
     canCreateDeltaOrder: false,
@@ -160,6 +200,12 @@ function getDefaultActions() {
     canCreateInvoice: false,
     canAllocateFromPool: false,
     canRecordVendorInvoice: false,
+    
+    // Derived state flags
+    isOverbilled: false,
+    isOverordered: false,
+    creditRequired: false,
+    poAdjustmentRequired: false,
   };
 }
 
