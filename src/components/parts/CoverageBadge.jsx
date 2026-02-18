@@ -6,11 +6,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CheckCircle2, AlertTriangle, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle, TrendingUp, TrendingDown, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 9.7c — CoverageBadge Component
+ * Phase 9.7d — CoverageBadge Component
  * 
  * Renders commitment coverage status from precomputed backend values.
  * GOVERNANCE: No local coverage computation allowed. All values from validator/resolver.
@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
  * - coverage_status: 'FULL' | 'PARTIAL' | 'NONE' | 'OVER'
  * - gap_qty: number (uncovered qty)
  * - overage_qty: number (over-covered qty)
- * - breakdown: { qty_needed, qty_reserved, qty_ordered, qty_received, qty_installed }
+ * - breakdown: { qty_needed, qty_reserved, qty_ordered, qty_received, qty_installed, qty_to_order }
  * - poAdjustmentRequired: boolean
+ * - undoAvailable: boolean (shows undo indicator)
  * - onClick: () => void
  * - compact: boolean
  */
