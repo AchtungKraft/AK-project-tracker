@@ -184,8 +184,12 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast.success(data.message);
+        const msg = data.warnings?.length > 0 
+          ? `Qty updated. ${data.warnings.join(', ')}`
+          : `Qty updated: ${data.reserved_qty_added || 0} reserved, ${data.to_order_qty_added || 0} to order`;
+        toast.success(msg);
         queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+        queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
         onMutationSuccess?.();
       } else {
         toast.error(data.error || 'Mutation failed');
