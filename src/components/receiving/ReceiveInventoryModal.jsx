@@ -403,7 +403,7 @@ export default function ReceiveInventoryModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-gray-700">
+          <Button variant="outline" onClick={handleClose} className="border-gray-700">
             Cancel
           </Button>
           <Button
