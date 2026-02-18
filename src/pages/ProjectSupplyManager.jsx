@@ -526,7 +526,11 @@ export default function ProjectSupplyManager() {
           </Badge>
         </TableCell>
         <TableCell className="text-center">
-          <span className="text-white">{commitment.qty_committed || 0}</span>
+          <InlineQtyStepper 
+            commitment={commitment} 
+            onMutationSuccess={() => refetchCommitments()}
+            disabled={!actionsEnabled}
+          />
         </TableCell>
         <TableCell className="text-center">
           <span className={commitment.qty_ordered > 0 ? 'text-purple-400' : 'text-gray-500'}>
