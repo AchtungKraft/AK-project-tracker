@@ -17,6 +17,10 @@ import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 
 /**
  * Enhanced Receiving Modal with mandatory location selection and provenance tracking
+ * 
+ * UNIFIED SUPPLY EXECUTION ENGINE:
+ * When commitment is provided, routes through applyReceivingToOrderAndCommitment
+ * to ensure lifecycle events and invariants are properly maintained.
  */
 export default function ReceiveInventoryModal({ 
   open, 
@@ -25,8 +29,19 @@ export default function ReceiveInventoryModal({
   receiptId = null,
   orderId = null,
   defaultQuantity = 1,
-  defaultUnitCost = null 
+  defaultUnitCost = null,
+  // NEW: Unified engine props
+  commitment = null,
+  onSuccess = null,
+  onClose = null
 }) {
+  // Support both open/onOpenChange and onClose patterns
+  const handleClose = () => {
+    if (onClose) onClose();
+    if (onOpenChange) onOpenChange(false);
+  };
+  
+  const isOpen = open !== undefined ? open : true;
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     quantity: defaultQuantity,
