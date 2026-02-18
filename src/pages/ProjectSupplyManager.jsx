@@ -55,6 +55,8 @@ import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
+import { CoverageBadge as CoverageBadgeNew, CoverageBadgeInline } from "@/components/parts/CoverageBadge";
+import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
