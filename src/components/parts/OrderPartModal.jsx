@@ -22,15 +22,28 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
  * OrderPartModal - Create or add to an order for a specific part
  * 
  * ⚠️ LEGACY WARNING: This modal creates PartPurchaseLineItem directly.
- * For project-linked orders, use ProjectSupplyManager which routes through CommitmentService.createPO
+ * For project-linked orders, use ProjectSupplyManager which routes through:
+ *   - createPurchaseOrdersFromCommitments (backend function)
  * 
- * This modal is kept for:
+ * This modal is kept ONLY for:
  * - General stock orders (no project linkage)
  * - Quick orders without commitment tracking
  * 
- * BLOCKED: UI-provided unit_price is IGNORED - cost must come from Part.cost
+ * BLOCKED: 
+ * - UI-provided unit_price is IGNORED - cost must come from Part.cost
+ * - If commitment/projectContext is provided, this modal shows a guard and blocks submission
  */
-export default function OrderPartModal({ part, onClose, onPartClick }) {
+export default function OrderPartModal({ 
+  part, 
+  onClose, 
+  onPartClick,
+  // NEW: Guard props - if these are provided, block legacy usage
+  commitment = null,
+  projectContext = null,
+  isProjectLinked = false
+}) {
+  // PROJECT GUARD: Block legacy modal for project-linked ordering
+  const isBlockedByProjectGuard = !!(commitment || projectContext || isProjectLinked);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
