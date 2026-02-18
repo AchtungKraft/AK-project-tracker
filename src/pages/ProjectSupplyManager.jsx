@@ -315,12 +315,14 @@ export default function ProjectSupplyManager() {
     // Apply status filter for tab
     switch (tabFilter) {
       case 'plan':
-        filtered = filtered.filter(c => c.commitment_status === 'planned');
+        // All active commitments for planning
+        filtered = filtered.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
         break;
       case 'buy':
+        // Items with qty_to_order > 0 OR not yet fully ordered
         filtered = filtered.filter(c => 
-          c.commitment_status === 'planned' || 
-          (c.qty_committed || 0) > (c.qty_ordered || 0)
+          (c.qty_to_order || 0) > 0 ||
+          (c.commitment_status === 'planned' && (c.qty_committed || 0) > (c.qty_ordered || 0))
         );
         break;
       case 'receive':
@@ -329,9 +331,10 @@ export default function ProjectSupplyManager() {
         );
         break;
       case 'install':
+        // Items with reserved or received qty not yet installed
         filtered = filtered.filter(c => 
           ['received', 'allocated', 'installed'].includes(c.commitment_status) ||
-          (c.qty_received || 0) > (c.qty_installed || 0)
+          ((c.qty_reserved || 0) + (c.qty_received || 0)) > (c.qty_installed || 0)
         );
         break;
     }
