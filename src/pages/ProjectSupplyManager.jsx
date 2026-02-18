@@ -1176,7 +1176,7 @@ export default function ProjectSupplyManager() {
                     <TableBody>
                       {getFilteredCommitments('receive').length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                             No items on order
                           </TableCell>
                         </TableRow>
@@ -1228,6 +1228,7 @@ export default function ProjectSupplyManager() {
                         <TableHead className="text-gray-400 text-center">Ordered</TableHead>
                         <TableHead className="text-gray-400 text-center">Received</TableHead>
                         <TableHead className="text-gray-400 text-center">Installed</TableHead>
+                        <TableHead className="text-gray-400">Coverage</TableHead>
                         <TableHead className="text-gray-400">Next Step</TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
@@ -1235,7 +1236,7 @@ export default function ProjectSupplyManager() {
                     <TableBody>
                       {getFilteredCommitments('install').length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                             No items ready to install
                           </TableCell>
                         </TableRow>
