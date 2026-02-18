@@ -1678,6 +1678,24 @@ export default function ProjectSupplyManager() {
           onSelect={(vendorId) => handleSinglePOCreate(vendorPickerCommitment, vendorId)}
         />
       )}
+
+      {/* Blocked Action Resolution Modal */}
+      {blockedItems && (
+        <BlockedActionResolutionModal
+          blocked={blockedItems}
+          projectId={projectId}
+          vendors={vendors}
+          onClose={() => setBlockedItems(null)}
+          onResolved={() => {
+            setBlockedItems(null);
+            refetchCommitments();
+          }}
+          onResolveVendor={resolveVendor}
+          onResolveBilling={resolveBilling}
+          onResolveQty={resolveQty}
+          onResolveInvariant={resolveInvariant}
+        />
+      )}
     </MobileSafeAreaContainer>
   );
 }
