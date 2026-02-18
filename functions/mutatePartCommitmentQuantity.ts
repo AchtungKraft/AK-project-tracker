@@ -420,7 +420,10 @@ async function executeIncreaseQty(base44, commitment, part, delta, reason, userI
   // Calculate new totals
   const newQtyCommitted = targetQty;
   const newQtyReserved = (commitment.qty_reserved || 0) + actualReserveQty;
-  const newQtyToOrder = (commitment.qty_to_order || 0) + actualToOrderQty;
+  
+  // Recompute qty_to_order from invariant: gap = needed - (reserved + max(ordered, received))
+  const coverageAfter = newQtyReserved + Math.max(commitment.qty_ordered || 0, commitment.qty_received || 0);
+  const newQtyToOrder = Math.max(0, newQtyCommitted - coverageAfter);
   
   const unitCost = commitment.unit_cost_snapshot || part?.cost || 0;
   const unitRetail = commitment.unit_retail_snapshot || part?.retail_override || part?.retail_matrix_price || 0;
