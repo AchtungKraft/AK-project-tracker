@@ -624,10 +624,19 @@ export default function ProjectSupplyManager() {
         </TableCell>
         {/* Coverage */}
         <TableCell>
-          <CoverageBadgeInline 
-            coverage={commitment.coverage}
-            onClick={() => setQtyManagerDrawer(commitment)}
-          />
+          <div className="flex items-center gap-1">
+            <CoverageBadgeInline 
+              coverage={commitment.coverage}
+              onClick={() => setQtyManagerDrawer(commitment)}
+            />
+            <CoverageControlsPopover
+              commitment={commitment}
+              coverage={commitment.coverage}
+              undoAvailable={commitment.undo_available}
+              onActionComplete={() => refetchCommitments()}
+              disabled={!actionsEnabled}
+            />
+          </div>
         </TableCell>
         {/* Next Step */}
         <TableCell>
