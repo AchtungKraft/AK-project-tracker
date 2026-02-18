@@ -605,6 +605,13 @@ export default function ProjectSupplyManager() {
                   <DollarSign className="w-4 h-4 mr-2" />
                   Allocate Pool
                 </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setQtyManagerDrawer(commitment)}
+                  className="text-cyan-400"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Manage Qty / Move
+                </DropdownMenuItem>
                 {allowed.canCancel && (
                   <>
                     <DropdownMenuSeparator className="bg-gray-700" />
