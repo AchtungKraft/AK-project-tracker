@@ -558,6 +558,9 @@ export default function ProjectSupplyManager() {
         dry_run: true
       });
 
+      // DEBUG: Log result for diagnostics (remove after confirming)
+      console.log('[PO Preview Bulk] Result:', JSON.stringify(result.data, null, 2));
+
       if (result.data?.error) {
         toast.error(result.data.error);
         return;
@@ -583,6 +586,9 @@ export default function ProjectSupplyManager() {
         allow_multi_vendor: true,
         dry_run: false
       });
+
+      // DEBUG: Log result for diagnostics (remove after confirming)
+      console.log('[PO Execute Bulk] Result:', JSON.stringify(result.data, null, 2));
 
       if (result.data?.error) {
         toast.error(result.data.error);
