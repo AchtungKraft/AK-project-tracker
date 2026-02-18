@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, ShoppingCart, ExternalLink } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, ExternalLink, AlertTriangle } from "lucide-react";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
