@@ -726,8 +726,41 @@ Deno.serve(async (req) => {
     const payload = await req.json().catch(() => ({}));
     const commitmentIds = payload.commitment_ids || null;
     const filters = payload.filters || {};
+    const includeUndoStatus = payload.include_undo_status || false;
     
     const results = await resolvePartLifecycleStateBatch(base44, commitmentIds, filters);
+    
+    // Optionally fetch undo availability for each commitment
+    if (includeUndoStatus && results.length > 0) {
+      const allCommitmentIds = results.map(r => r.commitment_id);
+      const lifecycleEvents = await base44.asServiceRole.entities.LifecycleEvent.filter({});
+      
+      // Group events by commitment_id
+      const eventsByCommitment = {};
+      for (const event of lifecycleEvents) {
+        if (allCommitmentIds.includes(event.commitment_id)) {
+          if (!eventsByCommitment[event.commitment_id]) {
+            eventsByCommitment[event.commitment_id] = [];
+          }
+          eventsByCommitment[event.commitment_id].push(event);
+        }
+      }
+      
+      // Determine undo availability for each result
+      for (const result of results) {
+        const events = eventsByCommitment[result.commitment_id] || [];
+        events.sort((a, b) => new Date(b.event_date || b.created_date) - new Date(a.event_date || a.created_date));
+        
+        const reversibleEvent = events.find(e => 
+          REVERSIBLE_EVENTS.includes(e.event_type) && 
+          !e.undone_at && 
+          e.is_reversible !== false
+        );
+        
+        result.undo_available = !!reversibleEvent;
+        result.last_reversible_event_type = reversibleEvent?.event_type || null;
+      }
+    }
     
     return Response.json({
       success: true,
