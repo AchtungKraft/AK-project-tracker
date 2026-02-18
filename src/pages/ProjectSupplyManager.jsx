@@ -282,7 +282,7 @@ export default function ProjectSupplyManager() {
     };
   }, [activeCommitments, pools]);
 
-  // Enrich commitments with part data
+  // Enrich commitments with part data and precomputed coverage block
   const enrichedCommitments = useMemo(() => {
     return activeCommitments.map(commitment => {
       const part = partsMap.get(commitment.part_id) || null;
@@ -293,6 +293,47 @@ export default function ProjectSupplyManager() {
       const commitmentInstalled = installedParts.filter(ip => ip.commitment_id === commitment.id && !ip.is_reversed);
 
       const categoryObj = resolveCategoryObj(part);
+      
+      // Compute coverage block (GOVERNANCE: this is the ONLY place coverage is computed for UI)
+      // In production, this should come from backend/resolver, but for now we derive from commitment fields
+      const qty_needed = commitment.qty_committed || 0;
+      const qty_reserved = commitment.qty_reserved || 0;
+      const qty_ordered = commitment.qty_ordered || 0;
+      const qty_received = commitment.qty_received || 0;
+      const qty_installed = commitment.qty_installed || 0;
+      const coverage_total = qty_reserved + Math.max(qty_ordered, qty_received);
+      const gap_qty = Math.max(0, qty_needed - coverage_total);
+      const overage_qty = Math.max(0, coverage_total - qty_needed);
+      
+      let coverage_status = 'NONE';
+      if (qty_needed === 0) {
+        coverage_status = coverage_total > 0 ? 'OVER' : 'FULL';
+      } else if (coverage_total === 0) {
+        coverage_status = 'NONE';
+      } else if (coverage_total < qty_needed) {
+        coverage_status = 'PARTIAL';
+      } else if (coverage_total === qty_needed) {
+        coverage_status = 'FULL';
+      } else {
+        coverage_status = 'OVER';
+      }
+      
+      const poAdjustmentRequired = overage_qty > 0 && (qty_ordered > qty_needed || qty_received > qty_needed);
+      
+      const coverage = {
+        qty_needed,
+        qty_reserved,
+        qty_ordered,
+        qty_received,
+        qty_installed,
+        qty_to_order: commitment.qty_to_order || gap_qty,
+        coverage_total,
+        gap_qty,
+        overage_qty,
+        coverage_status,
+        poAdjustmentRequired
+      };
+
       return {
         ...commitment,
         part,
@@ -306,6 +347,7 @@ export default function ProjectSupplyManager() {
         lifecycleState,
         lineItems: commitmentLineItems,
         installedParts: commitmentInstalled,
+        coverage, // Precomputed coverage block
       };
     });
   }, [activeCommitments, partsMap, vendors, lineItems, installedParts]);
