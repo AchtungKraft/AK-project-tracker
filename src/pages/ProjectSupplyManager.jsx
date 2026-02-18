@@ -53,6 +53,8 @@ import AllocatePoolModal from "@/components/financial/AllocatePoolModal";
 import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
+import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
+import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
@@ -90,6 +92,7 @@ export default function ProjectSupplyManager() {
   const [allocateModal, setAllocateModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
   const [actionsEnabled, setActionsEnabled] = useState(true);
+  const [qtyManagerDrawer, setQtyManagerDrawer] = useState(null);
 
   // Data Fetching
   const { data: project, isLoading: projectLoading } = useQuery({
