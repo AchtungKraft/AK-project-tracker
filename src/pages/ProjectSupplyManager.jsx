@@ -722,6 +722,10 @@ export default function ProjectSupplyManager() {
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
+              <CoverageDiagnosticsPanel 
+                projectId={projectId}
+                onOpenCommitment={(c) => setQtyManagerDrawer(c)}
+              />
               <Button
                 onClick={() => setShowCreatePoolModal(true)}
                 variant="outline"
