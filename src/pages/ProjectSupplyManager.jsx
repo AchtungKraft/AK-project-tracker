@@ -883,26 +883,28 @@ export default function ProjectSupplyManager() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                  <p className="text-xs text-gray-500 px-4 py-2 border-b border-gray-800">
+                    Auto: reserves stock first, remainder goes to order queue.
+                  </p>
                   <Table>
                     <TableHeader>
                       <TableRow className="border-gray-800 hover:bg-transparent">
                         <TableHead className="w-10"></TableHead>
                         <TableHead className="text-gray-400">Part</TableHead>
-                        <TableHead className="text-gray-400">Status</TableHead>
-                        <TableHead className="text-gray-400 text-center">Qty</TableHead>
+                        <TableHead className="text-gray-400 text-center">Needed</TableHead>
+                        <TableHead className="text-gray-400 text-center">Reserved</TableHead>
+                        <TableHead className="text-gray-400 text-center">To Order</TableHead>
                         <TableHead className="text-gray-400 text-center">Ordered</TableHead>
                         <TableHead className="text-gray-400 text-center">Received</TableHead>
                         <TableHead className="text-gray-400 text-center">Installed</TableHead>
-                        <TableHead className="text-gray-400 text-right">Retail</TableHead>
-                        <TableHead className="text-gray-400">Coverage</TableHead>
-                        <TableHead className="text-gray-400 text-right">Exposure</TableHead>
+                        <TableHead className="text-gray-400">Next Step</TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {getFilteredCommitments('plan').length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                             No planned items. All requirements are in progress or completed.
                           </TableCell>
                         </TableRow>
