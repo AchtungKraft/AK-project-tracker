@@ -3,14 +3,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 /**
  * getPortfolioSupplyState - Canonical read model for portfolio-level supply metrics
  * 
- * Returns precomputed metrics per project:
- * - Commitment lifecycle summaries
- * - Financial exposure and coverage
- * - Pool balances and status
- * - Installation progress
- * - Alert flags
- * 
- * UI must NOT calculate any of these - render only.
+ * Accepts filters: { searchTerm, statusFilter }
+ * Returns precomputed metrics per project
  */
 
 Deno.serve(async (req) => {
@@ -32,22 +26,63 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch all required entities
-    const [projects, statuses, projectTypes, commitments, pools, lineItems, installedParts] = await Promise.all([
-      base44.entities.Project.list(),
+    // Parse filters from request
+    let body = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      // No body or invalid JSON, use defaults
+    }
+    const { searchTerm, statusFilter } = body;
+
+    // Fetch projects (no server-side text search, filter in memory)
+    const projects = await base44.entities.Project.list();
+    
+    // Early text filter to reduce project set
+    let filteredProjects = projects;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filteredProjects = projects.filter(p =>
+        p.name?.toLowerCase().includes(term) ||
+        p.client_name?.toLowerCase().includes(term)
+      );
+    }
+
+    const projectIds = filteredProjects.map(p => p.id);
+
+    // If no projects match, return early
+    if (projectIds.length === 0) {
+      return Response.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        portfolio: {
+          total_projects: 0,
+          total_commitments: 0,
+          total_exposure: 0,
+          total_pool_balance: 0,
+          total_needs_order: 0,
+          total_on_order: 0,
+          total_ready_to_install: 0,
+          projects_with_alerts: 0,
+          funding_blocked_count: 0,
+        },
+        projects: [],
+      });
+    }
+
+    // Fetch related entities only for filtered projects
+    const [statuses, projectTypes, commitments, pools, installedParts] = await Promise.all([
       base44.entities.StatusList.list(),
       base44.entities.ProjectType.list(),
-      base44.entities.PartCommitment.list(),
-      base44.entities.BillingPool.list(),
-      base44.entities.PartPurchaseLineItem.list(),
-      base44.entities.InstalledPart.list(),
+      base44.entities.PartCommitment.filter({ project_id: { $in: projectIds } }),
+      base44.entities.BillingPool.filter({ project_id: { $in: projectIds } }),
+      base44.entities.InstalledPart.filter({ project_id: { $in: projectIds } }),
     ]);
 
     // Build project metrics
-    const projectMetrics = projects.map(project => {
+    const projectMetrics = filteredProjects.map(project => {
       const projectCommitments = commitments.filter(c => c.project_id === project.id && c.commitment_status !== 'cancelled');
       const projectPools = pools.filter(p => p.project_id === project.id);
-      const projectLineItems = lineItems.filter(li => projectCommitments.some(c => c.id === li.commitment_id));
       const projectInstalled = installedParts.filter(ip => ip.project_id === project.id && !ip.is_reversed);
 
       // Commitment lifecycle counts
@@ -76,13 +111,9 @@ Deno.serve(async (req) => {
       let totalQtyInstalled = 0;
 
       projectCommitments.forEach(c => {
-        const exposure = c.exposure_gap || 0;
-        const covered = c.covered_retail_total || 0;
-        const planned = c.planned_retail_total || 0;
-        
-        totalExposure += exposure;
-        totalCoveredRetail += covered;
-        totalPlannedRetail += planned;
+        totalExposure += c.exposure_gap || 0;
+        totalCoveredRetail += c.covered_retail_total || 0;
+        totalPlannedRetail += c.planned_retail_total || 0;
         totalQtyCommitted += c.qty_committed || 0;
         totalQtyOrdered += c.qty_ordered || 0;
         totalQtyReceived += c.qty_received || 0;
@@ -127,7 +158,7 @@ Deno.serve(async (req) => {
         (c.qty_received || 0) > (c.qty_installed || 0)
       ).length;
 
-      // Funding block: exposure > pool balance
+      // Funding block
       const isFundingBlocked = totalExposure > totalPoolBalance && totalExposure > 0;
 
       // Alert flags
@@ -137,7 +168,6 @@ Deno.serve(async (req) => {
       if (needsOrder > 0) alerts.push('NEEDS_ORDER');
       if (coveragePercent < 100 && totalPlannedRetail > 0) alerts.push('PARTIAL_COVERAGE');
 
-      // Get status and type info
       const status = statuses.find(s => s.id === project.status_id);
       const projectType = projectTypes.find(t => t.id === project.project_type_id);
 
@@ -151,61 +181,57 @@ Deno.serve(async (req) => {
         project_type_id: project.project_type_id,
         project_type_name: projectType?.name || 'Unknown',
         featured_image_url: project.featured_image_url,
-        
-        // Commitment counts
         total_commitments: projectCommitments.length,
         status_counts: statusCounts,
-        
-        // Quantities
         qty_committed: totalQtyCommitted,
         qty_ordered: totalQtyOrdered,
         qty_received: totalQtyReceived,
         qty_installed: totalQtyInstalled,
-        
-        // Financial
         total_exposure: totalExposure,
         total_covered_retail: totalCoveredRetail,
         total_planned_retail: totalPlannedRetail,
         coverage_percent: coveragePercent,
-        
-        // Pools
         total_pool_balance: totalPoolBalance,
         total_pool_allocated: totalPoolAllocated,
         active_pools: activePools,
         has_overdrawn_pool: hasOverdrawnPool,
-        
-        // Progress
         install_percent: installPercent,
-        
-        // Action counts
         needs_order_count: needsOrder,
         on_order_count: onOrder,
         ready_to_install_count: readyToInstall,
-        
-        // Flags
         is_funding_blocked: isFundingBlocked,
         alerts,
       };
     });
 
+    // Apply statusFilter after metrics are calculated
+    let finalProjects = projectMetrics;
+    if (statusFilter === 'alerts') {
+      finalProjects = projectMetrics.filter(p => p.alerts.length > 0);
+    } else if (statusFilter === 'funding_blocked') {
+      finalProjects = projectMetrics.filter(p => p.is_funding_blocked);
+    } else if (statusFilter === 'active') {
+      finalProjects = projectMetrics.filter(p => p.total_commitments > 0);
+    }
+
     // Portfolio totals
     const portfolioTotals = {
-      total_projects: projects.length,
-      total_commitments: commitments.filter(c => c.commitment_status !== 'cancelled').length,
-      total_exposure: projectMetrics.reduce((sum, p) => sum + p.total_exposure, 0),
-      total_pool_balance: projectMetrics.reduce((sum, p) => sum + p.total_pool_balance, 0),
-      total_needs_order: projectMetrics.reduce((sum, p) => sum + p.needs_order_count, 0),
-      total_on_order: projectMetrics.reduce((sum, p) => sum + p.on_order_count, 0),
-      total_ready_to_install: projectMetrics.reduce((sum, p) => sum + p.ready_to_install_count, 0),
-      projects_with_alerts: projectMetrics.filter(p => p.alerts.length > 0).length,
-      funding_blocked_count: projectMetrics.filter(p => p.is_funding_blocked).length,
+      total_projects: finalProjects.length,
+      total_commitments: finalProjects.reduce((sum, p) => sum + p.total_commitments, 0),
+      total_exposure: finalProjects.reduce((sum, p) => sum + p.total_exposure, 0),
+      total_pool_balance: finalProjects.reduce((sum, p) => sum + p.total_pool_balance, 0),
+      total_needs_order: finalProjects.reduce((sum, p) => sum + p.needs_order_count, 0),
+      total_on_order: finalProjects.reduce((sum, p) => sum + p.on_order_count, 0),
+      total_ready_to_install: finalProjects.reduce((sum, p) => sum + p.ready_to_install_count, 0),
+      projects_with_alerts: finalProjects.filter(p => p.alerts.length > 0).length,
+      funding_blocked_count: finalProjects.filter(p => p.is_funding_blocked).length,
     };
 
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
       portfolio: portfolioTotals,
-      projects: projectMetrics,
+      projects: finalProjects,
     });
 
   } catch (error) {

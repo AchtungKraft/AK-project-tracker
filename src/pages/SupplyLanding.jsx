@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import {
   Layers, Search, RefreshCw, AlertTriangle, CheckCircle2,
-  DollarSign, Package, ChevronRight, ArrowUpDown
+  Package, ChevronRight, ArrowUpDown
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 
@@ -33,8 +33,6 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
  * SupplyLanding - Portfolio Overview (Screen 1)
  * Data Source: getPortfolioSupplyState() backend function
  * Mutations: NONE (read-only overview)
- * 
- * Displays all projects with supply chain metrics, links to ProjectSupplyManager
  */
 export default function SupplyLanding() {
   const navigate = useNavigate();
@@ -43,43 +41,33 @@ export default function SupplyLanding() {
   const [sortBy, setSortBy] = useState('exposure');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch portfolio state from backend read model
+  // Debounce search to avoid excessive API calls
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch portfolio state from backend with filters
   const { data: portfolioData, isLoading, refetch } = useQuery({
-    queryKey: ['portfolioSupplyState'],
+    queryKey: ['portfolioSupplyState', debouncedSearch, statusFilter],
     queryFn: async () => {
-      const response = await base44.functions.invoke('getPortfolioSupplyState', {});
+      const response = await base44.functions.invoke('getPortfolioSupplyState', {
+        searchTerm: debouncedSearch,
+        statusFilter: statusFilter === 'all' ? null : statusFilter,
+      });
       return response.data;
     },
-    staleTime: 30000, // 30s cache
+    staleTime: 30000,
   });
 
   const portfolio = portfolioData?.portfolio || {};
   const projects = portfolioData?.projects || [];
 
-  // Filter and sort projects
-  const filteredProjects = useMemo(() => {
-    let filtered = [...projects];
-
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(p =>
-        p.project_name?.toLowerCase().includes(term) ||
-        p.client_name?.toLowerCase().includes(term)
-      );
-    }
-
-    // Status filter
-    if (statusFilter === 'alerts') {
-      filtered = filtered.filter(p => p.alerts?.length > 0);
-    } else if (statusFilter === 'funding_blocked') {
-      filtered = filtered.filter(p => p.is_funding_blocked);
-    } else if (statusFilter === 'active') {
-      filtered = filtered.filter(p => p.total_commitments > 0);
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
+  // Sort projects (filtering done server-side now)
+  const sortedProjects = useMemo(() => {
+    const sorted = [...projects];
+    sorted.sort((a, b) => {
       switch (sortBy) {
         case 'exposure':
           return (b.total_exposure || 0) - (a.total_exposure || 0);
@@ -93,9 +81,8 @@ export default function SupplyLanding() {
           return 0;
       }
     });
-
-    return filtered;
-  }, [projects, searchTerm, statusFilter, sortBy]);
+    return sorted;
+  }, [projects, sortBy]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -229,7 +216,7 @@ export default function SupplyLanding() {
             <CardContent className="p-0">
               {isLoading ? (
                 <div className="p-8 text-center text-gray-500">Loading portfolio data...</div>
-              ) : filteredProjects.length === 0 ? (
+              ) : sortedProjects.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">No projects match your filters</div>
               ) : (
                 <Table>
@@ -246,7 +233,7 @@ export default function SupplyLanding() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProjects.map(project => (
+                    {sortedProjects.map(project => (
                       <TableRow
                         key={project.project_id}
                         className="border-gray-800 hover:bg-gray-800/30 cursor-pointer"
