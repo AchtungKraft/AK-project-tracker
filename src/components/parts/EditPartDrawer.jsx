@@ -236,15 +236,8 @@ export default function EditPartDrawer({ partId, onClose }) {
       toast.error('Part name is required');
       return;
     }
-    // Map part_category_id to category string name
-    const dataToSave = { ...editedPart };
-    if (editedPart.part_category_id) {
-      const selectedCategory = categories.find(c => c.id === editedPart.part_category_id);
-      dataToSave.category = selectedCategory?.name || 'Uncategorized';
-    }
-    delete dataToSave.part_category_id;
-    updateMutation.mutate(dataToSave);
-  }, [editedPart, updateMutation, categories]);
+    updateMutation.mutate(editedPart);
+  }, [editedPart, updateMutation]);
 
   const handleInlineCreate = async (entityType, data) => {
     let mutation;
