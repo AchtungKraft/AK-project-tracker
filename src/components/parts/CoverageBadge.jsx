@@ -75,6 +75,7 @@ export function CoverageBadge({
   overage_qty = 0,
   breakdown,
   poAdjustmentRequired = false,
+  undoAvailable = false,
   onClick,
   compact = false,
   className
