@@ -149,6 +149,17 @@ export default function PartsExplorerLayout({ onPartClick }) {
     }));
   };
 
+  // Build a map of category name -> category id for matching
+  const categoryNameToId = useMemo(() => {
+    const map = {};
+    categories.forEach(cat => {
+      if (cat.name) {
+        map[cat.name.toLowerCase()] = cat.id;
+      }
+    });
+    return map;
+  }, [categories]);
+
   // Helper to get all descendant category IDs
   const getAllDescendantCategoryIds = (categoryId, allCategories) => {
     const descendants = new Set();
@@ -164,6 +175,15 @@ export default function PartsExplorerLayout({ onPartClick }) {
       });
     }
     return Array.from(descendants);
+  };
+
+  // Helper to get the category ID for a part (supports both part_category_id and category string)
+  const getPartCategoryId = (part) => {
+    if (part.part_category_id) return part.part_category_id;
+    if (part.category) {
+      return categoryNameToId[part.category.toLowerCase()];
+    }
+    return null;
   };
 
   const filteredParts = parts.filter(part => {
