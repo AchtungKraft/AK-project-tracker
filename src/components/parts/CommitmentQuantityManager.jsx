@@ -183,13 +183,34 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
       return response.data;
     },
     onSuccess: (data) => {
-      if (data.success) {
-        const msg = data.warnings?.length > 0 
-          ? `Qty updated. ${data.warnings.join(', ')}`
-          : `Qty updated: ${data.reserved_qty_added || 0} reserved, ${data.to_order_qty_added || 0} to order`;
-        toast.success(msg);
+      if (data.ok || data.success) {
+        // Build informative message from coverage data
+        let msg = 'Qty updated';
+        if (data.coverage) {
+          const parts = [];
+          if (data.reserved_qty_added > 0) parts.push(`${data.reserved_qty_added} reserved`);
+          if (data.to_order_qty_added > 0) parts.push(`${data.to_order_qty_added} to order`);
+          if (data.coverage.gap_qty > 0) parts.push(`gap: ${data.coverage.gap_qty}`);
+          if (parts.length > 0) msg += `: ${parts.join(', ')}`;
+        }
+        
+        // Show warnings if any
+        if (data.warnings?.poAdjustmentRequired) {
+          toast.warning('PO adjustment may be required', { description: msg });
+        } else if (data.violations?.length > 0) {
+          const warningViolations = data.violations.filter(v => v.severity === 'WARNING');
+          if (warningViolations.length > 0) {
+            toast.warning(msg, { description: warningViolations.map(v => v.message).join(', ') });
+          } else {
+            toast.success(msg);
+          }
+        } else {
+          toast.success(msg);
+        }
+        
         queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
         queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+        queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
         onMutationSuccess?.();
       } else {
         toast.error(data.error || 'Mutation failed');
