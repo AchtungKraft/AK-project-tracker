@@ -541,7 +541,10 @@ async function executeDecreaseQty(base44, commitment, part, delta, reason, userI
   
   const newQtyCommitted = targetQty;
   const newQtyReserved = Math.max(0, currentReserved - reduceFromReserved);
-  const newQtyToOrder = Math.max(0, currentToOrder - reduceFromToOrder);
+  
+  // Recompute qty_to_order from invariant: gap = needed - (reserved + max(ordered, received))
+  const coverageAfter = newQtyReserved + Math.max(commitment.qty_ordered || 0, commitment.qty_received || 0);
+  const newQtyToOrder = Math.max(0, newQtyCommitted - coverageAfter);
   
   const unitCost = commitment.unit_cost_snapshot || part?.cost || 0;
   const unitRetail = commitment.unit_retail_snapshot || part?.retail_override || part?.retail_matrix_price || 0;
