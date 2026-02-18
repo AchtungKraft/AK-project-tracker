@@ -482,9 +482,25 @@ export default function ProjectSupplyManager() {
     window.history.replaceState({}, '', url.toString());
   };
 
+  // Compute next step label from commitment state
+  const getNextStepLabel = (commitment) => {
+    const { qty_committed = 0, qty_reserved = 0, qty_to_order = 0, qty_ordered = 0, qty_received = 0, qty_installed = 0, billing_status } = commitment;
+    
+    if (qty_to_order > 0) {
+      if (billing_status === 'paid') return { label: 'Create PO', color: 'green' };
+      if (billing_status === 'invoiced') return { label: 'Awaiting Payment', color: 'yellow' };
+      return { label: 'Invoice Client', color: 'red' };
+    }
+    if (qty_ordered > qty_received) return { label: 'Receive', color: 'blue' };
+    if ((qty_reserved + qty_received) > qty_installed) return { label: 'Ready to Install', color: 'cyan' };
+    if (qty_installed >= qty_committed) return { label: 'Complete', color: 'green' };
+    return { label: '-', color: 'gray' };
+  };
+
   // Render commitment row
   const renderCommitmentRow = (commitment, showActions = true) => {
     const { part, vendor, allowed, lifecycleState } = commitment;
+    const nextStep = getNextStepLabel(commitment);
 
     return (
       <TableRow key={commitment.id} className="hover:bg-gray-800/30">
@@ -516,15 +532,7 @@ export default function ProjectSupplyManager() {
             </div>
           </div>
         </TableCell>
-        <TableCell>
-          <Badge 
-            variant="outline" 
-            className={`text-xs border-${lifecycleState.color}-600 text-${lifecycleState.color}-400`}
-            style={{ borderColor: `var(--${lifecycleState.color}-600, #6B7280)`, color: `var(--${lifecycleState.color}-400, #9CA3AF)` }}
-          >
-            {lifecycleState.label}
-          </Badge>
-        </TableCell>
+        {/* Needed (editable stepper) */}
         <TableCell className="text-center">
           <InlineQtyStepper 
             commitment={commitment} 
@@ -532,31 +540,60 @@ export default function ProjectSupplyManager() {
             disabled={!actionsEnabled}
           />
         </TableCell>
+        {/* Reserved (read-only) */}
         <TableCell className="text-center">
-          <span className={commitment.qty_ordered > 0 ? 'text-purple-400' : 'text-gray-500'}>
+          <span className={(commitment.qty_reserved || 0) > 0 ? 'text-cyan-400' : 'text-gray-500'}>
+            {commitment.qty_reserved || 0}
+          </span>
+        </TableCell>
+        {/* To Order (read-only) */}
+        <TableCell className="text-center">
+          {(commitment.qty_to_order || 0) > 0 ? (
+            <Badge variant="outline" className="border-purple-600 text-purple-400">
+              {commitment.qty_to_order}
+            </Badge>
+          ) : (
+            <span className="text-gray-500">0</span>
+          )}
+        </TableCell>
+        {/* Ordered */}
+        <TableCell className="text-center">
+          <span className={(commitment.qty_ordered || 0) > 0 ? 'text-purple-400' : 'text-gray-500'}>
             {commitment.qty_ordered || 0}
           </span>
         </TableCell>
+        {/* Received */}
         <TableCell className="text-center">
-          <span className={commitment.qty_received > 0 ? 'text-blue-400' : 'text-gray-500'}>
+          <span className={(commitment.qty_received || 0) > 0 ? 'text-blue-400' : 'text-gray-500'}>
             {commitment.qty_received || 0}
           </span>
         </TableCell>
+        {/* Installed */}
         <TableCell className="text-center">
-          <span className={commitment.qty_installed > 0 ? 'text-green-400' : 'text-gray-500'}>
+          <span className={(commitment.qty_installed || 0) > 0 ? 'text-green-400' : 'text-gray-500'}>
             {commitment.qty_installed || 0}
           </span>
         </TableCell>
-        <TableCell className="text-right">
-          <span className="text-white">${(commitment.planned_retail_total || 0).toFixed(0)}</span>
-        </TableCell>
+        {/* Next Step */}
         <TableCell>
-          <CoverageBadge commitment={commitment} compact />
-        </TableCell>
-        <TableCell className="text-right">
-          <span className={commitment.exposure_gap > 0 ? 'text-red-400' : 'text-green-400'}>
-            ${(commitment.exposure_gap || 0).toFixed(0)}
-          </span>
+          <Badge 
+            variant="outline" 
+            className={`text-xs border-${nextStep.color}-600 text-${nextStep.color}-400`}
+            style={{ 
+              borderColor: nextStep.color === 'green' ? '#16a34a' : 
+                           nextStep.color === 'yellow' ? '#ca8a04' :
+                           nextStep.color === 'red' ? '#dc2626' :
+                           nextStep.color === 'blue' ? '#2563eb' :
+                           nextStep.color === 'cyan' ? '#0891b2' : '#6b7280',
+              color: nextStep.color === 'green' ? '#4ade80' : 
+                     nextStep.color === 'yellow' ? '#facc15' :
+                     nextStep.color === 'red' ? '#f87171' :
+                     nextStep.color === 'blue' ? '#60a5fa' :
+                     nextStep.color === 'cyan' ? '#22d3ee' : '#9ca3af'
+            }}
+          >
+            {nextStep.label}
+          </Badge>
         </TableCell>
         {showActions && (
           <TableCell>
