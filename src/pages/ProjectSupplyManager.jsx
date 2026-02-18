@@ -708,6 +708,28 @@ export default function ProjectSupplyManager() {
     return { label: '-', color: 'gray' };
   };
 
+  // === BLOCKED ITEM RESOLUTION HANDLERS ===
+  const resolveVendor = (commitmentId) => {
+    const commitment = enrichedCommitments.find(c => c.id === commitmentId);
+    if (commitment) setVendorPickerCommitment(commitment);
+  };
+
+  const resolveBilling = (commitmentId) => {
+    const commitment = enrichedCommitments.find(c => c.id === commitmentId);
+    if (commitment) setAllocateModal(commitment);
+  };
+
+  const resolveQty = (commitmentId) => {
+    const commitment = enrichedCommitments.find(c => c.id === commitmentId);
+    if (commitment) setQtyManagerDrawer(commitment);
+  };
+
+  const resolveInvariant = (commitmentId) => {
+    // Switch to plan tab for coverage review
+    setActiveTab('plan');
+    toast.info('Review commitment coverage in the Plan tab');
+  };
+
   // Render commitment row
   const renderCommitmentRow = (commitment, showActions = true) => {
     const { part, vendor, allowed, lifecycleState } = commitment;
