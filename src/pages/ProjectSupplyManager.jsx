@@ -609,12 +609,9 @@ export default function ProjectSupplyManager() {
         });
       }
       
+      // Show guided resolution modal for blocked items
       if (blocked.length > 0) {
-        // Extract reasons with fallbacks
-        const reasons = blocked.slice(0, 3).map(b => b.message || b.reason || b.reason_code || 'Unknown').join('; ');
-        toast.warning(`${blocked.length} items blocked`, {
-          description: reasons
-        });
+        setBlockedItems(blocked);
       }
       
       // Silent failure fallback
