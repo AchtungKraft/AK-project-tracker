@@ -986,13 +986,70 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'Unknown action type' }, { status: 400 });
     }
 
+    // If mutation was successful and not dry_run, validate final state
+    if (result.success && !dry_run) {
+      // Fetch updated commitment for validation
+      const updatedCommitments = await base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
+      const updatedCommitment = updatedCommitments[0];
+      
+      if (updatedCommitment) {
+        const validation = validateCommitmentQtyInvariant({
+          qty_needed: updatedCommitment.qty_committed,
+          qty_committed: updatedCommitment.qty_committed,
+          qty_reserved: updatedCommitment.qty_reserved,
+          qty_ordered: updatedCommitment.qty_ordered,
+          qty_received: updatedCommitment.qty_received,
+          qty_installed: updatedCommitment.qty_installed,
+          qty_to_order: updatedCommitment.qty_to_order
+        });
+        
+        // Log overcommitted detection if applicable
+        if (validation.coverage.coverage_status === 'OVER') {
+          await createLifecycleEvent(
+            base44,
+            updatedCommitment,
+            'OVERCOMMITTED_DETECTED',
+            {},
+            { coverage: validation.coverage, violations: validation.violations },
+            user.email,
+            'Post-mutation validation'
+          );
+        }
+
+        // Return enriched response
+        return Response.json({
+          ok: result.success,
+          ...result,
+          action_type,
+          commitment: {
+            id: updatedCommitment.id,
+            qty_committed: updatedCommitment.qty_committed,
+            qty_reserved: updatedCommitment.qty_reserved,
+            qty_to_order: updatedCommitment.qty_to_order,
+            qty_ordered: updatedCommitment.qty_ordered,
+            qty_received: updatedCommitment.qty_received,
+            qty_installed: updatedCommitment.qty_installed,
+            coverage_status: updatedCommitment.coverage_status
+          },
+          coverage: validation.coverage,
+          violations: validation.violations,
+          suggested_actions: validation.suggested_actions,
+          warnings: {
+            ...(result.warnings ? { messages: result.warnings } : {}),
+            poAdjustmentRequired: validation.coverage.poAdjustmentRequired
+          }
+        });
+      }
+    }
+
     return Response.json({
+      ok: result.success,
       ...result,
       action_type
     });
 
   } catch (error) {
     console.error('mutatePartCommitmentQuantity error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 });
