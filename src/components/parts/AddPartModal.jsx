@@ -112,7 +112,16 @@ export default function AddPartModal({ onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    // Map part_category_id to category string name
+    const dataToSave = { ...formData };
+    if (formData.part_category_id) {
+      const selectedCategory = categories.find(c => c.id === formData.part_category_id);
+      dataToSave.category = selectedCategory?.name || 'Uncategorized';
+    } else {
+      dataToSave.category = 'Uncategorized';
+    }
+    delete dataToSave.part_category_id;
+    createMutation.mutate(dataToSave);
   };
 
   const activeCategories = categories.filter(c => c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
