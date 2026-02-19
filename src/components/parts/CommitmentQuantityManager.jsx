@@ -264,7 +264,7 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
           <Minus className="w-3 h-3" />
         </Button>
         <span className="w-8 text-center text-white font-medium">
-          {commitment.qty_committed || 0}
+          {commitment.required_total ?? commitment.qty_committed ?? 0}
         </span>
         <Button
           variant="outline"
