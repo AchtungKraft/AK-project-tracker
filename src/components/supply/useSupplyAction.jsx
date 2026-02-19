@@ -29,6 +29,7 @@ export function useSupplyAction(options = {}) {
     'opsSupplyView',
     'partSupplyUsage',
     'partsInventoryView',  // CANONICAL: Parts Tracker read model
+    'inventoryItems',      // CANONICAL: Ensure InventoryItem queries are invalidated
     'partCommitments',
     'projectCommitments',
     'commitmentState',
