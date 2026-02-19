@@ -60,20 +60,26 @@ export default function PartStatusSummary({ partId }) {
   // Line items for this part (for On Order display)
   const partLineItems = lineItems.filter(li => li.part_id === partId);
 
-  const getStatusBadge = (req) => {
-    if (req.qty_installed >= req.qty_needed) {
+  // CANONICAL: Status badge from commitment data
+  const getStatusBadge = (commitment) => {
+    const required = commitment.required_total ?? 0;
+    const installed = commitment.qty_installed ?? 0;
+    const reserved = commitment.reserved_from_stock ?? 0;
+    const onOrder = commitment.on_order ?? 0;
+    
+    if (installed >= required) {
       return <Badge className="bg-green-600 text-white text-xs">Installed</Badge>;
     }
-    if (req.qty_installed > 0) {
+    if (installed > 0) {
       return <Badge className="bg-green-600/50 text-white text-xs">Partial Install</Badge>;
     }
-    if (req.qty_allocated >= req.qty_needed) {
+    if (reserved >= required) {
       return <Badge className="bg-blue-600 text-white text-xs">Allocated</Badge>;
     }
-    if (req.qty_allocated > 0) {
+    if (reserved > 0) {
       return <Badge className="bg-blue-600/50 text-white text-xs">Partial Alloc</Badge>;
     }
-    if (req.qty_ordered > 0) {
+    if (onOrder > 0) {
       return <Badge className="bg-yellow-600 text-white text-xs">On Order</Badge>;
     }
     return <Badge className="bg-red-600 text-white text-xs">Needed</Badge>;
