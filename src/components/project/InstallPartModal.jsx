@@ -228,9 +228,9 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
             <Button 
               onClick={handleInstall}
               className="bg-green-600 hover:bg-green-700"
-              disabled={installMutation.isPending || maxInstallable <= 0 || (affectsInventory && availableInventory.length === 0)}
+              disabled={supplyAction.isPending || maxInstallable <= 0 || (affectsInventory && availableInventory.length === 0)}
             >
-              {installMutation.isPending ? 'Installing...' : `Install ${qtyToInstall} Unit(s)`}
+              {supplyAction.isPending ? 'Installing...' : `Install ${qtyToInstall} Unit(s)`}
             </Button>
           </div>
         </div>
@@ -245,8 +245,8 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
         part={part}
         quantity={qtyToInstall}
         fromLocation={activeLocations.find(l => l.id === selectedLocationId)}
-        commitment={commitment}
-        isLoading={installMutation.isPending}
+        commitment={passedCommitment || commitmentState}
+        isLoading={supplyAction.isPending}
       />
     </Dialog>
   );
