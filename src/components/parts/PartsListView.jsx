@@ -92,47 +92,36 @@ export default function PartsListView({
   }, [financialStatuses]);
 
   /**
-   * getInventoryStats - Now uses Part.physical_stock (canonical) and PartCommitment
-   * Returns: { onHand, available, need, onOrder, toOrder }
+   * getInventoryStats - CANONICAL: Returns stats from read model only
+   * NO local computation. NO legacy fields.
+   * Returns: { onHand, available, need, onOrder, toOrder, reserved, projectCount }
    */
   const getInventoryStats = (part) => {
-    // Use Part.physical_stock as canonical source
-    const onHand = part.physical_stock ?? 0;
+    // Look up canonical data from read model
+    const canonical = inventoryViewMap.get(part.id);
     
-    // Get commitments for this part
-    const partCommitments = commitments.filter(c => c.part_id === part.id);
+    if (canonical) {
+      return {
+        onHand: canonical.physical_stock ?? 0,
+        available: canonical.available ?? 0,
+        need: canonical.required_total ?? 0,
+        onOrder: canonical.on_order ?? 0,
+        toOrder: canonical.to_order ?? 0,
+        reserved: canonical.reserved_total ?? 0,
+        projectCount: canonical.projects_using_count ?? 0
+      };
+    }
     
-    // Total reserved across all projects (canonical: reserved_from_stock)
-    const reserved = partCommitments.reduce((sum, c) => 
-      sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0), 0);
-    
-    // Total required across all projects
-    const totalRequired = partCommitments.reduce((sum, c) => 
-      sum + (c.required_total ?? c.qty_committed ?? 0), 0);
-    
-    // On Order = sum of covered_from_po across commitments
-    const onOrder = partCommitments.reduce((sum, c) => 
-      sum + (c.covered_from_po ?? 0), 0);
-    
-    // To Order (gap) = required - reserved - covered_from_po
-    const toOrder = partCommitments.reduce((sum, c) => {
-      const req = c.required_total ?? c.qty_committed ?? 0;
-      const res = c.reserved_from_stock ?? c.qty_reserved ?? 0;
-      const cov = c.covered_from_po ?? 0;
-      return sum + Math.max(0, req - res - cov);
-    }, 0);
-    
-    // Available = physical - reserved
-    const available = Math.max(0, onHand - reserved);
-    
-    return { 
-      onHand, 
-      available, 
-      need: totalRequired,  // Total demand
-      onOrder,
-      toOrder,              // Gap that needs ordering
-      reserved,
-      projectCount: partCommitments.length
+    // Fallback to Part.physical_stock only if read model not loaded yet
+    const physical = part.physical_stock ?? 0;
+    return {
+      onHand: physical,
+      available: physical,
+      need: 0,
+      onOrder: 0,
+      toOrder: 0,
+      reserved: 0,
+      projectCount: 0
     };
   };
 
