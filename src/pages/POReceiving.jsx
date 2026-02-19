@@ -1,31 +1,19 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { createPageUrl } from '@/utils';
-import { Link } from 'react-router-dom';
-import { 
-  Package, 
-  Truck, 
-  CheckCircle2, 
-  AlertTriangle, 
-  ArrowLeft,
-  MapPin,
-  Save,
-  Loader2,
-  ClipboardCheck
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { usePOReceivingView, useSupplyAction } from "@/components/supply/useProjectSupplyView";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -33,407 +21,553 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { toast } from 'sonner';
-import MobileSafeAreaContainer from '@/components/mobile/MobileSafeAreaContainer';
+} from "@/components/ui/table";
+import {
+  ArrowLeft,
+  Package,
+  Truck,
+  MapPin,
+  Search,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
+/**
+ * POReceiving - PO-centric fast receiving page
+ * 
+ * Two modes:
+ * 1. List mode: Shows all receivable POs
+ * 2. Detail mode: Shows single PO for batch receiving (order_id in URL)
+ * 
+ * Design: open PO → check boxes → enter qty → assign location → receive all
+ */
 export default function POReceiving() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const orderId = urlParams.get('order_id');
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('all');
 
-  // State for receiving quantities per line item
-  const [receivingData, setReceivingData] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Use different query based on mode
+  const listView = usePOReceivingView(null, { search: searchTerm, vendor_id: vendorFilter !== 'all' ? vendorFilter : undefined });
+  const detailView = usePOReceivingView(orderId);
 
-  // Fetch order
-  const { data: order, isLoading: orderLoading } = useQuery({
-    queryKey: ['order', orderId],
-    queryFn: async () => {
-      if (!orderId) return null;
-      const orders = await base44.entities.Order.filter({ id: orderId });
-      return orders[0] || null;
-    },
-    enabled: !!orderId
-  });
-
-  // Fetch line items for this order
-  const { data: lineItems = [], isLoading: lineItemsLoading } = useQuery({
-    queryKey: ['orderLineItems', orderId],
-    queryFn: async () => {
-      if (!orderId) return [];
-      return base44.entities.PartPurchaseLineItem.filter({ order_id: orderId });
-    },
-    enabled: !!orderId
-  });
-
-  // Fetch parts for line items
-  const { data: parts = [] } = useQuery({
-    queryKey: ['lineParts', lineItems.map(li => li.part_id).join(',')],
-    queryFn: async () => {
-      const partIds = [...new Set(lineItems.map(li => li.part_id).filter(Boolean))];
-      if (partIds.length === 0) return [];
-      return base44.entities.Part.filter({ id: { $in: partIds } });
-    },
-    enabled: lineItems.length > 0
-  });
-
-  // Fetch locations
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.filter({ active: true })
-  });
-
-  // Fetch vendor
-  const { data: vendor } = useQuery({
-    queryKey: ['vendor', order?.vendor_id],
-    queryFn: async () => {
-      if (!order?.vendor_id) return null;
-      const vendors = await base44.entities.Vendor.filter({ id: order.vendor_id });
-      return vendors[0] || null;
-    },
-    enabled: !!order?.vendor_id
-  });
-
-  // Build part map
-  const partMap = useMemo(() => new Map(parts.map(p => [p.id, p])), [parts]);
-
-  // Receive mutation using unified dispatcher
-  const receiveMutation = useMutation({
-    mutationFn: async (receivePayload) => {
-      const result = await base44.functions.invoke('executeSupplyAction', {
-        action_type: 'RECEIVE',
-        commitment_ids: [],
-        payload: receivePayload
-      });
-      if (result.data?.error) throw new Error(result.data.error);
-      return result.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orderLineItems', orderId] });
-      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-    }
-  });
-
-  // Handle quantity change for a line item
-  const handleQtyChange = (lineItemId, value) => {
-    setReceivingData(prev => ({
-      ...prev,
-      [lineItemId]: {
-        ...prev[lineItemId],
-        qty: Math.max(0, parseInt(value) || 0)
-      }
-    }));
-  };
-
-  // Handle location change for a line item
-  const handleLocationChange = (lineItemId, locationId) => {
-    setReceivingData(prev => ({
-      ...prev,
-      [lineItemId]: {
-        ...prev[lineItemId],
-        location_id: locationId
-      }
-    }));
-  };
-
-  // Submit all receiving
-  const handleSubmitReceiving = async () => {
-    const itemsToReceive = Object.entries(receivingData)
-      .filter(([_, data]) => data.qty > 0)
-      .map(([lineItemId, data]) => ({
-        line_item_id: lineItemId,
-        qty_received: data.qty,
-        location_id: data.location_id
-      }));
-
-    if (itemsToReceive.length === 0) {
-      toast.warning('No quantities entered to receive');
-      return;
-    }
-
-    setIsSubmitting(true);
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const item of itemsToReceive) {
-      try {
-        await receiveMutation.mutateAsync(item);
-        successCount++;
-      } catch (error) {
-        errorCount++;
-        console.error('Receive error:', error);
-      }
-    }
-
-    setIsSubmitting(false);
-    setReceivingData({});
-
-    if (successCount > 0) {
-      toast.success(`Received ${successCount} line item(s)`);
-    }
-    if (errorCount > 0) {
-      toast.error(`${errorCount} item(s) failed to receive`);
-    }
-
-    // Refetch
-    queryClient.invalidateQueries({ queryKey: ['orderLineItems', orderId] });
-    queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-  };
-
-  // Compute totals
-  const totals = useMemo(() => {
-    let totalOrdered = 0;
-    let totalReceived = 0;
-    let totalPending = 0;
-
-    for (const li of lineItems) {
-      const ordered = li.qty_ordered ?? 0;
-      const received = li.qty_received ?? 0;
-      totalOrdered += ordered;
-      totalReceived += received;
-      totalPending += Math.max(0, ordered - received);
-    }
-
-    return { totalOrdered, totalReceived, totalPending };
-  }, [lineItems]);
-
-  // Check if all received
-  const isFullyReceived = totals.totalPending === 0;
-
-  if (!orderId) {
+  if (orderId) {
     return (
-      <MobileSafeAreaContainer>
-        <div className="p-6">
-          <div className="text-center py-12">
-            <Package className="w-16 h-16 mx-auto text-gray-600 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">No Order Selected</h2>
-            <p className="text-gray-400 mb-4">Please select a purchase order to receive.</p>
-            <Link to={createPageUrl('SupplyQueues')}>
-              <Button variant="outline">View Orders</Button>
-            </Link>
-          </div>
-        </div>
-      </MobileSafeAreaContainer>
-    );
-  }
-
-  if (orderLoading || lineItemsLoading) {
-    return (
-      <MobileSafeAreaContainer>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
-        </div>
-      </MobileSafeAreaContainer>
-    );
-  }
-
-  if (!order) {
-    return (
-      <MobileSafeAreaContainer>
-        <div className="p-6">
-          <div className="text-center py-12">
-            <AlertTriangle className="w-16 h-16 mx-auto text-yellow-500 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Order Not Found</h2>
-            <p className="text-gray-400 mb-4">The requested order could not be found.</p>
-            <Link to={createPageUrl('SupplyQueues')}>
-              <Button variant="outline">Back to Orders</Button>
-            </Link>
-          </div>
-        </div>
-      </MobileSafeAreaContainer>
+      <POReceivingDetail 
+        po={detailView.po} 
+        locations={detailView.locations}
+        isLoading={detailView.isLoading}
+        onBack={() => navigate(createPageUrl('POReceiving'))}
+        refetch={detailView.refetch}
+      />
     );
   }
 
   return (
-    <MobileSafeAreaContainer>
-      <div className="p-4 md:p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link to={createPageUrl('SupplyQueues')}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Truck className="w-6 h-6 text-blue-400" />
-                Receive PO: {order.po_number}
-              </h1>
-              <p className="text-gray-400 text-sm">
-                {vendor?.vendor_name || 'Unknown Vendor'} • {order.order_date}
-              </p>
-            </div>
-          </div>
-          
-          <Badge 
-            variant={isFullyReceived ? 'default' : 'outline'}
-            className={isFullyReceived ? 'bg-green-600' : 'border-yellow-500 text-yellow-500'}
-          >
-            {isFullyReceived ? 'Fully Received' : order.status}
-          </Badge>
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Truck className="w-6 h-6 text-green-500" />
+            PO Receiving
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Fast batch receiving by purchase order
+          </p>
         </div>
+        <Button 
+          variant="outline" 
+          onClick={() => listView.refetch()}
+          disabled={listView.isLoading}
+        >
+          <RefreshCw className={cn("w-4 h-4 mr-2", listView.isLoading && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
 
-        {/* Summary Cards */}
+      {/* Summary */}
+      {listView.summary && (
         <div className="grid grid-cols-3 gap-4">
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-blue-400">{totals.totalOrdered}</p>
-              <p className="text-xs text-gray-400">Total Ordered</p>
+          <Card className="bg-gray-900/50 border-gray-700">
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-white">{listView.summary.total_orders || 0}</div>
+              <div className="text-sm text-gray-400">Open Orders</div>
             </CardContent>
           </Card>
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-green-400">{totals.totalReceived}</p>
-              <p className="text-xs text-gray-400">Received</p>
+          <Card className="bg-gray-900/50 border-gray-700">
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-green-400">{listView.summary.total_lines || 0}</div>
+              <div className="text-sm text-gray-400">Line Items</div>
             </CardContent>
           </Card>
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-yellow-400">{totals.totalPending}</p>
-              <p className="text-xs text-gray-400">Pending</p>
+          <Card className="bg-gray-900/50 border-gray-700">
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-blue-400">{listView.summary.total_qty_remaining || 0}</div>
+              <div className="text-sm text-gray-400">Qty to Receive</div>
             </CardContent>
           </Card>
         </div>
+      )}
 
-        {/* Line Items Table */}
-        <Card className="bg-gray-800/50 border-gray-700">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2">
-              <ClipboardCheck className="w-5 h-5 text-green-400" />
-              Line Items
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700 hover:bg-transparent">
-                    <TableHead className="text-gray-400">Part</TableHead>
-                    <TableHead className="text-gray-400 text-center">Ordered</TableHead>
-                    <TableHead className="text-gray-400 text-center">Received</TableHead>
-                    <TableHead className="text-gray-400 text-center">Remaining</TableHead>
-                    <TableHead className="text-gray-400 text-center w-28">Receive Qty</TableHead>
-                    <TableHead className="text-gray-400 w-40">Location</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lineItems.map(lineItem => {
-                    const part = partMap.get(lineItem.part_id);
-                    const ordered = lineItem.qty_ordered ?? 0;
-                    const received = lineItem.qty_received ?? 0;
-                    const remaining = Math.max(0, ordered - received);
-                    const receivingQty = receivingData[lineItem.id]?.qty || 0;
-                    const receivingLocation = receivingData[lineItem.id]?.location_id || '';
+      {/* Filters */}
+      <div className="flex gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Input
+            placeholder="Search PO number, vendor, part..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-gray-900 border-gray-700"
+          />
+        </div>
+        <Select value={vendorFilter} onValueChange={setVendorFilter}>
+          <SelectTrigger className="w-48 bg-gray-900 border-gray-700">
+            <SelectValue placeholder="All Vendors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Vendors</SelectItem>
+            {listView.filterOptions?.vendors?.map(v => (
+              <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-                    return (
-                      <TableRow key={lineItem.id} className="border-gray-700">
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {part?.featured_photo && (
-                              <img 
-                                src={part.featured_photo} 
-                                alt="" 
-                                className="w-10 h-10 rounded object-cover bg-gray-700"
-                              />
-                            )}
-                            <div>
-                              <p className="text-white font-medium">{part?.part_name || 'Unknown'}</p>
-                              <p className="text-xs text-gray-500">{part?.vendor_part_number}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center text-white">{ordered}</TableCell>
-                        <TableCell className="text-center">
-                          <span className={received >= ordered ? 'text-green-400' : 'text-blue-400'}>
-                            {received}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {remaining > 0 ? (
-                            <span className="text-yellow-400">{remaining}</span>
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4 text-green-400 mx-auto" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {remaining > 0 ? (
-                            <Input
-                              type="number"
-                              min="0"
-                              max={remaining}
-                              value={receivingQty || ''}
-                              onChange={(e) => handleQtyChange(lineItem.id, e.target.value)}
-                              placeholder="0"
-                              className="w-20 h-8 text-center bg-gray-900 border-gray-600"
-                            />
-                          ) : (
-                            <span className="text-gray-500 text-sm">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {remaining > 0 && receivingQty > 0 ? (
-                            <Select
-                              value={receivingLocation}
-                              onValueChange={(v) => handleLocationChange(lineItem.id, v)}
-                            >
-                              <SelectTrigger className="h-8 bg-gray-900 border-gray-600">
-                                <SelectValue placeholder="Select..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {locations.map(loc => (
-                                  <SelectItem key={loc.id} value={loc.id}>
-                                    {loc.location_area}
-                                    {loc.bin_description && ` - ${loc.bin_description}`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span className="text-gray-500 text-sm">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Submit Button */}
-        {totals.totalPending > 0 && (
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSubmitReceiving}
-              disabled={isSubmitting || Object.values(receivingData).every(d => !d.qty)}
-              className="bg-green-600 hover:bg-green-700 gap-2"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Submit Receiving
-            </Button>
-          </div>
-        )}
-
-        {/* Fully Received Message */}
-        {isFullyReceived && (
-          <Card className="bg-green-900/20 border-green-700">
-            <CardContent className="p-4 flex items-center gap-3">
-              <CheckCircle2 className="w-6 h-6 text-green-400" />
-              <div>
-                <p className="text-green-400 font-medium">Order Fully Received</p>
-                <p className="text-sm text-gray-400">All items have been received into inventory.</p>
-              </div>
-            </CardContent>
+      {/* Orders List */}
+      <div className="space-y-3">
+        {listView.isLoading ? (
+          <Card className="bg-gray-900/50 border-gray-700 p-8 text-center">
+            <RefreshCw className="w-8 h-8 animate-spin text-gray-500 mx-auto" />
+            <p className="text-gray-400 mt-2">Loading orders...</p>
           </Card>
+        ) : listView.orders?.length === 0 ? (
+          <Card className="bg-gray-900/50 border-gray-700 p-8 text-center">
+            <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+            <p className="text-white font-medium">All caught up!</p>
+            <p className="text-gray-400 text-sm">No orders waiting to be received</p>
+          </Card>
+        ) : (
+          listView.orders?.map(po => (
+            <Card 
+              key={po.order_id} 
+              className="bg-gray-900/50 border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+              onClick={() => navigate(createPageUrl('POReceiving') + `?order_id=${po.order_id}`)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                      <Package className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-white">{po.po_number}</span>
+                        <Badge variant="outline" className={cn(
+                          po.status === 'Ordered' && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                          po.status === 'Partial' && "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                        )}>
+                          {po.status}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {po.vendor_name} • {po.total_lines} items
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-green-400">{po.total_qty_remaining}</div>
+                    <div className="text-xs text-gray-500">to receive</div>
+                  </div>
+                </div>
+                
+                {/* Progress bar */}
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{po.total_qty_received} received</span>
+                    <span>{po.total_qty_ordered} ordered</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-green-500 transition-all"
+                      style={{ width: `${(po.total_qty_received / po.total_qty_ordered) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
         )}
       </div>
-    </MobileSafeAreaContainer>
+    </div>
+  );
+}
+
+/**
+ * POReceivingDetail - Single PO batch receiving interface
+ */
+function POReceivingDetail({ po, locations, isLoading, onBack, refetch }) {
+  const supplyAction = useSupplyAction();
+  const [lineInputs, setLineInputs] = useState({});
+  const [selectedLines, setSelectedLines] = useState(new Set());
+  const [defaultLocation, setDefaultLocation] = useState('');
+  const [isReceiving, setIsReceiving] = useState(false);
+
+  // Initialize line inputs when PO loads
+  React.useEffect(() => {
+    if (po?.lines) {
+      const initial = {};
+      po.lines.forEach(line => {
+        initial[line.line_item_id] = {
+          receive_qty: line.qty_remaining,
+          location_id: '',
+        };
+      });
+      setLineInputs(initial);
+      // Select all lines with remaining qty by default
+      setSelectedLines(new Set(po.lines.filter(l => l.qty_remaining > 0).map(l => l.line_item_id)));
+    }
+  }, [po]);
+
+  const updateLineInput = (lineId, field, value) => {
+    setLineInputs(prev => ({
+      ...prev,
+      [lineId]: {
+        ...prev[lineId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const toggleLine = (lineId) => {
+    setSelectedLines(prev => {
+      const next = new Set(prev);
+      if (next.has(lineId)) {
+        next.delete(lineId);
+      } else {
+        next.add(lineId);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!po?.lines) return;
+    setSelectedLines(new Set(po.lines.filter(l => l.qty_remaining > 0).map(l => l.line_item_id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedLines(new Set());
+  };
+
+  const receiveAll = () => {
+    if (!po?.lines) return;
+    const updated = { ...lineInputs };
+    po.lines.forEach(line => {
+      if (updated[line.line_item_id]) {
+        updated[line.line_item_id].receive_qty = line.qty_remaining;
+      }
+    });
+    setLineInputs(updated);
+    selectAll();
+  };
+
+  const applyDefaultLocation = () => {
+    if (!defaultLocation) return;
+    const updated = { ...lineInputs };
+    selectedLines.forEach(lineId => {
+      if (updated[lineId]) {
+        updated[lineId].location_id = defaultLocation;
+      }
+    });
+    setLineInputs(updated);
+    toast.success(`Applied location to ${selectedLines.size} items`);
+  };
+
+  const handleReceive = async () => {
+    if (selectedLines.size === 0) {
+      toast.error('Select at least one line to receive');
+      return;
+    }
+
+    // Build receiving payload
+    const lines = [];
+    selectedLines.forEach(lineId => {
+      const input = lineInputs[lineId];
+      const line = po.lines.find(l => l.line_item_id === lineId);
+      if (input && input.receive_qty > 0 && line) {
+        lines.push({
+          line_item_id: lineId,
+          qty_received: input.receive_qty,
+          location_id: input.location_id || defaultLocation || null,
+        });
+      }
+    });
+
+    if (lines.length === 0) {
+      toast.error('No valid quantities to receive');
+      return;
+    }
+
+    setIsReceiving(true);
+    try {
+      await supplyAction.execute({
+        action_type: 'RECEIVE',
+        commitment_ids: [], // Not needed for PO-level receiving
+        payload: {
+          order_id: po.order_id,
+          lines,
+        },
+      });
+
+      toast.success(`Received ${lines.length} line items`, {
+        description: `Total qty: ${lines.reduce((sum, l) => sum + l.qty_received, 0)}`,
+      });
+      refetch();
+    } catch (error) {
+      toast.error('Failed to receive: ' + error.message);
+    } finally {
+      setIsReceiving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 animate-spin text-gray-500" />
+      </div>
+    );
+  }
+
+  if (!po) {
+    return (
+      <div className="p-6 text-center">
+        <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+        <p className="text-white font-medium">Order not found</p>
+        <Button variant="outline" onClick={onBack} className="mt-4">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Orders
+        </Button>
+      </div>
+    );
+  }
+
+  const totalToReceive = Array.from(selectedLines).reduce((sum, lineId) => {
+    return sum + (lineInputs[lineId]?.receive_qty || 0);
+  }, 0);
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={onBack} className="p-2">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              <Package className="w-5 h-5 text-green-500" />
+              {po.po_number}
+            </h1>
+            <p className="text-gray-400 text-sm">
+              {po.vendor_name} • {po.order_date}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {po.order_url && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={po.order_url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-4 h-4 mr-1" />
+                View Order
+              </a>
+            </Button>
+          )}
+          {po.pdf_attachments?.length > 0 && (
+            <Button variant="outline" size="sm">
+              <FileText className="w-4 h-4 mr-1" />
+              {po.pdf_attachments.length} Docs
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Actions Bar */}
+      <Card className="bg-gray-900/50 border-gray-700">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={receiveAll}>
+                Receive All Remaining
+              </Button>
+              <Button variant="ghost" size="sm" onClick={selectAll}>
+                Select All
+              </Button>
+              <Button variant="ghost" size="sm" onClick={deselectAll}>
+                Clear Selection
+              </Button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-gray-500" />
+                <Select value={defaultLocation} onValueChange={setDefaultLocation}>
+                  <SelectTrigger className="w-48 bg-gray-800 border-gray-600">
+                    <SelectValue placeholder="Default location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>No location</SelectItem>
+                    {locations?.map(loc => (
+                      <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={applyDefaultLocation}
+                  disabled={!defaultLocation || selectedLines.size === 0}
+                >
+                  Apply to Selected
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Line Items Table */}
+      <Card className="bg-gray-900/50 border-gray-700">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-gray-700 hover:bg-transparent">
+              <TableHead className="w-10">
+                <Checkbox 
+                  checked={selectedLines.size === po.lines?.filter(l => l.qty_remaining > 0).length}
+                  onCheckedChange={(checked) => checked ? selectAll() : deselectAll()}
+                />
+              </TableHead>
+              <TableHead>Part</TableHead>
+              <TableHead className="text-right">Ordered</TableHead>
+              <TableHead className="text-right">Received</TableHead>
+              <TableHead className="text-right">Remaining</TableHead>
+              <TableHead className="w-28">Receive Qty</TableHead>
+              <TableHead className="w-48">Location</TableHead>
+              <TableHead>Project</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {po.lines?.map(line => {
+              const input = lineInputs[line.line_item_id] || { receive_qty: 0, location_id: '' };
+              const isSelected = selectedLines.has(line.line_item_id);
+              const isFullyReceived = line.qty_remaining === 0;
+
+              return (
+                <TableRow 
+                  key={line.line_item_id} 
+                  className={cn(
+                    "border-gray-700",
+                    isFullyReceived && "opacity-50",
+                    isSelected && "bg-green-900/10"
+                  )}
+                >
+                  <TableCell>
+                    <Checkbox 
+                      checked={isSelected}
+                      onCheckedChange={() => toggleLine(line.line_item_id)}
+                      disabled={isFullyReceived}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      {line.featured_photo ? (
+                        <img src={line.featured_photo} alt="" className="w-8 h-8 rounded object-contain bg-gray-800" />
+                      ) : (
+                        <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center">
+                          <Package className="w-4 h-4 text-gray-500" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium text-white">{line.part_name}</div>
+                        {line.vendor_part_number && (
+                          <div className="text-xs text-gray-500 font-mono">{line.vendor_part_number}</div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{line.qty_ordered}</TableCell>
+                  <TableCell className="text-right font-mono text-green-400">{line.qty_received}</TableCell>
+                  <TableCell className="text-right font-mono text-blue-400">{line.qty_remaining}</TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={line.qty_remaining}
+                      value={input.receive_qty}
+                      onChange={(e) => updateLineInput(line.line_item_id, 'receive_qty', parseInt(e.target.value) || 0)}
+                      disabled={isFullyReceived}
+                      className="w-20 h-8 text-center bg-gray-800 border-gray-600"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={input.location_id} 
+                      onValueChange={(v) => updateLineInput(line.line_item_id, 'location_id', v)}
+                      disabled={isFullyReceived}
+                    >
+                      <SelectTrigger className="h-8 bg-gray-800 border-gray-600">
+                        <SelectValue placeholder="Location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={null}>No location</SelectItem>
+                        {locations?.map(loc => (
+                          <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-gray-400">{line.project_name}</span>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {/* Receive Action Footer */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 border-t border-gray-700 p-4 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="text-sm text-gray-400">
+            <span className="text-white font-bold">{selectedLines.size}</span> items selected • 
+            <span className="text-green-400 font-bold ml-1">{totalToReceive}</span> units to receive
+          </div>
+          <Button 
+            onClick={handleReceive}
+            disabled={selectedLines.size === 0 || totalToReceive === 0 || isReceiving}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {isReceiving ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Receiving...
+              </>
+            ) : (
+              <>
+                <Truck className="w-4 h-4 mr-2" />
+                Receive Selected ({totalToReceive} units)
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
