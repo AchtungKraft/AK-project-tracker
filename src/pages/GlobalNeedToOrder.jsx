@@ -216,7 +216,7 @@ export default function GlobalNeedToOrder() {
   };
 
   const selectAllInGroup = (groupItems) => {
-    const orderableIds = groupItems.filter(i => i.canOrder).map(i => i.id);
+    const orderableIds = groupItems.filter(i => i.is_orderable).map(i => i.commitment_id);
     const allSelected = orderableIds.every(id => selectedItems.has(id));
     
     setSelectedItems(prev => {
