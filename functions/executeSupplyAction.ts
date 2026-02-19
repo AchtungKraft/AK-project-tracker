@@ -218,17 +218,18 @@ async function adjustRequired(ctx, commitment_ids, payload) {
 
         ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CREATE' });
         ctx.lifecycle_events.push({
-          entity_type: 'PartCommitment',
-          entity_id: commitmentId,
+          commitment_id: commitmentId,
           event_type: 'COMMITMENT_CREATED',
+          trigger_source: 'UNIFIED_ENGINE',
+          triggered_by: ctx.user.email,
           actor_email: ctx.user.email,
-          details: JSON.stringify({
-            project_id,
-            part_id,
+          part_id,
+          project_id,
+          metadata: JSON.stringify({
             required_total: initialRequired,
             source_type
           }),
-          created_date: ctx.timestamp
+          event_date: ctx.timestamp
         });
       }
     }
