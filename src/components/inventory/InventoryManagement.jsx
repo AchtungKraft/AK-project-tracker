@@ -112,98 +112,73 @@ export default function InventoryManagement({ onPartClick }) {
     return Array.from(descendants);
   };
 
-  // Aggregate inventory data by Part (global position)
+  // CANONICAL: Build inventory view from read model
+  const inventoryViewMap = useMemo(() => {
+    const map = new Map();
+    partsInventoryView.forEach(p => map.set(p.part_id, p));
+    return map;
+  }, [partsInventoryView]);
+
+  // Aggregate inventory data by Part (global position) - CANONICAL source
   const partAggregates = useMemo(() => {
     const aggregates = {};
 
-    // First, aggregate inventory items by part
-    inventoryItems.forEach(item => {
-      if (!aggregates[item.part_id]) {
-        aggregates[item.part_id] = {
-          partId: item.part_id,
-          onHand: 0,
-          reserved: 0,
-          needed: 0,
-          onOrder: 0,
-          locations: [],
-          requirementsByProject: [],
-          orderLineItems: []
-        };
-      }
-      aggregates[item.part_id].onHand += item.quantity_on_hand || 0;
-      aggregates[item.part_id].reserved += item.quantity_reserved || 0;
-      aggregates[item.part_id].locations.push({
-        locationId: item.location_id,
-        locationName: getLocationName(item.location_id),
-        onHand: item.quantity_on_hand || 0,
-        reserved: item.quantity_reserved || 0,
-        available: (item.quantity_on_hand || 0) - (item.quantity_reserved || 0),
-        purchaseCost: item.purchase_cost
-      });
+    // Use canonical read model for inventory stats
+    partsInventoryView.forEach(pv => {
+      aggregates[pv.part_id] = {
+        partId: pv.part_id,
+        onHand: pv.physical_stock ?? 0,
+        reserved: pv.reserved_total ?? 0,
+        needed: pv.required_total ?? 0,
+        onOrder: pv.on_order ?? 0,
+        toOrder: pv.to_order ?? 0,
+        locations: [], // Populated below from commitments for drill-down
+        requirementsByProject: [],
+        orderLineItems: []
+      };
     });
 
-    // Calculate demand from requirements: qty_needed - qty_installed - qty_allocated
-    // Allocated inventory already represents committed supply and must reduce demand
-    requirements.forEach(req => {
-      const stillNeeded = Math.max(0, (req.qty_needed || 0) - (req.qty_installed || 0) - (req.qty_allocated || 0));
-      if (stillNeeded > 0) {
-        if (!aggregates[req.part_id]) {
-          aggregates[req.part_id] = {
-            partId: req.part_id,
-            onHand: 0,
+    // Build project demand drill-down from commitments (CANONICAL)
+    commitments.forEach(c => {
+      if (c.commitment_status === 'cancelled' || c.commitment_status === 'closed') return;
+      
+      const required = c.required_total ?? 0;
+      const installed = c.qty_installed ?? 0;
+      const reserved = c.reserved_from_stock ?? 0;
+      const onOrder = c.covered_from_po ?? 0;
+      const stillNeeded = Math.max(0, required - reserved - onOrder);
+      
+      if (required > installed) {
+        const project = projects.find(p => p.id === c.project_id);
+        if (!aggregates[c.part_id]) {
+          const part = parts.find(p => p.id === c.part_id);
+          aggregates[c.part_id] = {
+            partId: c.part_id,
+            onHand: part?.physical_stock ?? 0,
             reserved: 0,
             needed: 0,
             onOrder: 0,
+            toOrder: 0,
             locations: [],
             requirementsByProject: [],
             orderLineItems: []
           };
         }
-        aggregates[req.part_id].needed += stillNeeded;
-      }
-      // Always track project requirements for drill-down, even if fully covered
-      if ((req.qty_needed || 0) > (req.qty_installed || 0)) {
-        const project = projects.find(p => p.id === req.project_id);
-        if (!aggregates[req.part_id]) {
-          aggregates[req.part_id] = {
-            partId: req.part_id,
-            onHand: 0,
-            reserved: 0,
-            needed: 0,
-            onOrder: 0,
-            locations: [],
-            requirementsByProject: [],
-            orderLineItems: []
-          };
-        }
-        aggregates[req.part_id].requirementsByProject.push({
-          projectId: req.project_id,
+        aggregates[c.part_id].requirementsByProject.push({
+          projectId: c.project_id,
           projectName: project?.name || 'Unknown Project',
-          qtyNeeded: req.qty_needed || 0,
-          qtyAllocated: req.qty_allocated || 0,
-          qtyInstalled: req.qty_installed || 0,
+          qtyNeeded: required,
+          qtyAllocated: reserved,
+          qtyInstalled: installed,
           stillNeeded
         });
       }
     });
 
-    // Calculate on-order from line items (qty_ordered - qty_received)
+    // Build on-order drill-down from line items
     lineItems.forEach(li => {
       const pending = Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0));
-      if (pending > 0) {
-        if (!aggregates[li.part_id]) {
-          aggregates[li.part_id] = {
-            partId: li.part_id,
-            onHand: 0,
-            reserved: 0,
-            needed: 0,
-            onOrder: 0,
-            locations: [],
-            requirementsByProject: [],
-            orderLineItems: []
-          };
-        }
-        aggregates[li.part_id].onOrder += pending;
+      if (pending > 0 && aggregates[li.part_id]) {
         const order = orders.find(o => o.id === li.order_id);
         aggregates[li.part_id].orderLineItems.push({
           orderId: li.order_id,
@@ -217,7 +192,7 @@ export default function InventoryManagement({ onPartClick }) {
     });
 
     return aggregates;
-  }, [inventoryItems, requirements, lineItems, projects, orders, locations]);
+  }, [partsInventoryView, commitments, lineItems, projects, orders, parts]);
 
   // Filter and enrich part data
   const filteredParts = useMemo(() => {
