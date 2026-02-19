@@ -278,8 +278,9 @@ export default function ProjectSupplyManager() {
     const poolPaid = pools.reduce((sum, p) => sum + (p.paid_amount || 0), 0);
     const hasOverdrawn = pools.some(p => p.status === 'overdrawn');
 
-    const totalQtyCommitted = activeCommitments.reduce((sum, c) => sum + (c.qty_committed || 0), 0);
-    const totalQtyInstalled = activeCommitments.reduce((sum, c) => sum + (c.qty_installed || 0), 0);
+    // Use canonical fields with legacy fallback for metrics
+    const totalQtyCommitted = activeCommitments.reduce((sum, c) => sum + (c.required_total ?? c.qty_committed ?? 0), 0);
+    const totalQtyInstalled = activeCommitments.reduce((sum, c) => sum + (c.qty_installed ?? 0), 0);
     const installPct = totalQtyCommitted > 0 ? Math.round((totalQtyInstalled / totalQtyCommitted) * 100) : 0;
 
     return {
