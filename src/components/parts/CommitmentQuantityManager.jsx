@@ -401,30 +401,70 @@ export default function CommitmentQuantityManager({
 
   const otherProjects = projects.filter(p => p.id !== commitment?.project_id);
 
-  // Dry run mutation for impact preview
+  // Dry run mutation for impact preview - use canonical dispatcher
   const previewMutation = useMutation({
     mutationFn: async (params) => {
-      const response = await base44.functions.invoke('mutatePartCommitmentQuantity', {
-        ...params,
+      const currentRequired = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+      let newRequired;
+      
+      if (params.action_type === ACTION_TYPES.INCREASE_QTY) {
+        newRequired = currentRequired + params.qty_delta;
+      } else if (params.action_type === ACTION_TYPES.DECREASE_QTY) {
+        newRequired = Math.max(0, currentRequired - params.qty_delta);
+      } else {
+        newRequired = currentRequired;
+      }
+
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADJUST_REQUIRED',
+        commitment_ids: [commitment.id],
+        payload: { required_total_set: newRequired },
         dry_run: true
       });
       return response.data;
     },
     onSuccess: (data) => {
-      setImpactPreview(data.impact);
+      if (data.preview) {
+        setImpactPreview({
+          old_qty: data.preview.old_required,
+          new_qty: data.preview.new_required,
+          delta: data.preview.delta,
+          reserved: data.preview.new_reserved,
+          to_order: data.preview.to_order,
+          coverage_status: data.preview.coverage_status
+        });
+      }
     }
   });
 
-  // Execute mutation
+  // Execute mutation - use canonical dispatcher
   const executeMutation = useMutation({
     mutationFn: async (params) => {
-      const response = await base44.functions.invoke('mutatePartCommitmentQuantity', params);
+      const currentRequired = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+      let newRequired;
+      
+      if (params.action_type === ACTION_TYPES.INCREASE_QTY) {
+        newRequired = currentRequired + params.qty_delta;
+      } else if (params.action_type === ACTION_TYPES.DECREASE_QTY) {
+        newRequired = Math.max(0, currentRequired - params.qty_delta);
+      } else {
+        newRequired = currentRequired;
+      }
+
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADJUST_REQUIRED',
+        commitment_ids: [commitment.id],
+        payload: { required_total_set: newRequired },
+        dry_run: false
+      });
       return response.data;
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast.success(data.message);
+        toast.success(`Requirement updated to ${data.required_total}`);
         queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+        queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
+        queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
         onSuccess?.();
         onClose?.();
       } else {
