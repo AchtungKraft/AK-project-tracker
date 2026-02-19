@@ -168,7 +168,7 @@ const QuantityStateMatrix = ({ commitment }) => {
   );
 };
 
-// Inline Qty Stepper - uses canonical dispatcher
+// Inline Qty Stepper - uses canonical dispatcher via useSupplyAction hook
 export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = false }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
@@ -189,11 +189,11 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
         throw new Error(`Unsupported action type: ${action_type}`);
       }
 
-      // Route through canonical dispatcher
+      // Route through canonical dispatcher - use required_total_set
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'ADJUST_REQUIRED',
         commitment_ids: [commitment.id],
-        payload: { new_required_total: newRequired },
+        payload: { required_total_set: newRequired },
         dry_run: false
       });
       
@@ -213,6 +213,8 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
       queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
       queryClient.invalidateQueries({ queryKey: ['globalOrderQueue'] });
       queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
+      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
       onMutationSuccess?.();
       
       setShowConfirmModal(false);
