@@ -22,6 +22,10 @@ const LEGACY_QTY_FIELDS = [
   'qty_allocated'
 ];
 
+// Canonical fields that MUST be present on new commitments
+const REQUIRED_CANONICAL_FIELDS = ['required_total'];
+const OPTIONAL_CANONICAL_FIELDS = ['reserved_from_stock', 'covered_from_po', 'qty_installed'];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -79,12 +83,20 @@ Deno.serve(async (req) => {
           commitment[f] > 0
         );
 
+        // Determine severity based on commitment age
+        const isOldCommitment = new Date(commitment.created_date) < new Date('2024-06-01');
+        
         violations.push({
           commitment_id: id,
           reason_code: 'LEGACY_DATA_DETECTED',
-          message: 'Commitment missing required_total (canonical field). Must migrate before proceeding.',
+          severity: isOldCommitment ? 'warning' : 'error', // Old = migration backlog, New = actual bug
+          message: isOldCommitment 
+            ? 'Legacy commitment missing required_total - add to migration backlog'
+            : 'Commitment missing required_total. This is a bug - new commitments MUST have required_total.',
           legacy_fields_present: legacyFieldsWithData,
-          suggested_action: 'Run migration or set required_total via executeSupplyAction'
+          suggested_action: isOldCommitment
+            ? 'Run migrateLegacyCommitmentQuantities to backfill'
+            : 'Fix the code that created this commitment to use executeSupplyAction'
         });
         continue;
       }

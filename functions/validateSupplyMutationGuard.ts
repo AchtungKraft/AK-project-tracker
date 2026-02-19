@@ -40,9 +40,22 @@ const CANONICAL_FIELDS = [
 
 /**
  * Pre-mutation validation - called before a write to enforce dispatcher usage
+ * 
+ * PHASE 1.1: HARD BLOCK LEGACY-ONLY WRITES
+ * 
+ * Rules:
+ * 1. PartCommitment CREATE without required_total → REJECTED
+ * 2. PartCommitment UPDATE touching legacy fields only → REJECTED
+ * 3. Only dispatcher with _dispatcher_bypass=true can write legacy fields
+ * 4. Migration function with _migration_bypass=true is allowed
  */
 function validateMutation(mutation) {
-  const { entity_type, operation, data } = mutation;
+  const { entity_type, operation, data, is_migration = false } = mutation;
+  
+  // Allow migration bypass for backfill scripts
+  if (data?._migration_bypass === true || is_migration) {
+    return { valid: true, note: 'Migration bypass accepted' };
+  }
   
   // PHASE 4: Block legacy inventory field writes
   if (entity_type === 'InventoryItem') {
@@ -74,6 +87,22 @@ function validateMutation(mutation) {
   // Skip if this is from the dispatcher (has _dispatcher_bypass flag)
   if (data?._dispatcher_bypass === true) {
     return { valid: true, note: 'Dispatcher bypass accepted' };
+  }
+
+  // PHASE 1.1: BLOCK CREATE without required_total
+  if (operation === 'create') {
+    const hasCanonicalRequired = data?.required_total !== undefined && data?.required_total !== null;
+    
+    if (!hasCanonicalRequired) {
+      return {
+        valid: false,
+        reason_code: 'LEGACY_WRITE_BLOCKED',
+        message: 'Cannot create PartCommitment without required_total. Use executeSupplyAction ADJUST_REQUIRED action.',
+        blocked_operation: 'create',
+        missing_field: 'required_total',
+        suggestion: 'Use base44.functions.invoke("executeSupplyAction", { action_type: "ADJUST_REQUIRED", payload: { project_id, part_id, required_total_set: qty } })'
+      };
+    }
   }
 
   // Check if mutation touches any legacy quantity fields
