@@ -85,7 +85,7 @@ const QuantityStateMatrix = ({ commitment }) => {
 
   return (
     <div className="space-y-4">
-      {/* Coverage summary */}
+      {/* Coverage summary - using canonical values */}
       <div className="bg-gray-800/50 rounded-lg p-3">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-gray-400">Coverage</span>
@@ -106,7 +106,7 @@ const QuantityStateMatrix = ({ commitment }) => {
           />
         </div>
         <p className="text-xs text-gray-500 mt-1">
-          {covered} of {qty_committed} covered (reserved + received)
+          {coverage_total} of {required_total} covered (reserved + on order)
         </p>
       </div>
 
