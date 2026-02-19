@@ -3,16 +3,75 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 /**
  * validateSupplyMutationGuard - Governance Enforcement Validator
  * 
- * Scans the codebase patterns to detect direct entity writes that bypass the dispatcher.
+ * Two modes:
+ * 1. Runtime Audit: Scans recent mutations to detect bypass patterns (hours_back param)
+ * 2. Pre-Mutation Guard: Validates a proposed mutation before execution (mutation param)
  * 
  * Violations detected:
- * - Direct PartCommitment.update for qty fields
- * - Direct PartProjectRequirement.update for qty fields
+ * - Direct PartCommitment.update for qty fields without required_total
+ * - Legacy-only writes (qty_committed, qty_reserved, etc. without canonical fields)
  * - Direct PartPurchaseLineItem.create outside dispatcher
  * - Direct InventoryItem.create outside RECEIVE action
- * 
- * This is a runtime audit - it analyzes recent mutations to detect bypass patterns.
  */
+
+// Legacy quantity fields that CANNOT be written directly
+const LEGACY_QTY_FIELDS = [
+  'qty_committed',
+  'qty_reserved', 
+  'qty_to_order',
+  'qty_ordered',
+  'qty_received',
+  'qty_allocated',
+  'qty_installed' // Even canonical field must go through dispatcher
+];
+
+// Canonical fields that CAN be written by dispatcher
+const CANONICAL_FIELDS = [
+  'required_total',
+  'reserved_from_stock',
+  'covered_from_po'
+];
+
+/**
+ * Pre-mutation validation - called before a write to enforce dispatcher usage
+ */
+function validateMutation(mutation) {
+  const { entity_type, operation, data } = mutation;
+  
+  // Only guard PartCommitment writes
+  if (entity_type !== 'PartCommitment') {
+    return { valid: true };
+  }
+
+  // Skip if this is from the dispatcher (has _dispatcher_bypass flag)
+  if (data?._dispatcher_bypass === true) {
+    return { valid: true, note: 'Dispatcher bypass accepted' };
+  }
+
+  // Check if mutation touches any legacy quantity fields
+  const legacyFieldsInMutation = LEGACY_QTY_FIELDS.filter(f => 
+    data && data[f] !== undefined
+  );
+
+  if (legacyFieldsInMutation.length === 0) {
+    return { valid: true };
+  }
+
+  // If touching legacy fields, must ALSO set required_total (canonical)
+  const hasCanonicalRequired = data?.required_total !== undefined;
+
+  if (!hasCanonicalRequired) {
+    return {
+      valid: false,
+      reason_code: 'LEGACY_WRITE_BLOCKED',
+      message: 'Commitment quantities must be written via executeSupplyAction (required_total is mandatory).',
+      blocked_fields: legacyFieldsInMutation,
+      suggestion: 'Use base44.functions.invoke("executeSupplyAction", { action, commitment_ids, payload }) instead of direct entity writes.'
+    };
+  }
+
+  return { valid: true };
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -33,11 +92,33 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'admin') {
-      return Response.json({ error: 'Admin access required' }, { status: 403 });
+    const body = await req.json();
+    
+    // Mode 1: Pre-mutation validation
+    if (body.mutation) {
+      const result = validateMutation(body.mutation);
+      
+      if (!result.valid) {
+        return Response.json({
+          success: false,
+          blocked: true,
+          ...result
+        }, { status: 400 });
+      }
+      
+      return Response.json({
+        success: true,
+        valid: true,
+        ...result
+      });
     }
 
-    const { hours_back = 24 } = await req.json();
+    // Mode 2: Runtime audit (requires admin)
+    if (user.role !== 'admin') {
+      return Response.json({ error: 'Admin access required for audit mode' }, { status: 403 });
+    }
+
+    const { hours_back = 24 } = body;
 
     const violations = [];
     const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
