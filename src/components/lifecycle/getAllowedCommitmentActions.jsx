@@ -141,7 +141,7 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // POOL ALLOCATION - only for commitments with retail value
-  if (commitment.unit_retail_snapshot && remaining > 0) {
+  if (unit_retail_snapshot && remaining > 0) {
     actions.canAllocateFromPool = true;
   }
 
