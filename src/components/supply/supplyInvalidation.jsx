@@ -186,6 +186,18 @@ export function getInvalidationKeysForAction(actionType) {
       'projectCommitments',
       'globalSupplyQueues',
     ],
+    ADD_STOCK: [
+      ...baseKeys,
+      'partSupplyUsage',
+      'inventoryItems',
+      'inventoryAuditLog',
+    ],
+    RECEIVE_STOCK: [
+      ...baseKeys,
+      'partSupplyUsage',
+      'inventoryItems',
+      'inventoryAuditLog',
+    ],
   };
 
   return actionKeys[actionType] || baseKeys;
