@@ -446,17 +446,98 @@ async function createPO(ctx, commitment_ids, payload) {
 
 /**
  * RECEIVE - Receive inventory from PO
+ * 
+ * Supports two modes:
+ * 1. Single line: { line_item_id, qty_received, location_id }
+ * 2. Batch (PO-centric): { order_id, lines: [{ line_item_id, qty_received, location_id }] }
  */
 async function receive(ctx, commitment_ids, payload) {
+  // Check for batch mode
+  if (payload.order_id && payload.lines) {
+    return receiveBatch(ctx, payload);
+  }
+
+  // Single line mode
   const { line_item_id, qty_received, location_id } = payload;
   
   if (!line_item_id || qty_received === undefined) {
     throw new Error('line_item_id and qty_received required');
   }
 
+  return receiveSingleLine(ctx, line_item_id, qty_received, location_id);
+}
+
+/**
+ * Batch receive multiple lines from a PO
+ */
+async function receiveBatch(ctx, payload) {
+  const { order_id, lines } = payload;
+  
+  if (!order_id || !lines || lines.length === 0) {
+    throw new Error('order_id and lines[] required for batch receiving');
+  }
+
+  // Fetch order
+  const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
+  if (!order) throw new Error('Order not found');
+
+  const results = [];
+  let total_received = 0;
+
+  for (const line of lines) {
+    if (!line.line_item_id || !line.qty_received || line.qty_received <= 0) {
+      continue;
+    }
+
+    const result = await receiveSingleLine(ctx, line.line_item_id, line.qty_received, line.location_id);
+    results.push(result);
+    total_received += line.qty_received;
+  }
+
+  // Update order status
+  const allLineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
+  const allReceived = allLineItems.every(li => (li.qty_received ?? 0) >= (li.qty_ordered ?? 0));
+  const someReceived = allLineItems.some(li => (li.qty_received ?? 0) > 0);
+  
+  const newStatus = allReceived ? 'Received' : (someReceived ? 'Partial' : order.status);
+  
+  if (newStatus !== order.status) {
+    await ctx.base44.asServiceRole.entities.Order.update(order_id, {
+      status: newStatus,
+      received_date: allReceived ? new Date().toISOString().slice(0, 10) : null
+    });
+    ctx.mutations.push({ entity: 'Order', id: order_id, action: 'STATUS_UPDATE' });
+  }
+
+  ctx.lifecycle_events.push({
+    entity_type: 'Order',
+    entity_id: order_id,
+    event_type: 'BATCH_RECEIVE',
+    actor_email: ctx.user.email,
+    details: JSON.stringify({ 
+      lines_received: results.length,
+      total_qty: total_received,
+      new_status: newStatus
+    }),
+    created_date: ctx.timestamp
+  });
+
+  return {
+    order_id,
+    order_status: newStatus,
+    lines_received: results.length,
+    total_qty_received: total_received,
+    results
+  };
+}
+
+/**
+ * Receive a single line item
+ */
+async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   // Fetch line item
   const [lineItem] = await ctx.base44.entities.PartPurchaseLineItem.filter({ id: line_item_id });
-  if (!lineItem) throw new Error('Line item not found');
+  if (!lineItem) throw new Error(`Line item ${line_item_id} not found`);
 
   const [part] = await ctx.base44.entities.Part.filter({ id: lineItem.part_id });
   if (!part) throw new Error('Part not found');
@@ -466,7 +547,7 @@ async function receive(ctx, commitment_ids, payload) {
   const remaining = ordered - already_received;
 
   if (qty_received > remaining) {
-    throw new Error(`Cannot receive ${qty_received}, only ${remaining} remaining`);
+    throw new Error(`Cannot receive ${qty_received} of ${part.part_name}, only ${remaining} remaining`);
   }
 
   if (ctx.dry_run) {
@@ -524,7 +605,7 @@ async function receive(ctx, commitment_ids, payload) {
     order_id: lineItem.order_id,
     line_item_id,
     qty_received,
-    location_id,
+    location_id: location_id || null,
     received_by: ctx.user.email,
     received_date: ctx.timestamp
   });
@@ -537,12 +618,14 @@ async function receive(ctx, commitment_ids, payload) {
     entity_id: part.id,
     event_type: 'INVENTORY_RECEIVED',
     actor_email: ctx.user.email,
-    details: JSON.stringify({ qty: qty_received, from_po: lineItem.order_id }),
+    details: JSON.stringify({ qty: qty_received, from_po: lineItem.order_id, location_id }),
     created_date: ctx.timestamp
   });
 
   return {
     line_item_id,
+    part_id: part.id,
+    part_name: part.part_name,
     qty_received,
     new_physical_stock: new_physical,
     line_status
