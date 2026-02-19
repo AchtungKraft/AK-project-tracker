@@ -58,25 +58,21 @@ export default function PartsListView({
     queryFn: () => base44.entities.CarYear.list(),
   });
 
-  // Use InventoryItem for stock calculations
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list(),
+  // CANONICAL: Use read model for inventory view - NO local InventoryItem math
+  const { data: partsInventoryView = [] } = useQuery({
+    queryKey: ['partsInventoryView'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      return res.data?.parts || [];
+    },
   });
 
-  // Use PartPurchaseLineItem for on-order calculations
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
-  });
-
-  // Use PartCommitment for canonical demand calculations
-  const { data: commitments = [] } = useQuery({
-    queryKey: ['partCommitmentsAll'],
-    queryFn: () => base44.entities.PartCommitment.filter({
-      commitment_status: { $nin: ['cancelled', 'closed'] }
-    }),
-  });
+  // Build lookup map for canonical inventory stats
+  const inventoryViewMap = useMemo(() => {
+    const map = new Map();
+    partsInventoryView.forEach(p => map.set(p.part_id, p));
+    return map;
+  }, [partsInventoryView]);
 
   // Batch resolve financial status for displayed parts
   const financialContexts = useMemo(() => {
