@@ -225,6 +225,7 @@ Deno.serve(async (req) => {
           // Raw commitment data for mutations
           _raw: {
             commitment_status: c.commitment_status,
+            billing_status: c.billing_status,
             requires_prepay: c.requires_prepay,
             prepay_satisfied_at: c.prepay_satisfied_at,
             order_line_item_ids: c.order_line_item_ids,
