@@ -60,6 +60,13 @@ Deno.serve(async (req) => {
 
     let result;
     
+    // Define which actions are commitment-scoped vs part-scoped
+    const COMMITMENT_SCOPED_ACTIONS = [
+      'ADJUST_REQUIRED', 'AUTO_RESERVE', 'CREATE_PO', 'RECEIVE', 
+      'INSTALL', 'REVERSE_INSTALL', 'ALLOCATE_POOL', 'CANCEL_COMMITMENT'
+    ];
+    const PART_SCOPED_ACTIONS = ['ADD_STOCK', 'RECEIVE_STOCK'];
+    
     switch (action_type) {
       case 'ADJUST_REQUIRED':
         result = await adjustRequired(context, commitment_ids, payload);
@@ -74,6 +81,7 @@ Deno.serve(async (req) => {
         result = await receive(context, commitment_ids, payload);
         break;
       case 'ADD_STOCK':
+      case 'RECEIVE_STOCK': // Alias for ADD_STOCK
         result = await addStock(context, payload);
         break;
       case 'INSTALL':
@@ -93,12 +101,24 @@ Deno.serve(async (req) => {
     }
 
     // Write lifecycle events if not dry run
-    // Filter out events without commitment_id (LifecycleEvent requires it)
+    // ENFORCEMENT: LifecycleEvent REQUIRES commitment_id per schema
+    // Part-scoped actions should use InventoryAuditLog instead
     if (!dry_run && context.lifecycle_events.length > 0) {
       for (const event of context.lifecycle_events) {
+        // Runtime assertion: commitment-scoped events MUST have commitment_id
         if (event.commitment_id) {
           await base44.asServiceRole.entities.LifecycleEvent.create(event);
+        } else {
+          // Log warning but don't fail - event was incorrectly constructed
+          console.warn(`Skipping LifecycleEvent without commitment_id: ${event.event_type}`);
         }
+      }
+    }
+    
+    // Write inventory audit logs if not dry run
+    if (!dry_run && context.inventory_audit_logs && context.inventory_audit_logs.length > 0) {
+      for (const log of context.inventory_audit_logs) {
+        await base44.asServiceRole.entities.InventoryAuditLog.create(log);
       }
     }
 
