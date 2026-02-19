@@ -523,7 +523,7 @@ export default function InventoryManagement({ onPartClick }) {
                         <TooltipTrigger className="flex items-center gap-1">
                           Needed <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
-                        <TooltipContent>Project demand (qty_needed − qty_installed)</TooltipContent>
+                        <TooltipContent>Project demand (sum of required_total from commitments)</TooltipContent>
                       </Tooltip>
                     </SortableHeader>
                     <SortableHeader columnKey="onOrder" className="text-right">
