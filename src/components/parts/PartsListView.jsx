@@ -357,15 +357,15 @@ export default function PartsListView({
             <div className="text-gray-500 mb-0.5">Cost</div>
             <div className={cn(
               "font-semibold flex items-center justify-center gap-0.5",
-              (!part.default_cost || part.default_cost === 0) ? "text-red-400" : "text-white"
+              (!part.cost && !part.default_cost) || (part.cost === 0 && part.default_cost === 0) ? "text-red-400" : "text-white"
             )}>
-              {(!part.default_cost || part.default_cost === 0) ? (
+              {(!part.cost && !part.default_cost) || (part.cost === 0 && part.default_cost === 0) ? (
                 <>
                   <AlertTriangle className="w-3 h-3" />
                   <span>$0</span>
                 </>
               ) : (
-                <>${part.default_cost.toFixed(2)}</>
+                <>${(part.cost ?? part.default_cost ?? 0).toFixed(2)}</>
               )}
             </div>
           </div>
@@ -374,28 +374,42 @@ export default function PartsListView({
             <div className="text-white font-semibold">{stats.onHand}</div>
           </div>
           <div className="text-center min-w-[50px]">
-            <div className="text-gray-500 mb-0.5">Available</div>
+            <div className="text-gray-500 mb-0.5">Avail</div>
             <div className={cn(
               "font-semibold",
-              stats.available > 0 ? "text-green-400" : "text-red-400"
+              stats.available > 0 ? "text-green-400" : "text-gray-500"
             )}>
               {stats.available}
             </div>
           </div>
           <div className="text-center min-w-[50px]">
-            <div className="text-gray-500 mb-0.5">Need</div>
+            <div className="text-gray-500 mb-0.5">Demand</div>
             <div className={cn(
               "font-semibold",
-              stats.need > 0 ? "text-red-400" : "text-gray-500"
+              stats.need > 0 ? "text-cyan-400" : "text-gray-500"
             )}>
               {stats.need}
+              {stats.projectCount > 0 && (
+                <span className="text-gray-500 text-[10px] block">
+                  ({stats.projectCount} proj)
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="text-center min-w-[50px]">
+            <div className="text-gray-500 mb-0.5">To Order</div>
+            <div className={cn(
+              "font-semibold",
+              stats.toOrder > 0 ? "text-red-400" : "text-gray-500"
+            )}>
+              {stats.toOrder}
             </div>
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">On Order</div>
             <div className={cn(
               "font-semibold",
-              stats.onOrder > 0 ? "text-orange-400" : "text-gray-500"
+              stats.onOrder > 0 ? "text-purple-400" : "text-gray-500"
             )}>
               {stats.onOrder}
             </div>
