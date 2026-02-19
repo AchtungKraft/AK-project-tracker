@@ -93,9 +93,12 @@ Deno.serve(async (req) => {
     }
 
     // Write lifecycle events if not dry run
+    // Filter out events without commitment_id (LifecycleEvent requires it)
     if (!dry_run && context.lifecycle_events.length > 0) {
       for (const event of context.lifecycle_events) {
-        await base44.asServiceRole.entities.LifecycleEvent.create(event);
+        if (event.commitment_id) {
+          await base44.asServiceRole.entities.LifecycleEvent.create(event);
+        }
       }
     }
 
