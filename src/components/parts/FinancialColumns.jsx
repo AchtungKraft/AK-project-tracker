@@ -202,9 +202,12 @@ export function FinancialColumns({ commitment, variant = "full" }) {
 export function FinancialCell({ commitment, field }) {
   if (!commitment) return <span className="text-gray-500">—</span>;
   
+  // Use canonical required_total with legacy fallback
+  const effectiveRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
+  
   const values = {
     planned_retail: commitment.planned_retail_total || 0,
-    ordered_cost: commitment.actual_extended_cost || (commitment.unit_cost_snapshot * commitment.qty_committed) || 0,
+    ordered_cost: commitment.actual_extended_cost || (commitment.unit_cost_snapshot * effectiveRequired) || 0,
     invoiced_retail: commitment.invoiced_retail_total || 0,
     covered_retail: commitment.covered_retail_total || 0,
     exposure_gap: commitment.exposure_gap ?? ((commitment.planned_retail_total || 0) - (commitment.covered_retail_total || 0)),
