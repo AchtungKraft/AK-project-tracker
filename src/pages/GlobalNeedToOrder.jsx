@@ -283,8 +283,8 @@ export default function GlobalNeedToOrder() {
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="text-center w-16">
             <p className="text-xs text-gray-500">Order</p>
-            {/* Display canonical to_order (gap) from resolver */}
-            <p className="text-white font-bold">×{item.to_order ?? item.qtyToOrder ?? 0}</p>
+            {/* CANONICAL: to_order from read model ONLY - no legacy fallback */}
+            <p className="text-white font-bold">×{item.to_order}</p>
           </div>
 
           {/* Canonical quantity display */}
