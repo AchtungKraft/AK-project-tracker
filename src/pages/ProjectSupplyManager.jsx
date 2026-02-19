@@ -1503,11 +1503,11 @@ export default function ProjectSupplyManager() {
 
       {reverseInstallModal && (
         <ReverseInstallationModal
-          installedParts={reverseInstallModal.installedParts}
-          commitment={reverseInstallModal}
+          installedParts={reverseInstallModal._raw?.installed_parts || []}
+          commitment={reverseInstallModal._raw || reverseInstallModal}
           onClose={() => setReverseInstallModal(null)}
           onSuccess={() => {
-            refetchCommitments();
+            invalidateSupply();
             setReverseInstallModal(null);
           }}
         />
@@ -1515,11 +1515,11 @@ export default function ProjectSupplyManager() {
 
       {receiveModal && (
         <ReceiveInventoryModal
-          commitment={receiveModal}
+          commitment={receiveModal._raw || receiveModal}
           part={receiveModal.part}
           onClose={() => setReceiveModal(null)}
           onSuccess={() => {
-            refetchCommitments();
+            invalidateSupply();
             setReceiveModal(null);
           }}
         />
@@ -1528,27 +1528,22 @@ export default function ProjectSupplyManager() {
       {allocateModal && (
         <AllocatePoolModal
           projectId={projectId}
-          commitment={allocateModal}
+          commitment={allocateModal._raw || allocateModal}
           onClose={() => setAllocateModal(null)}
           onSuccess={() => {
-            refetchCommitments();
-            refetchPools();
-            queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
+            invalidateSupply();
           }}
         />
       )}
 
       {cancelModal && (
         <CancelCommitmentModal
-          commitment={cancelModal}
+          commitment={cancelModal._raw || cancelModal}
           part={cancelModal.part}
           project={project}
           onClose={() => setCancelModal(null)}
           onSuccess={() => {
-            refetchCommitments();
-            refetchPools();
-            queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-            queryClient.invalidateQueries({ queryKey: ['projectPools'] });
+            invalidateSupply();
             setCancelModal(null);
             toast.success('Commitment removed');
           }}
@@ -1559,12 +1554,10 @@ export default function ProjectSupplyManager() {
         <CommitmentQuantityDrawer
           open={!!qtyManagerDrawer}
           onClose={() => setQtyManagerDrawer(null)}
-          commitment={qtyManagerDrawer}
+          commitment={qtyManagerDrawer._raw || qtyManagerDrawer}
           part={qtyManagerDrawer.part}
           onSuccess={() => {
-            refetchCommitments();
-            refetchPools();
-            queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+            invalidateSupply();
           }}
         />
       )}
