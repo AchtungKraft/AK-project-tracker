@@ -194,7 +194,7 @@ export default function InventoryManagement({ onPartClick }) {
     return aggregates;
   }, [partsInventoryView, commitments, lineItems, projects, orders, parts]);
 
-  // Filter and enrich part data
+  // Filter and enrich part data - CANONICAL: from read model
   const filteredParts = useMemo(() => {
     return Object.values(partAggregates)
       .map(agg => {
@@ -213,19 +213,12 @@ export default function InventoryManagement({ onPartClick }) {
           matchesCategory = relevantCategoryIds.includes(part.part_category_id);
         }
 
-        // Filter by location (filter the locations array, but still show the part if any location matches)
-        let filteredLocations = agg.locations;
-        if (locationFilter !== 'all') {
-          filteredLocations = agg.locations.filter(loc => loc.locationId === locationFilter);
-        }
-
         if (!matchesSearch || !matchesCategory) return null;
-        if (locationFilter !== 'all' && filteredLocations.length === 0) return null;
 
-        // Calculate derived values
-        const onHand = filteredLocations.reduce((sum, loc) => sum + loc.onHand, 0);
-        const reserved = filteredLocations.reduce((sum, loc) => sum + loc.reserved, 0);
-        const available = onHand - reserved;
+        // CANONICAL: Use values from read model aggregate
+        const onHand = agg.onHand;
+        const reserved = agg.reserved;
+        const available = Math.max(0, onHand - reserved);
         const netPosition = available + agg.onOrder - agg.needed;
 
         return {
@@ -235,11 +228,11 @@ export default function InventoryManagement({ onPartClick }) {
           reserved,
           available,
           netPosition,
-          filteredLocations
+          filteredLocations: agg.locations
         };
       })
       .filter(Boolean);
-  }, [partAggregates, parts, searchTerm, categoryFilter, locationFilter]);
+  }, [partAggregates, parts, searchTerm, categoryFilter]);
 
   // Sort filtered parts
   const sortedParts = useMemo(() => {
