@@ -246,20 +246,21 @@ export default function GlobalNeedToOrder() {
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="text-center w-16">
             <p className="text-xs text-gray-500">Order</p>
-            <p className="text-white font-bold">×{item.qtyToOrder}</p>
+            {/* Display canonical to_order (gap) from resolver */}
+            <p className="text-white font-bold">×{item.to_order ?? item.qtyToOrder ?? 0}</p>
           </div>
 
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Exposure</p>
-            <p className={item.exposureGap > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
-              ${item.exposureGap.toFixed(0)}
+            <p className={(item.exposureGap ?? 0) > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
+              ${(item.exposureGap ?? 0).toFixed(0)}
             </p>
           </div>
 
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Pool</p>
-            <p className={item.poolBalance >= item.exposureGap ? 'text-green-400' : 'text-yellow-400'}>
-              ${item.poolBalance.toFixed(0)}
+            <p className={(item.poolBalance ?? 0) >= (item.exposureGap ?? 0) ? 'text-green-400' : 'text-yellow-400'}>
+              ${(item.poolBalance ?? 0).toFixed(0)}
             </p>
           </div>
 
