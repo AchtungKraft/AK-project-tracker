@@ -119,32 +119,153 @@ Deno.serve(async (req) => {
 // ============================================================================
 
 /**
- * ADJUST_REQUIRED - Change required_total with auto-reservation
+ * ADJUST_REQUIRED - Canonical "Add to Project" / Qty Edit action
+ * 
+ * This is the SINGLE entry point for changing required quantities.
+ * It handles: create-if-missing, auto-reserve, recompute to_order, return fresh view model.
+ * 
+ * Inputs:
+ * - commitment_ids[0] OR { project_id, part_id } (creates commitment if missing)
+ * - required_total_delta OR required_total_set (one must be provided)
+ * - source_type: SHOP_PURCHASED (default), CLIENT_SUPPLIED, AK_CUSTOM, TAKE_OFF
+ * - dry_run: preview changes without persisting
+ * 
+ * Returns: updated commitment + part inventory snapshot + view model row
  */
 async function adjustRequired(ctx, commitment_ids, payload) {
-  const { new_required_total } = payload;
+  const { 
+    required_total_delta, 
+    required_total_set,
+    new_required_total, // legacy param - maps to required_total_set
+    source_type = 'SHOP_PURCHASED',
+    project_id,
+    part_id
+  } = payload;
+
+  // Support legacy param name
+  const effectiveRequiredSet = required_total_set ?? new_required_total;
   
-  if (new_required_total === undefined || new_required_total < 0) {
-    throw new Error('new_required_total must be a non-negative number');
+  // Validate: must have delta OR set value
+  if (effectiveRequiredSet === undefined && required_total_delta === undefined) {
+    throw new Error('Either required_total_delta or required_total_set must be provided');
   }
 
-  const commitmentId = commitment_ids?.[0];
-  if (!commitmentId) throw new Error('commitment_id required');
+  let commitmentId = commitment_ids?.[0];
+  let commitment = null;
+  let part = null;
+  let isNewCommitment = false;
 
-  // Fetch commitment and part
-  const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-  if (!commitment) throw new Error('Commitment not found');
+  // If no commitment_id, try to find or create by project_id + part_id
+  if (!commitmentId) {
+    if (!project_id || !part_id) {
+      throw new Error('Either commitment_id OR (project_id + part_id) required');
+    }
 
-  const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
-  if (!part) throw new Error('Part not found');
+    // Check if commitment already exists
+    const existingCommitments = await ctx.base44.entities.PartCommitment.filter({
+      project_id,
+      part_id,
+      commitment_status: { $nin: ['cancelled', 'closed'] }
+    });
 
-  // Calculate available stock
+    if (existingCommitments.length > 0) {
+      commitment = existingCommitments[0];
+      commitmentId = commitment.id;
+    } else {
+      // Need to create - fetch part for pricing
+      const parts = await ctx.base44.entities.Part.filter({ id: part_id });
+      part = parts[0];
+      if (!part) throw new Error('Part not found');
+
+      // Determine initial required_total
+      const initialRequired = effectiveRequiredSet ?? Math.max(1, required_total_delta ?? 1);
+      
+      if (ctx.dry_run) {
+        isNewCommitment = true;
+      } else {
+        // Create commitment with canonical fields
+        const retail_effective = part.retail_override ?? part.retail_matrix_price ?? part.default_retail ?? 0;
+        
+        commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
+          project_id,
+          part_id,
+          required_total: initialRequired,
+          reserved_from_stock: 0,
+          covered_from_po: 0,
+          qty_installed: 0,
+          supply_source_type: mapSourceType(source_type),
+          // Legacy fields for compatibility
+          qty_committed: initialRequired,
+          qty_reserved: 0,
+          qty_to_order: initialRequired,
+          qty_ordered: 0,
+          qty_received: 0,
+          commitment_status: 'planned',
+          coverage_status: 'NOT_COVERED',
+          source_type: 'manual_attachment',
+          billing_status: 'billable',
+          unit_cost_snapshot: part.cost ?? 0,
+          unit_retail_snapshot: retail_effective,
+          planned_cost_total: (part.cost ?? 0) * initialRequired,
+          planned_retail_total: retail_effective * initialRequired,
+          commitment_version: 1,
+          state_version: 1,
+          last_recomputed_at: ctx.timestamp
+        });
+
+        commitmentId = commitment.id;
+        isNewCommitment = true;
+
+        ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CREATE' });
+        ctx.lifecycle_events.push({
+          entity_type: 'PartCommitment',
+          entity_id: commitmentId,
+          event_type: 'COMMITMENT_CREATED',
+          actor_email: ctx.user.email,
+          details: JSON.stringify({
+            project_id,
+            part_id,
+            required_total: initialRequired,
+            source_type
+          }),
+          created_date: ctx.timestamp
+        });
+      }
+    }
+  }
+
+  // Fetch commitment if not yet loaded
+  if (!commitment && commitmentId) {
+    const commitments = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
+    commitment = commitments[0];
+    if (!commitment) throw new Error('Commitment not found');
+  }
+
+  // Fetch part if not yet loaded
+  if (!part) {
+    const parts = await ctx.base44.entities.Part.filter({ id: commitment?.part_id || part_id });
+    part = parts[0];
+    if (!part) throw new Error('Part not found');
+  }
+
+  // Calculate new required_total
+  const current_required = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+  let new_required;
+  
+  if (effectiveRequiredSet !== undefined) {
+    new_required = Math.max(0, effectiveRequiredSet);
+  } else {
+    new_required = Math.max(0, current_required + (required_total_delta ?? 0));
+  }
+
+  // =========== AUTO-RESERVE LOGIC ===========
+  // Get part inventory state
   const physical_stock = part.physical_stock ?? 0;
   
   // Get total allocated to OTHER commitments for this part
   const otherCommitments = await ctx.base44.entities.PartCommitment.filter({
-    part_id: commitment.part_id,
-    id: { $ne: commitmentId },
+    part_id: part.id,
+    id: commitmentId ? { $ne: commitmentId } : undefined,
     commitment_status: { $nin: ['cancelled', 'closed'] }
   });
   
@@ -154,57 +275,138 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   
   const available = Math.max(0, physical_stock - other_allocated);
   
-  // Calculate new reservation
-  const new_reserved = Math.min(new_required_total, available);
-  const new_gap = Math.max(0, new_required_total - new_reserved);
+  // Calculate new reservation (auto-reserve up to available)
+  const current_reserved = commitment?.reserved_from_stock ?? commitment?.qty_reserved ?? 0;
+  const new_reserved = Math.min(new_required, available + current_reserved);
+  
+  // Calculate covered_from_po (unchanged by this action)
+  const covered_from_po = commitment?.covered_from_po ?? 0;
+  
+  // Compute to_order (the gap)
+  const to_order = Math.max(0, new_required - new_reserved - covered_from_po);
 
-  if (ctx.dry_run) {
-    return {
-      preview: {
-        commitment_id: commitmentId,
-        old_required: commitment.required_total ?? commitment.qty_committed,
-        new_required: new_required_total,
-        old_reserved: commitment.reserved_from_stock ?? commitment.qty_reserved,
-        new_reserved,
-        available_stock: available,
-        new_gap
-      }
-    };
+  // Compute coverage status
+  const coverage_total = new_reserved + covered_from_po;
+  let coverage_status = 'NOT_COVERED';
+  if (coverage_total >= new_required && new_required > 0) {
+    coverage_status = 'FULLY_COVERED';
+  } else if (coverage_total > 0) {
+    coverage_status = 'PARTIALLY_COVERED';
   }
 
-  // Update commitment
+  // =========== DRY RUN PREVIEW ===========
+  if (ctx.dry_run) {
+    const preview = {
+      commitment_id: commitmentId ?? 'NEW',
+      is_new_commitment: isNewCommitment || !commitmentId,
+      project_id: commitment?.project_id || project_id,
+      part_id: part.id,
+      part_name: part.part_name,
+      old_required: current_required,
+      new_required,
+      delta: new_required - current_required,
+      old_reserved: current_reserved,
+      new_reserved,
+      covered_from_po,
+      to_order,
+      coverage_status,
+      coverage_pct: new_required > 0 ? Math.round((coverage_total / new_required) * 100) : 100,
+      source_type,
+      inventory_snapshot: {
+        physical_stock,
+        other_allocated,
+        available,
+        on_order_total: 0 // Would need line item query
+      }
+    };
+    return { preview };
+  }
+
+  // =========== PERSIST CHANGES ===========
+  const retail_effective = part.retail_override ?? part.retail_matrix_price ?? part.default_retail ?? 0;
+  
   const updateData = {
-    required_total: new_required_total,
+    required_total: new_required,
     reserved_from_stock: new_reserved,
-    // Keep legacy fields in sync during migration
-    qty_committed: new_required_total,
+    covered_from_po,
+    supply_source_type: mapSourceType(source_type),
+    // Legacy fields kept in sync during migration
+    qty_committed: new_required,
     qty_reserved: new_reserved,
-    qty_to_order: new_gap,
-    commitment_version: (commitment.commitment_version ?? 0) + 1
+    qty_to_order: to_order,
+    coverage_status,
+    // Pricing recompute
+    planned_cost_total: (commitment?.unit_cost_snapshot ?? part.cost ?? 0) * new_required,
+    planned_retail_total: (commitment?.unit_retail_snapshot ?? retail_effective) * new_required,
+    // State versioning
+    commitment_version: (commitment?.commitment_version ?? 0) + 1,
+    state_version: (commitment?.state_version ?? 0) + 1,
+    last_recomputed_at: ctx.timestamp
   };
 
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, updateData);
+  // If not a new commitment, update it
+  if (!isNewCommitment && commitmentId) {
+    await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, updateData);
+  }
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'ADJUST_REQUIRED' });
   ctx.lifecycle_events.push({
-    entity_type: 'PartCommitment',
-    entity_id: commitmentId,
+    commitment_id: commitmentId,
     event_type: 'ADJUST_REQUIRED',
     actor_email: ctx.user.email,
-    details: JSON.stringify({
-      old_required: commitment.required_total ?? commitment.qty_committed,
-      new_required: new_required_total,
-      new_reserved
-    }),
-    created_date: ctx.timestamp
+    trigger_source: 'USER_ACTION',
+    old_values: JSON.stringify({ required_total: current_required, reserved_from_stock: current_reserved }),
+    new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: new_reserved, to_order }),
+    part_id: part.id,
+    project_id: commitment?.project_id || project_id,
+    qty_delta: new_required - current_required
   });
 
+  // =========== RETURN VIEW MODEL ROW ===========
+  const [project] = await ctx.base44.entities.Project.filter({ id: commitment?.project_id || project_id });
+  
   return {
+    success: true,
     commitment_id: commitmentId,
-    required_total: new_required_total,
+    is_new_commitment: isNewCommitment,
+    // Canonical state
+    required_total: new_required,
     reserved_from_stock: new_reserved,
-    gap: new_gap
+    covered_from_po,
+    to_order,
+    coverage_status,
+    coverage_pct: new_required > 0 ? Math.round(((new_reserved + covered_from_po) / new_required) * 100) : 100,
+    // Context
+    project_id: commitment?.project_id || project_id,
+    project_name: project?.name,
+    part_id: part.id,
+    part_name: part.part_name,
+    source_type,
+    // Inventory snapshot
+    inventory_snapshot: {
+      physical_stock,
+      allocated_total: other_allocated + new_reserved,
+      available: Math.max(0, physical_stock - other_allocated - new_reserved),
+      on_order_total: 0 // TODO: sum from line items
+    },
+    // Next action hint
+    next_action: to_order > 0 ? 'CREATE_PO' : (new_reserved > (commitment?.qty_installed ?? 0) ? 'INSTALL' : 'COMPLETE')
   };
+}
+
+/**
+ * Map UI source type to schema enum
+ */
+function mapSourceType(source_type) {
+  const mapping = {
+    'SHOP_PURCHASED': 'VENDOR',
+    'VENDOR': 'VENDOR',
+    'CLIENT_SUPPLIED': 'CLIENT_SUPPLIED',
+    'AK_CUSTOM': 'AK_CUSTOM',
+    'TAKE_OFF': 'TAKE_OFF',
+    'STOCK': 'STOCK'
+  };
+  return mapping[source_type] || 'VENDOR';
 }
 
 /**
