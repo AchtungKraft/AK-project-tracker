@@ -211,7 +211,7 @@ export default function PartStatusSummary({ partId }) {
       )}
 
       {/* Empty state */}
-      {partRequirements.length === 0 && partLineItems.length === 0 && partInventory.length === 0 && (
+      {commitments.length === 0 && partLineItems.length === 0 && onHand === 0 && (
         <div className="text-center py-4 text-gray-500 text-sm">
           <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p>No activity for this part yet</p>
