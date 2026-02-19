@@ -231,7 +231,7 @@ export default function GlobalNeedToOrder() {
   };
 
   const getSelectedItemsData = () => {
-    return filteredItems.filter(item => selectedItems.has(item.id));
+    return filteredItems.filter(item => selectedItems.has(item.commitment_id));
   };
 
   const renderItem = (item) => {
