@@ -44,6 +44,28 @@ const CANONICAL_FIELDS = [
 function validateMutation(mutation) {
   const { entity_type, operation, data } = mutation;
   
+  // PHASE 4: Block legacy inventory field writes
+  if (entity_type === 'InventoryItem') {
+    const legacyInventoryFields = LEGACY_INVENTORY_FIELDS.filter(f => 
+      data && data[f] !== undefined
+    );
+    
+    if (legacyInventoryFields.length > 0) {
+      // Skip if this is from the dispatcher
+      if (data?._dispatcher_bypass === true) {
+        return { valid: true, note: 'Dispatcher bypass accepted' };
+      }
+      
+      return {
+        valid: false,
+        reason_code: 'LEGACY_INVENTORY_WRITE_BLOCKED',
+        message: 'InventoryItem quantity fields must be written via executeSupplyAction RECEIVE action.',
+        blocked_fields: legacyInventoryFields,
+        suggestion: 'Use base44.functions.invoke("executeSupplyAction", { action_type: "RECEIVE", ... }) instead of direct entity writes.'
+      };
+    }
+  }
+
   // Only guard PartCommitment writes
   if (entity_type !== 'PartCommitment') {
     return { valid: true };
