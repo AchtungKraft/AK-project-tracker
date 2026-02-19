@@ -5,6 +5,65 @@
 
 ---
 
+## Hard Reset (Delete All Commitments)
+
+### Preconditions
+
+Before executing a hard reset, confirm ALL of the following:
+
+- ☑️ No project has installed parts that need historical preservation
+- ☑️ No reporting depends on PartCommitment history
+- ☑️ No PO reconciliation logic relies on old commitments
+- ☑️ We accept that demand history starts fresh from today
+
+### What Gets Deleted
+
+| Entity | Scope | Reason |
+|--------|-------|--------|
+| `PartCommitment` | ALL records | Primary reset target |
+| `LifecycleEvent` | Where `commitment_id` matches | Linked history |
+| `PoolAllocation` | Where `commitment_id` matches | Billing linkage |
+
+### What Is Preserved
+
+| Entity | Reason |
+|--------|--------|
+| `Part.physical_stock` | Inventory reality unchanged |
+| `InventoryReceipt` | Receiving history preserved |
+| `InventoryAuditLog` | Inventory mutation audit trail |
+| `Order` / `PartPurchaseLineItem` | PO history (may be orphaned) |
+| `Part`, `Project`, `Vendor` | Master data |
+
+### Execution
+
+1. Navigate to **Supply Dashboard** (SupplyLanding)
+2. Scroll to **Danger Zone: Supply Hard Reset** (admin only)
+3. Click **Preview Reset** to see impact summary
+4. Review counts and high-risk items
+5. Type confirmation token: `RESET_SUPPLY_COMMITMENTS_DELETE_ALL`
+6. Click **Execute Reset**
+7. Wait for completion and post-check results
+
+### Expected After-State
+
+- All project supply views show zero commitments
+- GlobalNeedToOrder queue is empty
+- Parts physical_stock values unchanged
+- Integrity audit should pass (no orphans)
+- Canonical flow check should pass (no legacy data)
+
+### Re-Onboarding Process
+
+After reset, rebuild demand:
+
+1. **Add parts to projects** using `ADJUST_REQUIRED` (sets `required_total`)
+2. **AUTO_RESERVE** to pull from existing physical stock
+3. **Order gaps** via Ops-first workflow (`GlobalNeedToOrder`)
+4. **Receive** via `POReceiving`
+5. **Install** via `ProjectSupplyManager` Install tab
+
+---
+
 ## Shop Manager Flow
 
 ### A) Project-First Workflow
