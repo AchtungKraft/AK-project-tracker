@@ -70,10 +70,12 @@ export default function PartsListView({
     queryFn: () => base44.entities.PartPurchaseLineItem.list(),
   });
 
-  // Use PartProjectRequirement for need-to-buy calculations
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list(),
+  // Use PartCommitment for canonical demand calculations
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitmentsAll'],
+    queryFn: () => base44.entities.PartCommitment.filter({
+      commitment_status: { $nin: ['cancelled', 'closed'] }
+    }),
   });
 
   // Batch resolve financial status for displayed parts
@@ -93,24 +95,49 @@ export default function PartsListView({
     return map;
   }, [financialStatuses]);
 
-  const getInventoryStats = (partId) => {
-    const items = inventoryItems.filter(i => i.part_id === partId);
-    const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
-    const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+  /**
+   * getInventoryStats - Now uses Part.physical_stock (canonical) and PartCommitment
+   * Returns: { onHand, available, need, onOrder, toOrder }
+   */
+  const getInventoryStats = (part) => {
+    // Use Part.physical_stock as canonical source
+    const onHand = part.physical_stock ?? 0;
     
-    // On Order = qty_ordered - qty_received from open PO lines
-    const partLineItems = lineItems.filter(li => li.part_id === partId);
-    const onOrder = partLineItems.reduce((sum, li) => 
-      sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
+    // Get commitments for this part
+    const partCommitments = commitments.filter(c => c.part_id === part.id);
     
-    // Need = sum of (qty_needed - qty_installed - qty_allocated) for all requirements
-    const partReqs = requirements.filter(r => r.part_id === partId);
-    const need = partReqs.reduce((sum, r) => {
-      const stillNeeded = (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0);
-      return sum + Math.max(0, stillNeeded);
+    // Total reserved across all projects (canonical: reserved_from_stock)
+    const reserved = partCommitments.reduce((sum, c) => 
+      sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0), 0);
+    
+    // Total required across all projects
+    const totalRequired = partCommitments.reduce((sum, c) => 
+      sum + (c.required_total ?? c.qty_committed ?? 0), 0);
+    
+    // On Order = sum of covered_from_po across commitments
+    const onOrder = partCommitments.reduce((sum, c) => 
+      sum + (c.covered_from_po ?? 0), 0);
+    
+    // To Order (gap) = required - reserved - covered_from_po
+    const toOrder = partCommitments.reduce((sum, c) => {
+      const req = c.required_total ?? c.qty_committed ?? 0;
+      const res = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const cov = c.covered_from_po ?? 0;
+      return sum + Math.max(0, req - res - cov);
     }, 0);
     
-    return { onHand, available: onHand - reserved, need, onOrder };
+    // Available = physical - reserved
+    const available = Math.max(0, onHand - reserved);
+    
+    return { 
+      onHand, 
+      available, 
+      need: totalRequired,  // Total demand
+      onOrder,
+      toOrder,              // Gap that needs ordering
+      reserved,
+      projectCount: partCommitments.length
+    };
   };
 
   const getCategoryPath = (categoryId) => {
