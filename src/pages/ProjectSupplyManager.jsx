@@ -1464,24 +1464,18 @@ export default function ProjectSupplyManager() {
           projectId={projectId}
           onClose={() => setShowCreatePoolModal(false)}
           onSuccess={() => {
-            refetchPools();
+            invalidateSupply();
             setShowCreatePoolModal(false);
           }}
         />
       )}
 
-      {orderModalPart && (
-        <OrderPartModal
-          part={orderModalPart}
-          onClose={() => setOrderModalPart(null)}
-        />
-      )}
-
       {deltaOrderCommitment && (
         <DeltaOrderModal
-          commitment={deltaOrderCommitment}
+          commitment={deltaOrderCommitment._raw || deltaOrderCommitment}
           part={deltaOrderCommitment.part}
           onClose={() => setDeltaOrderCommitment(null)}
+          onSuccess={() => invalidateSupply()}
         />
       )}
 
@@ -1495,7 +1489,7 @@ export default function ProjectSupplyManager() {
           part={installModal.part}
           onClose={() => setInstallModal(null)}
           onSuccess={() => {
-            refetchCommitments();
+            invalidateSupply();
             setInstallModal(null);
           }}
         />
