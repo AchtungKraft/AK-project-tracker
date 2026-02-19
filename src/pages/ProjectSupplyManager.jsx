@@ -548,8 +548,7 @@ export default function ProjectSupplyManager() {
 
   // Single row PO creation
   const handleSinglePOCreate = async (commitment, overrideVendorId = null) => {
-    const part = partsMap.get(commitment.part_id);
-    const vendorId = overrideVendorId || part?.default_vendor_id;
+    const vendorId = overrideVendorId || commitment.vendor?.id;
     
     // If no vendor, show vendor picker
     if (!vendorId) {
