@@ -10,17 +10,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
-
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 /**
- * CANONICAL SUPPLY FLOW ENFORCED
- * All project part mutations must go through CommitmentService.
- * Direct entity writes are blocked.
+ * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2B
  * 
- * AddToBuildModal - Add a part to a project/build (CANONICAL)
- * Routes through CommitmentService.addPartToProject to create PartCommitment
- * Optionally allocates inventory immediately if available
- * MIGRATION: No longer creates PartProjectRequirement or PartBuildAssignment directly
+ * AddToBuildModal - Add a part to a project/build
+ * 
+ * CANONICAL IMPLEMENTATION:
+ * - Uses executeSupplyAction with ADJUST_REQUIRED action
+ * - Sets required_total (not legacy qty_committed)
+ * - Optional AUTO_RESERVE for immediate allocation
+ * - Unified invalidation via supplyInvalidation helper
+ * 
+ * NO LEGACY WRITES:
+ * - Does NOT write to PartProjectRequirement directly
+ * - Does NOT write to PartBuildAssignment directly
+ * - Does NOT write qty_committed, qty_needed, or other legacy fields
  */
 export default function AddToBuildModal({ part, onClose }) {
   const queryClient = useQueryClient();
@@ -71,38 +77,42 @@ export default function AddToBuildModal({ part, onClose }) {
 
       const qtyNeeded = Number(formData.qty_needed) || 1;
 
-      // Create commitment via CommitmentService (CANONICAL)
-      const response = await base44.functions.invoke('commitmentService', {
-        action: 'addPartToProject',
-        project_id: formData.project_id,
-        part_id: part.id,
-        qty_committed: qtyNeeded,
-        notes: formData.notes || null,
-        source_surface: 'AddToBuildModal',
-        requested_by: 'user'
+      // CANONICAL: Use executeSupplyAction with ADJUST_REQUIRED
+      // This is the ONLY way to create/update commitments
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADJUST_REQUIRED',
+        commitment_ids: [], // Empty = create new commitment
+        payload: {
+          project_id: formData.project_id,
+          part_id: part.id,
+          required_total_set: qtyNeeded, // CANONICAL: required_total, NOT qty_committed
+          source_type: 'SHOP_PURCHASED', // Default source type
+          notes: formData.notes || null,
+          source_surface: 'AddToBuildModal',
+        },
+        dry_run: false
       });
 
-      const commitmentData = response.data;
-      if (!commitmentData.success) {
-        throw new Error(commitmentData.error || 'Failed to add part to project');
+      if (response.data?.error) {
+        throw new Error(response.data.error || 'Failed to add part to project');
       }
 
-      const commitment = commitmentData.commitment;
+      const commitment = response.data.commitment;
+      const needsCostReview = response.data.needs_cost_review;
 
       // Handle immediate inventory allocation if requested
-      // CANONICAL: Route through executeSupplyAction dispatcher instead of direct entity writes
+      // CANONICAL: Route through executeSupplyAction for AUTO_RESERVE
       let qtyAllocated = 0;
-      if (allocateImmediately && inventoryItems.length > 0) {
-        // Calculate available to allocate
-        const totalAvailable = inventoryItems.reduce((sum, item) => {
-          const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
-          return sum + Math.max(0, available);
-        }, 0);
+      if (allocateImmediately && commitment) {
+        // Get part's physical stock for allocation calculation
+        const partData = await base44.entities.Part.filter({ id: part.id });
+        const partRecord = partData[0];
+        const physicalStock = partRecord?.physical_stock ?? 0;
         
-        const toAllocate = Math.min(totalAvailable, qtyNeeded);
+        // Calculate how much can be allocated (min of stock and needed)
+        const toAllocate = Math.min(physicalStock, qtyNeeded);
         
         if (toAllocate > 0) {
-          // Route through dispatcher for AUTO_RESERVE action
           const reserveResponse = await base44.functions.invoke('executeSupplyAction', {
             action_type: 'AUTO_RESERVE',
             commitment_ids: [commitment.id],
@@ -116,16 +126,26 @@ export default function AddToBuildModal({ part, onClose }) {
         }
       }
       
-      return { commitment, qtyAllocated, needs_cost_review: commitmentData.needs_cost_review };
+      return { 
+        commitment, 
+        qtyAllocated, 
+        needs_cost_review: needsCostReview,
+        project_id: formData.project_id,
+        part_id: part.id
+      };
     },
-    onSuccess: ({ commitment, qtyAllocated, needs_cost_review }) => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+    onSuccess: ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id }) => {
+      // CANONICAL: Use unified invalidation helper
+      invalidateSupplyQueries(queryClient, {
+        part_ids: [part_id],
+        project_ids: [project_id],
+        commitment_ids: commitment ? [commitment.id] : [],
+        invalidateAll: true, // Ensure GlobalNeedToOrder and all views update
+      });
       
       let message = 'Part added to build';
       if (qtyAllocated > 0) {
-        message += ` (${qtyAllocated} allocated)`;
+        message += ` (${qtyAllocated} allocated from stock)`;
       }
       if (needs_cost_review) {
         message += ' ⚠️ Cost review needed';
