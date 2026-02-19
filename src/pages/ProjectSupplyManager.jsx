@@ -1704,9 +1704,14 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading, vendors })
 }
 
 // === VENDOR PICKER MODAL ===
-function VendorPickerModal({ commitment, part, vendors, onClose, onSelect }) {
+function VendorPickerModal({ commitment, part, onClose, onSelect }) {
   const [selectedVendor, setSelectedVendor] = useState('');
-  const activeVendors = vendors.filter(v => v.active);
+  
+  // Fetch vendors from read model
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => base44.entities.Vendor.filter({ active: true }),
+  });
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1734,7 +1739,7 @@ function VendorPickerModal({ commitment, part, vendors, onClose, onSelect }) {
               <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
             )}
             <p className="text-sm text-gray-400 mt-1">
-              Qty to Order: <span className="text-purple-400">{commitment.qty_to_order}</span>
+              Qty to Order: <span className="text-purple-400">{commitment.to_order || commitment.qty_to_order}</span>
             </p>
           </div>
 
@@ -1745,7 +1750,7 @@ function VendorPickerModal({ commitment, part, vendors, onClose, onSelect }) {
                 <SelectValue placeholder="Select vendor..." />
               </SelectTrigger>
               <SelectContent>
-                {activeVendors.map(v => (
+                {vendors.map(v => (
                   <SelectItem key={v.id} value={v.id}>
                     <span style={{ color: v.color }}>{v.vendor_name}</span>
                   </SelectItem>
