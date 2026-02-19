@@ -437,7 +437,7 @@ export default function EditPartDrawer({ partId, onClose }) {
             <PartStatusSummary partId={partId} />
 
             {/* Inventory Locations Detail - Editable */}
-            {inventoryItems.length > 0 && (
+            {inventoryStats.onHand > 0 && (
               <InventoryLocationsList partId={partId} />
             )}
 
