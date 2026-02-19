@@ -290,9 +290,6 @@ export default function ProjectSupplyManager() {
         
         // Inventory snapshot from read model
         inventory_snapshot: item.inventory_snapshot,
-        
-        // Raw data for mutations
-        _raw: item._raw,
       };
     });
   }, [supplyItems, categoriesMap]);
