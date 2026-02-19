@@ -1,12 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import { invalidateSupplyQueries, extractInvalidationContext } from "@/components/supply/supplyInvalidation";
 
 /**
  * useSupplyAction - Hook for executing canonical supply actions
  * 
  * This is the ONLY way UI components should mutate supply state.
  * All actions go through executeSupplyAction dispatcher.
+ * 
+ * PHASE 4: Uses unified invalidation helper for cross-view consistency
  * 
  * Usage:
  * const { adjustRequired, createPO, receive, install } = useSupplyAction();
@@ -20,33 +23,7 @@ import { toast } from "sonner";
 
 export function useSupplyAction(options = {}) {
   const queryClient = useQueryClient();
-  const { onSuccess, onError, invalidateKeys = [] } = options;
-
-  // Default query keys to invalidate after any supply action
-  // CANONICAL: Includes partsInventoryView for Parts Tracker alignment
-  const defaultInvalidateKeys = [
-    'projectSupplyView',
-    'opsSupplyView',
-    'partSupplyUsage',
-    'partsInventoryView',  // CANONICAL: Parts Tracker read model
-    'inventoryItems',      // CANONICAL: Ensure InventoryItem queries are invalidated
-    'partCommitments',
-    'projectCommitments',
-    'commitmentState',
-    'commitmentStates',
-    'lifecycleActionQueue',
-    'globalOrderQueue',
-    'globalSupplyQueues',
-    'parts',
-    'part',  // Individual part queries
-    ...invalidateKeys
-  ];
-
-  const invalidateQueries = () => {
-    for (const key of defaultInvalidateKeys) {
-      queryClient.invalidateQueries({ queryKey: [key] });
-    }
-  };
+  const { onSuccess, onError, showSuccessToast = false } = options;
 
   // Base mutation for all supply actions
   const mutation = useMutation({
@@ -62,11 +39,19 @@ export function useSupplyAction(options = {}) {
       if (result.error) {
         throw new Error(result.error);
       }
-      return result;
+      return { ...result, _payload: payload, _action_type: action_type };
     },
     onSuccess: (data, variables) => {
       if (!variables.dry_run) {
-        invalidateQueries();
+        // PHASE 4: Use unified invalidation helper
+        const context = extractInvalidationContext(data, variables.payload);
+        invalidateSupplyQueries(queryClient, {
+          ...context,
+          invalidateAll: true // Ensure all supply views refresh
+        });
+      }
+      if (showSuccessToast && data._action_type) {
+        toast.success(`${data._action_type} completed`);
       }
       onSuccess?.(data, variables);
     },
@@ -176,10 +161,13 @@ export function useSupplyAction(options = {}) {
   };
 
   return {
-    // Base mutation
+    // Base mutation - also expose as mutate for compatibility
     execute: mutation.mutateAsync,
+    mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync,
     mutation,
     isPending: mutation.isPending,
+    isLoading: mutation.isPending, // Alias for backward compatibility
     
     // Convenience methods
     adjustRequired,
@@ -190,8 +178,8 @@ export function useSupplyAction(options = {}) {
     reverseInstall,
     cancelCommitment,
     
-    // Manual invalidation
-    invalidateQueries
+    // Manual invalidation via unified helper
+    invalidateQueries: (context = {}) => invalidateSupplyQueries(queryClient, context)
   };
 }
 
