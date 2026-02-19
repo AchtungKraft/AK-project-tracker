@@ -78,18 +78,6 @@ export default function InventoryManagement({ onPartClick }) {
     queryFn: () => base44.entities.Order.list()
   });
 
-  // Get location name with hierarchy
-  const getLocationName = (locationId) => {
-    if (!locationId) return 'Unassigned';
-    const location = locations.find(l => l.id === locationId);
-    if (!location) return 'Unknown';
-    if (location.parent_id) {
-      const parent = locations.find(l => l.id === location.parent_id);
-      return parent ? `${parent.location_area} > ${location.location_area}` : location.location_area;
-    }
-    return location.location_area;
-  };
-
   // Get all descendant category IDs
   const getAllDescendantCategoryIds = (categoryId) => {
     const descendants = new Set([categoryId]);
