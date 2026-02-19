@@ -532,18 +532,13 @@ export default function ProjectSupplyManager() {
         toast.error('No orders created - check commitment eligibility');
       }
 
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projectLineItems', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Invalidate via read model
+      invalidateSupply();
       
       // Clear selection
       setSelectedItems(new Set());
       setShowBulkPOPreview(false);
       setBulkPOPreviewData(null);
-      
-      // Refresh data
-      refetchCommitments();
     } catch (error) {
       toast.error('Failed to create PO: ' + error.message);
     } finally {
