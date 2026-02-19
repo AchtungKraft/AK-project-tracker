@@ -110,11 +110,11 @@ const QuantityStateMatrix = ({ commitment }) => {
         </p>
       </div>
 
-      {/* Progress bars */}
+      {/* Progress bars - using required_total as denominator */}
       <div className="space-y-2">
         {stages.map((stage, idx) => {
           const Icon = stage.icon;
-          const pct = qty_committed > 0 ? (stage.value / qty_committed) * 100 : 0;
+          const pct = required_total > 0 ? (stage.value / required_total) * 100 : 0;
           return (
             <div key={stage.label} className="flex items-center gap-3">
               <div className="w-24 flex items-center gap-2 text-sm text-gray-400">
