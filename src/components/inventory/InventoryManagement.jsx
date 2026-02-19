@@ -337,7 +337,6 @@ export default function InventoryManagement({ onPartClick }) {
     setExpandedParts(newExpanded);
   };
 
-  const parentLocations = locations.filter(l => !l.parent_id && l.active);
   const parentCategories = categories.filter(c => !c.parent_id && c.active);
 
   return (
