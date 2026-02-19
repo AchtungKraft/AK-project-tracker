@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { invalidateSupplyQueries, extractInvalidationContext } from "./supplyInvalidation";
 
 /**
  * useProjectSupplyView - Hook for consuming project supply read model
@@ -149,6 +150,8 @@ export function usePOReceivingView(orderId = null, filters = {}) {
  * 
  * All supply mutations MUST go through this hook.
  * Components MUST NOT write to commitment/inventory entities directly.
+ * 
+ * Uses unified invalidation helper to ensure all views stay in sync.
  */
 export function useSupplyAction() {
   const queryClient = useQueryClient();
@@ -164,18 +167,17 @@ export function useSupplyAction() {
       if (response.data?.error) {
         throw new Error(response.data.error);
       }
-      return response.data;
+      return { ...response.data, _action_type: action_type, _payload: payload };
     },
     onSuccess: (data, variables) => {
-      // Invalidate all supply-related queries after successful mutation
+      // Use unified invalidation helper for consistent cache management
       if (!variables.dry_run) {
-        queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
-        queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
-        queryClient.invalidateQueries({ queryKey: ['poReceivingView'] });
-        queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-        queryClient.invalidateQueries({ queryKey: ['parts'] });
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
-        queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+        const context = extractInvalidationContext(data, variables.payload);
+        // Always do full invalidation for supply actions to ensure consistency
+        invalidateSupplyQueries(queryClient, {
+          ...context,
+          invalidateAll: true,
+        });
       }
     },
   });
