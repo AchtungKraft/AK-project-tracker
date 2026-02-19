@@ -1101,17 +1101,141 @@ async function cancelCommitment(ctx, commitment_ids, payload) {
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CANCEL' });
   
   ctx.lifecycle_events.push({
-    entity_type: 'PartCommitment',
-    entity_id: commitmentId,
-    event_type: 'CANCELLED',
+    commitment_id: commitmentId,
+    event_type: 'COMMITMENT_CANCELLED',
+    trigger_source: 'UNIFIED_ENGINE',
+    triggered_by: ctx.user.email,
     actor_email: ctx.user.email,
-    details: JSON.stringify({ reason, cancellation_type }),
-    created_date: ctx.timestamp
+    part_id: commitment.part_id,
+    project_id: commitment.project_id,
+    metadata: JSON.stringify({ reason, cancellation_type }),
+    event_date: ctx.timestamp
   });
 
   return {
     commitment_id: commitmentId,
     cancellation_type,
     stock_released: reserved
+  };
+}
+
+// ============================================================================
+// ADD_STOCK - Canonical stock addition (no commitment)
+// ============================================================================
+
+/**
+ * ADD_STOCK - Add physical inventory without a PO or commitment
+ * 
+ * This is the canonical way to add "found inventory", "gifts", "transfers in", etc.
+ * It updates Part.physical_stock and optionally creates an InventoryItem for location tracking.
+ * 
+ * Inputs:
+ * - part_id: ID of the part
+ * - qty: Quantity to add (positive)
+ * - location_id: Optional storage location
+ * - note: Optional note describing why
+ * - purchase_cost: Optional cost per unit
+ * 
+ * Returns: updated part snapshot + inventory state
+ */
+async function addStock(ctx, payload) {
+  const { part_id, qty, location_id, note, purchase_cost } = payload;
+
+  if (!part_id) {
+    throw new Error('part_id is required for ADD_STOCK');
+  }
+  
+  const quantity = Number(qty) || 0;
+  if (quantity <= 0) {
+    throw new Error('qty must be a positive number');
+  }
+
+  // Fetch the part
+  const [part] = await ctx.base44.entities.Part.filter({ id: part_id });
+  if (!part) throw new Error('Part not found');
+
+  const old_physical = part.physical_stock ?? 0;
+  const new_physical = old_physical + quantity;
+
+  if (ctx.dry_run) {
+    return {
+      preview: {
+        part_id,
+        part_name: part.part_name,
+        qty_adding: quantity,
+        old_physical_stock: old_physical,
+        new_physical_stock: new_physical,
+        location_id
+      }
+    };
+  }
+
+  // Update Part.physical_stock
+  await ctx.base44.asServiceRole.entities.Part.update(part_id, {
+    physical_stock: new_physical
+  });
+
+  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'ADD_STOCK' });
+
+  // Create InventoryItem for location tracking (optional, backward compatibility)
+  let inventoryItemId = null;
+  if (location_id) {
+    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+      part_id,
+      location_id,
+      quantity_on_hand: quantity,
+      quantity_reserved: 0,
+      purchase_cost: purchase_cost ? Number(purchase_cost) : null,
+      received_date: new Date().toISOString().split('T')[0],
+      notes: note || 'Added via ADD_STOCK action'
+    });
+    inventoryItemId = invItem.id;
+    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'CREATE' });
+  }
+
+  // Create audit log entry
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
+    part_id,
+    action_type: 'ADD_STOCK',
+    qty_delta: quantity,
+    old_qty: old_physical,
+    new_qty: new_physical,
+    location_id: location_id || null,
+    notes: note || null,
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp
+  });
+
+  ctx.lifecycle_events.push({
+    commitment_id: null, // No commitment for stock-level operations
+    event_type: 'STOCK_RESERVED', // Using closest enum; ideally STOCK_ADDED
+    trigger_source: 'UNIFIED_ENGINE',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id,
+    metadata: JSON.stringify({
+      action: 'ADD_STOCK',
+      qty_added: quantity,
+      location_id,
+      note
+    }),
+    event_date: ctx.timestamp
+  });
+
+  // Return updated state
+  return {
+    success: true,
+    part_id,
+    part_name: part.part_name,
+    qty_added: quantity,
+    old_physical_stock: old_physical,
+    new_physical_stock: new_physical,
+    location_id,
+    inventory_item_id: inventoryItemId,
+    // Context for invalidation
+    invalidation_context: {
+      part_ids: [part_id],
+      invalidateAll: true
+    }
   };
 }
