@@ -1,17 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -35,17 +32,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  ShoppingCart, Package, Truck, CheckCircle2, AlertTriangle, DollarSign,
-  ArrowLeft, ArrowRight, Plus, MoreVertical, RefreshCw, Search, Wallet,
-  Wrench, X, ChevronRight, FileText, Download, Eye, Edit, Trash2,
-  AlertCircle, Clock, MapPin
+  ShoppingCart, Package, Truck, AlertTriangle, DollarSign,
+  ArrowLeft, Plus, MoreVertical, RefreshCw, Search, Wallet,
+  Wrench, X, FileText, Edit, Trash2,
+  AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
-import { CommitmentActions } from "@/components/financial/financialMutationGuard";
-import { getAllowedCommitmentActions, getCommitmentLifecycleState } from "@/components/lifecycle/getAllowedCommitmentActions";
-import { CoverageBadge, BillingStatusBadge } from "@/components/parts/FinancialColumns";
-import OrderPartModal from "@/components/parts/OrderPartModal";
+import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import CreatePoolModal from "@/components/financial/CreatePoolModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
@@ -58,9 +52,10 @@ import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
 import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
-import { CoverageBadge as CoverageBadgeNew, CoverageBadgeInline } from "@/components/parts/CoverageBadge";
+import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
+import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
