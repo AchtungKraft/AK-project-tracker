@@ -431,7 +431,7 @@ export default function InventoryManagement({ onPartClick }) {
                     <p className="text-lg font-bold text-white">{globalTotals.onHand}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Total physical inventory across all locations</TooltipContent>
+                <TooltipContent>Total physical inventory (sum of Part.physical_stock)</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -441,7 +441,7 @@ export default function InventoryManagement({ onPartClick }) {
                     <p className="text-lg font-bold text-yellow-400">{globalTotals.reserved}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Inventory allocated to projects (not yet installed)</TooltipContent>
+                <TooltipContent>Inventory allocated to projects (sum of reserved_from_stock)</TooltipContent>
               </Tooltip>
 
               <Tooltip>
