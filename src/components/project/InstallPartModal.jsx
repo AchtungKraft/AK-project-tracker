@@ -138,6 +138,11 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
             </CardContent>
           </Card>
 
+          {/* Show canonical commitment state if available */}
+          {commitmentState && (
+            <CommitmentQuantityRow state={commitmentState} compact className="mb-2" />
+          )}
+
           {maxInstallable <= 0 ? (
             <div className="text-center py-6 text-gray-500">
               <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
