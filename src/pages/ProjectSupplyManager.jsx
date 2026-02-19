@@ -308,39 +308,48 @@ export default function ProjectSupplyManager() {
 
       const categoryObj = resolveCategoryObj(part);
       
-      // Compute coverage block (GOVERNANCE: this is the ONLY place coverage is computed for UI)
-      // In production, this should come from backend/resolver, but for now we derive from commitment fields
-      const qty_needed = commitment.qty_committed || 0;
-      const qty_reserved = commitment.qty_reserved || 0;
-      const qty_ordered = commitment.qty_ordered || 0;
-      const qty_received = commitment.qty_received || 0;
-      const qty_installed = commitment.qty_installed || 0;
-      const coverage_total = qty_reserved + Math.max(qty_ordered, qty_received);
-      const gap_qty = Math.max(0, qty_needed - coverage_total);
-      const overage_qty = Math.max(0, coverage_total - qty_needed);
+      // CANONICAL COVERAGE: Use canonical fields with legacy fallback
+      // This should eventually come from backend resolver (resolveCommitmentState)
+      const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
+      const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
+      const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
+      const qty_installed = commitment.qty_installed ?? 0;
       
-      let coverage_status = 'NONE';
-      if (qty_needed === 0) {
-        coverage_status = coverage_total > 0 ? 'OVER' : 'FULL';
-      } else if (coverage_total === 0) {
-        coverage_status = 'NONE';
-      } else if (coverage_total < qty_needed) {
-        coverage_status = 'PARTIAL';
-      } else if (coverage_total === qty_needed) {
-        coverage_status = 'FULL';
-      } else {
-        coverage_status = 'OVER';
+      // Derived values from canonical fields
+      const coverage_total = reserved_from_stock + covered_from_po;
+      const gap_qty = Math.max(0, required_total - coverage_total);
+      const overage_qty = Math.max(0, coverage_total - required_total);
+      
+      // Use resolver's coverage_status if available, else derive
+      let coverage_status = commitment.coverage_status;
+      if (!coverage_status) {
+        if (required_total === 0) {
+          coverage_status = coverage_total > 0 ? 'OVER' : 'FULLY_COVERED';
+        } else if (coverage_total === 0) {
+          coverage_status = 'NOT_COVERED';
+        } else if (coverage_total < required_total) {
+          coverage_status = 'PARTIALLY_COVERED';
+        } else if (coverage_total >= required_total) {
+          coverage_status = 'FULLY_COVERED';
+        }
       }
       
-      const poAdjustmentRequired = overage_qty > 0 && (qty_ordered > qty_needed || qty_received > qty_needed);
+      const poAdjustmentRequired = overage_qty > 0 && (covered_from_po > required_total);
       
       const coverage = {
-        qty_needed,
-        qty_reserved,
-        qty_ordered,
-        qty_received,
+        // Canonical fields
+        required_total,
+        reserved_from_stock,
+        covered_from_po,
         qty_installed,
-        qty_to_order: commitment.qty_to_order || gap_qty,
+        to_order: gap_qty,
+        // Legacy aliases for compatibility
+        qty_needed: required_total,
+        qty_reserved: reserved_from_stock,
+        qty_ordered: covered_from_po,
+        qty_received: commitment.qty_received ?? 0, // legacy only
+        qty_to_order: gap_qty,
+        // Derived
         coverage_total,
         gap_qty,
         overage_qty,
