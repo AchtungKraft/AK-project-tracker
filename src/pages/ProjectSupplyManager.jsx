@@ -34,7 +34,7 @@ import {
 import {
   ShoppingCart, Package, Truck, AlertTriangle, DollarSign,
   ArrowLeft, Plus, MoreVertical, RefreshCw, Search, Wallet,
-  Wrench, X, FileText, Edit, Trash2,
+  Wrench, X, FileText, Edit, Trash2, Download,
   AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
