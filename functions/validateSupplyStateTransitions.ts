@@ -125,14 +125,21 @@ Deno.serve(async (req) => {
           state.coverage_status === expectedCoverage
         );
         
-        // Test 1f: Action gating - canCreatePO
-        const canCreatePO = state.commitment_status === 'planned' && state.to_order > 0;
+        // Test 1f: Action gating - canCreatePO (USER'S TEST CASE)
+        // Fresh requirement with gap should allow PO creation
+        const canCreatePOResult = canCreatePO(state);
+        const expectedCanCreatePO = state.commitment_status === 'planned' && state.to_order > 0;
         addTest(
           'Test 1f: canCreatePO when planned with gap',
-          `status=${state.commitment_status}, to_order=${state.to_order} → canCreatePO=${state.commitment_status === 'planned' && state.to_order > 0}`,
-          canCreatePO,
-          true, // This is computed, always passes if computed
-          { commitment_status: state.commitment_status, to_order: state.to_order }
+          `status=${state.commitment_status}, to_order=${state.to_order} → canCreatePO=${expectedCanCreatePO}`,
+          canCreatePOResult,
+          canCreatePOResult === expectedCanCreatePO,
+          { 
+            commitment_status: state.commitment_status, 
+            to_order: state.to_order,
+            canCreatePO: canCreatePOResult,
+            expected: expectedCanCreatePO
+          }
         );
         
         // ========================================
