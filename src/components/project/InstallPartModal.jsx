@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +13,31 @@ import { Wrench, Package, MapPin, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
+import { useSupplyAction, useCommitmentState } from "@/components/supply/useSupplyState";
+import { CommitmentQuantityRow } from "@/components/supply/CanonicalQuantityDisplay";
 
-export default function InstallPartModal({ requirement, onClose }) {
+/**
+ * InstallPartModal - Install parts using canonical dispatcher
+ * 
+ * ALL MUTATIONS route through executeSupplyAction with action_type='INSTALL'
+ * NO direct entity writes allowed
+ */
+export default function InstallPartModal({ requirement, commitment: passedCommitment, onClose }) {
   const queryClient = useQueryClient();
-  const [qtyToInstall, setQtyToInstall] = useState(
-    Math.min((requirement.qty_allocated || 0) - (requirement.qty_installed || 0), 1)
-  );
+  
+  // Determine if we're using requirement-based or commitment-based install
+  const commitmentId = passedCommitment?.id || requirement?.commitment_id;
+  
+  // Fetch canonical commitment state from resolver
+  const { data: commitmentState } = useCommitmentState(commitmentId);
+  
+  // Calculate max installable from canonical state
+  const available_for_install = commitmentState?.available_for_install ?? 0;
+  const maxInstallable = passedCommitment 
+    ? available_for_install
+    : (requirement?.qty_allocated || 0) - (requirement?.qty_installed || 0);
+  
+  const [qtyToInstall, setQtyToInstall] = useState(Math.min(maxInstallable, 1));
   const [notes, setNotes] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -29,8 +48,9 @@ export default function InstallPartModal({ requirement, onClose }) {
   });
 
   const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems', requirement.part_id],
-    queryFn: () => base44.entities.InventoryItem.filter({ part_id: requirement.part_id })
+    queryKey: ['inventoryItems', requirement?.part_id || passedCommitment?.part_id],
+    queryFn: () => base44.entities.InventoryItem.filter({ part_id: requirement?.part_id || passedCommitment?.part_id }),
+    enabled: !!(requirement?.part_id || passedCommitment?.part_id)
   });
 
   const { data: locations = [] } = useQuery({
@@ -38,19 +58,8 @@ export default function InstallPartModal({ requirement, onClose }) {
     queryFn: () => base44.entities.Location.list()
   });
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list()
-  });
-
-  const { data: commitments = [] } = useQuery({
-    queryKey: ['partCommitments', requirement.project_id],
-    queryFn: () => base44.entities.PartCommitment.filter({ project_id: requirement.project_id }),
-    enabled: !!requirement.project_id,
-  });
-
-  const part = parts.find(p => p.id === requirement.part_id) || {};
-  const maxInstallable = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
+  const partId = requirement?.part_id || passedCommitment?.part_id;
+  const part = parts.find(p => p.id === partId) || {};
   const activeLocations = locations.filter(l => l.active);
   
   // Get available inventory with location info
@@ -62,54 +71,14 @@ export default function InstallPartModal({ requirement, onClose }) {
     })
     .filter(i => i.available > 0);
   
-  // Find commitment for this requirement
-  const commitment = commitments.find(c => c.requirement_id === requirement.id && c.commitment_status !== 'cancelled');
-  
   // Check if part type affects inventory
   const affectsInventory = part.affects_inventory !== false;
 
-  // Use centralized mutation service
-  const installMutation = useMutation({
-    mutationFn: async () => {
-      const response = await base44.functions.invoke('mutateInventory', {
-        mutation_type: 'install',
-        part_id: requirement.part_id,
-        qty: qtyToInstall,
-        project_id: requirement.project_id,
-        commitment_id: commitment?.id || null,
-        from_location_id: selectedLocationId || null,
-        unit_cost: part.default_cost || 0,
-        notes: notes || `Installed for requirement`,
-      });
-      
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-
-      // Update requirement qty_installed separately (mutation service handles InstalledPart)
-      const newInstalled = (requirement.qty_installed || 0) + qtyToInstall;
-      const newStatus = newInstalled >= requirement.qty_needed ? 'Installed' : 
-                       newInstalled > 0 ? 'Partially Installed' : requirement.status;
-      
-      await base44.entities.PartProjectRequirement.update(requirement.id, {
-        qty_installed: newInstalled,
-        status: newStatus
-      });
-      
-      return response.data;
-    },
+  // Use canonical supply action dispatcher
+  const supplyAction = useSupplyAction({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['installedParts'] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryAuditLogs'] });
-      toast.success(`${qtyToInstall} unit(s) marked as installed`);
       setShowConfirmModal(false);
       onClose();
-    },
-    onError: (error) => {
-      toast.error('Failed to install: ' + error.message);
     }
   });
 
@@ -130,7 +99,17 @@ export default function InstallPartModal({ requirement, onClose }) {
   };
   
   const handleConfirmedInstall = () => {
-    installMutation.mutate();
+    // Route through canonical dispatcher - NO direct entity writes
+    supplyAction.mutate({
+      action_type: 'INSTALL',
+      commitment_ids: [commitmentId],
+      payload: {
+        qty_to_install: qtyToInstall,
+        location_id: selectedLocationId || null,
+        notes: notes || `Installed for project`
+      },
+      dry_run: false
+    });
   };
 
   return (
