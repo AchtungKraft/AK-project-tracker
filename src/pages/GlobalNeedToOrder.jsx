@@ -34,10 +34,15 @@ import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import { useSupplyAction } from "@/components/supply/useSupplyState";
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
- * Uses consolidated backend function to avoid rate limits
+ * 
+ * DATA SOURCE: getGlobalOrderQueue backend function
+ * MUTATIONS: Routes through executeSupplyAction (CREATE_PO)
+ * 
+ * Displays canonical to_order (gap) values from resolver - NO local derivation
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
