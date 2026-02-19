@@ -166,55 +166,53 @@ const QuantityStateMatrix = ({ commitment }) => {
   );
 };
 
-// Inline Qty Stepper
+// Inline Qty Stepper - uses canonical dispatcher
 export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = false }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const queryClient = useQueryClient();
 
+  // Use canonical supply action dispatcher
   const mutation = useMutation({
     mutationFn: async ({ action_type, qty_delta, reason }) => {
-      const response = await base44.functions.invoke('mutatePartCommitmentQuantity', {
-        commitment_id: commitment.id,
-        action_type,
-        qty_delta,
-        reason
+      // Calculate new required_total based on action
+      const currentRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
+      let newRequired;
+      
+      if (action_type === ACTION_TYPES.INCREASE_QTY) {
+        newRequired = currentRequired + qty_delta;
+      } else if (action_type === ACTION_TYPES.DECREASE_QTY) {
+        newRequired = Math.max(0, currentRequired - qty_delta);
+      } else {
+        throw new Error(`Unsupported action type: ${action_type}`);
+      }
+
+      // Route through canonical dispatcher
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADJUST_REQUIRED',
+        commitment_ids: [commitment.id],
+        payload: { new_required_total: newRequired },
+        dry_run: false
       });
+      
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+      
       return response.data;
     },
     onSuccess: (data) => {
-      if (data.ok || data.success) {
-        // Build informative message from coverage data
-        let msg = 'Qty updated';
-        if (data.coverage) {
-          const parts = [];
-          if (data.reserved_qty_added > 0) parts.push(`${data.reserved_qty_added} reserved`);
-          if (data.to_order_qty_added > 0) parts.push(`${data.to_order_qty_added} to order`);
-          if (data.coverage.gap_qty > 0) parts.push(`gap: ${data.coverage.gap_qty}`);
-          if (parts.length > 0) msg += `: ${parts.join(', ')}`;
-        }
-        
-        // Show warnings if any
-        if (data.warnings?.poAdjustmentRequired) {
-          toast.warning('PO adjustment may be required', { description: msg });
-        } else if (data.violations?.length > 0) {
-          const warningViolations = data.violations.filter(v => v.severity === 'WARNING');
-          if (warningViolations.length > 0) {
-            toast.warning(msg, { description: warningViolations.map(v => v.message).join(', ') });
-          } else {
-            toast.success(msg);
-          }
-        } else {
-          toast.success(msg);
-        }
-        
-        queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-        queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
-        queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
-        onMutationSuccess?.();
-      } else {
-        toast.error(data.error || 'Mutation failed');
-      }
+      toast.success(`Requirement updated to ${data.required_total}`);
+      
+      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['commitmentState'] });
+      queryClient.invalidateQueries({ queryKey: ['commitmentStates'] });
+      queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+      queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
+      queryClient.invalidateQueries({ queryKey: ['globalOrderQueue'] });
+      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
+      onMutationSuccess?.();
+      
       setShowConfirmModal(false);
       setPendingAction(null);
     },
