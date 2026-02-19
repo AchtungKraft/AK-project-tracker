@@ -755,9 +755,15 @@ export default function ProjectSupplyManager() {
               onClick={() => setQtyManagerDrawer(commitment)}
             />
             <CoverageControlsPopover
-              commitment={{ ...commitment._raw, id: commitment.id }}
+              commitment={{ 
+                id: commitment.id,
+                commitment_status: commitment.commitment_status,
+                required_total: commitment.required_total,
+                reserved_from_stock: commitment.reserved_from_stock,
+                covered_from_po: commitment.covered_from_po,
+              }}
               coverage={commitment.coverage}
-              undoAvailable={commitment._raw?.undo_available}
+              undoAvailable={false}
               onActionComplete={() => invalidateSupply()}
               disabled={!actionsEnabled}
             />
