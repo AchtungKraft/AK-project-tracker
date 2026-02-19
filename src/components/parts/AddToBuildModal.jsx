@@ -90,31 +90,29 @@ export default function AddToBuildModal({ part, onClose }) {
       const commitment = commitmentData.commitment;
 
       // Handle immediate inventory allocation if requested
+      // CANONICAL: Route through executeSupplyAction dispatcher instead of direct entity writes
       let qtyAllocated = 0;
       if (allocateImmediately && inventoryItems.length > 0) {
-        let remainingToAllocate = qtyNeeded;
-        
-        for (const item of inventoryItems) {
-          if (remainingToAllocate <= 0) break;
-          
+        // Calculate available to allocate
+        const totalAvailable = inventoryItems.reduce((sum, item) => {
           const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
-          if (available <= 0) continue;
-          
-          const toAllocate = Math.min(available, remainingToAllocate);
-          
-          await base44.entities.InventoryItem.update(item.id, {
-            quantity_reserved: (item.quantity_reserved || 0) + toAllocate
+          return sum + Math.max(0, available);
+        }, 0);
+        
+        const toAllocate = Math.min(totalAvailable, qtyNeeded);
+        
+        if (toAllocate > 0) {
+          // Route through dispatcher for AUTO_RESERVE action
+          const reserveResponse = await base44.functions.invoke('executeSupplyAction', {
+            action_type: 'AUTO_RESERVE',
+            commitment_ids: [commitment.id],
+            payload: { qty_to_reserve: toAllocate },
+            dry_run: false
           });
           
-          qtyAllocated += toAllocate;
-          remainingToAllocate -= toAllocate;
-        }
-
-        // Update commitment with allocated qty
-        if (qtyAllocated > 0) {
-          await base44.entities.PartCommitment.update(commitment.id, {
-            qty_allocated: qtyAllocated
-          });
+          if (reserveResponse.data?.success) {
+            qtyAllocated = reserveResponse.data.qty_reserved || toAllocate;
+          }
         }
       }
       
