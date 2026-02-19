@@ -1,6 +1,4 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -25,16 +23,20 @@ import {
 import {
   ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
   DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
-  Plus, RefreshCw, ArrowRight
+  Plus, RefreshCw, ArrowRight, Truck
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import { CoverageBadge } from "@/components/parts/FinancialColumns";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
-import { useSupplyAction } from "@/components/supply/useSupplyState";
+import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/components/supply/useProjectSupplyView";
+import InventoryChip from "@/components/supply/InventoryChip";
+import SourceTypeBadge from "@/components/supply/SourceTypeBadge";
+import NextActionBadge from "@/components/supply/NextActionBadge";
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
