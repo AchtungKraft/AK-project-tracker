@@ -127,8 +127,10 @@ export function FinancialColumns({ commitment, variant = "full" }) {
     return <span className="text-gray-500">—</span>;
   }
   
+  // Use canonical fields with legacy fallback
+  const effectiveRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
   const plannedRetail = commitment.planned_retail_total || 0;
-  const orderedCost = commitment.actual_extended_cost || (commitment.unit_cost_snapshot * commitment.qty_committed) || 0;
+  const orderedCost = commitment.actual_extended_cost || (commitment.unit_cost_snapshot * effectiveRequired) || 0;
   const invoicedRetail = commitment.invoiced_retail_total || 0;
   const coveredRetail = commitment.covered_retail_total || 0;
   const exposureGap = commitment.exposure_gap ?? (plannedRetail - coveredRetail);
