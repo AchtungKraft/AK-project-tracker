@@ -53,11 +53,6 @@ export default function InventoryManagement({ onPartClick }) {
     queryFn: () => base44.entities.Part.list()
   });
 
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list()
-  });
-
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: () => base44.entities.PartCategory.list()
