@@ -117,19 +117,16 @@ export default function PartStatusSummary({ partId }) {
             <p className={`text-sm font-bold ${available > 0 ? 'text-blue-400' : 'text-red-400'}`}>{available}</p>
           </div>
           <div className="p-2 bg-gray-800/50 rounded text-center">
-            <p className="text-xs text-gray-500">Needed</p>
-            <p className={`text-sm font-bold ${totalNeeded > 0 ? 'text-red-400' : 'text-gray-500'}`}>{totalNeeded}</p>
+            <p className="text-xs text-gray-500">Required</p>
+            <p className={`text-sm font-bold ${totalNeeded > 0 ? 'text-purple-400' : 'text-gray-500'}`}>{totalNeeded}</p>
           </div>
           <div className="p-2 bg-gray-800/50 rounded text-center">
             <p className="text-xs text-gray-500">On Order</p>
             <p className={`text-sm font-bold ${totalOnOrder > 0 ? 'text-orange-400' : 'text-gray-500'}`}>{totalOnOrder}</p>
           </div>
-          <div className={`p-2 rounded text-center ${netPosition >= 0 ? 'bg-green-900/20' : 'bg-red-900/20'}`}>
-            <p className="text-xs text-gray-500">Net Position</p>
-            <p className={`text-sm font-bold ${netPosition > 0 ? 'text-green-400' : netPosition < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-              {netPosition > 0 ? '+' : ''}{netPosition}
-              {netPosition < 0 && <AlertTriangle className="w-3 h-3 inline ml-1" />}
-            </p>
+          <div className="p-2 bg-gray-800/50 rounded text-center">
+            <p className="text-xs text-gray-500">To Order</p>
+            <p className={`text-sm font-bold ${toOrder > 0 ? 'text-red-400' : 'text-gray-500'}`}>{toOrder}</p>
           </div>
         </div>
       </div>
