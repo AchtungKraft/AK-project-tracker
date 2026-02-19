@@ -209,6 +209,25 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Check: LEGACY POISON PILL - reserved with ZERO required
+      // This is a critical issue because it blocks AUTO_RESERVE by claiming
+      // allocated stock that shouldn't be allocated
+      if (reserved > 0 && required === 0 && installed === 0) {
+        issues.push({
+          type: 'RESERVED_WITH_ZERO_REQUIRED',
+          severity: 'critical',
+          entity_type: 'PartCommitment',
+          entity_id: commitment.id,
+          project_id: commitment.project_id,
+          part_name: part?.part_name,
+          required_total: required,
+          reserved_from_stock: reserved,
+          qty_installed: installed,
+          has_orders: (commitment.order_line_item_ids || []).length > 0,
+          fix: 'Run fixLegacyReservedZeroRequired to release blocked stock'
+        });
+      }
+
       // Check: negative quantities
       if (reserved < 0) {
         issues.push({
