@@ -22,6 +22,15 @@ import AddToBuildModal from "./AddToBuildModal";
 import PartTypeSelector, { PartTypeBadge } from "./PartTypeSelector";
 import ArchivePartModal from "./ArchivePartModal";
 import { getPartTypeBehavior, getPartTypeFieldVisibility, canOrderPart, canReceiveInventory } from "./partTypeBehavior";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+
+/**
+ * EditPartDrawer - Part Detail Modal
+ * 
+ * CANONICAL: All inventory stats from getPartSupplyUsage read model
+ * NO local InventoryItem math or aggregation
+ * Uses unified invalidation helper for all supply operations
+ */
 
 export default function EditPartDrawer({ partId, onClose }) {
   const queryClient = useQueryClient();
@@ -998,7 +1007,10 @@ export default function EditPartDrawer({ partId, onClose }) {
 
       {showInventoryModal && (
         <AddInventoryModal
-          onClose={() => setShowInventoryModal(false)}
+          onClose={() => {
+            setShowInventoryModal(false);
+            // Modal handles its own invalidation via supplyInvalidation helper
+          }}
           preselectedPartId={partId}
         />
       )}
@@ -1006,7 +1018,10 @@ export default function EditPartDrawer({ partId, onClose }) {
       {showOrderModal && part && (
         <OrderPartModal
           part={part}
-          onClose={() => setShowOrderModal(false)}
+          onClose={() => {
+            setShowOrderModal(false);
+            // Modal handles its own invalidation via supplyInvalidation helper
+          }}
           onPartClick={null}
         />
       )}
@@ -1014,7 +1029,10 @@ export default function EditPartDrawer({ partId, onClose }) {
       {showBuildModal && part && (
         <AddToBuildModal
           part={part}
-          onClose={() => setShowBuildModal(false)}
+          onClose={() => {
+            setShowBuildModal(false);
+            // Modal handles its own invalidation via supplyInvalidation helper
+          }}
         />
       )}
 
@@ -1025,8 +1043,11 @@ export default function EditPartDrawer({ partId, onClose }) {
           part={part}
           onSuccess={() => {
             setShowArchiveModal(false);
-            queryClient.invalidateQueries({ queryKey: ['parts'] });
-            queryClient.invalidateQueries({ queryKey: ['part', partId] });
+            // CANONICAL: Use unified invalidation
+            invalidateSupplyQueries(queryClient, {
+              part_ids: [partId],
+              invalidateAll: true,
+            });
           }}
         />
       )}
