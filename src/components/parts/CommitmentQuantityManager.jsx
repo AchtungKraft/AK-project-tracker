@@ -51,29 +51,31 @@ const ACTION_TYPES = {
 };
 
 // Quantity State Matrix Display
+// Quantity State Matrix Display - uses canonical field names
 const QuantityStateMatrix = ({ commitment }) => {
-  const {
-    qty_committed = 0,
-    qty_reserved = 0,
-    qty_to_order = 0,
-    qty_ordered = 0,
-    qty_received = 0,
-    qty_installed = 0,
-    qty_cancelled = 0
-  } = commitment;
+  // Use canonical fields with fallback to legacy
+  const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
+  const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
+  const covered_from_po = commitment.covered_from_po ?? 0;
+  const qty_installed = commitment.qty_installed ?? 0;
+  const qty_cancelled = commitment.qty_cancelled ?? 0;
+  
+  // Compute derived values (canonical)
+  const coverage_total = reserved_from_stock + covered_from_po;
+  const gap = Math.max(0, required_total - coverage_total);
+  const received_not_installed = Math.max(0, reserved_from_stock - qty_installed);
 
   const stages = [
-    { label: 'Needed', value: qty_committed, color: 'bg-gray-500', icon: Package },
-    { label: 'Reserved', value: qty_reserved, color: 'bg-cyan-500', icon: Package },
-    { label: 'To Order', value: qty_to_order, color: 'bg-purple-500', icon: ShoppingCart },
-    { label: 'Ordered', value: qty_ordered, color: 'bg-purple-600', icon: ShoppingCart },
-    { label: 'Received', value: qty_received, color: 'bg-blue-500', icon: Truck },
+    { label: 'Required', value: required_total, color: 'bg-gray-500', icon: Package },
+    { label: 'Reserved', value: reserved_from_stock, color: 'bg-cyan-500', icon: Package },
+    { label: 'On Order', value: covered_from_po, color: 'bg-purple-500', icon: ShoppingCart },
+    { label: 'To Order', value: gap, color: 'bg-red-500', icon: ShoppingCart },
+    { label: 'Received', value: received_not_installed, color: 'bg-blue-500', icon: Truck },
     { label: 'Installed', value: qty_installed, color: 'bg-green-500', icon: Wrench },
   ];
 
-  // Coverage = reserved + received
-  const covered = qty_reserved + qty_received;
-  const coveragePct = qty_committed > 0 ? Math.round((covered / qty_committed) * 100) : 0;
+  // Coverage percentage from canonical values
+  const coveragePct = required_total > 0 ? Math.round((coverage_total / required_total) * 100) : 0;
 
   const remaining = {
     toOrder: qty_to_order,
