@@ -1570,9 +1570,8 @@ export default function ProjectSupplyManager() {
       {/* Vendor Picker for single PO when part has no default vendor */}
       {vendorPickerCommitment && (
         <VendorPickerModal
-          commitment={vendorPickerCommitment}
-          part={partsMap.get(vendorPickerCommitment.part_id)}
-          vendors={vendors}
+          commitment={vendorPickerCommitment._raw || vendorPickerCommitment}
+          part={vendorPickerCommitment.part}
           onClose={() => setVendorPickerCommitment(null)}
           onSelect={(vendorId) => handleSinglePOCreate(vendorPickerCommitment, vendorId)}
         />
@@ -1583,11 +1582,10 @@ export default function ProjectSupplyManager() {
         <BlockedActionResolutionModal
           blocked={blockedItems}
           projectId={projectId}
-          vendors={vendors}
           onClose={() => setBlockedItems(null)}
           onResolved={() => {
             setBlockedItems(null);
-            refetchCommitments();
+            invalidateSupply();
           }}
           onResolveVendor={resolveVendor}
           onResolveBilling={resolveBilling}
