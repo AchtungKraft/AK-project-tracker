@@ -105,113 +105,22 @@ export default function ProjectSupplyManager() {
   // Blocked items resolution state
   const [blockedItems, setBlockedItems] = useState(null);
 
-  // Data Fetching
-  const { data: project, isLoading: projectLoading } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: async () => {
-      const projects = await base44.entities.Project.filter({ id: projectId });
-      return projects[0];
-    },
-    enabled: !!projectId
-  });
+  // =====================================================================
+  // CANONICAL READ MODEL - Single source of truth for supply state
+  // UI MUST NOT compute coverage, to_order, or next_action locally.
+  // =====================================================================
+  const { 
+    items: supplyItems, 
+    summary: supplySummary, 
+    pools, 
+    categories,
+    project,
+    isLoading: supplyLoading, 
+    refetch: refetchSupply,
+    invalidate: invalidateSupply
+  } = useProjectSupplyView(projectId);
 
-  const { data: requirements = [], refetch: refetchReqs } = useQuery({
-    queryKey: ['projectRequirements', projectId],
-    queryFn: () => base44.entities.PartProjectRequirement.filter({ project_id: projectId }),
-    enabled: !!projectId
-  });
-
-  const { data: commitments = [], refetch: refetchCommitments } = useQuery({
-    queryKey: ['projectCommitments', projectId],
-    queryFn: () => base44.entities.PartCommitment.filter({ project_id: projectId }),
-    enabled: !!projectId
-  });
-
-  const { data: pools = [], refetch: refetchPools } = useQuery({
-    queryKey: ['projectPools', projectId],
-    queryFn: () => base44.entities.BillingPool.filter({ project_id: projectId }),
-    enabled: !!projectId
-  });
-
-  const { data: allocations = [] } = useQuery({
-    queryKey: ['projectAllocations', projectId],
-    queryFn: async () => {
-      const poolIds = pools.map(p => p.id);
-      if (poolIds.length === 0) return [];
-      const allAllocations = await base44.entities.PoolAllocation.list();
-      return allAllocations.filter(a => poolIds.includes(a.pool_id));
-    },
-    enabled: pools.length > 0
-  });
-
-  const { data: charges = [] } = useQuery({
-    queryKey: ['projectCharges', projectId],
-    queryFn: () => base44.entities.PoolCharge.filter({ project_id: projectId }),
-    enabled: !!projectId
-  });
-
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['projectLineItems', projectId],
-    queryFn: async () => {
-      const commitmentIds = commitments.map(c => c.id);
-      if (commitmentIds.length === 0) return [];
-      const allItems = await base44.entities.PartPurchaseLineItem.list();
-      return allItems.filter(li => commitmentIds.includes(li.commitment_id));
-    },
-    enabled: commitments.length > 0
-  });
-
-  const { data: orders = [] } = useQuery({
-    queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list()
-  });
-
-  const { data: installedParts = [] } = useQuery({
-    queryKey: ['projectInstalledParts', projectId],
-    queryFn: async () => {
-      const commitmentIds = commitments.map(c => c.id);
-      if (commitmentIds.length === 0) return [];
-      const allInstalled = await base44.entities.InstalledPart.list();
-      return allInstalled.filter(ip => commitmentIds.includes(ip.commitment_id));
-    },
-    enabled: commitments.length > 0
-  });
-
-  const { data: parts = [] } = useQuery({
-    queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list()
-  });
-
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list()
-  });
-
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list()
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list()
-  });
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list()
-  });
-
-  // Build O(1) parts lookup map
-  const partsMap = useMemo(() => {
-    const map = new Map();
-    for (const p of parts) {
-      map.set(p.id, p);
-    }
-    return map;
-  }, [parts]);
-
-  // Build O(1) categories lookup map
+  // Build O(1) category lookup map from read model
   const categoriesMap = useMemo(() => {
     const map = new Map();
     for (const c of categories) {
@@ -219,18 +128,6 @@ export default function ProjectSupplyManager() {
     }
     return map;
   }, [categories]);
-
-  // Safe category resolver - returns full category object for color/hierarchy support
-  const resolveCategoryObj = (part) => {
-    if (!part) return null;
-    
-    // Primary: use part_category_id reference
-    if (part.part_category_id) {
-      return categoriesMap.get(part.part_category_id) || null;
-    }
-    
-    return null;
-  };
 
   // Get category display name with parent hierarchy
   const getCategoryDisplayName = (categoryObj) => {
@@ -245,131 +142,148 @@ export default function ProjectSupplyManager() {
     return categoryObj.name;
   };
 
-  // Filtered data
-  const activeCommitments = commitments.filter(c => c.commitment_status !== 'cancelled');
-  
-  // Detect orphan commitments (missing part references)
+  // Detect orphan items (missing part_name indicates part not found)
   const orphanCommitments = useMemo(() => {
-    return activeCommitments.filter(c => !partsMap.has(c.part_id));
-  }, [activeCommitments, partsMap]);
+    return supplyItems.filter(item => item.part_name === 'Unknown Part');
+  }, [supplyItems]);
 
-  // Calculate metrics
+  // Metrics from read model summary
   const metrics = useMemo(() => {
-    const byStatus = {
-      planned: activeCommitments.filter(c => c.commitment_status === 'planned').length,
-      ordered: activeCommitments.filter(c => c.commitment_status === 'ordered').length,
-      partiallyReceived: activeCommitments.filter(c => c.commitment_status === 'partially_received').length,
-      received: activeCommitments.filter(c => c.commitment_status === 'received').length,
-      allocated: activeCommitments.filter(c => c.commitment_status === 'allocated').length,
-      installed: activeCommitments.filter(c => c.commitment_status === 'installed').length,
-    };
-
-    const totalPlanned = activeCommitments.reduce((sum, c) => sum + (c.planned_retail_total || 0), 0);
-    const totalCovered = activeCommitments.reduce((sum, c) => sum + (c.covered_retail_total || 0), 0);
-    const totalExposure = activeCommitments.reduce((sum, c) => sum + (c.exposure_gap || 0), 0);
-    const coveragePct = totalPlanned > 0 ? Math.round((totalCovered / totalPlanned) * 100) : 0;
-
-    const poolBalance = pools.reduce((sum, p) => sum + (p.balance || 0), 0);
-    const poolPaid = pools.reduce((sum, p) => sum + (p.paid_amount || 0), 0);
-    const hasOverdrawn = pools.some(p => p.status === 'overdrawn');
-
-    // Use canonical fields with legacy fallback for metrics
-    const totalQtyCommitted = activeCommitments.reduce((sum, c) => sum + (c.required_total ?? c.qty_committed ?? 0), 0);
-    const totalQtyInstalled = activeCommitments.reduce((sum, c) => sum + (c.qty_installed ?? 0), 0);
-    const installPct = totalQtyCommitted > 0 ? Math.round((totalQtyInstalled / totalQtyCommitted) * 100) : 0;
-
+    const s = supplySummary;
     return {
-      byStatus,
-      totalPlanned,
-      totalCovered,
-      totalExposure,
-      coveragePct,
-      poolBalance,
-      poolPaid,
-      hasOverdrawn,
-      installPct,
-      totalCommitments: activeCommitments.length,
+      byStatus: s.by_status || {
+        planned: 0, ordered: 0, partiallyReceived: 0,
+        received: 0, allocated: 0, installed: 0
+      },
+      totalPlanned: s.total_planned_retail || 0,
+      totalCovered: s.total_covered_retail || 0,
+      totalExposure: s.total_exposure || 0,
+      coveragePct: s.coverage_percent || 0,
+      poolBalance: s.pool_balance || 0,
+      poolPaid: s.pool_paid || 0,
+      hasOverdrawn: s.has_overdrawn || false,
+      installPct: s.install_percent || 0,
+      totalCommitments: supplyItems.length,
     };
-  }, [activeCommitments, pools]);
+  }, [supplySummary, supplyItems.length]);
 
-  // Enrich commitments with part data and precomputed coverage block
+  // =====================================================================
+  // CANONICAL VIEW MODEL ROWS - Directly from read model, NO local math
+  // Each item is a SupplyCommitmentViewModel with all computed fields
+  // =====================================================================
   const enrichedCommitments = useMemo(() => {
-    return activeCommitments.map(commitment => {
-      const part = partsMap.get(commitment.part_id) || null;
-      const vendor = part ? vendors.find(v => v.id === part.default_vendor_id) : null;
-      const allowed = getAllowedCommitmentActions(commitment);
-      const lifecycleState = getCommitmentLifecycleState(commitment);
-      const commitmentLineItems = lineItems.filter(li => li.commitment_id === commitment.id);
-      const commitmentInstalled = installedParts.filter(ip => ip.commitment_id === commitment.id && !ip.is_reversed);
-
-      const categoryObj = resolveCategoryObj(part);
-      
-      // CANONICAL COVERAGE: Use canonical fields with legacy fallback
-      // This should eventually come from backend resolver (resolveCommitmentState)
-      const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
-      const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
-      const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
-      const qty_installed = commitment.qty_installed ?? 0;
-      
-      // Derived values from canonical fields
-      const coverage_total = reserved_from_stock + covered_from_po;
-      const gap_qty = Math.max(0, required_total - coverage_total);
-      const overage_qty = Math.max(0, coverage_total - required_total);
-      
-      // Use resolver's coverage_status if available, else derive
-      let coverage_status = commitment.coverage_status;
-      if (!coverage_status) {
-        if (required_total === 0) {
-          coverage_status = coverage_total > 0 ? 'OVER' : 'FULLY_COVERED';
-        } else if (coverage_total === 0) {
-          coverage_status = 'NOT_COVERED';
-        } else if (coverage_total < required_total) {
-          coverage_status = 'PARTIALLY_COVERED';
-        } else if (coverage_total >= required_total) {
-          coverage_status = 'FULLY_COVERED';
-        }
+    return supplyItems.map(item => {
+      // FAIL HARD if canonical fields are missing
+      if (item.required_total === undefined) {
+        console.error(`[CANONICAL VIOLATION] Missing required_total for commitment ${item.commitment_id}`);
       }
+      if (item.reserved_from_stock === undefined) {
+        console.error(`[CANONICAL VIOLATION] Missing reserved_from_stock for commitment ${item.commitment_id}`);
+      }
+      if (item.to_order === undefined) {
+        console.error(`[CANONICAL VIOLATION] Missing to_order for commitment ${item.commitment_id}`);
+      }
+      if (item.coverage_status === undefined) {
+        console.error(`[CANONICAL VIOLATION] Missing coverage_status for commitment ${item.commitment_id}`);
+      }
+
+      // Build category object from read model data
+      const categoryObj = item.category_id ? categoriesMap.get(item.category_id) : null;
       
-      const poAdjustmentRequired = overage_qty > 0 && (covered_from_po > required_total);
-      
+      // Derive allowed actions from raw commitment data
+      const allowed = getAllowedCommitmentActions(item._raw || {});
+
+      // Build coverage block from canonical fields - NO local computation
       const coverage = {
-        // Canonical fields
-        required_total,
-        reserved_from_stock,
-        covered_from_po,
-        qty_installed,
-        to_order: gap_qty,
-        // Legacy aliases for compatibility
-        qty_needed: required_total,
-        qty_reserved: reserved_from_stock,
-        qty_ordered: covered_from_po,
-        qty_received: commitment.qty_received ?? 0, // legacy only
-        qty_to_order: gap_qty,
-        // Derived
-        coverage_total,
-        gap_qty,
-        overage_qty,
-        coverage_status,
-        poAdjustmentRequired
+        // Canonical fields from read model
+        required_total: item.required_total,
+        reserved_from_stock: item.reserved_from_stock,
+        covered_from_po: item.covered_from_po,
+        qty_installed: item.qty_installed,
+        to_order: item.to_order,
+        // Derived from read model
+        coverage_total: item.reserved_from_stock + item.covered_from_po,
+        gap_qty: item.to_order,
+        coverage_status: item.coverage_status,
+        coverage_percent: item.coverage_percent,
+        // Availability for install
+        available_to_install: item.available_to_install,
+        on_order_qty: item.on_order_qty,
+        received_qty: item.received_qty,
       };
 
       return {
-        ...commitment,
-        part,
+        // Identity
+        id: item.commitment_id,
+        commitment_id: item.commitment_id,
+        part_id: item.part_id,
+        project_id: item.project_id,
+        
+        // Part info from read model
+        part: {
+          id: item.part_id,
+          part_name: item.part_name,
+          vendor_part_number: item.vendor_part_number,
+          featured_photo: item.featured_photo,
+        },
+        
+        // Category
         categoryObj,
-        categoryId: categoryObj?.id || 'uncategorized',
-        categoryName: getCategoryDisplayName(categoryObj),
-        categoryColor: categoryObj?.color || '#6B7280',
+        categoryId: item.category_id || 'uncategorized',
+        categoryName: categoryObj?.name || item.category_name || 'Uncategorized',
+        categoryColor: item.category_color || '#6B7280',
         categoryParentId: categoryObj?.parent_id || null,
-        vendor,
+        
+        // Vendor
+        vendor: item.vendor_id ? { 
+          id: item.vendor_id, 
+          vendor_name: item.vendor_name 
+        } : null,
+        
+        // Lifecycle
         allowed,
-        lifecycleState,
-        lineItems: commitmentLineItems,
-        installedParts: commitmentInstalled,
+        commitment_status: item._raw?.commitment_status || 'planned',
+        
+        // Canonical quantities - directly from read model
+        required_total: item.required_total,
+        reserved_from_stock: item.reserved_from_stock,
+        covered_from_po: item.covered_from_po,
+        qty_installed: item.qty_installed,
+        to_order: item.to_order,
+        on_order_qty: item.on_order_qty,
+        received_qty: item.received_qty,
+        available_to_install: item.available_to_install,
+        
+        // Coverage state
+        coverage_status: item.coverage_status,
+        coverage_percent: item.coverage_percent,
         coverage, // Precomputed coverage block
+        
+        // Next action from read model
+        next_action: item.next_action,
+        block_reason_code: item.block_reason_code,
+        block_reason_message: item.block_reason_message,
+        
+        // Source type
+        source_type: item.source_type,
+        
+        // Financial from read model
+        unit_cost: item.unit_cost,
+        unit_retail: item.unit_retail,
+        planned_cost_total: item.planned_cost_total,
+        planned_retail_total: item.planned_retail_total,
+        covered_retail_total: item.covered_retail_total,
+        exposure_gap: item.exposure_gap,
+        billing_status: item.billing_status,
+        
+        // Inventory snapshot from read model
+        inventory_snapshot: item.inventory_snapshot,
+        
+        // Raw data for mutations
+        _raw: item._raw,
       };
     });
-  }, [activeCommitments, partsMap, vendors, lineItems, installedParts]);
+  }, [supplyItems, categoriesMap]);
 
   // Filter commitments for each tab - using canonical fields
   const getFilteredCommitments = (tabFilter) => {
