@@ -51,32 +51,33 @@ Deno.serve(async (req) => {
     // If commitment_ids provided, use direct lookup (skip report for efficiency)
     let orphans = [];
     
-    if (commitment_ids && commitment_ids.length > 0) {
-      // Direct mode - just fetch these commitments
-      const commitments = await base44.asServiceRole.entities.PartCommitment.filter({
-        id: { $in: commitment_ids }
-      });
-      orphans = commitments.map(c => ({
-        commitment_id: c.id,
-        project_id: c.project_id,
-        commitment_status: c.commitment_status,
-        missing_part_id: c.part_id,
-        line_items_count: 0,
-        installed_parts_count: 0,
-        has_financial_history: false,
-        has_install_history: false,
-        recommended_resolution: 'CANCEL',
-        confidence: 70,
-        identifiers: { notes: c.notes }
-      }));
-    } else {
-      // Get orphan report - use service role to call internal function
-      const reportResponse = await base44.asServiceRole.functions.invoke('getOrphanCommitmentReport', {});
-      if (reportResponse.data?.error) {
-        throw new Error(reportResponse.data.error);
-      }
-      orphans = reportResponse.data?.orphans || [];
-    }
+    // Inline orphan detection to avoid nested function calls
+    const allCommitments = await base44.asServiceRole.entities.PartCommitment.filter({});
+    const allParts = await base44.asServiceRole.entities.Part.filter({});
+    const partIdSet = new Set(allParts.map(p => p.id));
+    
+    // Find orphans (commitments referencing non-existent parts)
+    const orphanCommitments = allCommitments.filter(c => c.part_id && !partIdSet.has(c.part_id));
+    
+    // Filter by commitment_ids if provided
+    let filteredOrphans = commitment_ids && commitment_ids.length > 0
+      ? orphanCommitments.filter(c => commitment_ids.includes(c.id))
+      : orphanCommitments;
+    
+    // Map to expected orphan format
+    orphans = filteredOrphans.map(c => ({
+      commitment_id: c.id,
+      project_id: c.project_id,
+      commitment_status: c.commitment_status,
+      missing_part_id: c.part_id,
+      line_items_count: 0, // We'll check this inline
+      installed_parts_count: 0,
+      has_financial_history: false,
+      has_install_history: false,
+      recommended_resolution: c.commitment_status === 'planned' ? 'CANCEL' : 'QUARANTINE',
+      confidence: c.commitment_status === 'planned' ? 70 : 50,
+      identifiers: { notes: c.notes }
+    }));
 
     // Filter by commitment_ids if provided
     if (commitment_ids && commitment_ids.length > 0) {
