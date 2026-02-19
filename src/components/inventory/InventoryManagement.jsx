@@ -531,7 +531,7 @@ export default function InventoryManagement({ onPartClick }) {
                         <TooltipTrigger className="flex items-center gap-1">
                           On Order <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
-                        <TooltipContent>Open PO lines (qty_ordered − qty_received)</TooltipContent>
+                        <TooltipContent>On order (sum of covered_from_po from commitments)</TooltipContent>
                       </Tooltip>
                     </SortableHeader>
                     <SortableHeader columnKey="netPosition" className="text-right">
