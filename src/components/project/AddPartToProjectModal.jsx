@@ -40,7 +40,7 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
 
   /**
    * CANONICAL SUPPLY FLOW ENFORCED
-   * All project part mutations must go through CommitmentService.
+   * All project part mutations must go through executeSupplyAction dispatcher.
    * Direct entity writes are blocked.
    */
   const createRequirementMutation = useMutation({
@@ -49,32 +49,36 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
         throw new Error('Please select a part');
       }
 
-      // Create commitment via CommitmentService (CANONICAL)
-      const response = await base44.functions.invoke('commitmentService', {
-        action: 'addPartToProject',
-        project_id: projectId,
-        part_id: selectedPartId,
-        qty_committed: qtyNeeded,
-        notes: notes || null,
-        source_surface: 'AddPartToProjectModal',
-        requested_by: 'user'
+      // Use canonical dispatcher - ADJUST_REQUIRED creates if missing
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADJUST_REQUIRED',
+        commitment_ids: [], // Empty - will create new
+        payload: {
+          project_id: projectId,
+          part_id: selectedPartId,
+          required_total_set: qtyNeeded,
+          source_type: 'SHOP_PURCHASED'
+        },
+        dry_run: false
       });
 
-      const commitmentData = response.data;
-      if (!commitmentData.success) {
-        throw new Error(commitmentData.error || 'Failed to add part to project');
+      const result = response.data;
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      return commitmentData;
+      return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
       queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
       
-      let message = 'Part added to project';
-      if (result.needs_cost_review) {
-        message += ' ⚠️ Cost review needed';
-      }
+      const message = result.is_new_commitment 
+        ? `Part added: ${result.required_total} required, ${result.reserved_from_stock} reserved`
+        : `Requirement updated to ${result.required_total}`;
       toast.success(message);
       onClose();
     },
