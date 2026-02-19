@@ -457,17 +457,19 @@ export default function CommitmentQuantityManager({
     });
   };
 
-  // Calculate constraints
+  // Calculate constraints - use canonical fields with legacy fallback
   const constraints = useMemo(() => {
     if (!commitment) return {};
     
-    const { qty_committed = 0, qty_ordered = 0, qty_received = 0, qty_installed = 0 } = commitment;
+    const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
+    const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
+    const qty_installed = commitment.qty_installed ?? 0;
     
     return {
-      maxDecrease: qty_committed - Math.max(qty_ordered, qty_installed),
-      maxCancelUnordered: qty_committed - qty_ordered,
-      maxSplit: qty_committed - 1,
-      maxMove: qty_committed - qty_installed
+      maxDecrease: required_total - Math.max(covered_from_po, qty_installed),
+      maxCancelUnordered: Math.max(0, required_total - (commitment.reserved_from_stock ?? 0) - covered_from_po), // gap
+      maxSplit: required_total - 1,
+      maxMove: required_total - qty_installed
     };
   }, [commitment]);
 
