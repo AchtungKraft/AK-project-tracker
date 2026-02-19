@@ -10,18 +10,18 @@ import {
 } from "lucide-react";
 
 /**
- * PartStatusSummary - Read-only summary of a part's status across inventory, projects, and orders
- * Used in EditPartDrawer to provide complete visibility
+ * PartStatusSummary - CANONICAL: Read-only summary using supply read model
+ * NO local InventoryItem math. All data from getPartSupplyUsage.
  */
 export default function PartStatusSummary({ partId }) {
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list(),
-  });
-
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
+  // CANONICAL: Fetch from read model
+  const { data: supplyUsage } = useQuery({
+    queryKey: ['partSupplyUsage', partId],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
+      return res.data;
+    },
+    enabled: !!partId,
   });
 
   const { data: orders = [] } = useQuery({
@@ -39,28 +39,26 @@ export default function PartStatusSummary({ partId }) {
     queryFn: () => base44.entities.Vendor.list(),
   });
 
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list(),
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ['partPurchaseLineItems'],
+    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
   });
 
-  // Filter data for this part
-  const partRequirements = requirements.filter(r => r.part_id === partId);
+  // CANONICAL inventory from read model
+  const inventory = supplyUsage?.inventory || {};
+  const demand = supplyUsage?.demand || {};
+  const commitments = supplyUsage?.commitments || [];
+
+  const onHand = inventory.physical_stock ?? 0;
+  const reserved = inventory.allocated_total ?? 0;
+  const available = inventory.available ?? 0;
+  const totalNeeded = demand.total_required ?? 0;
+  const totalOnOrder = demand.total_on_order ?? 0;
+  const toOrder = demand.total_to_order ?? 0;
+  const netPosition = available + totalOnOrder - toOrder;
+
+  // Line items for this part (for On Order display)
   const partLineItems = lineItems.filter(li => li.part_id === partId);
-  const partInventory = inventoryItems.filter(i => i.part_id === partId);
-
-  // Calculate inventory totals
-  const onHand = partInventory.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
-  const reserved = partInventory.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
-  const available = onHand - reserved;
-
-  // Calculate demand and pipeline
-  // Needed = qty_needed - qty_installed - qty_allocated (allocated reduces demand)
-  const totalNeeded = partRequirements.reduce((sum, r) => 
-    sum + Math.max(0, (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0)), 0);
-  const totalOnOrder = partLineItems.reduce((sum, li) => 
-    sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
-  const netPosition = available + totalOnOrder - totalNeeded;
 
   const getStatusBadge = (req) => {
     if (req.qty_installed >= req.qty_needed) {
