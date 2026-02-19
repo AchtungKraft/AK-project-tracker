@@ -99,7 +99,7 @@ export default function GlobalNeedToOrder() {
     });
   }, [needToOrderItems, coverageFilter, prepayFilter]);
 
-  // Group items
+  // Group items - using canonical fields from read model
   const groupedItems = useMemo(() => {
     const groups = {};
 
@@ -115,11 +115,14 @@ export default function GlobalNeedToOrder() {
         groupLabel = item.project_name || 'General / AK Stock';
         groupColor = '#EF4444';
       } else {
-        groupKey = item.coverageState;
-        groupLabel = item.coverageState === 'covered' ? '✓ Fully Covered' :
-                     item.coverageState === 'partial' ? '◐ Partially Covered' : '○ Uncovered';
-        groupColor = item.coverageState === 'covered' ? '#10B981' :
-                     item.coverageState === 'partial' ? '#F59E0B' : '#EF4444';
+        // Use canonical coverage_status
+        const coverageState = item.coverage_status === 'FULL' ? 'covered' :
+                              item.coverage_status === 'PARTIAL' ? 'partial' : 'uncovered';
+        groupKey = coverageState;
+        groupLabel = coverageState === 'covered' ? '✓ Fully Covered' :
+                     coverageState === 'partial' ? '◐ Partially Covered' : '○ Uncovered';
+        groupColor = coverageState === 'covered' ? '#10B981' :
+                     coverageState === 'partial' ? '#F59E0B' : '#EF4444';
       }
 
       if (!groups[groupKey]) {
@@ -136,11 +139,11 @@ export default function GlobalNeedToOrder() {
       }
 
       groups[groupKey].items.push(item);
-      // Use canonical to_order (gap) from backend - NO local derivation
-      groups[groupKey].totalQty += item.to_order ?? item.qtyToOrder ?? 0;
-      groups[groupKey].totalExposure += item.exposureGap ?? 0;
-      groups[groupKey].totalCost += item.estimatedCost ?? 0;
-      if (item.canOrder) groups[groupKey].canOrderCount++;
+      // Use canonical to_order from read model - NO local derivation
+      groups[groupKey].totalQty += item.to_order ?? 0;
+      groups[groupKey].totalExposure += item.exposure_gap ?? 0;
+      groups[groupKey].totalCost += item.estimated_cost ?? 0;
+      if (item.is_orderable) groups[groupKey].canOrderCount++;
     });
 
     return Object.values(groups).sort((a, b) => {
