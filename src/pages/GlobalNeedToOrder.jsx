@@ -136,9 +136,10 @@ export default function GlobalNeedToOrder() {
       }
 
       groups[groupKey].items.push(item);
-      groups[groupKey].totalQty += item.qtyToOrder;
-      groups[groupKey].totalExposure += item.exposureGap;
-      groups[groupKey].totalCost += item.estimatedCost;
+      // Use canonical to_order (gap) from backend - NO local derivation
+      groups[groupKey].totalQty += item.to_order ?? item.qtyToOrder ?? 0;
+      groups[groupKey].totalExposure += item.exposureGap ?? 0;
+      groups[groupKey].totalCost += item.estimatedCost ?? 0;
       if (item.canOrder) groups[groupKey].canOrderCount++;
     });
 
