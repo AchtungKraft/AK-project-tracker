@@ -332,7 +332,8 @@ export default function SupplyQueues() {
                           <span className="text-gray-400">{item.vendor_name || '-'}</span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <span className="text-white">{item.qty_committed || 0}</span>
+                          {/* Use canonical required_total with legacy fallback */}
+                          <span className="text-white">{item.required_total ?? item.qty_committed ?? 0}</span>
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="text-white">${(item.planned_retail || 0).toFixed(0)}</span>
