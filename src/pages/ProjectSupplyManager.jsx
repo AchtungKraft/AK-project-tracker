@@ -1563,15 +1563,13 @@ export default function ProjectSupplyManager() {
           }}
           onConfirm={handleBulkPOExecute}
           isLoading={isBulkPOLoading}
-          vendors={vendors}
         />
       )}
 
       {/* Vendor Picker for single PO when part has no default vendor */}
       {vendorPickerCommitment && (
         <VendorPickerModal
-          commitment={vendorPickerCommitment._raw || vendorPickerCommitment}
-          part={vendorPickerCommitment.part}
+          commitment={vendorPickerCommitment}
           onClose={() => setVendorPickerCommitment(null)}
           onSelect={(vendorId) => handleSinglePOCreate(vendorPickerCommitment, vendorId)}
         />
