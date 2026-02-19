@@ -644,28 +644,22 @@ export default function InventoryManagement({ onPartClick }) {
                           </TableCell>
                         </TableRow>
 
-                        {/* Expanded Location Details */}
-                        {isExpanded && hasLocations && (
+                        {/* Expanded Inventory Details - CANONICAL: Shows Part.physical_stock */}
+                        {isExpanded && item.onHand > 0 && (
                           <TableRow className="bg-gray-900/30">
                             <TableCell colSpan={9} className="p-0">
                               <div className="px-8 py-3 border-l-2 border-blue-500/50 ml-4">
                                 <p className="text-xs text-gray-400 mb-2 flex items-center gap-1">
-                                  <MapPin className="w-3 h-3" /> Locations
+                                  <MapPin className="w-3 h-3" /> Inventory Summary (from Part.physical_stock)
                                 </p>
                                 <div className="space-y-1">
-                                  {item.filteredLocations.map((loc, idx) => (
-                                    <div key={idx} className="flex items-center gap-4 text-sm">
-                                      <span className="text-gray-300 min-w-[180px]">{loc.locationName}</span>
-                                      <span className="text-white">On Hand: {loc.onHand}</span>
-                                      <span className="text-yellow-400">Reserved: {loc.reserved}</span>
-                                      <span className={loc.available > 0 ? 'text-blue-400' : 'text-gray-500'}>
-                                        Available: {loc.available}
-                                      </span>
-                                      {loc.purchaseCost && (
-                                        <span className="text-gray-400">@ ${loc.purchaseCost.toFixed(2)}</span>
-                                      )}
-                                    </div>
-                                  ))}
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <span className="text-white">Physical Stock: {item.onHand}</span>
+                                    <span className="text-yellow-400">Reserved: {item.reserved}</span>
+                                    <span className={item.available > 0 ? 'text-blue-400' : 'text-gray-500'}>
+                                      Available: {item.available}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </TableCell>
