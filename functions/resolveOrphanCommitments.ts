@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
       mode = 'DRY_RUN', 
       commitment_ids,
       min_confidence = 0,
-      actions_filter // Optional: ['REPLACE', 'REATTACH', 'CANCEL', 'QUARANTINE']
+      actions_filter, // Optional: ['REPLACE', 'REATTACH', 'CANCEL', 'QUARANTINE']
+      force_resolution // Override: force all to specific action (e.g., 'CANCEL')
     } = await req.json();
 
     const isDryRun = mode === 'DRY_RUN';
@@ -101,7 +102,21 @@ Deno.serve(async (req) => {
       results.processed++;
 
       try {
-        const action = orphan.recommended_resolution;
+        // Force resolution override logic:
+        // If force_resolution is set AND orphan has no real history, use forced action
+        let action = orphan.recommended_resolution;
+        
+        if (force_resolution) {
+          const hasRealHistory = 
+            orphan.line_items_count > 0 ||
+            orphan.installed_parts_count > 0 ||
+            orphan.has_financial_history ||
+            orphan.has_install_history;
+          
+          if (!hasRealHistory) {
+            action = force_resolution;
+          }
+        }
 
         switch (action) {
           case 'REPLACE': {
