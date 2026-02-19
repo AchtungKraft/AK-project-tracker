@@ -8,9 +8,9 @@ import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
 
 /**
- * PartsGrid - Displays parts in a card/grid format
- * Uses InventoryItem for stock/available calculations
- * NO LONGER uses Part.quantity_on_hand, Part.status, or PartBuildAssignment
+ * PartsGrid - CANONICAL: Displays parts in a card/grid format
+ * Uses getPartsInventoryView read model for stock/available calculations
+ * NO InventoryItem.list() aggregation. NO local reduce() for stock totals.
  */
 export default function PartsGrid({ 
   parts, 

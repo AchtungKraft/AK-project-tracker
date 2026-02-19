@@ -11,9 +11,9 @@ import FinancialStatusBadge from "../financial/FinancialStatusBadge";
 import { useFinancialStatusBatch } from "../financial/useFinancialStatus";
 
 /**
- * PartsListView - Displays parts in a list format
- * Uses InventoryItem for stock/available calculations
- * NO LONGER uses Part.quantity_on_hand, Part.status, or PartBuildAssignment
+ * PartsListView - CANONICAL: Displays parts in a list format
+ * Uses getPartsInventoryView read model for stock/available calculations
+ * NO InventoryItem.list() aggregation. NO local reduce() for stock totals.
  */
 export default function PartsListView({ 
   parts, 
