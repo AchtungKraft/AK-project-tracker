@@ -80,10 +80,10 @@ export function getAllowedCommitmentActions(commitment) {
   // Edit commitment (qty, pricing) - only before billing locks
   if (!hasBeenBilled && !isPaidOrInvoiced) {
     actions.canEdit = true;
-    actions.canReduceQty = qty_installed === 0 || qty_committed > qty_installed;
+    actions.canReduceQty = qty_installed === 0 || effectiveRequired > qty_installed;
   }
 
-  // CREATE PO - only for planned state with unordered qty
+  // CREATE PO - only for planned state with unordered qty (gap > 0)
   // NOT allowed for: ordered, installed, partially_received, received, allocated, cancelled, closed
   if (commitment_status === 'planned' && unorderedQty > 0) {
     actions.canCreatePO = true;
@@ -92,22 +92,22 @@ export function getAllowedCommitmentActions(commitment) {
   // DELTA ORDER - only for commitments that already have orders (ordered, partially_received, received)
   // This creates additional PO lines for existing commitments
   const canDeltaOrderStates = ['ordered', 'partially_received', 'received'];
-  if (canDeltaOrderStates.includes(commitment_status) && qty_ordered > 0) {
+  if (canDeltaOrderStates.includes(commitment_status) && effectiveOnOrder > 0) {
     actions.canCreateDeltaOrder = true;
   }
 
-  // RECEIVE - only if has ordered & unreceived
+  // RECEIVE - only if has items on order (covered_from_po > 0)
   if (unreceived > 0) {
     actions.canReceive = true;
   }
 
-  // ALLOCATE - only if has received & unallocated
-  const unallocated = Math.max(0, qty_received - qty_allocated);
+  // ALLOCATE - only if has received & unallocated (using canonical fields)
+  const unallocated = Math.max(0, (qty_received || 0) - effectiveReserved);
   if (unallocated > 0) {
     actions.canAllocate = true;
   }
 
-  // INSTALL - only if has allocated & uninstalled
+  // INSTALL - only if has reserved & uninstalled (reserved_from_stock > qty_installed)
   if (uninstalled > 0) {
     actions.canInstall = true;
   }
