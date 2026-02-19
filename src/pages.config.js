@@ -62,6 +62,7 @@ import InventoryMutationMonitor from './pages/InventoryMutationMonitor';
 import MyPriorities from './pages/MyPriorities';
 import MyProjects from './pages/MyProjects';
 import MyTasks from './pages/MyTasks';
+import POReceiving from './pages/POReceiving';
 import PartsActionWorkbench from './pages/PartsActionWorkbench';
 import PartsLifecycleDiagnostic from './pages/PartsLifecycleDiagnostic';
 import PartsTracker from './pages/PartsTracker';
@@ -82,7 +83,6 @@ import Tasks from './pages/Tasks';
 import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import TestDataCleanup from './pages/TestDataCleanup';
-import POReceiving from './pages/POReceiving';
 import __Layout from './Layout.jsx';
 
 
@@ -102,6 +102,7 @@ export const PAGES = {
     "MyPriorities": MyPriorities,
     "MyProjects": MyProjects,
     "MyTasks": MyTasks,
+    "POReceiving": POReceiving,
     "PartsActionWorkbench": PartsActionWorkbench,
     "PartsLifecycleDiagnostic": PartsLifecycleDiagnostic,
     "PartsTracker": PartsTracker,
@@ -122,7 +123,6 @@ export const PAGES = {
     "TasksExplorer": TasksExplorer,
     "TechSpecs": TechSpecs,
     "TestDataCleanup": TestDataCleanup,
-    "POReceiving": POReceiving,
 }
 
 export const pagesConfig = {
