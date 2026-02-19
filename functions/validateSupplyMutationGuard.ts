@@ -25,6 +25,12 @@ const LEGACY_QTY_FIELDS = [
   'qty_installed' // Even canonical field must go through dispatcher
 ];
 
+// LEGACY INVENTORY FIELDS - BLOCKED from UI writes
+const LEGACY_INVENTORY_FIELDS = [
+  'quantity_on_hand',
+  'quantity_reserved'
+];
+
 // Canonical fields that CAN be written by dispatcher
 const CANONICAL_FIELDS = [
   'required_total',
