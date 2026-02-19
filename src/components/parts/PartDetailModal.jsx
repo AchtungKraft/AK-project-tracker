@@ -458,6 +458,11 @@ export default function PartDetailModal({ part, onClose }) {
               </Badge>
             )}
 
+            {/* Project Usage Section - shows which projects use this part */}
+            <div className="pt-4 border-t border-gray-700">
+              <PartProjectUsageSection partId={part.id} />
+            </div>
+
             {!isMobile && (
               <div className="pt-4 border-t border-gray-700">
                 <Button
