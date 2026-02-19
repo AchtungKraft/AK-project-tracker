@@ -131,39 +131,38 @@ export default function PartStatusSummary({ partId }) {
         </div>
       </div>
 
-      {/* Project Demand */}
-      {partRequirements.length > 0 && (
+      {/* Project Demand - CANONICAL: from commitments in read model */}
+      {commitments.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">
             <FolderKanban className="w-4 h-4 text-purple-400" />
-            <h4 className="text-sm font-medium text-white">Project Demand ({partRequirements.length})</h4>
+            <h4 className="text-sm font-medium text-white">Project Demand ({commitments.length})</h4>
           </div>
           <div className="space-y-1 max-h-48 overflow-y-auto">
-            {partRequirements.map(req => {
-              const project = projects.find(p => p.id === req.project_id);
+            {commitments.map(c => {
               return (
                 <Link 
-                  key={req.id}
-                  to={createPageUrl(`ProjectDetail?id=${req.project_id}&tab=parts`)}
+                  key={c.commitment_id}
+                  to={createPageUrl(`ProjectDetail?id=${c.project_id}&tab=parts`)}
                   className="flex items-center justify-between p-2 bg-gray-800/30 rounded hover:bg-gray-800/50 transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm text-white truncate">{project?.name || 'Unknown Project'}</span>
-                    {getStatusBadge(req)}
+                    <span className="text-sm text-white truncate">{c.project_name || 'Unknown Project'}</span>
+                    {getStatusBadge(c)}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-gray-400 flex-shrink-0">
-                    <span title="Needed">{req.qty_needed || 0}</span>
+                    <span title="Required">{c.required_total || 0}</span>
                     <span>/</span>
-                    <span className="text-blue-400" title="Allocated">{req.qty_allocated || 0}</span>
+                    <span className="text-blue-400" title="Reserved">{c.reserved_from_stock || 0}</span>
                     <span>/</span>
-                    <span className="text-green-400" title="Installed">{req.qty_installed || 0}</span>
+                    <span className="text-green-400" title="Installed">{c.qty_installed || 0}</span>
                     <ExternalLink className="w-3 h-3 text-gray-500" />
                   </div>
                 </Link>
               );
             })}
           </div>
-          <p className="text-xs text-gray-500 mt-1 text-right">Needed / Allocated / Installed</p>
+          <p className="text-xs text-gray-500 mt-1 text-right">Required / Reserved / Installed</p>
         </div>
       )}
 
