@@ -171,6 +171,14 @@ Deno.serve(async (req) => {
     }
 
     // Mode 2: Runtime audit (requires admin)
+    // NOTE: Audit mode scans recent entities which can be slow - consider using sparingly
+    if (!body.run_audit) {
+      return Response.json({
+        success: true,
+        message: 'No mutation provided and run_audit not set. Pass {mutation: {...}} for validation or {run_audit: true} for audit.'
+      });
+    }
+    
     if (user.role !== 'admin') {
       return Response.json({ error: 'Admin access required for audit mode' }, { status: 403 });
     }
