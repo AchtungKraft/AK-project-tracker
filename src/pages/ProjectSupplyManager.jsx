@@ -1108,10 +1108,7 @@ export default function ProjectSupplyManager() {
                       <PoolActionsMenu 
                         pool={pool} 
                         disabled={!actionsEnabled}
-                        onRefresh={() => {
-                          refetchPools();
-                          queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-                        }}
+                        onRefresh={() => invalidateSupply()}
                       />
                     </div>
                   </CardHeader>
