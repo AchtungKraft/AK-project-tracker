@@ -235,35 +235,20 @@ export default function GlobalNeedToOrder() {
   };
 
   const renderItem = (item) => {
-    // Build commitment object using canonical fields from backend resolver
-    const commitment = {
-      id: item.commitment_id,
-      commitment_status: item.commitment_status,
-      // Canonical fields
-      required_total: item.required_total ?? item.qty_committed ?? 0,
-      reserved_from_stock: item.reserved_from_stock ?? 0,
-      covered_from_po: item.covered_from_po ?? 0,
-      qty_installed: item.qty_installed ?? 0,
-      // Derived by resolver
-      to_order: item.to_order ?? item.qtyToOrder ?? 0,
-      // Legacy fallbacks for getAllowedCommitmentActions compatibility
-      qty_committed: item.qty_committed,
-      qty_ordered: item.qty_ordered,
-      qty_received: item.qty_received,
-    };
-    const allowed = getAllowedCommitmentActions(commitment);
+    // Use canonical fields from read model - NO local derivation
+    const isOrderable = item.is_orderable;
 
     return (
       <div 
-        key={item.id}
+        key={item.commitment_id}
         className={`p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0 ${
-          !item.canOrder ? 'opacity-60' : ''
+          !isOrderable ? 'opacity-60' : ''
         }`}
       >
         <Checkbox
-          checked={selectedItems.has(item.id)}
-          onCheckedChange={() => toggleItemSelection(item.id)}
-          disabled={!item.canOrder}
+          checked={selectedItems.has(item.commitment_id)}
+          onCheckedChange={() => toggleItemSelection(item.commitment_id)}
+          disabled={!isOrderable}
         />
 
         {item.featured_photo && (
