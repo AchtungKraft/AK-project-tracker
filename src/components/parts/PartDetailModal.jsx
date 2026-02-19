@@ -14,12 +14,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Edit2, Trash2, X, Upload } from "lucide-react";
+import { Loader2, Edit2, Trash2, X, Upload, FolderKanban } from "lucide-react";
 import { toast } from "sonner";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import MobilePhotoActions, { MobilePhotoGrid } from "@/components/mobile/MobilePhotoActions";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import PartProjectUsageSection from "./PartProjectUsageSection";
 
 export default function PartDetailModal({ part, onClose }) {
   const queryClient = useQueryClient();
