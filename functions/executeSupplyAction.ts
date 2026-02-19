@@ -351,17 +351,24 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   }
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'ADJUST_REQUIRED' });
-  ctx.lifecycle_events.push({
-    commitment_id: commitmentId,
-    event_type: 'ADJUST_REQUIRED',
-    actor_email: ctx.user.email,
-    trigger_source: 'USER_ACTION',
-    old_values: JSON.stringify({ required_total: current_required, reserved_from_stock: current_reserved }),
-    new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: new_reserved, to_order }),
-    part_id: part.id,
-    project_id: commitment?.project_id || project_id,
-    qty_delta: new_required - current_required
-  });
+  
+  // Only emit lifecycle event for actual changes, not initial creation
+  if (!isNewCommitment && (new_required !== current_required || new_reserved !== current_reserved)) {
+    const event_type = new_required > current_required ? 'QTY_INCREASED' : 'QTY_DECREASED';
+    ctx.lifecycle_events.push({
+      commitment_id: commitmentId,
+      event_type,
+      actor_email: ctx.user.email,
+      trigger_source: 'UNIFIED_ENGINE',
+      triggered_by: ctx.user.email,
+      old_values: JSON.stringify({ required_total: current_required, reserved_from_stock: current_reserved }),
+      new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: new_reserved, to_order }),
+      part_id: part.id,
+      project_id: commitment?.project_id || project_id,
+      qty_delta: new_required - current_required,
+      event_date: ctx.timestamp
+    });
+  }
 
   // =========== RETURN VIEW MODEL ROW ===========
   const [project] = await ctx.base44.entities.Project.filter({ id: commitment?.project_id || project_id });
