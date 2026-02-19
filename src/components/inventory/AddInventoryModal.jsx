@@ -17,8 +17,8 @@ import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation"
 /**
  * AddInventoryModal - Add inventory for a part
  * 
- * CANONICAL: Updates Part.physical_stock via direct entity update
- * Also creates InventoryItem for location tracking (legacy compatibility)
+ * CANONICAL: Routes through executeSupplyAction ADD_STOCK
+ * No direct Part.physical_stock writes - all inventory mutations go through dispatcher
  * Uses unified invalidation helper
  */
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
@@ -46,10 +46,10 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
 
   // Update default cost when part data loads
   React.useEffect(() => {
-    if (preselectedPart?.default_cost && !formData.purchase_cost) {
+    if (preselectedPart?.cost && !formData.purchase_cost) {
       setFormData(prev => ({
         ...prev,
-        purchase_cost: preselectedPart.default_cost.toString()
+        purchase_cost: preselectedPart.cost.toString()
       }));
     }
   }, [preselectedPart]);
@@ -59,42 +59,40 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
     queryFn: () => base44.entities.Part.list()
   });
 
-
-
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const qty = Number(data.quantity_on_hand) || 0;
       const partId = data.part_id;
 
-      // CANONICAL: Update Part.physical_stock directly
-      const parts = await base44.entities.Part.filter({ id: partId });
-      const part = parts[0];
-      if (!part) throw new Error('Part not found');
+      if (!partId) throw new Error('Part is required');
+      if (qty <= 0) throw new Error('Quantity must be positive');
 
-      const currentStock = part.physical_stock ?? 0;
-      await base44.entities.Part.update(partId, {
-        physical_stock: currentStock + qty
+      // CANONICAL: Route through dispatcher - no direct Part writes
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADD_STOCK',
+        payload: {
+          part_id: partId,
+          qty,
+          location_id: data.location_id || null,
+          note: data.notes || null,
+          purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null
+        }
       });
 
-      // Also create InventoryItem for location tracking (backward compatibility)
-      const inventoryItem = await base44.entities.InventoryItem.create({
-        ...data,
-        quantity_on_hand: qty,
-        quantity_reserved: 0,
-        purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null,
-        received_date: new Date().toISOString().split('T')[0]
-      });
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to add inventory');
+      }
 
-      return { inventoryItem, partId };
+      return response.data;
     },
-    onSuccess: ({ partId }) => {
-      // CANONICAL: Use unified invalidation helper
-      invalidateSupplyQueries(queryClient, {
-        part_ids: [partId],
-        invalidateAll: true, // Ensure all views see new stock
+    onSuccess: (result) => {
+      // CANONICAL: Use unified invalidation helper with context from dispatcher
+      invalidateSupplyQueries(queryClient, result.invalidation_context || {
+        part_ids: [result.part_id],
+        invalidateAll: true
       });
       
-      toast.success('Inventory added successfully');
+      toast.success(`Added ${result.qty_added} to inventory (new total: ${result.new_physical_stock})`);
       onClose();
     },
     onError: (error) => {
