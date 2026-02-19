@@ -197,13 +197,21 @@ export default function GlobalNeedToOrder() {
   };
 
   const renderItem = (item) => {
+    // Build commitment object using canonical fields from backend resolver
     const commitment = {
       id: item.commitment_id,
       commitment_status: item.commitment_status,
+      // Canonical fields
+      required_total: item.required_total ?? item.qty_committed ?? 0,
+      reserved_from_stock: item.reserved_from_stock ?? 0,
+      covered_from_po: item.covered_from_po ?? 0,
+      qty_installed: item.qty_installed ?? 0,
+      // Derived by resolver
+      to_order: item.to_order ?? item.qtyToOrder ?? 0,
+      // Legacy fallbacks for getAllowedCommitmentActions compatibility
       qty_committed: item.qty_committed,
       qty_ordered: item.qty_ordered,
       qty_received: item.qty_received,
-      qty_installed: item.qty_installed,
     };
     const allowed = getAllowedCommitmentActions(commitment);
 
