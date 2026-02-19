@@ -137,7 +137,6 @@ function GroupedBlockedItems({ reasonCode, items, onFix }) {
 export default function BlockedActionResolutionModal({
   blocked = [],
   projectId,
-  vendors,
   onClose,
   onResolved,
   onResolveVendor,
