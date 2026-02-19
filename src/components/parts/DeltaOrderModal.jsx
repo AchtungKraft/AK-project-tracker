@@ -47,12 +47,13 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
     queryFn: () => base44.entities.Vendor.list(),
   });
 
-  // Calculate existing order quantities
-  const existingOrdered = commitment?.qty_ordered || 0;
-  const existingReceived = commitment?.qty_received || 0;
-  const pendingDelivery = Math.max(0, existingOrdered - existingReceived);
-  const totalCommitted = commitment?.qty_committed || 0;
-  const remainingNeeded = Math.max(0, totalCommitted - existingOrdered);
+  // Calculate existing order quantities - use canonical fields with legacy fallback
+  const existingOrdered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? 0;
+  const existingReceived = commitment?.qty_received ?? 0; // legacy only
+  const pendingDelivery = existingOrdered; // covered_from_po = on_order (not yet installed)
+  const totalCommitted = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+  const reserved = commitment?.reserved_from_stock ?? 0;
+  const remainingNeeded = Math.max(0, totalCommitted - reserved - existingOrdered);
 
   // Validation
   const canSubmit = deltaQty > 0 && unitCost > 0 && vendorId;
