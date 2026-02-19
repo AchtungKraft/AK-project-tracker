@@ -23,6 +23,11 @@ import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
 import AddToBuildModal from "../parts/AddToBuildModal";
 
+/**
+ * InventoryManagement - CANONICAL: Uses getPartsInventoryView read model
+ * NO direct InventoryItem.quantity_on_hand/quantity_reserved reads
+ * All inventory data from Part.physical_stock + commitment aggregations
+ */
 export default function InventoryManagement({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
@@ -35,9 +40,13 @@ export default function InventoryManagement({ onPartClick }) {
   const [showDemandDetail, setShowDemandDetail] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
 
-  const { data: inventoryItems = [], isLoading } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list('-created_date')
+  // CANONICAL: Use read model for inventory view
+  const { data: partsInventoryView = [], isLoading } = useQuery({
+    queryKey: ['partsInventoryView'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      return res.data?.parts || [];
+    },
   });
 
   const { data: parts = [] } = useQuery({
@@ -55,9 +64,9 @@ export default function InventoryManagement({ onPartClick }) {
     queryFn: () => base44.entities.PartCategory.list()
   });
 
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list()
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.list()
   });
 
   const { data: lineItems = [] } = useQuery({
