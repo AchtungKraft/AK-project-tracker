@@ -41,10 +41,23 @@ import NextActionBadge from "@/components/supply/NextActionBadge";
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
  * 
- * DATA SOURCE: getGlobalOrderQueue backend function
+ * PHASE 1 COMPLETE: Uses ONLY useOpsSupplyView (getOpsSupplyView backend)
+ * DEPRECATED: getGlobalOrderQueue is no longer used
+ * 
+ * DATA SOURCE: getOpsSupplyView with mode='ORDERING'
  * MUTATIONS: Routes through executeSupplyAction (CREATE_PO)
  * 
- * Displays canonical to_order (gap) values from resolver - NO local derivation
+ * CANONICAL FIELDS USED:
+ * - item.to_order (computed gap from read model)
+ * - item.coverage_status (FULL/PARTIAL/NONE)
+ * - item.next_action, item.block_reason_code
+ * - item.required_total, item.reserved_from_stock, item.covered_from_po
+ * 
+ * NO LEGACY FIELDS:
+ * - NO item.qty_committed
+ * - NO item.qty_ordered
+ * - NO item.qty_to_order
+ * - NO local derivation like: qtyToOrder = qty_committed - qty_ordered
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
