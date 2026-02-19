@@ -261,7 +261,7 @@ export default function PartsListView({
   const PartRow = ({ part }) => {
     const images = part.photos || [];
     const featuredPhoto = part.featured_photo || images[0];
-    const stats = getInventoryStats(part.id);
+    const stats = getInventoryStats(part); // Now pass full part object
     const hasMultipleImages = images.length > 1;
     const vendor = vendors.find(v => v.id === part.default_vendor_id);
     const make = makes.find(m => m.id === part.car_make_id);
