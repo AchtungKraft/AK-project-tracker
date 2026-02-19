@@ -191,8 +191,18 @@ export default function ProjectSupplyManager() {
       // Build category object from read model data
       const categoryObj = item.category_id ? categoriesMap.get(item.category_id) : null;
       
-      // Derive allowed actions from raw commitment data
-      const allowed = getAllowedCommitmentActions(item._raw || {});
+      // Derive allowed actions from CANONICAL fields (read model), NOT legacy _raw
+      const allowed = getAllowedCommitmentActions({
+        ...item._raw,
+        // Override with canonical fields from read model
+        required_total: item.required_total,
+        reserved_from_stock: item.reserved_from_stock,
+        covered_from_po: item.covered_from_po,
+        qty_installed: item.qty_installed,
+        to_order: item.to_order,
+        commitment_status: item._raw?.commitment_status || 'planned',
+        billing_status: item._raw?.billing_status || 'billable',
+      });
 
       // Build coverage block from canonical fields - NO local computation
       const coverage = {
