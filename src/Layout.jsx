@@ -75,6 +75,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Truck,
       },
       {
+        title: "PO Receiving",
+        url: createPageUrl("POReceiving"),
+        icon: Package,
+      },
+      {
         title: "Work Queues",
         url: createPageUrl("SupplyQueues"),
         icon: ListChecks,
