@@ -155,12 +155,47 @@ export default function GlobalNeedToOrder() {
     });
   }, [filteredItems, groupMode]);
 
-  // Stats from filtered items - using canonical to_order
-  const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? i.qtyToOrder ?? 0), 0);
-  const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposureGap ?? 0), 0);
-  const totalCost = filteredItems.reduce((sum, i) => sum + (i.estimatedCost ?? 0), 0);
-  const canOrderCount = filteredItems.filter(i => i.canOrder).length;
-  const blockedCount = filteredItems.filter(i => !i.canOrder).length;
+  // Stats from filtered items - using canonical fields from read model
+  const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
+  const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
+  const totalCost = filteredItems.reduce((sum, i) => sum + (i.estimated_cost ?? 0), 0);
+  const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
+  const blockedCount = filteredItems.filter(i => !i.is_orderable).length;
+
+  // Batch PO creation handler using dispatcher
+  const handleBatchCreatePO = async () => {
+    const selectedData = getSelectedItemsData();
+    if (selectedData.length === 0) {
+      toast.error('Select items to create PO');
+      return;
+    }
+
+    const commitment_ids = selectedData.map(i => i.commitment_id);
+    
+    try {
+      // Preview first
+      const preview = await actionPreview.preview({
+        action_type: 'CREATE_PO',
+        commitment_ids,
+        payload: { allow_multi_vendor: false },
+      });
+
+      if (preview.blocked_items?.length > 0) {
+        toast.error(`${preview.blocked_items.length} items blocked from ordering`);
+        return;
+      }
+
+      // Show batch order modal with preview data
+      setShowBatchOrderModal(true);
+    } catch (error) {
+      toast.error('Failed to preview: ' + error.message);
+    }
+  };
+
+  // Go to receiving after PO creation
+  const handleGoToReceiving = () => {
+    navigate(createPageUrl('POReceiving'));
+  };
 
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => {
