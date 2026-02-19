@@ -50,42 +50,49 @@ export default function PartsGrid({
     queryFn: () => base44.entities.CarYear.list(),
   });
 
-  // Use InventoryItem for stock calculations
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list(),
+  // CANONICAL: Use read model for inventory view - NO local InventoryItem math
+  const { data: partsInventoryView = [] } = useQuery({
+    queryKey: ['partsInventoryView'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      return res.data?.parts || [];
+    },
   });
 
-  // Use PartPurchaseLineItem for on-order calculations
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
-  });
+  // Build lookup map for canonical inventory stats
+  const inventoryViewMap = React.useMemo(() => {
+    const map = new Map();
+    partsInventoryView.forEach(p => map.set(p.part_id, p));
+    return map;
+  }, [partsInventoryView]);
 
-  // Use PartProjectRequirement for need-to-buy calculations
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list(),
-  });
-
+  /**
+   * getInventoryStats - CANONICAL: Returns stats from read model only
+   * NO local computation. NO legacy fields.
+   */
   const getInventoryStats = (partId) => {
-    const items = inventoryItems.filter(i => i.part_id === partId);
-    const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
-    const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+    const canonical = inventoryViewMap.get(partId);
     
-    // On Order = qty_ordered - qty_received from open PO lines
-    const partLineItems = lineItems.filter(li => li.part_id === partId);
-    const onOrder = partLineItems.reduce((sum, li) => 
-      sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
+    if (canonical) {
+      return {
+        onHand: canonical.physical_stock ?? 0,
+        available: canonical.available ?? 0,
+        need: canonical.required_total ?? 0,
+        onOrder: canonical.on_order ?? 0,
+        toOrder: canonical.to_order ?? 0
+      };
+    }
     
-    // Need = sum of (qty_needed - qty_installed - qty_allocated) for all requirements
-    const partReqs = requirements.filter(r => r.part_id === partId);
-    const need = partReqs.reduce((sum, r) => {
-      const stillNeeded = (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0);
-      return sum + Math.max(0, stillNeeded);
-    }, 0);
-    
-    return { onHand, available: onHand - reserved, need, onOrder };
+    // Fallback if read model not loaded - use Part.physical_stock from the part object
+    const part = parts.find(p => p.id === partId);
+    const physical = part?.physical_stock ?? 0;
+    return {
+      onHand: physical,
+      available: physical,
+      need: 0,
+      onOrder: 0,
+      toOrder: 0
+    };
   };
 
   const toggleGroup = (groupKey) => {
