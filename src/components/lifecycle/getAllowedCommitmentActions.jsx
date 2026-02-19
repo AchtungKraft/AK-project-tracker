@@ -106,7 +106,7 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // ALLOCATE - only if has received & unallocated (using canonical fields)
-  const unallocated = Math.max(0, (qty_received || 0) - effectiveReserved);
+  const unallocated = Math.max(0, received_qty - effectiveReserved);
   if (unallocated > 0) {
     actions.canAllocate = true;
   }
