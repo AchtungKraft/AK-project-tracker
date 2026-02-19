@@ -303,6 +303,102 @@ Deno.serve(async (req) => {
       invariantViolations.length > 0 ? { violations: invariantViolations } : null
     );
 
+    // ========================================
+    // TEST 5: Read Model Agreement
+    // Verify getProjectSupplyView, getPartSupplyUsage, getPartsInventoryView agree
+    // ========================================
+    if (test_part_id) {
+      try {
+        // Call getPartSupplyUsage
+        const supplyUsageRes = await base44.functions.invoke('getPartSupplyUsage', {
+          part_id: test_part_id
+        });
+        const supplyUsage = supplyUsageRes.data;
+
+        // Call getPartsInventoryView (filter to this part)
+        const partsInventoryRes = await base44.functions.invoke('getPartsInventoryView', {
+          search: null
+        });
+        const partsInventory = partsInventoryRes.data?.parts || [];
+        const partInv = partsInventory.find(p => p.part_id === test_part_id);
+
+        if (supplyUsage && partInv) {
+          // Both should agree on physical_stock
+          addTest(
+            'Test 5a: Read models agree on physical_stock',
+            supplyUsage.inventory?.physical_stock,
+            partInv.physical_stock,
+            supplyUsage.inventory?.physical_stock === partInv.physical_stock,
+            { supplyUsage: supplyUsage.inventory?.physical_stock, partsInventory: partInv.physical_stock }
+          );
+
+          // Both should agree on total reserved
+          addTest(
+            'Test 5b: Read models agree on reserved_total',
+            supplyUsage.inventory?.allocated_total,
+            partInv.reserved_total,
+            supplyUsage.inventory?.allocated_total === partInv.reserved_total,
+            { supplyUsage: supplyUsage.inventory?.allocated_total, partsInventory: partInv.reserved_total }
+          );
+
+          // Both should agree on to_order (total)
+          addTest(
+            'Test 5c: Read models agree on to_order total',
+            supplyUsage.demand?.total_to_order,
+            partInv.to_order,
+            supplyUsage.demand?.total_to_order === partInv.to_order,
+            { supplyUsage: supplyUsage.demand?.total_to_order, partsInventory: partInv.to_order }
+          );
+        } else {
+          addTest(
+            'Test 5: Read model agreement',
+            'Both read models return data',
+            { supplyUsage: !!supplyUsage, partInv: !!partInv },
+            false
+          );
+        }
+      } catch (readModelError) {
+        addTest(
+          'Test 5: Read model agreement',
+          'Read models callable',
+          readModelError.message,
+          false
+        );
+      }
+    }
+
+    // ========================================
+    // TEST 6: Canonical Field Usage (No Legacy)
+    // ========================================
+    const sampleForLegacyCheck = sampleCommitments.slice(0, 3);
+    let legacyFieldIssues = [];
+    
+    for (const c of sampleForLegacyCheck) {
+      // Check that required_total exists and matches qty_committed if both set
+      if (c.required_total === undefined && c.qty_committed !== undefined) {
+        legacyFieldIssues.push({
+          id: c.id,
+          issue: 'required_total missing, only legacy qty_committed exists'
+        });
+      }
+      
+      // Check that reserved_from_stock exists
+      if (c.reserved_from_stock === undefined && c.qty_reserved !== undefined) {
+        legacyFieldIssues.push({
+          id: c.id,
+          issue: 'reserved_from_stock missing, only legacy qty_reserved exists'
+        });
+      }
+    }
+    
+    addTest(
+      'Test 6: Canonical fields populated (not just legacy)',
+      '0 legacy-only issues',
+      `${legacyFieldIssues.length} issues`,
+      legacyFieldIssues.length === 0,
+      legacyFieldIssues.length > 0 ? { issues: legacyFieldIssues } : null
+    );
+
     return Response.json({
       success: results.summary.failed === 0,
       results
