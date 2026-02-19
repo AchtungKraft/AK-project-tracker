@@ -1499,7 +1499,15 @@ export default function ProjectSupplyManager() {
 
       {deltaOrderCommitment && (
         <DeltaOrderModal
-          commitment={deltaOrderCommitment._raw || deltaOrderCommitment}
+          commitment={{
+            id: deltaOrderCommitment.id,
+            commitment_status: deltaOrderCommitment.commitment_status,
+            required_total: deltaOrderCommitment.required_total,
+            reserved_from_stock: deltaOrderCommitment.reserved_from_stock,
+            covered_from_po: deltaOrderCommitment.covered_from_po,
+            qty_installed: deltaOrderCommitment.qty_installed,
+            unit_cost_snapshot: deltaOrderCommitment.unit_cost,
+          }}
           part={deltaOrderCommitment.part}
           onClose={() => setDeltaOrderCommitment(null)}
           onSuccess={() => invalidateSupply()}
@@ -1524,8 +1532,14 @@ export default function ProjectSupplyManager() {
 
       {reverseInstallModal && (
         <ReverseInstallationModal
-          installedParts={reverseInstallModal._raw?.installed_parts || []}
-          commitment={reverseInstallModal._raw || reverseInstallModal}
+          installedParts={[]}
+          commitment={{
+            id: reverseInstallModal.id,
+            commitment_status: reverseInstallModal.commitment_status,
+            qty_installed: reverseInstallModal.qty_installed,
+            part_id: reverseInstallModal.part_id,
+            project_id: reverseInstallModal.project_id,
+          }}
           onClose={() => setReverseInstallModal(null)}
           onSuccess={() => {
             invalidateSupply();
@@ -1536,7 +1550,16 @@ export default function ProjectSupplyManager() {
 
       {receiveModal && (
         <ReceiveInventoryModal
-          commitment={receiveModal._raw || receiveModal}
+          commitment={{
+            id: receiveModal.id,
+            commitment_status: receiveModal.commitment_status,
+            required_total: receiveModal.required_total,
+            reserved_from_stock: receiveModal.reserved_from_stock,
+            covered_from_po: receiveModal.covered_from_po,
+            on_order_qty: receiveModal.on_order_qty,
+            part_id: receiveModal.part_id,
+            project_id: receiveModal.project_id,
+          }}
           part={receiveModal.part}
           onClose={() => setReceiveModal(null)}
           onSuccess={() => {
@@ -1549,7 +1572,15 @@ export default function ProjectSupplyManager() {
       {allocateModal && (
         <AllocatePoolModal
           projectId={projectId}
-          commitment={allocateModal._raw || allocateModal}
+          commitment={{
+            id: allocateModal.id,
+            commitment_status: allocateModal.commitment_status,
+            required_total: allocateModal.required_total,
+            unit_retail_snapshot: allocateModal.unit_retail,
+            planned_retail_total: allocateModal.planned_retail_total,
+            covered_retail_total: allocateModal.covered_retail_total,
+            exposure_gap: allocateModal.exposure_gap,
+          }}
           onClose={() => setAllocateModal(null)}
           onSuccess={() => {
             invalidateSupply();
@@ -1559,7 +1590,16 @@ export default function ProjectSupplyManager() {
 
       {cancelModal && (
         <CancelCommitmentModal
-          commitment={cancelModal._raw || cancelModal}
+          commitment={{
+            id: cancelModal.id,
+            commitment_status: cancelModal.commitment_status,
+            required_total: cancelModal.required_total,
+            reserved_from_stock: cancelModal.reserved_from_stock,
+            covered_from_po: cancelModal.covered_from_po,
+            qty_installed: cancelModal.qty_installed,
+            part_id: cancelModal.part_id,
+            project_id: cancelModal.project_id,
+          }}
           part={cancelModal.part}
           project={project}
           onClose={() => setCancelModal(null)}
@@ -1575,7 +1615,16 @@ export default function ProjectSupplyManager() {
         <CommitmentQuantityDrawer
           open={!!qtyManagerDrawer}
           onClose={() => setQtyManagerDrawer(null)}
-          commitment={qtyManagerDrawer._raw || qtyManagerDrawer}
+          commitment={{
+            id: qtyManagerDrawer.id,
+            commitment_status: qtyManagerDrawer.commitment_status,
+            required_total: qtyManagerDrawer.required_total,
+            reserved_from_stock: qtyManagerDrawer.reserved_from_stock,
+            covered_from_po: qtyManagerDrawer.covered_from_po,
+            qty_installed: qtyManagerDrawer.qty_installed,
+            part_id: qtyManagerDrawer.part_id,
+            project_id: qtyManagerDrawer.project_id,
+          }}
           part={qtyManagerDrawer.part}
           onSuccess={() => {
             invalidateSupply();
