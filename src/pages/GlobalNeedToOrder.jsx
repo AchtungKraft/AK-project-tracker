@@ -81,28 +81,23 @@ export default function GlobalNeedToOrder() {
   const supplyAction = useSupplyAction();
   const actionPreview = useSupplyActionPreview();
 
-  // Apply filters
+  // Apply local filters (search already applied in API, but coverage/prepay are local)
   const filteredItems = useMemo(() => {
     return needToOrderItems.filter(item => {
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch = 
-          item.part_name?.toLowerCase().includes(term) ||
-          item.vendor_part_number?.toLowerCase().includes(term) ||
-          item.project_name?.toLowerCase().includes(term) ||
-          item.vendor_name?.toLowerCase().includes(term);
-        if (!matchesSearch) return false;
+      // Coverage filter using canonical coverage_status
+      if (coverageFilter !== 'all') {
+        const coverageState = item.coverage_status === 'FULL' ? 'covered' :
+                              item.coverage_status === 'PARTIAL' ? 'partial' : 'uncovered';
+        if (coverageState !== coverageFilter) return false;
       }
-
-      if (selectedProjectFilter !== 'all' && item.project_id !== selectedProjectFilter) return false;
-      if (selectedVendorFilter !== 'all' && item.vendor_id !== selectedVendorFilter) return false;
-      if (coverageFilter !== 'all' && item.coverageState !== coverageFilter) return false;
-      if (prepayFilter === 'required' && !item.requiresPrepay) return false;
-      if (prepayFilter === 'not_required' && item.requiresPrepay) return false;
+      
+      // Prepay filter
+      if (prepayFilter === 'required' && !item.requires_prepay) return false;
+      if (prepayFilter === 'not_required' && item.requires_prepay) return false;
 
       return true;
     });
-  }, [needToOrderItems, searchTerm, selectedProjectFilter, selectedVendorFilter, coverageFilter, prepayFilter]);
+  }, [needToOrderItems, coverageFilter, prepayFilter]);
 
   // Group items
   const groupedItems = useMemo(() => {
