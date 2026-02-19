@@ -285,33 +285,32 @@ export default function ProjectSupplyManager() {
     });
   }, [supplyItems, categoriesMap]);
 
-  // Filter commitments for each tab - using canonical fields
+  // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
     let filtered = enrichedCommitments;
 
-    // Apply status filter for tab using canonical coverage fields
+    // Apply status filter for tab using CANONICAL coverage fields
     switch (tabFilter) {
       case 'plan':
         // All active commitments for planning
         filtered = filtered.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
         break;
       case 'buy':
-        // Items with gap > 0 (to_order) OR not yet fully covered
+        // Items with to_order > 0 OR coverage_status indicates gap
         filtered = filtered.filter(c => {
-          const toOrder = c.coverage?.to_order ?? c.coverage?.gap_qty ?? 0;
-          return toOrder > 0 || c.coverage?.coverage_status === 'NOT_COVERED' || c.coverage?.coverage_status === 'PARTIALLY_COVERED';
+          return c.to_order > 0 || c.coverage_status === 'NONE' || c.coverage_status === 'PARTIAL';
         });
         break;
       case 'receive':
+        // Items with on_order_qty > 0 (expecting delivery)
         filtered = filtered.filter(c => 
-          ['ordered', 'partially_received'].includes(c.commitment_status)
+          c.on_order_qty > 0 || ['ordered', 'partially_received'].includes(c.commitment_status)
         );
         break;
       case 'install':
-        // Items with reserved/covered qty not yet installed - use canonical fields
+        // Items with available_to_install > 0
         filtered = filtered.filter(c => {
-          const availableForInstall = (c.coverage?.reserved_from_stock ?? 0) - (c.coverage?.qty_installed ?? 0);
-          return ['received', 'allocated', 'installed'].includes(c.commitment_status) || availableForInstall > 0;
+          return c.available_to_install > 0;
         });
         break;
     }
