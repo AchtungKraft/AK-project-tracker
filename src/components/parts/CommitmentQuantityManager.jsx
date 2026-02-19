@@ -231,9 +231,14 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
   };
 
   const handleDecrement = () => {
-    const minQty = Math.max(commitment.qty_installed || 0, commitment.qty_ordered || 0);
-    if ((commitment.qty_committed || 0) <= minQty) {
-      toast.error(`Cannot reduce below ${minQty} (${commitment.qty_ordered > commitment.qty_installed ? 'ordered' : 'installed'} qty)`);
+    // Use canonical fields with legacy fallback
+    const currentRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
+    const installedQty = commitment.qty_installed ?? 0;
+    const onOrderQty = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
+    const minQty = Math.max(installedQty, onOrderQty);
+    
+    if (currentRequired <= minQty) {
+      toast.error(`Cannot reduce below ${minQty} (${onOrderQty > installedQty ? 'ordered' : 'installed'} qty)`);
       return;
     }
     setPendingAction({ action_type: ACTION_TYPES.DECREASE_QTY, qty_delta: 1 });
