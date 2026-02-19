@@ -403,10 +403,10 @@ export default function ReceiveInventoryModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={createInventoryMutation.isPending || !formData.quantity || part?.is_archived}
+            disabled={isReceiving || !formData.quantity || part?.is_archived}
             className="bg-green-600 hover:bg-green-700"
           >
-            {createInventoryMutation.isPending ? "Adding..." : "Add to Inventory"}
+            {isReceiving ? "Adding..." : "Add to Inventory"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -420,7 +420,7 @@ export default function ReceiveInventoryModal({
         part={part}
         quantity={formData.quantity}
         toLocation={activeLocations.find(l => l.id === formData.location_id)}
-        isLoading={createInventoryMutation.isPending}
+        isLoading={isReceiving}
       />
     </Dialog>
   );
