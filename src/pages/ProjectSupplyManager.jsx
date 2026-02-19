@@ -187,6 +187,17 @@ export default function ProjectSupplyManager() {
       if (item.coverage_status === undefined) {
         console.error(`[CANONICAL VIOLATION] Missing coverage_status for commitment ${item.commitment_id}`);
       }
+      
+      // CANONICAL VERIFICATION LOG
+      console.log('[ProjectSupplyManager CANONICAL]', {
+        part_id: item.part_id,
+        commitment_id: item.commitment_id,
+        physical_stock: item.physical_stock,
+        reserved_total: item.reserved_from_stock,
+        available: item.available_qty,
+        to_order: item.to_order,
+        on_order: item.covered_from_po
+      });
 
       // Build category object from read model data
       const categoryObj = item.category_id ? categoriesMap.get(item.category_id) : null;

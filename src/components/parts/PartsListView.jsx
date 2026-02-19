@@ -101,6 +101,16 @@ export default function PartsListView({
     const canonical = inventoryViewMap.get(part.id);
     
     if (canonical) {
+      // CANONICAL VERIFICATION LOG
+      console.log('[PartsListView CANONICAL]', {
+        part_id: part.id,
+        physical_stock: canonical.physical_stock,
+        reserved_total: canonical.reserved_total,
+        available: canonical.available,
+        to_order: canonical.to_order,
+        on_order: canonical.on_order
+      });
+      
       return {
         onHand: canonical.physical_stock ?? 0,
         available: canonical.available ?? 0,
@@ -112,11 +122,11 @@ export default function PartsListView({
       };
     }
     
-    // Fallback to Part.physical_stock only if read model not loaded yet
-    const physical = part.physical_stock ?? 0;
+    // Read model not loaded yet - return zeros, don't compute locally
+    console.warn('[PartsListView] Read model not loaded for part', part.id);
     return {
-      onHand: physical,
-      available: physical,
+      onHand: 0,
+      available: 0,
       need: 0,
       onOrder: 0,
       toOrder: 0,

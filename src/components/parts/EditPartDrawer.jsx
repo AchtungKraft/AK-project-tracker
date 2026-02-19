@@ -315,24 +315,37 @@ export default function EditPartDrawer({ partId, onClose }) {
   // CANONICAL inventory stats from read model only
   const inventoryStats = useMemo(() => {
     if (!supplyUsage?.inventory) {
-      // Fallback to Part.physical_stock for initial load
-      const physical = part?.physical_stock ?? 0;
+      // Read model not loaded yet - return zeros, don't compute locally
+      console.warn('[EditPartDrawer] Read model not loaded for part', partId);
       return { 
-        onHand: physical, 
+        onHand: 0, 
         reserved: 0, 
-        available: physical,
+        available: 0,
         onOrder: 0,
         toOrder: 0
       };
     }
-    return {
+    
+    const stats = {
       onHand: supplyUsage.inventory.physical_stock ?? 0,
       reserved: supplyUsage.inventory.allocated_total ?? 0,
       available: supplyUsage.inventory.available ?? 0,
       onOrder: supplyUsage.demand?.total_on_order ?? 0,
       toOrder: supplyUsage.demand?.total_to_order ?? 0
     };
-  }, [supplyUsage, part?.physical_stock]);
+    
+    // CANONICAL VERIFICATION LOG
+    console.log('[EditPartDrawer CANONICAL]', {
+      part_id: partId,
+      physical_stock: stats.onHand,
+      reserved_total: stats.reserved,
+      available: stats.available,
+      to_order: stats.toOrder,
+      on_order: stats.onOrder
+    });
+    
+    return stats;
+  }, [supplyUsage, partId]);
 
   if (isLoading || !editedPart) {
     return (

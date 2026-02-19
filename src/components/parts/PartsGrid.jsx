@@ -83,12 +83,10 @@ export default function PartsGrid({
       };
     }
     
-    // Fallback if read model not loaded - use Part.physical_stock from the part object
-    const part = parts.find(p => p.id === partId);
-    const physical = part?.physical_stock ?? 0;
+    // Read model not loaded yet - return zeros, don't compute locally
     return {
-      onHand: physical,
-      available: physical,
+      onHand: 0,
+      available: 0,
       need: 0,
       onOrder: 0,
       toOrder: 0
