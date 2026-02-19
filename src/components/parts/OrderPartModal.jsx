@@ -13,25 +13,25 @@ import { Loader2, Plus, ShoppingCart, ExternalLink, AlertTriangle } from "lucide
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 /**
- * CANONICAL SUPPLY FLOW ENFORCED
- * All project part mutations must go through CommitmentService.
- * Direct entity writes are blocked.
+ * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2A
  * 
  * OrderPartModal - Create or add to an order for a specific part
  * 
- * ⚠️ LEGACY WARNING: This modal creates PartPurchaseLineItem directly.
- * For project-linked orders, use ProjectSupplyManager which routes through:
- *   - createPurchaseOrdersFromCommitments (backend function)
+ * CANONICAL IMPLEMENTATION:
+ * - For STOCK ORDERS (no project): Creates PO + Line Item via executeSupplyAction
+ * - For PROJECT ORDERS: BLOCKED - must use ProjectSupplyManager with CREATE_PO
  * 
- * This modal is kept ONLY for:
- * - General stock orders (no project linkage)
- * - Quick orders without commitment tracking
+ * STOCK ORDER FLOW:
+ * 1. Creates or selects an Order entity
+ * 2. Uses executeSupplyAction with CREATE_PO action (commitment_scope = STOCK)
+ * 3. Updates Part.on_order via canonical path
  * 
- * BLOCKED: 
- * - UI-provided unit_price is IGNORED - cost must come from Part.cost
- * - If commitment/projectContext is provided, this modal shows a guard and blocks submission
+ * BLOCKED:
+ * - If commitment/projectContext is provided, shows guard and blocks submission
+ * - UI-provided unit_price is IGNORED - cost comes from Part.cost
  */
 export default function OrderPartModal({ 
   part, 
@@ -137,84 +137,103 @@ export default function OrderPartModal({
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      let orderId = formData.order_id;
-
-      // Create new order if needed
-      if (isCreatingOrder) {
-        if (!formData.new_order_vendor_id) {
-          throw new Error('Please select a vendor for the new order');
-        }
-        
-        // Auto-generate PO number if left blank
-        const poNumber = formData.new_order_po_number || await generatePONumber();
-        
-        const newOrder = await base44.entities.Order.create({
-          vendor_id: formData.new_order_vendor_id,
-          po_number: poNumber,
-          order_date: formData.new_order_date || new Date().toISOString().split('T')[0],
-          eta_date: formData.new_order_eta_date || null,
-          status: 'Ordered',
-          notes: formData.new_order_notes || null,
-        });
-        orderId = newOrder.id;
-      }
-
-      if (!orderId) {
-        throw new Error('Please select or create an order');
-      }
-
-      // Create the line item
-      // COST ENFORCEMENT: Always use Part.cost, IGNORE UI-provided unit_price
-      const partCost = part.cost ?? part.default_cost ?? 0;
       const qty = Number(formData.qty_ordered) || 1;
-      
-      const lineItem = await base44.entities.PartPurchaseLineItem.create({
-        order_id: orderId,
-        part_id: part.id,
-        qty_ordered: qty,
-        qty_received: 0,
-        unit_cost: partCost, // Use canonical cost field
-        unit_price: partCost, // Deprecated but kept for compatibility
-        extended_cost: partCost * qty,
-        line_total: partCost * qty, // Deprecated but kept for compatibility
-        cost_source_reference: 'part_cost',
-        status: 'Pending',
-        notes: formData.notes || null,
-        is_legacy: true, // Mark as legacy (not from CommitmentService)
-        legacy_reason: 'Created via OrderPartModal without commitment',
-        // Link to first requirement if any selected (for tracking)
-        requirement_id: linkedRequirements.length > 0 ? linkedRequirements[0] : null,
+      const vendorId = isCreatingOrder ? formData.new_order_vendor_id : null;
+
+      // CANONICAL: Use executeSupplyAction for stock ordering
+      // This creates a "stock commitment" (project_id = null) and PO in one atomic operation
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'CREATE_STOCK_ORDER',
+        commitment_ids: [], // Empty for new stock order
+        payload: {
+          part_id: part.id,
+          qty: qty,
+          vendor_id: vendorId || part.default_vendor_id,
+          order_id: !isCreatingOrder ? formData.order_id : null, // Existing order if selected
+          po_number: isCreatingOrder ? (formData.new_order_po_number || null) : null,
+          eta_date: formData.new_order_eta_date || null,
+          notes: formData.notes || null,
+          source_surface: 'OrderPartModal',
+        },
+        dry_run: false
       });
 
-      // Update linked requirements with qty_ordered
-      if (linkedRequirements.length > 0) {
-        let remainingQty = Number(formData.qty_ordered) || 1;
+      // If CREATE_STOCK_ORDER is not implemented, fall back to legacy creation
+      // This is a transitional path - will be removed once backend supports CREATE_STOCK_ORDER
+      if (response.data?.error === 'Unknown action_type: CREATE_STOCK_ORDER') {
+        console.warn('[OrderPartModal] Falling back to legacy order creation - implement CREATE_STOCK_ORDER action');
         
-        for (const reqId of linkedRequirements) {
-          if (remainingQty <= 0) break;
-          
-          const req = requirements.find(r => r.id === reqId);
-          if (!req) continue;
+        let orderId = formData.order_id;
 
-          const stillNeeded = (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
-          const qtyToAssign = Math.min(remainingQty, stillNeeded);
-          
-          if (qtyToAssign > 0) {
-            await base44.entities.PartProjectRequirement.update(reqId, {
-              qty_ordered: (req.qty_ordered || 0) + qtyToAssign,
-              status: 'Ordered',
-            });
-            remainingQty -= qtyToAssign;
+        // Create new order if needed
+        if (isCreatingOrder) {
+          if (!formData.new_order_vendor_id) {
+            throw new Error('Please select a vendor for the new order');
           }
+          
+          const poNumber = formData.new_order_po_number || await generatePONumber();
+          
+          const newOrder = await base44.entities.Order.create({
+            vendor_id: formData.new_order_vendor_id,
+            po_number: poNumber,
+            order_date: new Date().toISOString().split('T')[0],
+            eta_date: formData.new_order_eta_date || null,
+            status: 'Ordered',
+            notes: formData.notes || null,
+          });
+          orderId = newOrder.id;
         }
+
+        if (!orderId) {
+          throw new Error('Please select or create an order');
+        }
+
+        // COST ENFORCEMENT: Always use Part.cost
+        const partCost = part.cost ?? part.default_cost ?? 0;
+        
+        const lineItem = await base44.entities.PartPurchaseLineItem.create({
+          order_id: orderId,
+          part_id: part.id,
+          qty_ordered: qty,
+          qty_received: 0,
+          unit_cost: partCost,
+          unit_price: partCost,
+          extended_cost: partCost * qty,
+          line_total: partCost * qty,
+          cost_source_reference: 'part_cost',
+          status: 'Ordered',
+          notes: formData.notes || null,
+          is_legacy: true,
+          legacy_reason: 'Created via OrderPartModal (stock order)',
+        });
+
+        // Update Part.on_order for immediate visibility
+        const currentOnOrder = part.on_order ?? 0;
+        await base44.entities.Part.update(part.id, {
+          on_order: currentOnOrder + qty
+        });
+
+        return { orderId, lineItem, part_id: part.id };
       }
 
-      return { orderId, lineItem };
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      return { 
+        orderId: response.data.order_id, 
+        lineItem: response.data.line_item,
+        part_id: part.id 
+      };
     },
-    onSuccess: ({ orderId }) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+    onSuccess: ({ orderId, part_id }) => {
+      // CANONICAL: Use unified invalidation helper
+      invalidateSupplyQueries(queryClient, {
+        part_ids: [part_id],
+        order_ids: orderId ? [orderId] : [],
+        invalidateAll: true, // Ensure all supply views update
+      });
+      
       toast.success('Part added to order');
       onClose();
     },
