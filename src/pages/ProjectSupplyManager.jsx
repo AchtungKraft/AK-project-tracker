@@ -376,22 +376,22 @@ export default function ProjectSupplyManager() {
     });
   }, [activeCommitments, partsMap, vendors, lineItems, installedParts]);
 
-  // Filter commitments for each tab
+  // Filter commitments for each tab - using canonical fields
   const getFilteredCommitments = (tabFilter) => {
     let filtered = enrichedCommitments;
 
-    // Apply status filter for tab
+    // Apply status filter for tab using canonical coverage fields
     switch (tabFilter) {
       case 'plan':
         // All active commitments for planning
         filtered = filtered.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
         break;
       case 'buy':
-        // Items with qty_to_order > 0 OR not yet fully ordered
-        filtered = filtered.filter(c => 
-          (c.qty_to_order || 0) > 0 ||
-          (c.commitment_status === 'planned' && (c.qty_committed || 0) > (c.qty_ordered || 0))
-        );
+        // Items with gap > 0 (to_order) OR not yet fully covered
+        filtered = filtered.filter(c => {
+          const toOrder = c.coverage?.to_order ?? c.coverage?.gap_qty ?? 0;
+          return toOrder > 0 || c.coverage?.coverage_status === 'NOT_COVERED' || c.coverage?.coverage_status === 'PARTIALLY_COVERED';
+        });
         break;
       case 'receive':
         filtered = filtered.filter(c => 
@@ -399,11 +399,11 @@ export default function ProjectSupplyManager() {
         );
         break;
       case 'install':
-        // Items with reserved or received qty not yet installed
-        filtered = filtered.filter(c => 
-          ['received', 'allocated', 'installed'].includes(c.commitment_status) ||
-          ((c.qty_reserved || 0) + (c.qty_received || 0)) > (c.qty_installed || 0)
-        );
+        // Items with reserved/covered qty not yet installed - use canonical fields
+        filtered = filtered.filter(c => {
+          const availableForInstall = (c.coverage?.reserved_from_stock ?? 0) - (c.coverage?.qty_installed ?? 0);
+          return ['received', 'allocated', 'installed'].includes(c.commitment_status) || availableForInstall > 0;
+        });
         break;
     }
 
