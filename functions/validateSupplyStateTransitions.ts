@@ -1,15 +1,41 @@
 /**
  * validateSupplyStateTransitions - End-to-end state transition tests
  * 
- * Tests the full lifecycle: Add → PO → Receive → Install
- * Validates canonical fields at each step.
+ * PHASE 6: Tests the full lifecycle and verifies canonical invariants
  * 
- * Test Matrix (User's requirements):
- * Test 1 — Fresh Requirement: required_total=8, to_order=8, canCreatePO=true
- * Test 2 — After PO: covered_from_po=8, to_order=0, canCreatePO=false  
- * Test 3 — Partial Receive: physical_stock increases, reserved increases
- * Test 4 — Install: reserved decreases, physical decreases, installed increases
- * Test 5 — Over-Reserve: stock=4, required=8 → reserved=4, to_order=4
+ * Test Matrix (Canonical Contract):
+ * 
+ * 1. ADJUST_REQUIRED via executeSupplyAction:
+ *    - Creates commitment with required_total (not legacy qty_committed)
+ *    - Auto-reserve from stock if available
+ *    - Computes to_order as gap
+ * 
+ * 2. AUTO_RESERVE:
+ *    - reserved_from_stock increases
+ *    - Part.physical_stock unchanged (reservation only)
+ *    - available = physical_stock - reserved_total
+ * 
+ * 3. CREATE_PO:
+ *    - covered_from_po increases
+ *    - to_order decreases
+ *    - commitment_status → ordered
+ * 
+ * 4. RECEIVE:
+ *    - Part.physical_stock increases
+ *    - covered_from_po may transition to reserved_from_stock
+ * 
+ * 5. INSTALL:
+ *    - qty_installed increases
+ *    - reserved_from_stock decreases
+ *    - Part.physical_stock decreases
+ * 
+ * Canonical Invariants:
+ * - installed ≤ reserved_from_stock (at transition boundaries)
+ * - available = physical_stock - reserved_total
+ * - to_order = required_total - reserved_from_stock - covered_from_po (clamped >= 0)
+ * 
+ * Read Model Agreement:
+ * - getProjectSupplyView, getPartSupplyUsage, getPartsInventoryView must agree
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
