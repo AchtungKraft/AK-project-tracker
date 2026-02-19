@@ -442,12 +442,7 @@ export default function ProjectSupplyManager() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      refetchReqs(),
-      refetchCommitments(),
-      refetchPools(),
-    ]);
-    queryClient.invalidateQueries();
+    await refetchSupply();
     setIsRefreshing(false);
   };
 
