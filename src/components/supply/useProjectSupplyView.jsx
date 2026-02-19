@@ -70,10 +70,19 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
   };
 
+  // Normalize filter_options to always have array properties
+  const rawFilterOptions = query.data?.filter_options || {};
+  const filterOptions = {
+    vendors: rawFilterOptions.vendors || [],
+    projects: rawFilterOptions.projects || [],
+    statuses: rawFilterOptions.statuses || [],
+    categories: rawFilterOptions.categories || [],
+  };
+
   return {
     items: query.data?.items || [],
     summary: query.data?.summary || {},
-    filterOptions: query.data?.filter_options || {},
+    filterOptions,
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
