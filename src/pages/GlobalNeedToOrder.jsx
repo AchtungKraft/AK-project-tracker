@@ -152,10 +152,10 @@ export default function GlobalNeedToOrder() {
     });
   }, [filteredItems, groupMode]);
 
-  // Stats from filtered items
-  const totalQty = filteredItems.reduce((sum, i) => sum + i.qtyToOrder, 0);
-  const totalExposure = filteredItems.reduce((sum, i) => sum + i.exposureGap, 0);
-  const totalCost = filteredItems.reduce((sum, i) => sum + i.estimatedCost, 0);
+  // Stats from filtered items - using canonical to_order
+  const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? i.qtyToOrder ?? 0), 0);
+  const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposureGap ?? 0), 0);
+  const totalCost = filteredItems.reduce((sum, i) => sum + (i.estimatedCost ?? 0), 0);
   const canOrderCount = filteredItems.filter(i => i.canOrder).length;
   const blockedCount = filteredItems.filter(i => !i.canOrder).length;
 
