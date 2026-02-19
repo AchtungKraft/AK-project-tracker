@@ -42,18 +42,41 @@ Deno.serve(async (req) => {
       commitment_ids,
       min_confidence = 0,
       actions_filter, // Optional: ['REPLACE', 'REATTACH', 'CANCEL', 'QUARANTINE']
-      force_resolution // Override: force all to specific action (e.g., 'CANCEL')
+      force_resolution, // Override: force all to specific action (e.g., 'CANCEL')
+      limit = 10 // Process in batches to avoid CPU limits
     } = await req.json();
 
     const isDryRun = mode === 'DRY_RUN';
 
-    // Get orphan report first
-    const reportResponse = await base44.functions.invoke('getOrphanCommitmentReport', {});
-    if (reportResponse.data?.error) {
-      throw new Error(reportResponse.data.error);
+    // If commitment_ids provided, use direct lookup (skip report for efficiency)
+    let orphans = [];
+    
+    if (commitment_ids && commitment_ids.length > 0) {
+      // Direct mode - just fetch these commitments
+      const commitments = await base44.entities.PartCommitment.filter({
+        id: { $in: commitment_ids }
+      });
+      orphans = commitments.map(c => ({
+        commitment_id: c.id,
+        project_id: c.project_id,
+        commitment_status: c.commitment_status,
+        missing_part_id: c.part_id,
+        line_items_count: 0,
+        installed_parts_count: 0,
+        has_financial_history: false,
+        has_install_history: false,
+        recommended_resolution: 'CANCEL',
+        confidence: 70,
+        identifiers: { notes: c.notes }
+      }));
+    } else {
+      // Get orphan report
+      const reportResponse = await base44.functions.invoke('getOrphanCommitmentReport', {});
+      if (reportResponse.data?.error) {
+        throw new Error(reportResponse.data.error);
+      }
+      orphans = reportResponse.data?.orphans || [];
     }
-
-    let orphans = reportResponse.data?.orphans || [];
 
     // Filter by commitment_ids if provided
     if (commitment_ids && commitment_ids.length > 0) {
@@ -69,6 +92,10 @@ Deno.serve(async (req) => {
     if (actions_filter && actions_filter.length > 0) {
       orphans = orphans.filter(o => actions_filter.includes(o.recommended_resolution));
     }
+
+    // Apply limit for batching
+    const totalOrphans = orphans.length;
+    orphans = orphans.slice(0, limit);
 
     const results = {
       mode,
@@ -337,6 +364,9 @@ Deno.serve(async (req) => {
 
     // Summary
     const summary = {
+      total_orphans: totalOrphans,
+      batch_size: limit,
+      remaining: totalOrphans - orphans.length,
       total_processed: results.processed,
       replaced: results.replaced.length,
       reattached: results.reattached.length,
@@ -350,7 +380,8 @@ Deno.serve(async (req) => {
       success: true,
       mode,
       summary,
-      results
+      results,
+      has_more: totalOrphans > orphans.length
     });
 
   } catch (error) {
