@@ -648,6 +648,17 @@ export default function ProjectSupplyManager() {
     const { part, vendor, allowed } = commitment;
     const nextStep = getNextStepLabel(commitment);
 
+    // DEBUG: Runtime validation - remove after confirming
+    console.log('[ROW DATA]', commitment.part?.part_name?.substring(0, 30), {
+      'required_total': commitment.required_total,
+      'to_order': commitment.to_order,
+      'coverage_status': commitment.coverage_status,
+      '_raw.to_order': commitment._raw?.to_order,
+      '_raw.qty_to_order': commitment._raw?.qty_to_order,
+      '_raw.required_total': commitment._raw?.required_total,
+      'allowed.canCreatePO': allowed?.canCreatePO,
+    });
+
     return (
       <TableRow key={commitment.id} className="hover:bg-gray-800/30">
         {showActions && (
