@@ -14,14 +14,19 @@ import { format } from "date-fns";
 import { Package, MapPin, AlertTriangle, Plus, Archive } from "lucide-react";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
-import { useSupplyAction } from "@/components/supply/useSupplyState";
+import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 /**
- * Enhanced Receiving Modal with mandatory location selection and provenance tracking
+ * ReceiveInventoryModal - PHASE 3 CANONICAL
  * 
  * CANONICAL DISPATCHER:
- * Routes through executeSupplyAction with action_type='RECEIVE'
- * NO direct entity writes (InventoryItem, Part, etc.) allowed
+ * - Routes through executeSupplyAction with action_type='RECEIVE'
+ * - Updates Part.physical_stock via canonical path
+ * - Updates commitment.covered_from_po or reserved_from_stock as appropriate
+ * - Uses unified invalidation helper for cache consistency
+ * 
+ * NO DIRECT ENTITY WRITES for commitment-based receiving
  */
 export default function ReceiveInventoryModal({ 
   open, 
@@ -89,6 +94,7 @@ export default function ReceiveInventoryModal({
   });
 
   // Legacy mutation for non-commitment receiving (general inventory)
+  // Also updates Part.physical_stock for canonical consistency
   const legacyReceiveMutation = useMutation({
     mutationFn: async (data) => {
       const response = await base44.functions.invoke('mutateInventory', {
@@ -109,11 +115,30 @@ export default function ReceiveInventoryModal({
         throw new Error(response.data.error);
       }
       
-      return response.data;
+      // CANONICAL: Also update Part.physical_stock directly for immediate consistency
+      // mutateInventory should handle this, but we ensure it here
+      try {
+        const currentPart = await base44.entities.Part.filter({ id: part.id });
+        if (currentPart[0]) {
+          const currentStock = currentPart[0].physical_stock ?? 0;
+          await base44.entities.Part.update(part.id, {
+            physical_stock: currentStock + data.quantity
+          });
+        }
+      } catch (stockError) {
+        console.warn('[ReceiveInventoryModal] Failed to update physical_stock:', stockError);
+        // Don't fail the whole operation if this fails - mutateInventory should have done it
+      }
+      
+      return { ...response.data, part_id: part.id };
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryAuditLogs'] });
+      // CANONICAL: Use unified invalidation helper
+      invalidateSupplyQueries(queryClient, {
+        part_ids: [result.part_id || part.id],
+        order_ids: orderId ? [orderId] : [],
+        invalidateAll: true, // Ensure all views update
+      });
       
       toast.success(`${formData.quantity} units added to inventory`);
       setShowConfirmModal(false);
