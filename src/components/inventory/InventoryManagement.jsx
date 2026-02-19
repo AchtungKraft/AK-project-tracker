@@ -514,7 +514,7 @@ export default function InventoryManagement({ onPartClick }) {
                         <TooltipTrigger className="flex items-center gap-1">
                           Reserved <HelpCircle className="w-3 h-3" />
                         </TooltipTrigger>
-                        <TooltipContent>Inventory allocated to projects (InventoryItem.quantity_reserved)</TooltipContent>
+                        <TooltipContent>Inventory allocated to projects (sum of reserved_from_stock)</TooltipContent>
                       </Tooltip>
                     </SortableHeader>
                     <SortableHeader columnKey="available" className="text-right">Available</SortableHeader>
