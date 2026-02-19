@@ -3,6 +3,13 @@
  * 
  * Tests the full lifecycle: Add → PO → Receive → Install
  * Validates canonical fields at each step.
+ * 
+ * Test Matrix (User's requirements):
+ * Test 1 — Fresh Requirement: required_total=8, to_order=8, canCreatePO=true
+ * Test 2 — After PO: covered_from_po=8, to_order=0, canCreatePO=false  
+ * Test 3 — Partial Receive: physical_stock increases, reserved increases
+ * Test 4 — Install: reserved decreases, physical decreases, installed increases
+ * Test 5 — Over-Reserve: stock=4, required=8 → reserved=4, to_order=4
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
@@ -53,6 +60,11 @@ Deno.serve(async (req) => {
         coverage_status,
         coverage_percent: required_total > 0 ? Math.round((coverage_total / required_total) * 100) : 0
       };
+    };
+
+    // Helper to compute canCreatePO using same logic as getAllowedCommitmentActions
+    const canCreatePO = (state) => {
+      return state.commitment_status === 'planned' && state.to_order > 0;
     };
 
     // ========================================
