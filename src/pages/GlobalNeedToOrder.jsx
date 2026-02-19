@@ -372,9 +372,18 @@ export default function GlobalNeedToOrder() {
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Button>
+              <Button
+                variant="outline"
+                onClick={handleGoToReceiving}
+                className="border-gray-700 text-white gap-2"
+              >
+                <Truck className="w-4 h-4" />
+                Go to Receiving
+              </Button>
               {selectedItems.size > 0 && (
                 <Button
-                  onClick={() => setShowBatchOrderModal(true)}
+                  onClick={handleBatchCreatePO}
+                  disabled={actionPreview.isPending}
                   className="bg-green-600 hover:bg-green-700 gap-2"
                 >
                   <ShoppingCart className="w-4 h-4" />
