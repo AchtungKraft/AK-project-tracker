@@ -704,7 +704,11 @@ export default function ProjectSupplyManager() {
         {/* Needed (editable stepper) - CANONICAL: required_total */}
         <TableCell className="text-center">
           <InlineQtyStepper 
-            commitment={{ ...commitment._raw, id: commitment.id, required_total: commitment.required_total }} 
+            commitment={{ 
+              id: commitment.id, 
+              required_total: commitment.required_total,
+              commitment_status: commitment.commitment_status,
+            }} 
             onMutationSuccess={() => invalidateSupply()}
             disabled={!actionsEnabled}
           />
