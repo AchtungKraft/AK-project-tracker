@@ -12,7 +12,15 @@ import LocationSelect from "@/components/common/LocationSelect";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
+/**
+ * AddInventoryModal - Add inventory for a part
+ * 
+ * CANONICAL: Updates Part.physical_stock via direct entity update
+ * Also creates InventoryItem for location tracking (legacy compatibility)
+ * Uses unified invalidation helper
+ */
 export default function AddInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -54,15 +62,38 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
 
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.InventoryItem.create({
-      ...data,
-      quantity_on_hand: Number(data.quantity_on_hand) || 0,
-      quantity_reserved: 0,
-      purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null,
-      received_date: new Date().toISOString().split('T')[0]
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+    mutationFn: async (data) => {
+      const qty = Number(data.quantity_on_hand) || 0;
+      const partId = data.part_id;
+
+      // CANONICAL: Update Part.physical_stock directly
+      const parts = await base44.entities.Part.filter({ id: partId });
+      const part = parts[0];
+      if (!part) throw new Error('Part not found');
+
+      const currentStock = part.physical_stock ?? 0;
+      await base44.entities.Part.update(partId, {
+        physical_stock: currentStock + qty
+      });
+
+      // Also create InventoryItem for location tracking (backward compatibility)
+      const inventoryItem = await base44.entities.InventoryItem.create({
+        ...data,
+        quantity_on_hand: qty,
+        quantity_reserved: 0,
+        purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null,
+        received_date: new Date().toISOString().split('T')[0]
+      });
+
+      return { inventoryItem, partId };
+    },
+    onSuccess: ({ partId }) => {
+      // CANONICAL: Use unified invalidation helper
+      invalidateSupplyQueries(queryClient, {
+        part_ids: [partId],
+        invalidateAll: true, // Ensure all views see new stock
+      });
+      
       toast.success('Inventory added successfully');
       onClose();
     },
