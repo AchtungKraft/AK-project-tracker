@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     
     if (commitment_ids && commitment_ids.length > 0) {
       // Direct mode - just fetch these commitments
-      const commitments = await base44.entities.PartCommitment.filter({
+      const commitments = await base44.asServiceRole.entities.PartCommitment.filter({
         id: { $in: commitment_ids }
       });
       orphans = commitments.map(c => ({
@@ -70,8 +70,8 @@ Deno.serve(async (req) => {
         identifiers: { notes: c.notes }
       }));
     } else {
-      // Get orphan report
-      const reportResponse = await base44.functions.invoke('getOrphanCommitmentReport', {});
+      // Get orphan report - use service role to call internal function
+      const reportResponse = await base44.asServiceRole.functions.invoke('getOrphanCommitmentReport', {});
       if (reportResponse.data?.error) {
         throw new Error(reportResponse.data.error);
       }
