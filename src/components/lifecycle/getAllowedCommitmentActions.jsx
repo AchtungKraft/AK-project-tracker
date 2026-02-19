@@ -123,7 +123,7 @@ export function getAllowedCommitmentActions(commitment) {
 
   // CANCEL - only before receiving/installing starts
   // After install, must use reduce qty or reverse
-  const hasReceived = (qty_received || 0) > 0;
+  const hasReceived = received_qty > 0;
   if (qty_installed === 0 && !hasReceived) {
     actions.canCancel = true;
   } else if (qty_installed === 0 && hasReceived) {
