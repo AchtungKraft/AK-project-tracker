@@ -12,8 +12,14 @@
 
 /**
  * Get allowed actions for a commitment based on its current state
- * @param {Object} commitment - PartCommitment entity
+ * @param {Object} commitment - PartCommitment entity or resolver state
  * @returns {Object} Allowed actions object
+ * 
+ * CANONICAL FIELDS (preferred):
+ * - required_total, reserved_from_stock, covered_from_po, qty_installed, to_order (gap)
+ * 
+ * LEGACY FIELDS (fallback for compatibility):
+ * - qty_committed, qty_ordered, qty_received, qty_allocated
  */
 export function getAllowedCommitmentActions(commitment) {
   if (!commitment) {
@@ -23,6 +29,12 @@ export function getAllowedCommitmentActions(commitment) {
   const {
     commitment_status,
     billing_status,
+    // Canonical fields (preferred)
+    required_total,
+    reserved_from_stock,
+    covered_from_po,
+    to_order, // gap from resolver
+    // Legacy fields (fallback)
     qty_committed = 0,
     qty_ordered = 0,
     qty_received = 0,
@@ -31,11 +43,17 @@ export function getAllowedCommitmentActions(commitment) {
     qty_cancelled = 0,
   } = commitment;
 
+  // Use canonical fields when available, fall back to legacy
+  const effectiveRequired = required_total ?? qty_committed;
+  const effectiveReserved = reserved_from_stock ?? qty_allocated;
+  const effectiveOnOrder = covered_from_po ?? qty_ordered;
+  const effectiveGap = to_order ?? Math.max(0, effectiveRequired - effectiveReserved - effectiveOnOrder - qty_cancelled);
+
   // Calculate derived quantities
-  const remaining = Math.max(0, qty_committed - qty_installed - qty_cancelled);
-  const unorderedQty = Math.max(0, qty_committed - qty_ordered - qty_cancelled);
-  const unreceived = Math.max(0, qty_ordered - qty_received);
-  const uninstalled = Math.max(0, qty_allocated - qty_installed);
+  const remaining = Math.max(0, effectiveRequired - qty_installed - qty_cancelled);
+  const unorderedQty = effectiveGap; // Canonical gap = required - reserved - covered
+  const unreceived = effectiveOnOrder; // On order = covered_from_po (received not yet installed)
+  const uninstalled = Math.max(0, effectiveReserved - qty_installed);
   const hasBeenBilled = billing_status && !['not_billable', 'billable'].includes(billing_status);
   const isPaidOrInvoiced = ['invoiced', 'paid'].includes(billing_status);
 
