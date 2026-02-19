@@ -6,21 +6,37 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * This is the ONLY entry point for supply mutations.
  * No component may write to commitment/inventory entities directly.
  * 
- * Supported actions:
+ * ============================================================================
+ * SUPPORTED ACTIONS & EVENT CONTRACTS
+ * ============================================================================
+ * 
+ * COMMITMENT-SCOPED ACTIONS (emit LifecycleEvent with commitment_id):
  * - ADJUST_REQUIRED: Change required_total, auto-reserve from available stock
  * - AUTO_RESERVE: Reserve from available physical stock
  * - CREATE_PO: Create purchase order for gap quantity
- * - RECEIVE: Receive inventory from PO, update physical_stock
+ * - RECEIVE: Receive inventory from PO, update physical_stock (commitment-linked)
  * - INSTALL: Consume reserved/received inventory
  * - REVERSE_INSTALL: Undo installation
  * - ALLOCATE_POOL: Allocate billing pool to commitment
  * - CANCEL_COMMITMENT: Cancel a commitment
  * 
+ * PART-SCOPED ACTIONS (emit InventoryAuditLog, NOT LifecycleEvent):
+ * - RECEIVE_STOCK / ADD_STOCK: Add inventory without PO (found stock, gifts, transfers)
+ *   Input: { part_id, qty, location_id?, note?, purchase_cost? }
+ *   Outputs: Updates Part.physical_stock, creates InventoryAuditLog
+ * 
+ * ============================================================================
+ * EVENT CONTRACT ENFORCEMENT
+ * ============================================================================
+ * - LifecycleEvent REQUIRES commitment_id (schema enforced)
+ * - Part-scoped actions MUST NOT create LifecycleEvent
+ * - Instead, part-scoped actions create InventoryAuditLog entries
+ * 
  * All actions:
  * 1. Validate invariants before mutation
  * 2. Execute atomic updates
- * 3. Emit lifecycle events
- * 4. Return updated state
+ * 3. Emit appropriate events (LifecycleEvent or InventoryAuditLog)
+ * 4. Return updated state + invalidation_context for UI cache busting
  */
 
 Deno.serve(async (req) => {
@@ -55,6 +71,7 @@ Deno.serve(async (req) => {
       timestamp,
       dry_run,
       lifecycle_events: [],
+      inventory_audit_logs: [], // For part-scoped actions
       mutations: []
     };
 
