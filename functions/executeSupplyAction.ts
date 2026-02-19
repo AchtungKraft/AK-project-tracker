@@ -73,6 +73,9 @@ Deno.serve(async (req) => {
       case 'RECEIVE':
         result = await receive(context, commitment_ids, payload);
         break;
+      case 'ADD_STOCK':
+        result = await addStock(context, payload);
+        break;
       case 'INSTALL':
         result = await install(context, commitment_ids, payload);
         break;
