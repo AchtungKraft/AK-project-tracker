@@ -652,9 +652,9 @@ export default function ProjectSupplyManager() {
     toast.info('Review commitment coverage in the Plan tab');
   };
 
-  // Render commitment row
+  // Render commitment row - CANONICAL fields only
   const renderCommitmentRow = (commitment, showActions = true) => {
-    const { part, vendor, allowed, lifecycleState } = commitment;
+    const { part, vendor, allowed } = commitment;
     const nextStep = getNextStepLabel(commitment);
 
     return (
@@ -687,49 +687,49 @@ export default function ProjectSupplyManager() {
             </div>
           </div>
         </TableCell>
-        {/* Needed (editable stepper) */}
+        {/* Needed (editable stepper) - CANONICAL: required_total */}
         <TableCell className="text-center">
           <InlineQtyStepper 
-            commitment={commitment} 
-            onMutationSuccess={() => refetchCommitments()}
+            commitment={{ ...commitment._raw, id: commitment.id, required_total: commitment.required_total }} 
+            onMutationSuccess={() => invalidateSupply()}
             disabled={!actionsEnabled}
           />
         </TableCell>
-        {/* Reserved (read-only) */}
+        {/* Reserved (read-only) - CANONICAL: reserved_from_stock */}
         <TableCell className="text-center">
-          <span className={(commitment.qty_reserved || 0) > 0 ? 'text-cyan-400' : 'text-gray-500'}>
-            {commitment.qty_reserved || 0}
+          <span className={commitment.reserved_from_stock > 0 ? 'text-cyan-400' : 'text-gray-500'}>
+            {commitment.reserved_from_stock}
           </span>
         </TableCell>
-        {/* To Order (read-only) */}
+        {/* To Order (read-only) - CANONICAL: to_order */}
         <TableCell className="text-center">
-          {(commitment.qty_to_order || 0) > 0 ? (
+          {commitment.to_order > 0 ? (
             <Badge variant="outline" className="border-purple-600 text-purple-400">
-              {commitment.qty_to_order}
+              {commitment.to_order}
             </Badge>
           ) : (
             <span className="text-gray-500">0</span>
           )}
         </TableCell>
-        {/* Ordered */}
+        {/* On Order - CANONICAL: on_order_qty (from line items) */}
         <TableCell className="text-center">
-          <span className={(commitment.qty_ordered || 0) > 0 ? 'text-purple-400' : 'text-gray-500'}>
-            {commitment.qty_ordered || 0}
+          <span className={commitment.on_order_qty > 0 ? 'text-purple-400' : 'text-gray-500'}>
+            {commitment.on_order_qty}
           </span>
         </TableCell>
-        {/* Received */}
+        {/* Received - CANONICAL: received_qty */}
         <TableCell className="text-center">
-          <span className={(commitment.qty_received || 0) > 0 ? 'text-blue-400' : 'text-gray-500'}>
-            {commitment.qty_received || 0}
+          <span className={commitment.received_qty > 0 ? 'text-blue-400' : 'text-gray-500'}>
+            {commitment.received_qty}
           </span>
         </TableCell>
-        {/* Installed */}
+        {/* Installed - CANONICAL: qty_installed */}
         <TableCell className="text-center">
-          <span className={(commitment.qty_installed || 0) > 0 ? 'text-green-400' : 'text-gray-500'}>
-            {commitment.qty_installed || 0}
+          <span className={commitment.qty_installed > 0 ? 'text-green-400' : 'text-gray-500'}>
+            {commitment.qty_installed}
           </span>
         </TableCell>
-        {/* Coverage */}
+        {/* Coverage - CANONICAL: coverage_status, coverage_percent */}
         <TableCell>
           <div className="flex items-center gap-1">
             <CoverageBadgeInline 
@@ -737,30 +737,32 @@ export default function ProjectSupplyManager() {
               onClick={() => setQtyManagerDrawer(commitment)}
             />
             <CoverageControlsPopover
-              commitment={commitment}
+              commitment={{ ...commitment._raw, id: commitment.id }}
               coverage={commitment.coverage}
-              undoAvailable={commitment.undo_available}
-              onActionComplete={() => refetchCommitments()}
+              undoAvailable={commitment._raw?.undo_available}
+              onActionComplete={() => invalidateSupply()}
               disabled={!actionsEnabled}
             />
           </div>
         </TableCell>
-        {/* Next Step */}
+        {/* Next Step - CANONICAL: next_action */}
         <TableCell>
           <Badge 
             variant="outline" 
-            className={`text-xs border-${nextStep.color}-600 text-${nextStep.color}-400`}
+            className="text-xs"
             style={{ 
               borderColor: nextStep.color === 'green' ? '#16a34a' : 
                            nextStep.color === 'yellow' ? '#ca8a04' :
                            nextStep.color === 'red' ? '#dc2626' :
                            nextStep.color === 'blue' ? '#2563eb' :
-                           nextStep.color === 'cyan' ? '#0891b2' : '#6b7280',
+                           nextStep.color === 'cyan' ? '#0891b2' :
+                           nextStep.color === 'purple' ? '#9333ea' : '#6b7280',
               color: nextStep.color === 'green' ? '#4ade80' : 
                      nextStep.color === 'yellow' ? '#facc15' :
                      nextStep.color === 'red' ? '#f87171' :
                      nextStep.color === 'blue' ? '#60a5fa' :
-                     nextStep.color === 'cyan' ? '#22d3ee' : '#9ca3af'
+                     nextStep.color === 'cyan' ? '#22d3ee' :
+                     nextStep.color === 'purple' ? '#c084fc' : '#9ca3af'
             }}
           >
             {nextStep.label}
