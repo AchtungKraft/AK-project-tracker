@@ -1206,21 +1206,8 @@ async function addStock(ctx, payload) {
     performed_at: ctx.timestamp
   });
 
-  ctx.lifecycle_events.push({
-    commitment_id: null, // No commitment for stock-level operations
-    event_type: 'STOCK_RESERVED', // Using closest enum; ideally STOCK_ADDED
-    trigger_source: 'UNIFIED_ENGINE',
-    triggered_by: ctx.user.email,
-    actor_email: ctx.user.email,
-    part_id,
-    metadata: JSON.stringify({
-      action: 'ADD_STOCK',
-      qty_added: quantity,
-      location_id,
-      note
-    }),
-    event_date: ctx.timestamp
-  });
+  // Note: Lifecycle events require commitment_id, so we skip for stock-level operations
+  // The InventoryAuditLog above serves as the audit trail for stock additions
 
   // Return updated state
   return {
