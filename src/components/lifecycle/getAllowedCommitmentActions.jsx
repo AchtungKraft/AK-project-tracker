@@ -119,9 +119,10 @@ export function getAllowedCommitmentActions(commitment) {
 
   // CANCEL - only before receiving/installing starts
   // After install, must use reduce qty or reverse
-  if (qty_installed === 0 && qty_received === 0) {
+  const hasReceived = (qty_received || 0) > 0;
+  if (qty_installed === 0 && !hasReceived) {
     actions.canCancel = true;
-  } else if (qty_installed === 0 && qty_received > 0) {
+  } else if (qty_installed === 0 && hasReceived) {
     // Can cancel but will need to return received inventory
     actions.canCancel = true;
     actions.cancelRequiresInventoryReturn = true;
@@ -141,7 +142,7 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // VENDOR INVOICE - only if has received items and not fully invoiced
-  if (qty_received > 0) {
+  if (hasReceived) {
     actions.canRecordVendorInvoice = true;
   }
 
@@ -151,31 +152,31 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canIncreaseQty = true;
   }
 
-  // Decrease qty - only if can reduce below ordered/installed
-  const maxDecrease = qty_committed - Math.max(qty_ordered, qty_installed);
+  // Decrease qty - only if can reduce below ordered/installed (use canonical)
+  const maxDecrease = effectiveRequired - Math.max(effectiveOnOrder, qty_installed);
   if (maxDecrease > 0) {
     actions.canDecreaseQty = true;
   }
 
-  // Cancel unordered qty - only if has unordered qty
+  // Cancel unordered qty - only if has gap (to_order > 0)
   if (unorderedQty > 0) {
     actions.canCancelUnorderedQty = true;
   }
 
   // Reallocate to project - only if has uninstalled qty
-  const maxMove = qty_committed - qty_installed;
+  const maxMove = effectiveRequired - qty_installed;
   if (maxMove > 0 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
     actions.canReallocateToProject = true;
   }
 
   // Split commitment - need at least 2 qty
-  if (qty_committed > 1 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+  if (effectiveRequired > 1 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
     actions.canSplitCommitment = true;
   }
 
   // DERIVED STATE FLAGS
-  // These indicate issues that need attention
-  actions.isOverordered = qty_ordered > qty_committed;
+  // These indicate issues that need attention (use canonical)
+  actions.isOverordered = effectiveOnOrder > effectiveRequired;
   actions.poAdjustmentRequired = actions.isOverordered;
 
   return actions;
