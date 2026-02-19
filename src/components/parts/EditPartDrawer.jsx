@@ -302,21 +302,37 @@ export default function EditPartDrawer({ partId, onClose }) {
     [years, editedPart?.car_model_id]
   );
 
-  // Fetch inventory for this part
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems', 'forPart', partId],
+  // CANONICAL: Fetch supply usage from read model - NO local inventory math
+  const { data: supplyUsage } = useQuery({
+    queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
-      const all = await base44.entities.InventoryItem.list();
-      return all.filter(i => i.part_id === partId);
+      const res = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
+      return res.data;
     },
     enabled: !!partId,
   });
 
+  // CANONICAL inventory stats from read model only
   const inventoryStats = useMemo(() => {
-    const onHand = inventoryItems.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
-    const reserved = inventoryItems.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
-    return { onHand, reserved, available: onHand - reserved };
-  }, [inventoryItems]);
+    if (!supplyUsage?.inventory) {
+      // Fallback to Part.physical_stock for initial load
+      const physical = part?.physical_stock ?? 0;
+      return { 
+        onHand: physical, 
+        reserved: 0, 
+        available: physical,
+        onOrder: 0,
+        toOrder: 0
+      };
+    }
+    return {
+      onHand: supplyUsage.inventory.physical_stock ?? 0,
+      reserved: supplyUsage.inventory.allocated_total ?? 0,
+      available: supplyUsage.inventory.available ?? 0,
+      onOrder: supplyUsage.demand?.total_on_order ?? 0,
+      toOrder: supplyUsage.demand?.total_to_order ?? 0
+    };
+  }, [supplyUsage, part?.physical_stock]);
 
   if (isLoading || !editedPart) {
     return (
