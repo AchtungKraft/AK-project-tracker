@@ -52,8 +52,8 @@ Deno.serve(async (req) => {
     let orphans = [];
     
     // Inline orphan detection to avoid nested function calls
-    const allCommitments = await base44.asServiceRole.entities.PartCommitment.filter({});
-    const allParts = await base44.asServiceRole.entities.Part.filter({});
+    const allCommitments = await base44.entities.PartCommitment.filter({});
+    const allParts = await base44.entities.Part.filter({});
     const partIdSet = new Set(allParts.map(p => p.id));
     
     // Find orphans (commitments referencing non-existent parts)
