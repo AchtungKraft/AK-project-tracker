@@ -14,13 +14,14 @@ import { format } from "date-fns";
 import { Package, MapPin, AlertTriangle, Plus, Archive } from "lucide-react";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
+import { useSupplyAction } from "@/components/supply/useSupplyState";
 
 /**
  * Enhanced Receiving Modal with mandatory location selection and provenance tracking
  * 
- * UNIFIED SUPPLY EXECUTION ENGINE:
- * When commitment is provided, routes through applyReceivingToOrderAndCommitment
- * to ensure lifecycle events and invariants are properly maintained.
+ * CANONICAL DISPATCHER:
+ * Routes through executeSupplyAction with action_type='RECEIVE'
+ * NO direct entity writes (InventoryItem, Part, etc.) allowed
  */
 export default function ReceiveInventoryModal({ 
   open, 
