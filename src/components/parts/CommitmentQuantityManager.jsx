@@ -322,7 +322,7 @@ const ConfirmMutationModal = ({ open, onClose, onConfirm, action, commitment, is
           <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Current Qty</span>
-              <span className="text-white">{commitment?.qty_committed || 0}</span>
+              <span className="text-white">{commitment?.required_total ?? commitment?.qty_committed ?? 0}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Change</span>
@@ -333,7 +333,7 @@ const ConfirmMutationModal = ({ open, onClose, onConfirm, action, commitment, is
             <div className="flex justify-between text-sm border-t border-gray-700 pt-2">
               <span className="text-gray-400">New Qty</span>
               <span className="text-white font-bold">
-                {(commitment?.qty_committed || 0) + (action.action_type === ACTION_TYPES.INCREASE_QTY ? action.qty_delta : -action.qty_delta)}
+                {(commitment?.required_total ?? commitment?.qty_committed ?? 0) + (action.action_type === ACTION_TYPES.INCREASE_QTY ? action.qty_delta : -action.qty_delta)}
               </span>
             </div>
           </div>
