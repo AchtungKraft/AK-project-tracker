@@ -606,19 +606,28 @@ export default function ProjectSupplyManager() {
     }
   };
 
-  // Compute next step label from commitment state
+  // Compute next step label from CANONICAL read model next_action
   const getNextStepLabel = (commitment) => {
-    const { qty_committed = 0, qty_reserved = 0, qty_to_order = 0, qty_ordered = 0, qty_received = 0, qty_installed = 0, billing_status } = commitment;
+    const action = commitment.next_action;
     
-    if (qty_to_order > 0) {
-      if (billing_status === 'paid') return { label: 'Create PO', color: 'green' };
-      if (billing_status === 'invoiced') return { label: 'Awaiting Payment', color: 'yellow' };
-      return { label: 'Invoice Client', color: 'red' };
+    switch (action) {
+      case 'CREATE_PO':
+        return { label: 'Create PO', color: 'purple' };
+      case 'RECEIVE':
+        return { label: 'Receive', color: 'blue' };
+      case 'INSTALL':
+        return { label: 'Ready to Install', color: 'cyan' };
+      case 'COMPLETE':
+        return { label: 'Complete', color: 'green' };
+      case 'BLOCKED_NO_VENDOR':
+        return { label: 'No Vendor', color: 'red' };
+      case 'BLOCKED_NO_FUNDING':
+        return { label: 'No Funding', color: 'yellow' };
+      case 'BLOCKED_PREPAY':
+        return { label: 'Awaiting Prepay', color: 'yellow' };
+      default:
+        return { label: action || '-', color: 'gray' };
     }
-    if (qty_ordered > qty_received) return { label: 'Receive', color: 'blue' };
-    if ((qty_reserved + qty_received) > qty_installed) return { label: 'Ready to Install', color: 'cyan' };
-    if (qty_installed >= qty_committed) return { label: 'Complete', color: 'green' };
-    return { label: '-', color: 'gray' };
   };
 
   // === BLOCKED ITEM RESOLUTION HANDLERS ===
