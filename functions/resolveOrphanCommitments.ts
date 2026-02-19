@@ -304,31 +304,14 @@ Deno.serve(async (req) => {
             };
 
             if (!isDryRun) {
-              try {
-                await base44.asServiceRole.entities.PartCommitment.update(orphan.commitment_id, {
-                  commitment_status: 'cancelled',
-                  cancelled_at: new Date().toISOString(),
-                  cancelled_by: user.email,
-                  cancelled_reason: 'Orphan resolution - no history, test/placeholder record'
-                });
-              } catch (updateErr) {
-                console.error(`Failed to update commitment ${orphan.commitment_id}:`, updateErr.message);
-                throw updateErr;
-              }
-
-              try {
-                await base44.asServiceRole.entities.LifecycleEvent.create({
-                  entity_type: 'PartCommitment',
-                  entity_id: orphan.commitment_id,
-                  event_type: 'ORPHAN_RESOLVED',
-                  actor_email: user.email,
-                  details: JSON.stringify({ action: 'CANCEL', reason: 'No history' }),
-                  created_date: new Date().toISOString()
-                });
-              } catch (logErr) {
-                console.error(`Failed to log lifecycle event:`, logErr.message);
-                // Continue - logging failure shouldn't block the operation
-              }
+              console.log(`Cancelling commitment: ${orphan.commitment_id}`);
+              await base44.asServiceRole.entities.PartCommitment.update(orphan.commitment_id, {
+                commitment_status: 'cancelled',
+                cancelled_at: new Date().toISOString(),
+                cancelled_by: user.email,
+                cancelled_reason: 'Orphan resolution - no history, test/placeholder record'
+              });
+              console.log(`Cancelled commitment: ${orphan.commitment_id}`);
             }
 
             results.cancelled.push(mapping);
