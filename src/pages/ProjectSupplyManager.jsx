@@ -1696,7 +1696,7 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
 }
 
 // === VENDOR PICKER MODAL ===
-function VendorPickerModal({ commitment, part, onClose, onSelect }) {
+function VendorPickerModal({ commitment, onClose, onSelect }) {
   const [selectedVendor, setSelectedVendor] = useState('');
   
   // Fetch vendors from read model
@@ -1704,6 +1704,9 @@ function VendorPickerModal({ commitment, part, onClose, onSelect }) {
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.filter({ active: true }),
   });
+
+  // Access part from canonical commitment structure
+  const part = commitment.part;
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1731,7 +1734,7 @@ function VendorPickerModal({ commitment, part, onClose, onSelect }) {
               <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
             )}
             <p className="text-sm text-gray-400 mt-1">
-              Qty to Order: <span className="text-purple-400">{commitment.to_order || commitment.qty_to_order}</span>
+              Qty to Order: <span className="text-purple-400">{commitment.to_order}</span>
             </p>
           </div>
 
