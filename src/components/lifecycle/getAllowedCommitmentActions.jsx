@@ -4,6 +4,9 @@
  * Returns allowed actions based on commitment state to ensure
  * consistent UI enforcement of business rules across all components.
  * 
+ * CANONICAL-ONLY: This function expects the read model shape.
+ * No legacy fallbacks. The caller MUST provide canonical fields.
+ * 
  * Usage:
  * import { getAllowedCommitmentActions } from '@/components/lifecycle/getAllowedCommitmentActions';
  * const allowed = getAllowedCommitmentActions(commitment);
@@ -12,47 +15,48 @@
 
 /**
  * Get allowed actions for a commitment based on its current state
- * @param {Object} commitment - PartCommitment entity or resolver state
+ * @param {Object} commitment - Canonical read model shape
  * @returns {Object} Allowed actions object
  * 
- * CANONICAL FIELDS (preferred):
- * - required_total, reserved_from_stock, covered_from_po, qty_installed, to_order (gap)
- * 
- * LEGACY FIELDS (fallback for compatibility):
- * - qty_committed, qty_ordered, qty_received, qty_allocated
+ * REQUIRED CANONICAL FIELDS:
+ * - required_total: Total quantity required
+ * - reserved_from_stock: Quantity reserved from physical inventory  
+ * - covered_from_po: Quantity covered by purchase orders
+ * - qty_installed: Quantity installed/consumed
+ * - to_order: Gap = required - reserved - covered (from read model)
+ * - commitment_status: Lifecycle state
+ * - billing_status: Billing lifecycle state
  */
 export function getAllowedCommitmentActions(commitment) {
   if (!commitment) {
     return getDefaultActions();
   }
 
+  // Extract CANONICAL fields only - no legacy fallbacks
   const {
-    commitment_status,
-    billing_status,
-    // Canonical fields (preferred)
-    required_total,
-    reserved_from_stock,
-    covered_from_po,
-    to_order, // gap from resolver
-    // Legacy fields (fallback)
-    qty_committed = 0,
-    qty_ordered = 0,
-    qty_received = 0,
-    qty_allocated = 0,
+    commitment_status = 'planned',
+    billing_status = 'billable',
+    required_total = 0,
+    reserved_from_stock = 0,
+    covered_from_po = 0,
     qty_installed = 0,
+    to_order = 0, // Pre-computed gap from read model
     qty_cancelled = 0,
+    // Optional fields for specific actions
+    unit_retail_snapshot,
+    received_qty = 0, // From read model if available
   } = commitment;
 
-  // Use canonical fields when available, fall back to legacy
-  const effectiveRequired = required_total ?? qty_committed;
-  const effectiveReserved = reserved_from_stock ?? qty_allocated;
-  const effectiveOnOrder = covered_from_po ?? qty_ordered;
-  const effectiveGap = to_order ?? Math.max(0, effectiveRequired - effectiveReserved - effectiveOnOrder - qty_cancelled);
+  // All values come directly from read model - NO recomputation
+  const effectiveRequired = required_total;
+  const effectiveReserved = reserved_from_stock;
+  const effectiveOnOrder = covered_from_po;
+  const effectiveGap = to_order;
 
-  // Calculate derived quantities
+  // Derived quantities from canonical fields
   const remaining = Math.max(0, effectiveRequired - qty_installed - qty_cancelled);
-  const unorderedQty = effectiveGap; // Canonical gap = required - reserved - covered
-  const unreceived = effectiveOnOrder; // On order = covered_from_po (received not yet installed)
+  const unorderedQty = effectiveGap;
+  const unreceived = effectiveOnOrder; // Items on order not yet received
   const uninstalled = Math.max(0, effectiveReserved - qty_installed);
   const hasBeenBilled = billing_status && !['not_billable', 'billable'].includes(billing_status);
   const isPaidOrInvoiced = ['invoiced', 'paid'].includes(billing_status);
