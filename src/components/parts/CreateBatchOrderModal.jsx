@@ -201,98 +201,55 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     return { totalItems, totalValue };
   }, [vendorGroups]);
 
-  const createOrdersMutation = useMutation({
-    mutationFn: async () => {
-      const results = [];
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      
-      // Get or create current year sequence
-      let yearSeq = poSequences.find(s => s.year === currentYear);
-      let currentSeqNum = yearSeq?.last_sequence || 0;
-      
-      for (const [vendorId, group] of Object.entries(vendorGroups)) {
-        if (group.items.length === 0) continue;
-        if (vendorId === 'unassigned') {
-          throw new Error('Please assign a vendor to all items before creating orders');
-        }
-        
-        // Generate PO number if not provided
-        let poNumber = group.orderData.po_number;
-        if (!poNumber) {
-          currentSeqNum++;
-          const mm = String(now.getMonth() + 1).padStart(2, '0');
-          const dd = String(now.getDate()).padStart(2, '0');
-          const prefix = group.orderData.po_prefix || 'AK';
-          poNumber = `${prefix}_${mm}${dd}${currentYear}_${String(currentSeqNum).padStart(3, '0')}`;
-        }
-        
-        // Create the order
-        const order = await base44.entities.Order.create({
-          vendor_id: vendorId,
-          po_number: poNumber,
-          po_prefix: group.orderData.po_prefix || 'AK',
-          order_number: group.orderData.order_number || null,
-          order_url: group.orderData.order_url || null,
-          order_date: group.orderData.order_date || new Date().toISOString().split('T')[0],
-          eta_date: group.orderData.eta_date || null,
-          status: 'Ordered',
-          notes: group.orderData.notes || null,
-          billing_status: 'Not Invoiced',
-        });
-        
-        // Create line items and update requirements
-        for (const item of group.items) {
-          // Create line item
-          await base44.entities.PartPurchaseLineItem.create({
-            order_id: order.id,
-            part_id: item.part.id,
-            requirement_id: item.requirement?.id || null,
-            qty_ordered: item.qty_to_order,
-            qty_received: 0,
-            unit_price: item.unit_price || null,
-            line_total: (item.qty_to_order || 0) * (item.unit_price || 0),
-            status: 'Ordered',
-            notes: null,
-          });
-          
-          // Update requirement qty_ordered if linked
-          if (item.requirement?.id) {
-            const currentOrdered = item.requirement.qty_ordered || 0;
-            await base44.entities.PartProjectRequirement.update(item.requirement.id, {
-              qty_ordered: currentOrdered + item.qty_to_order,
-              status: 'Ordered',
-            });
-          }
-        }
-        
-        results.push({ order, itemCount: group.items.length });
-      }
-      
-      // Update the year sequence
-      if (currentSeqNum > (yearSeq?.last_sequence || 0)) {
-        if (yearSeq) {
-          await base44.entities.POSequence.update(yearSeq.id, { last_sequence: currentSeqNum });
-        } else {
-          await base44.entities.POSequence.create({ year: currentYear, last_sequence: currentSeqNum });
-        }
-      }
-      
-      return results;
-    },
-    onSuccess: (results) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['poSequences'] });
-      toast.success(`Created ${results.length} order(s) successfully`);
+  // Use canonical supply action dispatcher
+  const supplyAction = useSupplyAction({
+    onSuccess: (data) => {
+      const orderCount = data.created_orders?.length || 0;
+      toast.success(`Created ${orderCount} order(s) successfully`);
       onSuccess?.();
       onClose();
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to create orders');
-    },
+    }
   });
+
+  const handleCreateOrders = () => {
+    // Check for unassigned vendors
+    if (Object.keys(vendorGroups).includes('unassigned')) {
+      toast.error('Please assign a vendor to all items before creating orders');
+      return;
+    }
+
+    // Collect all commitment IDs from selected items
+    const commitmentIds = [];
+    const vendorOverrides = {};
+    
+    for (const [vendorId, group] of Object.entries(vendorGroups)) {
+      for (const item of group.items) {
+        if (item.commitment_id) {
+          commitmentIds.push(item.commitment_id);
+          if (item.vendorOverride) {
+            vendorOverrides[item.commitment_id] = item.vendorOverride;
+          }
+        }
+      }
+    }
+
+    if (commitmentIds.length === 0) {
+      toast.error('No commitments selected for ordering');
+      return;
+    }
+
+    // Route through canonical dispatcher - NO direct entity writes
+    supplyAction.mutate({
+      action_type: 'CREATE_PO',
+      commitment_ids: commitmentIds,
+      payload: {
+        po_prefix: Object.values(vendorGroups)[0]?.orderData?.po_prefix || 'AK',
+        allow_multi_vendor: true,
+        vendor_overrides: vendorOverrides
+      },
+      dry_run: false
+    });
+  };
 
   const activeVendors = vendors.filter(v => v.active);
   const hasUnassignedVendor = Object.keys(vendorGroups).includes('unassigned');
