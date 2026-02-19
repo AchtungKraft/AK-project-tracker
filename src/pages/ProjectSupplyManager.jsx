@@ -1600,8 +1600,7 @@ export default function ProjectSupplyManager() {
 }
 
 // === BULK PO PREVIEW MODAL ===
-function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading, vendors }) {
-  const vendorMap = new Map(vendors.map(v => [v.id, v]));
+function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
   const vendorGroups = preview.preview?.vendor_groups || [];
   const blocked = preview.blocked || [];
   const summary = preview.summary || {};
