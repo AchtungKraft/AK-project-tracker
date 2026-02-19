@@ -246,6 +246,51 @@ Deno.serve(async (req) => {
     addPhase('Phase 2: Commitment Invariants', phase2Tests);
 
     // ========================================
+    // PHASE 2.5: Legacy Poison Pill Detection
+    // ========================================
+    const phase25Tests = [];
+    
+    // Find commitments with reserved > 0 but required = 0 (poison pills)
+    const poisonPillCommitments = sampleCommitments.filter(c => {
+      const required = c.required_total ?? c.qty_committed ?? 0;
+      const reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const installed = c.qty_installed ?? 0;
+      return reserved > 0 && required === 0 && installed === 0;
+    });
+
+    phase25Tests.push({
+      name: 'No poison pill commitments (reserved > 0, required = 0)',
+      expected: '0 poison pills',
+      actual: poisonPillCommitments.length === 0 
+        ? '0 found (clean)' 
+        : `${poisonPillCommitments.length} found - run fixLegacyReservedZeroRequired`,
+      passed: poisonPillCommitments.length === 0,
+      details: poisonPillCommitments.slice(0, 5).map(c => ({
+        id: c.id,
+        reserved: c.reserved_from_stock ?? c.qty_reserved,
+        required: c.required_total ?? c.qty_committed ?? 0
+      }))
+    });
+
+    if (poisonPillCommitments.length > 0) {
+      // Calculate blocked stock
+      const blockedStock = poisonPillCommitments.reduce((sum, c) => {
+        return sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0);
+      }, 0);
+
+      results.failures.push({
+        type: 'LEGACY_POISON_PILL',
+        count: poisonPillCommitments.length,
+        blocked_stock_units: blockedStock,
+        severity: 'critical',
+        fix: 'Run fixLegacyReservedZeroRequired with dry_run=false',
+        sample_ids: poisonPillCommitments.slice(0, 5).map(c => c.id)
+      });
+    }
+
+    addPhase('Phase 2.5: Legacy Poison Pill Detection', phase25Tests);
+
+    // ========================================
     // PHASE 3: Mutation Test (if enabled)
     // ========================================
     const phase3Tests = [];
