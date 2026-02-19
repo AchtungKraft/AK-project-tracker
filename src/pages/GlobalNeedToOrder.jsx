@@ -273,29 +273,35 @@ export default function GlobalNeedToOrder() {
             <p className="text-white font-bold">×{item.to_order ?? item.qtyToOrder ?? 0}</p>
           </div>
 
+          {/* Canonical quantity display */}
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Exposure</p>
-            <p className={(item.exposureGap ?? 0) > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
-              ${(item.exposureGap ?? 0).toFixed(0)}
+            <p className={(item.exposure_gap ?? 0) > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
+              ${(item.exposure_gap ?? 0).toFixed(0)}
             </p>
           </div>
 
           <div className="text-center w-20">
             <p className="text-xs text-gray-500">Pool</p>
-            <p className={(item.poolBalance ?? 0) >= (item.exposureGap ?? 0) ? 'text-green-400' : 'text-yellow-400'}>
-              ${(item.poolBalance ?? 0).toFixed(0)}
+            <p className={(item.pool_balance ?? 0) >= (item.exposure_gap ?? 0) ? 'text-green-400' : 'text-yellow-400'}>
+              ${(item.pool_balance ?? 0).toFixed(0)}
             </p>
           </div>
 
-          <CoverageBadge commitment={commitment} compact />
+          {/* Next action badge from resolver */}
+          <NextActionBadge 
+            nextAction={item.next_action} 
+            blockReason={item.block_reason_code}
+            compact
+          />
 
-          {item.requiresPrepay && (
-            <Badge variant="outline" className={item.prepayOk ? 'border-green-600 text-green-400' : 'border-red-600 text-red-400'}>
-              {item.prepayOk ? '✓ Prepaid' : '⚠ Prepay Req'}
+          {item.requires_prepay && (
+            <Badge variant="outline" className={item.prepay_ok ? 'border-green-600 text-green-400' : 'border-red-600 text-red-400'}>
+              {item.prepay_ok ? '✓ Prepaid' : '⚠ Prepay Req'}
             </Badge>
           )}
 
-          {item.canOrder ? (
+          {isOrderable ? (
             <Badge className="bg-green-600 text-white">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Ready
@@ -303,7 +309,7 @@ export default function GlobalNeedToOrder() {
           ) : (
             <Badge variant="outline" className="border-red-600 text-red-400">
               <XCircle className="w-3 h-3 mr-1" />
-              Blocked
+              {item.block_reason_code === 'INSUFFICIENT_FUNDS' ? 'Need Funds' : 'Blocked'}
             </Badge>
           )}
 
@@ -314,13 +320,13 @@ export default function GlobalNeedToOrder() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-              {item.canOrder && (
+              {isOrderable && (
                 <DropdownMenuItem onClick={() => setOrderModalPart({ id: item.part_id, part_name: item.part_name })} className="text-green-400">
                   <ShoppingCart className="w-4 h-4 mr-2" />
                   Create PO
                 </DropdownMenuItem>
               )}
-              {allowed.canCreateDeltaOrder && (
+              {item.covered_from_po > 0 && (
                 <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
                   <Plus className="w-4 h-4 mr-2" />
                   Additional Order
