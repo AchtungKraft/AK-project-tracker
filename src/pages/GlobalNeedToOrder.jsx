@@ -82,8 +82,8 @@ export default function GlobalNeedToOrder() {
   const actionPreview = useSupplyActionPreview();
 
   // Apply local filters (search already applied in API, but coverage/prepay are local)
+  // Note: needToOrderItems is guaranteed to be an array by the hook
   const filteredItems = useMemo(() => {
-    if (!needToOrderItems) return [];
     return needToOrderItems.filter(item => {
       // Coverage filter using canonical coverage_status
       if (coverageFilter !== 'all') {
