@@ -23,10 +23,12 @@ export function useSupplyAction(options = {}) {
   const { onSuccess, onError, invalidateKeys = [] } = options;
 
   // Default query keys to invalidate after any supply action
+  // CANONICAL: Includes partsInventoryView for Parts Tracker alignment
   const defaultInvalidateKeys = [
     'projectSupplyView',
     'opsSupplyView',
     'partSupplyUsage',
+    'partsInventoryView',  // CANONICAL: Parts Tracker read model
     'partCommitments',
     'projectCommitments',
     'commitmentState',
@@ -35,6 +37,7 @@ export function useSupplyAction(options = {}) {
     'globalOrderQueue',
     'globalSupplyQueues',
     'parts',
+    'part',  // Individual part queries
     ...invalidateKeys
   ];
 
