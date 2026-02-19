@@ -64,19 +64,22 @@ export default function GlobalNeedToOrder() {
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
 
-  // Single consolidated API call
-  const { data: queueData, isLoading, refetch } = useQuery({
-    queryKey: ['globalOrderQueue'],
-    queryFn: async () => {
-      const response = await base44.functions.invoke('getGlobalOrderQueue', {});
-      return response.data;
-    },
-    staleTime: 30000,
+  // Use canonical ops supply view - replaces getGlobalOrderQueue
+  const { 
+    items: needToOrderItems, 
+    summary, 
+    filterOptions, 
+    isLoading, 
+    refetch 
+  } = useOpsSupplyView('ORDERING', {
+    vendor_id: selectedVendorFilter !== 'all' ? selectedVendorFilter : undefined,
+    project_id: selectedProjectFilter !== 'all' ? selectedProjectFilter : undefined,
+    search: searchTerm || undefined,
   });
 
-  const needToOrderItems = queueData?.items || [];
-  const summary = queueData?.summary || {};
-  const filterOptions = queueData?.filters || { projects: [], vendors: [] };
+  // Supply action dispatcher
+  const supplyAction = useSupplyAction();
+  const actionPreview = useSupplyActionPreview();
 
   // Apply filters
   const filteredItems = useMemo(() => {
