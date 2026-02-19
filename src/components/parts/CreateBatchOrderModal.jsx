@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign } from "lucide-react";
+import { useSupplyAction } from "@/components/supply/useSupplyState";
 
 /**
  * CreateBatchOrderModal - Create orders from selected parts grouped by vendor
- * Handles both project-specific and general AK stock orders
+ * 
+ * CANONICAL DISPATCHER: Routes through executeSupplyAction with action_type='CREATE_PO'
+ * NO direct Order.create or PartPurchaseLineItem.create allowed
  */
 export default function CreateBatchOrderModal({ selectedItems, onClose, onSuccess }) {
   const queryClient = useQueryClient();
