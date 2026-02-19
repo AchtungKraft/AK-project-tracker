@@ -3,13 +3,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 /**
  * verifySupplyCanonicalFlow - End-to-end test for canonical supply mutations
  * 
- * PHASE 6: Verifies the full Add → Order → Receive → Install flow
+ * PHASE 5/6: Verifies the full Add → Order → Receive → Install flow
  * All mutations go through executeSupplyAction, not direct entity writes.
+ * 
+ * Returns structured report:
+ * - failures[]: Canonical invariant violations or broken references (BLOCKING)
+ * - warnings[]: Legacy commitments missing required_total (migration backlog)
+ * - summary: counts by type
  * 
  * Test Cases:
  * 1. Entity schemas have canonical fields
  * 2. Commitments use canonical fields (not just legacy)
  * 3. Invariants hold (installed <= reserved, to_order >= 0)
+ * 4. No broken references
  */
 
 Deno.serve(async (req) => {
@@ -41,7 +47,11 @@ Deno.serve(async (req) => {
     const results = {
       timestamp: new Date().toISOString(),
       phases: [],
-      summary: { passed: 0, failed: 0, warnings: 0 }
+      summary: { passed: 0, failed: 0, warnings: 0 },
+      // PHASE 5/6: Structured failure/warning lists
+      failures: [],
+      warnings_list: [],
+      migration_backlog: []
     };
 
     const addPhase = (name, tests) => {
@@ -199,6 +209,40 @@ Deno.serve(async (req) => {
       results.summary.warnings += 1;
     }
 
+    // PHASE 5/6: Populate structured lists
+    // Add actual failures (invariant violations)
+    const installedExceedsReserved = invariantIssues.filter(i => i.type === 'INSTALLED_EXCEEDS_RESERVED');
+    const negativeToOrder = invariantIssues.filter(i => i.type === 'NEGATIVE_TO_ORDER');
+    
+    results.failures = [
+      ...installedExceedsReserved.map(i => ({
+        type: 'INVARIANT_VIOLATION',
+        subtype: 'INSTALLED_EXCEEDS_RESERVED',
+        commitment_id: i.id,
+        values: i.values,
+        severity: 'error',
+        fix: 'Run reconciliation to fix qty_installed vs reserved_from_stock'
+      })),
+      ...negativeToOrder.map(i => ({
+        type: 'INVARIANT_VIOLATION',
+        subtype: 'NEGATIVE_TO_ORDER',
+        commitment_id: i.id,
+        values: i.values,
+        severity: 'error',
+        fix: 'Recompute coverage - required_total may be less than reserved+covered'
+      }))
+    ];
+
+    // Add migration backlog (legacy commitments)
+    results.migration_backlog = missingCanonical.map(i => ({
+      commitment_id: i.id,
+      type: 'MISSING_REQUIRED_TOTAL',
+      severity: 'warning',
+      fix: 'Run migrateLegacyCommitmentQuantities to backfill required_total'
+    }));
+
+    results.warnings_list = [...results.migration_backlog];
+
     addPhase('Phase 2: Commitment Invariants', phase2Tests);
 
     // ========================================
@@ -280,9 +324,24 @@ Deno.serve(async (req) => {
 
     addPhase('Phase 3: Mutation Test', phase3Tests);
 
+    // Final summary
+    results.summary.total_failures = results.failures.length;
+    results.summary.total_warnings = results.warnings_list.length;
+    results.summary.migration_backlog_count = results.migration_backlog.length;
+
     return Response.json({
-      success: results.summary.failed === 0,
-      results
+      success: results.summary.failed === 0 && results.failures.length === 0,
+      results,
+      // PHASE 5/6: Top-level structured output
+      failures: results.failures,
+      warnings: results.warnings_list,
+      migration_backlog: results.migration_backlog,
+      summary: {
+        ...results.summary,
+        verdict: results.failures.length === 0 
+          ? (results.migration_backlog.length > 0 ? 'PASS_WITH_BACKLOG' : 'PASS')
+          : 'FAIL'
+      }
     });
 
   } catch (error) {
