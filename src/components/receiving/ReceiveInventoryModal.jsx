@@ -155,7 +155,22 @@ export default function ReceiveInventoryModal({
   };
   
   const handleConfirmedReceive = () => {
-    createInventoryMutation.mutate(formData);
+    // Route through canonical dispatcher for commitment-based receiving
+    if (commitment && commitment.order_line_item_ids?.[0]) {
+      supplyAction.mutate({
+        action_type: 'RECEIVE',
+        commitment_ids: [commitment.id],
+        payload: {
+          line_item_id: commitment.order_line_item_ids[0],
+          qty_received: formData.quantity,
+          location_id: formData.location_id || null
+        },
+        dry_run: false
+      });
+    } else {
+      // Legacy path for non-commitment receiving
+      legacyReceiveMutation.mutate(formData);
+    }
   };
 
   const activeLocations = locations.filter(l => l.active);
