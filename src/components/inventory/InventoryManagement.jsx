@@ -364,7 +364,7 @@ export default function InventoryManagement({ onPartClick }) {
             </div>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -374,29 +374,6 @@ export default function InventoryManagement({ onPartClick }) {
                   className="pl-10 bg-gray-900/50 border-gray-700 text-white"
                 />
               </div>
-              <Select value={locationFilter} onValueChange={setLocationFilter}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
-                  <SelectValue placeholder="All Locations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Locations</SelectItem>
-                  {parentLocations.map(parent => {
-                    const children = locations.filter(l => l.parent_id === parent.id && l.active);
-                    return (
-                      <React.Fragment key={parent.id}>
-                        <SelectItem value={parent.id}>
-                          <span style={{ color: parent.color }}>{parent.location_area}</span>
-                        </SelectItem>
-                        {children.map(child => (
-                          <SelectItem key={child.id} value={child.id}>
-                            <span className="ml-4" style={{ color: child.color }}>→ {child.location_area}</span>
-                          </SelectItem>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                   <SelectValue placeholder="All Categories" />
