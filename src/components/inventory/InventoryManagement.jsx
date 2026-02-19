@@ -461,7 +461,7 @@ export default function InventoryManagement({ onPartClick }) {
                     <p className="text-lg font-bold text-red-400">{globalTotals.needed}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Total project demand (qty_needed − qty_installed)</TooltipContent>
+                <TooltipContent>Total project demand (sum of required_total from commitments)</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -471,7 +471,7 @@ export default function InventoryManagement({ onPartClick }) {
                     <p className="text-lg font-bold text-orange-400">{globalTotals.onOrder}</p>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>Open PO quantity (qty_ordered − qty_received)</TooltipContent>
+                <TooltipContent>On order quantity (sum of covered_from_po from commitments)</TooltipContent>
               </Tooltip>
 
               <Tooltip>
