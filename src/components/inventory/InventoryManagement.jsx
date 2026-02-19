@@ -30,7 +30,6 @@ import AddToBuildModal from "../parts/AddToBuildModal";
  */
 export default function InventoryManagement({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [locationFilter, setLocationFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addInventoryPartId, setAddInventoryPartId] = useState(null);
