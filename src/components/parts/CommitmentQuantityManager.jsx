@@ -78,9 +78,9 @@ const QuantityStateMatrix = ({ commitment }) => {
   const coveragePct = required_total > 0 ? Math.round((coverage_total / required_total) * 100) : 0;
 
   const remaining = {
-    toOrder: qty_to_order,
-    toReceive: Math.max(0, qty_ordered - qty_received),
-    toInstall: Math.max(0, (qty_reserved + qty_received) - qty_installed)
+    toOrder: gap,
+    toReceive: covered_from_po,
+    toInstall: Math.max(0, reserved_from_stock - qty_installed)
   };
 
   return (
