@@ -126,6 +126,76 @@ export function blockLegacyCreate(entityName, callerSurface = 'unknown') {
   }
 }
 
+// ============================================
+// FORWARD MODEL GUARDRAILS
+// ============================================
+
+// Entities that are LEGACY-ONLY (blocked for forward model projects)
+const LEGACY_ONLY_ENTITIES = [
+  'BillingPool',
+  'PoolAllocation',
+  'PoolCharge',
+  'VendorInvoice',
+  'VendorInvoiceLineItem',
+  'VendorPayment',
+];
+
+// Operations that are LEGACY-ONLY
+const LEGACY_ONLY_OPERATIONS = [
+  'createPool',
+  'allocatePool',
+  'createPoolCharge',
+  'createVendorInvoice',
+  'updateVendorPayment',
+  'directCommitmentBillingStatusWrite',
+];
+
+/**
+ * Check if an entity is legacy-only (not available for forward model)
+ */
+export function isLegacyOnlyEntity(entityName) {
+  return LEGACY_ONLY_ENTITIES.includes(entityName);
+}
+
+/**
+ * Assert that a project is NOT using the forward financial model
+ * Throws LEGACY_FLOW_BLOCKED error if project is forward model
+ * 
+ * @param {Object} project - Project object with financial_model_version
+ * @param {string} operation - Name of the operation being attempted
+ * @throws Error with code LEGACY_FLOW_BLOCKED if forward model
+ */
+export function assertNotForwardModel(project, operation) {
+  if (project?.financial_model_version === 'forward') {
+    const error = new Error(
+      `LEGACY_FLOW_BLOCKED: This flow is legacy-only and not available in forward financial model projects. ` +
+      `Operation: ${operation}. ` +
+      `Forward model uses InvoiceBatch for client billing.`
+    );
+    error.code = 'LEGACY_FLOW_BLOCKED';
+    throw error;
+  }
+}
+
+/**
+ * Assert that an entity can be created/updated for the given project
+ * Throws if entity is legacy-only and project is forward model
+ * 
+ * @param {string} entityName - Entity being mutated
+ * @param {Object} project - Project object with financial_model_version
+ * @throws Error with code LEGACY_FLOW_BLOCKED if blocked
+ */
+export function assertEntityAllowedForProject(entityName, project) {
+  if (isLegacyOnlyEntity(entityName) && project?.financial_model_version === 'forward') {
+    const error = new Error(
+      `LEGACY_FLOW_BLOCKED: ${entityName} is a legacy-only entity and cannot be used in forward financial model projects. ` +
+      `Forward model uses InvoiceBatch for client billing.`
+    );
+    error.code = 'LEGACY_FLOW_BLOCKED';
+    throw error;
+  }
+}
+
 /**
  * Check if a field is a sensitive financial/lifecycle field
  */
