@@ -313,6 +313,11 @@ export default function SupplyLanding() {
               )}
             </CardContent>
           </Card>
+
+          {/* Admin-only Danger Zone */}
+          {isAdmin && (
+            <SupplyHardResetPanel />
+          )}
         </div>
       </div>
     </MobileSafeAreaContainer>
