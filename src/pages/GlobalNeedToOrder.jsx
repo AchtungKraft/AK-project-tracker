@@ -220,11 +220,16 @@ export default function GlobalNeedToOrder() {
     });
   };
 
-  const toggleItemSelection = (itemId) => {
+  // CANONICAL: Selection uses commitment_id exclusively
+  const toggleItemSelection = (commitmentId) => {
+    if (!commitmentId) {
+      console.error('[CANONICAL VIOLATION] toggleItemSelection called with undefined commitmentId');
+      return;
+    }
     setSelectedItems(prev => {
       const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
+      if (next.has(commitmentId)) next.delete(commitmentId);
+      else next.add(commitmentId);
       return next;
     });
   };
