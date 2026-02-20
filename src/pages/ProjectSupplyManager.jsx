@@ -1134,6 +1134,8 @@ export default function ProjectSupplyManager() {
               </Card>
             </TabsContent>
 
+            {/* LEGACY ONLY: Fund tab content for pool management */}
+            {project?.financial_model_version !== 'forward' && (
             <TabsContent value="fund" className="mt-4 space-y-4">
               {/* Pools Summary */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1214,6 +1216,7 @@ export default function ProjectSupplyManager() {
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
 
             <TabsContent value="buy" className="mt-4">
               <Card className="bg-black/40 border-gray-800">
