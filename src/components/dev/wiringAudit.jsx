@@ -142,3 +142,33 @@ export function useWiringAudit(pageName) {
     wrap: (actionName, fn, meta = {}) => withWiringAudit(actionName, fn, { ...meta, pageName }),
   };
 }
+
+/**
+ * QA CHECKLIST - Critical action wiring verification
+ * 
+ * Each action must:
+ * 1. trackClick() on user interaction
+ * 2. trackSuccess() or trackError() on completion
+ * 3. Call correct invalidation after mutation
+ * 
+ * VERIFIED ACTIONS:
+ * [x] AddPartButton::add_part_button -> AddPartToProjectModal
+ * [x] AddPartButton::add_part_modal_submit -> executeSupplyAction
+ * [x] ProjectSupplyManager::bulk_po_preview -> createPurchaseOrdersFromCommitments(dry_run)
+ * [x] ProjectSupplyManager::bulk_po_execute -> createPurchaseOrdersFromCommitments
+ * [x] ProjectSupplyManager::single_po_create -> createPurchaseOrdersFromCommitments
+ * [x] SupplyQueues::refresh_queues -> getGlobalSupplyQueues
+ * [x] SupplyQueues::navigate_to_project -> ProjectSupplyManager
+ * [x] GlobalNeedToOrder::batch_create_po -> CreateBatchOrderModal
+ * [x] GlobalNeedToOrder::navigate_to_receiving -> POReceiving
+ * 
+ * TODO: Wire remaining actions
+ * [ ] ForwardInvoiceDashboard::create_invoice -> createInvoiceBatch
+ * [ ] ForwardInvoiceDashboard::record_payment -> updatePaymentStatus
+ * [ ] ForwardInvoiceDashboard::export_csv -> exportInvoiceBatchToQuickBooks
+ * [ ] InstallPartModal::install -> executeSupplyAction
+ * [ ] ReceiveInventoryModal::receive -> executeSupplyAction
+ */
+export const WIRING_CHECKLIST = {
+  // This is documentation only - used for verification
+};

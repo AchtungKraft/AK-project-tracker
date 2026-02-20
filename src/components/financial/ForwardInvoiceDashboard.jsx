@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { differenceInDays, parseISO, format } from "date-fns";
+import { useWiringAudit } from "@/components/dev/wiringAudit";
 
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
@@ -59,6 +60,7 @@ import { differenceInDays, parseISO, format } from "date-fns";
  */
 export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) {
   const queryClient = useQueryClient();
+  const audit = useWiringAudit('ForwardInvoiceDashboard');
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentBatch, setPaymentBatch] = useState(null);
@@ -130,6 +132,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
   // Export to QB mutation
   const exportMutation = useMutation({
     mutationFn: async ({ batchId, action }) => {
+      audit.trackClick('qb_export', { batchId, action });
       const response = await base44.functions.invoke('exportInvoiceBatchToQuickBooks', {
         batch_id: batchId,
         action: action, // 'csv' or 'mark_exported'
@@ -137,6 +140,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
       return response.data;
     },
     onSuccess: (data, variables) => {
+      audit.trackSuccess('qb_export', { action: variables.action });
       if (variables.action === 'csv' && data.csv_url) {
         // Trigger download
         const link = document.createElement('a');
@@ -152,6 +156,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
       }
     },
     onError: (error) => {
+      audit.trackError('qb_export', error);
       toast.error(error.message || 'Export failed');
     },
   });
@@ -173,6 +178,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
   // Record payment mutation
   const paymentMutation = useMutation({
     mutationFn: async (paymentData) => {
+      audit.trackClick('record_payment', { batchId: paymentData.batchId });
       const { batchId, ...data } = paymentData;
       await base44.entities.InvoiceBatch.update(batchId, {
         status: 'paid',
@@ -183,13 +189,15 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
         is_locked: true, // Lock on payment
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      audit.trackSuccess('record_payment', { batchId: variables.batchId });
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
       queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
     },
     onError: (error) => {
+      audit.trackError('record_payment', error);
       toast.error(error.message || 'Failed to record payment');
     },
   });
@@ -207,8 +215,14 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
   };
 
   const handleRecordPayment = (batch) => {
+    audit.trackClick('open_payment_modal', { batchId: batch.id });
     setPaymentBatch(batch);
     setShowPaymentModal(true);
+  };
+
+  const handleCreateInvoice = () => {
+    audit.trackClick('create_invoice');
+    onCreateInvoice?.();
   };
 
   return (
@@ -278,7 +292,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
             <RefreshCw className="w-4 h-4" />
           </Button>
           <Button
-            onClick={onCreateInvoice}
+            onClick={handleCreateInvoice}
             className="bg-green-600 hover:bg-green-700 gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -298,7 +312,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
             <div className="p-8 text-center text-gray-500">
               <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No invoices yet</p>
-              <Button onClick={onCreateInvoice} className="mt-3 bg-green-600 hover:bg-green-700">
+              <Button onClick={handleCreateInvoice} className="mt-3 bg-green-600 hover:bg-green-700">
                 Create First Invoice
               </Button>
             </div>
