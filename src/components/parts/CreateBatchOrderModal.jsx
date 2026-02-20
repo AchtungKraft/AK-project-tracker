@@ -473,40 +473,46 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                   />
                 </div>
 
-                {/* Phase 6: Freight + Tariff at PO header */}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-orange-900/10 border border-orange-700/30 rounded-lg">
-                  <div>
-                    <Label className="text-orange-400 text-xs flex items-center gap-1">
-                      <Truck className="w-3 h-3" /> Freight Cost
-                    </Label>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-gray-500 text-xs">$</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={group.orderData.freight_cost || ''}
-                        onChange={(e) => updateVendorGroup(vendorId, 'freight_cost', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="bg-gray-800 border-gray-700 h-8 text-sm"
-                      />
-                    </div>
+                {/* Phase 6.2A: Freight + Tariff per vendor PO (not shared across split POs) */}
+                <div className="p-3 bg-orange-900/10 border border-orange-700/30 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-orange-300">
+                    <Truck className="w-3 h-3" />
+                    <span>Freight & Tariff for this vendor's PO only</span>
                   </div>
-                  <div>
-                    <Label className="text-red-400 text-xs flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" /> Tariff/Duty
-                    </Label>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-gray-500 text-xs">$</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={group.orderData.tariff_cost || ''}
-                        onChange={(e) => updateVendorGroup(vendorId, 'tariff_cost', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="bg-gray-800 border-gray-700 h-8 text-sm"
-                      />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-orange-400 text-xs flex items-center gap-1">
+                        Freight Cost
+                      </Label>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-gray-500 text-xs">$</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={group.orderData.freight_cost || ''}
+                          onChange={(e) => updateVendorGroup(vendorId, 'freight_cost', parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          className="bg-gray-800 border-gray-700 h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-red-400 text-xs flex items-center gap-1">
+                        Tariff/Duty
+                      </Label>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-gray-500 text-xs">$</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={group.orderData.tariff_cost || ''}
+                          onChange={(e) => updateVendorGroup(vendorId, 'tariff_cost', parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          className="bg-gray-800 border-gray-700 h-8 text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
