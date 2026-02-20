@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
     const total_landed_cost = ordered_parts_cost + total_freight + total_tariff;
     
     // Calculate percentages
-    const received_pct = ordered_cost > 0 ? (received_cost / ordered_cost) * 100 : 0;
+    const received_pct = ordered_parts_cost > 0 ? (received_parts_cost / ordered_parts_cost) * 100 : 0;
     
     return Response.json({
       data: {
@@ -169,14 +169,21 @@ Deno.serve(async (req) => {
         project_name: project.name,
         financial_model_version: 'forward',
         
-        // PRIMARY COST METRICS (from PO lines ONLY)
-        ordered_cost,
-        received_cost,
-        unreceived_cost,
+        // PRIMARY COST METRICS (from PO lines ONLY - renamed for clarity)
+        ordered_parts_cost,
+        received_parts_cost,
+        unreceived_parts_cost,
         
-        // ADDITIONAL COSTS
+        // LEGACY ALIASES (for backward compatibility with dashboard)
+        ordered_cost: ordered_parts_cost,
+        received_cost: received_parts_cost,
+        unreceived_cost: unreceived_parts_cost,
+        
+        // FREIGHT + TARIFF (from Order header)
         total_freight,
         total_tariff,
+        
+        // LANDED TOTAL
         total_landed_cost,
         
         // QUANTITIES
@@ -186,14 +193,17 @@ Deno.serve(async (req) => {
         // STATUS
         received_pct,
         locked_cost_count,
+        cost_review_count, // Lines that need cost review
         line_item_count: activeLineItems.length,
         commitment_count: activeCommitments.length,
+        order_count: projectOrders.length,
         
         // DETAILED BREAKDOWN
         line_items: lineItemDetails,
         
         // AUDIT INFO
         cost_authority: 'PO_LINE_ONLY',
+        freight_tariff_source: 'ORDER_HEADER',
         excluded_sources: ['commitment.unit_cost_snapshot', 'commitment.planned_cost_total', 'Part.cost']
       }
     });
