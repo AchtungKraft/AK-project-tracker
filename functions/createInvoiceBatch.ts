@@ -177,16 +177,15 @@ Deno.serve(async (req) => {
       console.warn('Could not fetch existing lines:', e);
     }
     
-    // Filter out duplicates from validItems
+    // CANONICAL: Filter out duplicates from validItems using commitment_id
     const finalItems = [];
     for (const item of validItems) {
       const isDuplicate = existingLines.some(el => 
-        (el.source_id === item.source_id && el.source_type === item.source_type) ||
-        (el.commitment_id && el.commitment_id === item.commitment_id)
+        el.commitment_id && el.commitment_id === item.commitment_id
       );
       if (isDuplicate) {
         blockedItems.push({
-          commitment_id: item.commitment_id || item.id,
+          commitment_id: item.commitment_id,
           part_name: item.part_name || 'Unknown',
           project_name: item.project_name || 'Unknown',
           reasons: ['Already queued in another batch'],
