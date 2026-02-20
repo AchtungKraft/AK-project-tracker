@@ -1,4 +1,4 @@
-// Financial Status Components - Phase 3.2 + 3.3 + Phase 4 + Phase 6 + Phase 9.6
+// Financial Status Components - Phase 3.2 + 3.3 + Phase 4 + Phase 6 + Phase 6.2
 export { default as FinancialStatusBadge, ClientBillingBadge, VendorStatusBadge, MarginStateBadge, FinancialDrilldown } from './FinancialStatusBadge';
 export { default as FinancialStatusFilters, BillingStatusFilter, VendorPaymentFilter, MarginStateFilter, FinancialRoleFilter, applyFinancialFilters } from './FinancialStatusFilters';
 export { useFinancialStatus, useFinancialStatusBatch, buildFinancialContexts, mergeFinancialStatus } from './useFinancialStatus';
@@ -6,6 +6,11 @@ export { default as FinancialDetailDrawer } from './FinancialDetailDrawer';
 export { default as ProjectFinancialWarningBanner } from './ProjectFinancialWarningBanner';
 export { default as ProjectFinancialSummaryWidget } from './ProjectFinancialSummaryWidget';
 export { default as InvoiceWorkbench } from './InvoiceWorkbench';
+
+// Phase 6.2 - Invoice Dashboard + QB Export Status
+export { default as InvoiceDashboard } from './InvoiceDashboard';
+export { default as QBExportStatusCards, QBNeedsExportCard, QBExportFailedCard } from './QBExportStatusCards';
+export { default as POCostReviewCard } from './POCostReviewCard';
 
 // Phase 9.6 - Invoice Confidence UX + Payment Safety
 export { default as InvoiceBatchPreviewModal } from './InvoiceBatchPreviewModal';
