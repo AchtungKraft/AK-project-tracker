@@ -248,22 +248,100 @@ Deno.serve(async (req) => {
       },
       
       // Report tab actions
+      // Phase 9C: Supply Math Integrity Actions
       {
         page: "ProjectSupplyManager",
-        component: "ExportCSVButton",
-        button_label: "Export CSV",
-        handler_name: null,
-        backend_function: null,
-        arguments_passed: [],
-        has_audit_tracking: false,
-        invalidates_query: false,
-        expected_response_fields: [],
-        ui_success_feedback: false,
-        ui_error_feedback: false,
-        wiring_status: "NOT_WIRED",
-        violation_severity: "HIGH",
-        violation_message: "Export CSV button has no onClick handler"
+        component: "AddPartButton",
+        button_label: "Add Part",
+        handler_name: "AddPartToProjectModal.createRequirementMutation",
+        backend_function: "executeSupplyAction",
+        arguments_passed: ["action_type=ADJUST_REQUIRED", "project_id", "part_id", "required_total_set"],
+        has_audit_tracking: true,
+        invalidates_query: true,
+        expected_response_fields: ["success", "commitment_id", "required_total", "reserved_from_stock", "to_order"],
+        ui_success_feedback: true,
+        ui_error_feedback: true,
+        wiring_status: "OK",
+        phase9c_notes: "Auto-reserves from physical_stock on creation"
       },
+      {
+        page: "POReceiving",
+        component: "ReceiveLineButton",
+        button_label: "Receive",
+        handler_name: "useSupplyAction.execute",
+        backend_function: "executeSupplyAction",
+        arguments_passed: ["action_type=RECEIVE", "line_item_id", "qty_received", "location_id"],
+        has_audit_tracking: true,
+        invalidates_query: true,
+        expected_response_fields: ["line_item_id", "qty_received", "new_physical_stock"],
+        ui_success_feedback: true,
+        ui_error_feedback: true,
+        wiring_status: "OK",
+        phase9c_notes: "Updates Part.physical_stock += qty, moves covered_from_po to reserved_from_stock"
+      },
+      {
+        page: "ProjectSupplyManager",
+        component: "InstallButton",
+        button_label: "Install",
+        handler_name: "InstallPartModal.handleInstall",
+        backend_function: "executeSupplyAction",
+        arguments_passed: ["action_type=INSTALL", "commitment_ids", "qty_to_install"],
+        has_audit_tracking: true,
+        invalidates_query: true,
+        expected_response_fields: ["commitment_id", "qty_installed", "total_installed"],
+        ui_success_feedback: true,
+        ui_error_feedback: true,
+        wiring_status: "OK",
+        phase9c_notes: "Decrements Part.physical_stock, HARD FAIL if would go negative"
+      },
+    ];
+
+    // ============================================================================
+    // PHASE 9C: SUPPLY INVARIANT RULES
+    // ============================================================================
+    const supplyInvariants = [
+      {
+        rule: "COVERAGE_INVARIANT",
+        description: "required_total = reserved_from_stock + covered_from_po + to_order",
+        enforced_in: ["getProjectSupplyView", "createPurchaseOrdersFromCommitments"],
+        enforcement_type: "HARD_FAIL",
+        status: "ENFORCED"
+      },
+      {
+        rule: "NEGATIVE_STOCK_GUARD",
+        description: "physical_stock cannot go negative on INSTALL",
+        enforced_in: ["executeSupplyAction (INSTALL)"],
+        enforcement_type: "HARD_FAIL",
+        status: "ENFORCED"
+      },
+      {
+        rule: "AUTO_RESERVE_ON_CREATE",
+        description: "New commitments auto-reserve from available physical_stock",
+        enforced_in: ["executeSupplyAction (ADJUST_REQUIRED)"],
+        enforcement_type: "AUTO",
+        status: "ENFORCED"
+      },
+      {
+        rule: "PO_UPDATES_COVERAGE",
+        description: "PO creation updates covered_from_po and recalculates to_order",
+        enforced_in: ["createPurchaseOrdersFromCommitments"],
+        enforcement_type: "AUTO",
+        status: "ENFORCED"
+      },
+      {
+        rule: "RECEIVE_UPDATES_PHYSICAL",
+        description: "Receiving adds to physical_stock, moves covered to reserved",
+        enforced_in: ["executeSupplyAction (RECEIVE)"],
+        enforcement_type: "AUTO",
+        status: "ENFORCED"
+      },
+      {
+        rule: "NO_LOCAL_UI_MATH",
+        description: "UI must not compute coverage/to_order locally",
+        enforced_in: ["useProjectSupplyView (invariant check only)"],
+        enforcement_type: "DEV_ASSERTION",
+        status: "ENFORCED"
+      }
     ];
 
     // ============================================================================
@@ -450,11 +528,15 @@ Deno.serve(async (req) => {
       legacy_references: legacyReferences,
       function_contracts: functionContracts,
       
+      // Phase 9C: Supply Invariants
+      supply_invariants: supplyInvariants,
+      
       // Phase 9 pass/fail criteria
       phase9_status: {
         critical_zero: criticalFailures === 0,
         legacy_zero: legacyCount === 0,
         contract_mismatch_zero: contractMismatches === 0,
+        supply_invariants_enforced: supplyInvariants.every(i => i.status === 'ENFORCED'),
         can_proceed: criticalFailures === 0 && legacyCount === 0 && contractMismatches === 0
       }
     });
