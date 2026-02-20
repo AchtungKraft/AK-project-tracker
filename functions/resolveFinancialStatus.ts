@@ -265,6 +265,7 @@ function resolveForContext(context, dataMaps) {
   
   // ============================================
   // FORWARD MODEL: Derive billing ONLY from InvoiceBatch (ClientInvoice)
+  // No legacy fields read: billing_status, exposure_gap, covered_retail_total, pools
   // ============================================
   if (project?.financial_model_version === 'forward') {
     result.billing_source = 'CLIENT_INVOICE';
@@ -274,42 +275,55 @@ function resolveForContext(context, dataMaps) {
     let batch = null;
     
     if (commitment_id && invoiceBatchLinesMap) {
+      // Find the most recent non-voided invoice line for this commitment
       for (const line of Object.values(invoiceBatchLinesMap)) {
-        if (line.commitment_id === commitment_id && line.qb_status !== 'voided') {
+        if (line.commitment_id === commitment_id) {
+          const candidateBatch = invoiceBatchesMap?.[line.batch_id];
+          // Skip voided batches
+          if (candidateBatch?.status === 'voided') continue;
+          // Skip draft batches (not yet sent)
+          if (candidateBatch?.status === 'draft') continue;
+          
           batchLine = line;
-          batch = invoiceBatchesMap?.[line.batch_id];
-          break;
+          batch = candidateBatch;
+          // Prefer paid over invoiced
+          if (batch?.status === 'paid') break;
         }
       }
     }
     
+    // FORWARD STATUS LOGIC:
+    // - No InvoiceBatchLine → "uninvoiced" (NOT_INVOICED)
+    // - InvoiceBatchLine exists + batch.status = 'paid' → "paid" (PAID)
+    // - InvoiceBatchLine exists + batch.status in ['sent','exported','invoiced'] → "invoiced" (INVOICED)
     if (batch) {
-      // Map InvoiceBatch.status to billing status
       switch (batch.status) {
         case 'paid':
           result.client_billing_status = CLIENT_BILLING_STATUS.PAID;
           result.client_payment_status = CLIENT_PAYMENT_STATUS.PAID;
           break;
+        case 'sent':
         case 'invoiced':
         case 'exported':
           result.client_billing_status = CLIENT_BILLING_STATUS.INVOICED;
           result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
           break;
         case 'voided':
-          result.client_billing_status = CLIENT_BILLING_STATUS.NOT_INVOICED;
-          result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
-          break;
+        case 'draft':
         default:
           result.client_billing_status = CLIENT_BILLING_STATUS.NOT_INVOICED;
+          result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
       }
     } else {
-      // No invoice batch line = not invoiced
+      // No invoice batch line = uninvoiced
       result.client_billing_status = isBillable ? CLIENT_BILLING_STATUS.NOT_INVOICED : CLIENT_BILLING_STATUS.NOT_BILLABLE;
+      result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
     }
     
-    // FORWARD MODEL: Skip vendor invoice status (PO = paid at order)
+    // FORWARD MODEL: Vendor payment assumed at PO (no VendorInvoice tracking)
     result.vendor_invoice_status = VENDOR_INVOICE_STATUS.NOT_RECEIVED;
-    result.vendor_payment_status = VENDOR_PAYMENT_STATUS.PAID; // Assume paid at order
+    result.vendor_payment_status = VENDOR_PAYMENT_STATUS.PAID;
+    result.vendor_source = VENDOR_SOURCE.NONE;
     
     // Calculate margin state for forward model
     result.margin_state = calculateMarginState(
@@ -319,10 +333,17 @@ function resolveForContext(context, dataMaps) {
       financialRole
     );
     
-    // Get commitment status if available
+    // Get commitment status if available (lifecycle, not billing)
     if (commitment_id) {
       const commitment = commitmentsMap[commitment_id];
       result.commitment_status = commitment?.commitment_status;
+    }
+    
+    // Add invoice reference for UI
+    if (batchLine && batch) {
+      result.invoice_batch_id = batch.id;
+      result.invoice_number = batch.invoice_number || batch.qb_invoice_number || batch.batch_name;
+      result.invoice_status = batch.status;
     }
     
     return result;
