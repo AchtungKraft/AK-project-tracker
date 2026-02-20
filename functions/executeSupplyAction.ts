@@ -643,12 +643,22 @@ async function createPO(ctx, commitment_ids, payload) {
 
     const po_number = `${po_prefix}_${dateStr}_${String(seq).padStart(3, '0')}`;
 
-    // Create order
+    // Phase 6.2A: Get per-vendor order data (freight/tariff are vendor-specific)
+    const vendorData = vendor_order_data[vendorId] || {};
+
+    // Create order - each PO has its own freight_cost and tariff_cost
     const order = await ctx.base44.asServiceRole.entities.Order.create({
       po_number,
-      po_prefix,
+      po_prefix: vendorData.po_prefix || po_prefix,
       vendor_id: vendorId,
-      order_date: new Date().toISOString().slice(0, 10),
+      order_number: vendorData.order_number || null,
+      order_url: vendorData.order_url || null,
+      order_date: vendorData.order_date || new Date().toISOString().slice(0, 10),
+      eta_date: vendorData.eta_date || null,
+      notes: vendorData.notes || null,
+      // Phase 6.2A: Freight/tariff are vendor-specific, NOT duplicated across split POs
+      freight_cost: vendorData.freight_cost || 0,
+      tariff_cost: vendorData.tariff_cost || 0,
       status: 'Draft'
     });
 
