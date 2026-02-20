@@ -52,12 +52,13 @@ import { toast } from "sonner";
 /**
  * LIFECYCLE_TABS - Workflow stages for invoicing
  * 
- * NOTE: The "Safety" column and ORDERING_SAFETY_CONFIG are LEGACY MODEL ONLY.
- * Forward model determines invoice readiness based on:
- * - Has commitment retail price (unit_retail_snapshot > 0)
- * - Not already linked to InvoiceBatchLine
+ * FORWARD MODEL:
+ * - Invoice status derived from: Uninvoiced / Invoiced / Paid (InvoiceBatch linkage)
+ * - Does NOT use: billing_status, exposure_gap, covered_retail_total, ordering_safety
  * 
- * Forward model does NOT use: billing_status, exposure_gap, covered_retail_total
+ * LEGACY MODEL:
+ * - Uses ORDERING_SAFETY_CONFIG (RED/YELLOW/GREEN) for pool-based billing safety
+ * - Uses client_billing_status badge
  */
 const LIFECYCLE_TABS = {
   ASSIGNED_NEEDS_BILLING: {
@@ -196,7 +197,17 @@ function LifecycleKPIHeader({ kpis }) {
 // LIFECYCLE TABLE
 // ============================================
 
-function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick }) {
+/**
+ * Derive forward-model invoice status from item data
+ * Returns: "Uninvoiced" | "Invoiced" | "Paid"
+ */
+function getForwardInvoiceStatus(item) {
+  if (item.batch_status === 'paid' || item.invoice_status === 'paid') return 'Paid';
+  if (item.batch_id || item.invoice_batch_id || item.batch_status === 'invoiced' || item.batch_status === 'sent') return 'Invoiced';
+  return 'Uninvoiced';
+}
+
+function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick, isForwardModel = false }) {
   const allowSelection = tabConfig.allowSelection;
 
   if (!items || items.length === 0) {
@@ -224,7 +235,10 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
           )}
           <TableHead className="text-gray-400 text-xs">Project</TableHead>
           <TableHead className="text-gray-400 text-xs">Part</TableHead>
-          <TableHead className="text-gray-400 text-xs text-center">Safety</TableHead>
+          {/* LEGACY ONLY: Safety column for pool-based billing */}
+          {!isForwardModel && (
+            <TableHead className="text-gray-400 text-xs text-center">Safety</TableHead>
+          )}
           <TableHead className="text-gray-400 text-xs text-right">Qty</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Unit</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Total</TableHead>
@@ -278,11 +292,14 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                 )}
               </div>
             </TableCell>
-            <TableCell className="text-center">
-              <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>
-                {item.ordering_safety}
-              </Badge>
-            </TableCell>
+            {/* LEGACY ONLY: Safety badge for pool-based billing */}
+            {!isForwardModel && (
+              <TableCell className="text-center">
+                <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>
+                  {item.ordering_safety}
+                </Badge>
+              </TableCell>
+            )}
             <TableCell className="text-right text-gray-300">{item.assigned_qty}</TableCell>
             <TableCell className="text-right text-gray-300">
               {item.unit_retail > 0 ? `$${item.unit_retail.toFixed(2)}` : (
@@ -294,7 +311,19 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
-                <Badge className="bg-gray-700 text-xs">{item.client_billing_status}</Badge>
+                {/* FORWARD: Show invoice status; LEGACY: Show billing status */}
+                {isForwardModel ? (
+                  <Badge className={cn(
+                    "text-xs",
+                    getForwardInvoiceStatus(item) === 'Paid' ? 'bg-green-600' :
+                    getForwardInvoiceStatus(item) === 'Invoiced' ? 'bg-purple-600' :
+                    'bg-gray-700'
+                  )}>
+                    {getForwardInvoiceStatus(item)}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-gray-700 text-xs">{item.client_billing_status}</Badge>
+                )}
                 {item.vendor_order_status === 'ORDERED' && (
                   <Badge className="bg-blue-600/30 text-blue-400 text-xs">Ordered</Badge>
                 )}

@@ -17,6 +17,11 @@ import { AlertTriangle, CheckCircle, Clock, DollarSign } from "lucide-react";
  * - OnOrder
  * - BuildsDashboard
  * 
+ * FINANCIAL MODEL ROUTING:
+ * - FORWARD MODEL: Uses InvoiceBatch status (Uninvoiced/Invoiced/Paid)
+ *   Does NOT use: exposure_gap, covered_retail_total, billing_status (pool-based)
+ * - LEGACY MODEL: Uses pool-based coverage (exposure_gap, covered_retail_total, billing_status)
+ * 
  * All values come from precomputed commitment fields only.
  * No page may reimplement financial logic.
  */
@@ -32,7 +37,7 @@ const formatCurrency = (value) => {
   }).format(value);
 };
 
-// Billing status badge configuration
+// LEGACY MODEL ONLY: Billing status badge configuration (pool-based)
 const BILLING_STATUS_CONFIG = {
   not_billable: { label: "Not Billable", color: "bg-gray-600 text-gray-200" },
   billable: { label: "Billable", color: "bg-blue-600 text-white" },
@@ -40,7 +45,28 @@ const BILLING_STATUS_CONFIG = {
   paid: { label: "Paid", color: "bg-green-600 text-white" },
 };
 
-// Coverage badge with tooltip
+// FORWARD MODEL: Invoice status badge configuration (InvoiceBatch-based)
+const FORWARD_INVOICE_STATUS_CONFIG = {
+  uninvoiced: { label: "Uninvoiced", color: "bg-gray-600 text-gray-200" },
+  invoiced: { label: "Invoiced", color: "bg-purple-600 text-white" },
+  paid: { label: "Paid", color: "bg-green-600 text-white" },
+};
+
+/**
+ * Derive forward-model invoice status from commitment
+ * Returns: "uninvoiced" | "invoiced" | "paid"
+ */
+function getForwardInvoiceStatus(commitment) {
+  if (commitment?.invoice_batch_status === 'paid') return 'paid';
+  if (commitment?.invoice_batch_id || commitment?.invoice_batch_status === 'invoiced' || commitment?.invoice_batch_status === 'sent') return 'invoiced';
+  return 'uninvoiced';
+}
+
+/**
+ * CoverageBadge - LEGACY MODEL ONLY
+ * Uses pool-based coverage (exposure_gap, covered_retail_total)
+ * Forward model should use ForwardInvoiceStatusBadge instead
+ */
 export function CoverageBadge({ commitment, compact = false }) {
   const plannedRetail = commitment?.planned_retail_total || 0;
   const coveredRetail = commitment?.covered_retail_total || 0;
@@ -76,7 +102,7 @@ export function CoverageBadge({ commitment, compact = false }) {
         <TooltipContent className="bg-gray-900 border-gray-700 p-3 max-w-xs">
           <div className="space-y-2 text-sm">
             <div className="font-semibold text-white border-b border-gray-700 pb-1">
-              Coverage Details
+              Coverage Details (Legacy)
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               <span className="text-gray-400">% Covered:</span>
