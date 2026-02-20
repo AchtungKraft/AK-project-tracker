@@ -226,7 +226,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
   }, [lineItems, isForwardModel]);
 
   const isLoading = loadingProject || loadingCommitments || 
-    (isForwardModel ? loadingRevenue : (loadingPools || loadingCharges)) || 
+    (isForwardModel ? (loadingRevenue || loadingCost) : (loadingPools || loadingCharges)) || 
     loadingLineItems;
 
   if (isLoading) {
