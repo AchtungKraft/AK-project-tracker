@@ -771,24 +771,41 @@ export default function ProjectFinancialDashboard({ projectId }) {
         </TabsContent>
 
         {/* Section 5: Procurement Cost Table */}
+        {/* FORWARD: Uses forwardCostSummary; LEGACY: Uses procurementSummary */}
         <TabsContent value="procurement">
           <Card className="bg-gray-900/50 border-gray-700">
             <CardHeader className="border-b border-gray-700/50 p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 text-sm">
-                  <span className="text-gray-400">
-                    Ordered: <span className="text-blue-400 font-medium">${procurementSummary.totalOrderedCost.toFixed(2)}</span>
-                  </span>
-                  <span className="text-gray-400">
-                    Freight: <span className="text-orange-400 font-medium">${procurementSummary.totalFreightCost.toFixed(2)}</span>
-                  </span>
-                  <span className="text-gray-400">
-                    Tariff: <span className="text-red-400 font-medium">${procurementSummary.totalTariffCost.toFixed(2)}</span>
-                  </span>
+                  {isForwardModel && forwardCostSummary ? (
+                    <>
+                      <span className="text-gray-400">
+                        Ordered: <span className="text-blue-400 font-medium">${forwardCostSummary.orderedPartsCost.toFixed(2)}</span>
+                      </span>
+                      <span className="text-gray-400">
+                        Freight: <span className="text-orange-400 font-medium">${forwardCostSummary.totalFreight.toFixed(2)}</span>
+                      </span>
+                      <span className="text-gray-400">
+                        Tariff: <span className="text-red-400 font-medium">${forwardCostSummary.totalTariff.toFixed(2)}</span>
+                      </span>
+                    </>
+                  ) : procurementSummary && (
+                    <>
+                      <span className="text-gray-400">
+                        Ordered: <span className="text-blue-400 font-medium">${procurementSummary.totalOrderedCost.toFixed(2)}</span>
+                      </span>
+                      <span className="text-gray-400">
+                        Freight: <span className="text-orange-400 font-medium">${procurementSummary.totalFreightCost.toFixed(2)}</span>
+                      </span>
+                      <span className="text-gray-400">
+                        Tariff: <span className="text-red-400 font-medium">${procurementSummary.totalTariffCost.toFixed(2)}</span>
+                      </span>
+                    </>
+                  )}
                 </div>
                 <Badge variant="outline" className="border-purple-600 text-purple-400">
                   <Lock className="w-3 h-3 mr-1" />
-                  {procurementSummary.lockedCostCount} Locked
+                  {isForwardModel ? (forwardCostSummary?.lockedCostCount || 0) : (procurementSummary?.lockedCostCount || 0)} Locked
                 </Badge>
               </div>
             </CardHeader>
