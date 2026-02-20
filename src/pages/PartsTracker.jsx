@@ -62,18 +62,7 @@ export default function PartsTracker() {
                   <span className="hidden sm:inline">INVENTORY</span>
                   <span className="sm:hidden">INV</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="supply" 
-                  className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(createPageUrl('SupplyLanding'));
-                  }}
-                >
-                  <Layers className="w-4 h-4" />
-                  <span className="hidden sm:inline">SUPPLY CHAIN</span>
-                  <span className="sm:hidden">SUPPLY</span>
-                </TabsTrigger>
+  {/* CANONICAL: Removed fake tab that hijacked click for navigation. Supply is accessed via main nav */}
                 <TabsTrigger value="locations" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
                   <MapPin className="w-4 h-4" />
                   <span>LOCATIONS</span>
