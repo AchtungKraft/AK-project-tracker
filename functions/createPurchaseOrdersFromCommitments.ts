@@ -224,16 +224,25 @@ Deno.serve(async (req) => {
       // Generate canonical PO number
       const poNumber = await generateCanonicalPONumber(base44, poSequences);
 
+      // Phase 6.2A: Get per-vendor order data if provided
+      const vendorData = vendor_order_data[vendorId] || {};
+
       // Create Order
       // FORWARD MODEL: Do not write billing_status (legacy field)
+      // Phase 6.2A: Each PO has its own freight_cost and tariff_cost (vendor-specific)
       const orderData = {
         vendor_id: vendorId,
-        po_prefix: 'AK',
+        po_prefix: vendorData.po_prefix || 'AK',
         po_number: poNumber,
-        order_date: today,
-        eta_date: eta_date || null,
+        order_number: vendorData.order_number || null,
+        order_url: vendorData.order_url || null,
+        order_date: vendorData.order_date || today,
+        eta_date: vendorData.eta_date || eta_date || null,
         status: 'Ordered',
-        notes: notes || `Created via Unified Supply Engine for ${items.length} commitment(s)`,
+        notes: vendorData.notes || notes || `Created via Unified Supply Engine for ${items.length} commitment(s)`,
+        // Phase 6.2A: Freight/tariff are vendor-specific, NOT duplicated across split POs
+        freight_cost: vendorData.freight_cost || 0,
+        tariff_cost: vendorData.tariff_cost || 0,
       };
       
       // Only set billing_status for legacy projects
