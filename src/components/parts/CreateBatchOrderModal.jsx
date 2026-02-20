@@ -541,7 +541,7 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                           className="w-16 h-7 bg-gray-800 border-gray-700 text-sm text-center"
                         />
                         
-                        <div className="flex items-center gap-1 w-24">
+                        <div className="flex items-center gap-1 w-28">
                           <span className="text-gray-500 text-xs">$</span>
                           <Input
                             type="number"
@@ -549,8 +549,16 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                             min="0"
                             value={item.unit_price}
                             onChange={(e) => updateLineItem(vendorId, idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                            className="h-7 bg-gray-800 border-gray-700 text-sm"
+                            className={cn(
+                              "h-7 bg-gray-800 text-sm",
+                              item.cost_overridden ? "border-yellow-600 bg-yellow-900/20" : "border-gray-700",
+                              (!item.unit_price || item.unit_price <= 0) && "border-red-600 bg-red-900/20"
+                            )}
+                            title={item.cost_overridden ? `Original: $${item.original_cost?.toFixed(2)}` : undefined}
                           />
+                          {item.cost_overridden && (
+                            <span className="text-yellow-500 text-xs" title="Cost manually overridden">*</span>
+                          )}
                         </div>
                         
                         <span className="text-xs text-gray-400 w-16 text-right">
