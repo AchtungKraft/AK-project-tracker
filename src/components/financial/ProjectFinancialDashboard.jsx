@@ -14,12 +14,190 @@ import {
   Package,
   Truck,
   FileText,
-  Lock
+  Lock,
+  Clock,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { differenceInDays, parseISO } from "date-fns";
 // LEGACY ONLY: Pool components not rendered for forward model
 import PoolPanel from "./PoolPanel";
 import CoverageBadge from "./CoverageBadge";
+
+/**
+ * InvoiceAgingSummary - Shows aging buckets for outstanding invoices
+ * Forward model only - derives from InvoiceBatch.due_date
+ */
+function InvoiceAgingSummary({ invoiceBatches }) {
+  const agingData = useMemo(() => {
+    const today = new Date();
+    const unpaidBatches = invoiceBatches.filter(b => 
+      b.status !== 'paid' && b.status !== 'voided' && b.status !== 'draft'
+    );
+    
+    let totalOutstanding = 0;
+    let totalOverdue = 0;
+    let oldestOverdueDays = 0;
+    let oldestInvoice = null;
+    
+    // Aging buckets
+    const buckets = {
+      current: 0,      // Not yet due
+      '1-30': 0,       // 1-30 days overdue
+      '31-60': 0,      // 31-60 days overdue
+      '61-90': 0,      // 61-90 days overdue
+      '90+': 0,        // Over 90 days overdue
+    };
+    
+    for (const batch of unpaidBatches) {
+      const amount = batch.total_amount || 0;
+      totalOutstanding += amount;
+      
+      // Calculate days overdue
+      const dueDate = batch.due_date ? parseISO(batch.due_date) : null;
+      if (dueDate) {
+        const daysOverdue = differenceInDays(today, dueDate);
+        
+        if (daysOverdue <= 0) {
+          buckets.current += amount;
+        } else {
+          totalOverdue += amount;
+          
+          // Track oldest overdue
+          if (daysOverdue > oldestOverdueDays) {
+            oldestOverdueDays = daysOverdue;
+            oldestInvoice = batch;
+          }
+          
+          // Bucket assignment
+          if (daysOverdue <= 30) {
+            buckets['1-30'] += amount;
+          } else if (daysOverdue <= 60) {
+            buckets['31-60'] += amount;
+          } else if (daysOverdue <= 90) {
+            buckets['61-90'] += amount;
+          } else {
+            buckets['90+'] += amount;
+          }
+        }
+      } else {
+        // No due date = treat as current
+        buckets.current += amount;
+      }
+    }
+    
+    return {
+      totalOutstanding,
+      totalOverdue,
+      oldestOverdueDays,
+      oldestInvoice,
+      buckets,
+      unpaidCount: unpaidBatches.length,
+    };
+  }, [invoiceBatches]);
+  
+  if (agingData.unpaidCount === 0) return null;
+  
+  return (
+    <Card className="bg-gray-900/50 border-gray-700">
+      <CardHeader className="border-b border-gray-700/50 pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-white flex items-center gap-2">
+            <Clock className="w-5 h-5 text-orange-400" />
+            Invoice Aging
+            <Badge className="bg-blue-600 text-white text-xs ml-2">Forward Model</Badge>
+          </CardTitle>
+          <Badge variant="outline" className="border-gray-600 text-gray-400">
+            {agingData.unpaidCount} outstanding
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4">
+        {/* Summary Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <MetricCard
+            label="Total Outstanding"
+            value={agingData.totalOutstanding}
+            color="text-yellow-400"
+          />
+          <MetricCard
+            label="Total Overdue"
+            value={agingData.totalOverdue}
+            color={agingData.totalOverdue > 0 ? "text-red-400" : "text-green-400"}
+            icon={agingData.totalOverdue > 0 ? AlertTriangle : CheckCircle2}
+          />
+          <div className="p-3 bg-gray-800/50 rounded-lg">
+            <p className="text-xs text-gray-500 mb-1">Oldest Outstanding</p>
+            {agingData.oldestOverdueDays > 0 ? (
+              <p className="text-lg font-semibold text-red-400">
+                {agingData.oldestOverdueDays} days
+              </p>
+            ) : (
+              <p className="text-lg font-semibold text-green-400">Current</p>
+            )}
+          </div>
+          <div className="p-3 bg-gray-800/50 rounded-lg">
+            <p className="text-xs text-gray-500 mb-1">Collection Rate</p>
+            <p className="text-lg font-semibold text-blue-400">
+              {agingData.totalOutstanding > 0 
+                ? ((1 - (agingData.totalOverdue / agingData.totalOutstanding)) * 100).toFixed(0)
+                : 100}%
+            </p>
+          </div>
+        </div>
+
+        {/* Aging Buckets */}
+        <div className="grid grid-cols-5 gap-2">
+          <AgingBucket label="Current" amount={agingData.buckets.current} color="green" />
+          <AgingBucket label="1-30 Days" amount={agingData.buckets['1-30']} color="yellow" />
+          <AgingBucket label="31-60 Days" amount={agingData.buckets['31-60']} color="orange" />
+          <AgingBucket label="61-90 Days" amount={agingData.buckets['61-90']} color="red" />
+          <AgingBucket label="90+ Days" amount={agingData.buckets['90+']} color="red" severe />
+        </div>
+        
+        {/* Alert for severely overdue */}
+        {agingData.oldestOverdueDays > 60 && agingData.oldestInvoice && (
+          <div className="mt-3 p-3 bg-red-900/20 border border-red-600/30 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5" />
+              <div>
+                <p className="text-red-400 text-sm font-medium">Severely Overdue Invoice</p>
+                <p className="text-red-400/70 text-xs">
+                  Invoice {agingData.oldestInvoice.invoice_number || agingData.oldestInvoice.batch_name} 
+                  is {agingData.oldestOverdueDays} days overdue
+                  (${(agingData.oldestInvoice.total_amount || 0).toLocaleString()})
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AgingBucket({ label, amount, color, severe = false }) {
+  const colorClasses = {
+    green: 'bg-green-900/30 border-green-700/50 text-green-400',
+    yellow: 'bg-yellow-900/30 border-yellow-700/50 text-yellow-400',
+    orange: 'bg-orange-900/30 border-orange-700/50 text-orange-400',
+    red: severe 
+      ? 'bg-red-900/50 border-red-600/50 text-red-400' 
+      : 'bg-red-900/30 border-red-700/50 text-red-400',
+  };
+  
+  return (
+    <div className={cn(
+      "p-2 rounded-lg border text-center",
+      colorClasses[color]
+    )}>
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      <p className={cn("text-sm font-medium", amount > 0 ? '' : 'text-gray-500')}>
+        ${amount.toLocaleString()}
+      </p>
+    </div>
+  );
+}
 
 /**
  * FINANCIAL MODEL ROUTING:
@@ -350,6 +528,13 @@ export default function ProjectFinancialDashboard({ projectId }) {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ============================================ */}
+      {/* FORWARD MODEL: Invoice Aging Summary */}
+      {/* ============================================ */}
+      {isForwardModel && forwardRevenueSummary?.invoiceBatches?.length > 0 && (
+        <InvoiceAgingSummary invoiceBatches={forwardRevenueSummary.invoiceBatches} />
       )}
 
       {/* ============================================ */}
