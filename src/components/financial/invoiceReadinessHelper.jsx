@@ -52,8 +52,16 @@ export function isInvoiceReady(commitment, options = {}) {
   }
 
   // 4. Check if already linked to InvoiceBatchLine (via invoice_batch_line_id)
+  // Phase 6.2B: Only block if linked to a non-draft batch
   if (commitment.invoice_batch_line_id) {
-    reasons.push('Already linked to an invoice batch');
+    // If we have batch status info passed in, use it
+    if (commitment._linked_batch_status && commitment._linked_batch_status !== 'draft') {
+      reasons.push('Already invoiced in a finalized batch');
+    } else if (!commitment._linked_batch_status) {
+      // Conservative: if no status info, assume it's blocking
+      reasons.push('Already linked to an invoice batch');
+    }
+    // If _linked_batch_status === 'draft', allow re-invoicing (draft batches can be modified)
   }
 
   // 5. Check archived status

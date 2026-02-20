@@ -237,8 +237,33 @@ Deno.serve(async (req) => {
       const existingLines = await base44.entities.InvoiceBatchLine.filter({ batch_id: target_batch_id });
       const existingCommitmentIds = new Set(existingLines.filter(l => l.commitment_id).map(l => l.commitment_id));
       
+      // Phase 6.2B: Check if commitment is linked to ANY non-draft batch
+      const allBatchLines = await base44.entities.InvoiceBatchLine.filter({});
+      const allBatches = await base44.entities.InvoiceBatch.filter({});
+      const nonDraftBatchIds = new Set(allBatches.filter(b => b.status !== 'draft').map(b => b.id));
+      
+      // Build a set of commitment_ids that are already in non-draft batches
+      const alreadyInvoicedCommitmentIds = new Set();
+      for (const line of allBatchLines) {
+        if (line.commitment_id && nonDraftBatchIds.has(line.batch_id)) {
+          alreadyInvoicedCommitmentIds.add(line.commitment_id);
+        }
+      }
+      
       const itemsToAdd = [];
       for (const item of finalItems) {
+        // Phase 6.2B: Block if already in a non-draft batch
+        if (item.commitment_id && alreadyInvoicedCommitmentIds.has(item.commitment_id)) {
+          blockedItems.push({
+            commitment_id: item.commitment_id,
+            part_name: item.part_name || 'Unknown',
+            project_name: item.project_name || 'Unknown',
+            reasons: ['Commitment already invoiced'],
+            code: 'ALREADY_INVOICED',
+          });
+          continue;
+        }
+        
         if (item.commitment_id && existingCommitmentIds.has(item.commitment_id)) {
           blockedItems.push({
             commitment_id: item.commitment_id,
