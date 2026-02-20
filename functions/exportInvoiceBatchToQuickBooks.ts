@@ -108,7 +108,9 @@ Deno.serve(async (req) => {
     const now = new Date();
     const qbExportId = `QB-${now.getTime().toString(36).toUpperCase()}`;
     
-    const customerName = batch.client_name || project?.client_name || 'Unknown Client';
+    // Phase 6.1: Prioritize qb_customer_name if set, then fall back to client_name or project client
+    const customerName = batch.qb_customer_name || batch.client_name || project?.client_name || 'Unknown Client';
+    const customerId = batch.qb_customer_id || null;
     const invoiceNumber = batch.qb_invoice_number || batch.invoice_number || batch.batch_name;
     const invoiceDate = batch.invoice_date || now.toISOString().split('T')[0];
     const dueDate = batch.due_date || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -118,6 +120,7 @@ Deno.serve(async (req) => {
       invoice_date: invoiceDate,
       due_date: dueDate,
       customer_name: customerName,
+      customer_id: customerId, // Phase 6.1: QB customer ID for API sync
       project_name: project?.name || null,
       memo: batch.notes || `Invoice Batch: ${batch.batch_name}`,
       total_amount: batch.total_amount || lines.reduce((sum, l) => sum + (l.line_total || 0), 0),
