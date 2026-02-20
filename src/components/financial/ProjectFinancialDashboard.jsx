@@ -540,6 +540,14 @@ export default function ProjectFinancialDashboard({ projectId }) {
       )}
 
       {/* ============================================ */}
+      {/* FORWARD MODEL: PO Lines Needing Cost Review */}
+      {/* Phase 6.1: Surface for $0 / missing cost PO lines */}
+      {/* ============================================ */}
+      {isForwardModel && (
+        <POCostReviewCard projectId={projectId} />
+      )}
+
+      {/* ============================================ */}
       {/* FORWARD MODEL: Cost Summary (PO Line Authority) */}
       {/* Does NOT read: commitment.unit_cost_snapshot, commitment.planned_cost_total, Part.cost */}
       {/* Freight/Tariff from Order header, not line items */}
