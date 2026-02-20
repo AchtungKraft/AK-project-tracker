@@ -155,10 +155,10 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                   ) : (
                     availableParts.slice(0, 50).map(part => {
                       const available = getInventoryAvailable(part.id);
-                      const isAssigned = existingRequirements.some(r => r.part_id === part.id);
+                      const existingCommitment = existingCommitments.find(c => c.part_id === part.id);
                       
                       return (
-                        <SelectItem key={part.id} value={part.id} disabled={isAssigned}>
+                        <SelectItem key={part.id} value={part.id}>
                           <div className="flex items-center justify-between gap-3 w-full">
                             <div className="flex-1 min-w-0">
                               <span className="truncate">{part.part_name}</span>
@@ -170,7 +170,11 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
                               <span className={`text-xs font-semibold ${available > 0 ? 'text-green-400' : 'text-gray-500'}`}>
                                 {available} avail
                               </span>
-                              {isAssigned && <span className="text-xs text-yellow-400">(Added)</span>}
+                              {existingCommitment && (
+                                <span className="text-xs text-yellow-400">
+                                  ({existingCommitment.required_total} in project)
+                                </span>
+                              )}
                             </div>
                           </div>
                         </SelectItem>
