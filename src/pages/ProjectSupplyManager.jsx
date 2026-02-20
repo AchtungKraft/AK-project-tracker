@@ -1041,10 +1041,13 @@ export default function ProjectSupplyManager() {
                 <Package className="w-4 h-4" />
                 Plan
               </TabsTrigger>
-              <TabsTrigger value="fund" className="data-[state=active]:bg-green-900/30 gap-1.5">
-                <Wallet className="w-4 h-4" />
-                Fund
-              </TabsTrigger>
+              {/* LEGACY ONLY: Fund tab for pool management */}
+              {project?.financial_model_version !== 'forward' && (
+                <TabsTrigger value="fund" className="data-[state=active]:bg-green-900/30 gap-1.5">
+                  <Wallet className="w-4 h-4" />
+                  Fund
+                </TabsTrigger>
+              )}
               <TabsTrigger value="buy" className="data-[state=active]:bg-purple-900/30 gap-1.5">
                 <ShoppingCart className="w-4 h-4" />
                 Buy
