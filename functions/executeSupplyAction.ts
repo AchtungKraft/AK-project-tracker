@@ -543,9 +543,10 @@ async function autoReserve(ctx, commitment_ids, payload) {
 
 /**
  * CREATE_PO - Create purchase order for gap quantity
+ * Phase 6.2A: Each vendor PO has its own freight_cost and tariff_cost
  */
 async function createPO(ctx, commitment_ids, payload) {
-  const { vendor_id, po_prefix = 'AK' } = payload;
+  const { vendor_id, po_prefix = 'AK', vendor_order_data = {} } = payload;
   
   if (!commitment_ids || commitment_ids.length === 0) {
     throw new Error('commitment_ids required');
