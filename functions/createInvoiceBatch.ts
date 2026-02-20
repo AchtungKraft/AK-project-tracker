@@ -2,13 +2,81 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
  * Phase 6 — Create Invoice Batch
+ * Phase 6.1 — Invoice Readiness Gate (centralized logic)
  * 
  * Creates invoice batches with support for multiple batching modes:
  * - MANUAL: Single batch with selected items
  * - BY_PROJECT: Split into batches per project
  * - BY_CLIENT: Split into batches per client
  * - BY_MILESTONE: Split by milestone/phase (if available)
+ * 
+ * Invoice Readiness Criteria (isInvoiceReady):
+ * 1. qty > 0
+ * 2. Has retail price (unit_retail, unit_retail_override, or unit_price)
+ * 3. Not already invoiced/paid (billing_status)
+ * 4. Not linked to existing InvoiceBatchLine
+ * 5. Not archived
+ * 6. Not NON_BILLABLE financial role
  */
+
+/**
+ * Centralized Invoice Readiness Check
+ * Single source of truth for determining if an item can be invoiced
+ */
+function isInvoiceReady(item) {
+  const reasons = [];
+  
+  // 1. Check required identifiers
+  if (!item.part_id) {
+    reasons.push('Missing part_id');
+  }
+  if (!item.project_id) {
+    reasons.push('Missing project_id');
+  }
+
+  // 2. Check quantity > 0
+  const qty = item.assigned_qty || item.qty || item.required_total || 0;
+  if (qty <= 0) {
+    reasons.push('Quantity must be greater than 0');
+  }
+  
+  // 3. Check retail pricing exists
+  const unitPrice = item.unit_price || item.unit_retail || item.unit_retail_override || 0;
+  if (unitPrice <= 0) {
+    reasons.push('Missing retail pricing');
+  }
+  
+  // 4. Check financial role (non-billable)
+  if (item.financial_role === 'NON_BILLABLE') {
+    reasons.push('Part is non-billable');
+  }
+  
+  // 5. Check part type for client-supplied
+  if (item.effective_part_type === 'CLIENT_SUPPLIED' && item.requires_client_billing === false) {
+    reasons.push('Client-supplied part not billable');
+  }
+  
+  // 6. Check archived status
+  if (item.is_archived) {
+    reasons.push('Part is archived');
+  }
+  
+  // 7. Check billing status - already invoiced/paid
+  if (item.billing_status === 'invoiced' || item.billing_status === 'paid') {
+    reasons.push('Already invoiced or paid');
+  }
+  
+  // 8. Check if already linked to InvoiceBatchLine
+  if (item.invoice_batch_line_id) {
+    reasons.push('Already linked to an invoice batch');
+  }
+  
+  return {
+    ready: reasons.length === 0,
+    reasons,
+    effective_unit_price: unitPrice,
+  };
+}
 
 function generateBatchName(mode, groupKey, timestamp) {
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
@@ -51,59 +119,26 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
     
-    // Validate items and collect blocked items
+    // Validate items using centralized isInvoiceReady helper
     const blockedItems = [];
     const validItems = [];
     
     for (const item of items) {
-      const blockReasons = [];
+      const readiness = isInvoiceReady(item);
       
-      if (!item.part_id) {
-        blockReasons.push('Missing part_id');
-      }
-      if (!item.project_id) {
-        blockReasons.push('Missing project_id');
-      }
-      
-      // Accept either unit_price or unit_retail
-      const unitPrice = item.unit_price || item.unit_retail || 0;
-      if (unitPrice <= 0) {
-        blockReasons.push('Missing retail pricing');
-      }
-      
-      // Check financial role
-      if (item.financial_role === 'NON_BILLABLE') {
-        blockReasons.push('Part is non-billable');
-      }
-      
-      // Check part type for client-supplied (Phase 9.6)
-      if (item.effective_part_type === 'CLIENT_SUPPLIED' && item.requires_client_billing === false) {
-        blockReasons.push('Client-supplied part not billable');
-      }
-      
-      // Check if archived (Phase 9.6)
-      if (item.is_archived) {
-        blockReasons.push('Part is archived');
-      }
-      
-      // Check billing status - already invoiced/paid (Phase 9.6 duplication safety)
-      if (item.billing_status === 'invoiced' || item.billing_status === 'paid') {
-        blockReasons.push('Already invoiced or paid');
-      }
-      
-      if (blockReasons.length > 0) {
+      if (!readiness.ready) {
         blockedItems.push({
           commitment_id: item.commitment_id || item.id,
           part_name: item.part_name || 'Unknown',
           project_name: item.project_name || 'Unknown',
-          reasons: blockReasons,
+          reasons: readiness.reasons,
           lifecycle_stage: item.client_billing_status || item.lifecycle_stage,
         });
       } else {
-        // Normalize item with unit_price
+        // Normalize item with effective unit_price
         validItems.push({
           ...item,
-          unit_price: unitPrice,
+          unit_price: readiness.effective_unit_price,
         });
       }
     }
