@@ -378,23 +378,90 @@ export async function commitmentAction(action, params) {
   return result.data;
 }
 
+/**
+ * Guarded legacy action - wraps legacy operations with forward model check
+ * Throws LEGACY_FLOW_BLOCKED if project is forward model
+ * 
+ * @param {string} actionName - Action being performed
+ * @param {Object} params - Action parameters (must include project or project_id)
+ * @param {Function} actionFn - The actual action function to execute
+ */
+async function guardedLegacyAction(actionName, params, actionFn) {
+  // If project object is passed, check directly
+  if (params.project?.financial_model_version === 'forward') {
+    const error = new Error(
+      `LEGACY_FLOW_BLOCKED: This flow is legacy-only and not available in forward financial model projects. ` +
+      `Operation: ${actionName}. Use InvoiceBatch for client billing.`
+    );
+    error.code = 'LEGACY_FLOW_BLOCKED';
+    throw error;
+  }
+  
+  // If only project_id passed, the backend will validate
+  return actionFn();
+}
+
 // Export action helpers for common operations
 export const CommitmentActions = {
   // CANONICAL ENTRY POINT for adding parts to projects
   addPartToProject: (params) => commitmentAction('addPartToProject', params),
   createPO: (params) => commitmentAction('createPO', params),
   createDeltaOrder: (params) => commitmentAction('createDeltaOrder', params),
-  createBillingPool: (params) => commitmentAction('createBillingPool', params),
-  allocatePool: (params) => commitmentAction('allocatePool', params),
-  recordVendorInvoiceCharge: (params) => commitmentAction('recordVendorInvoiceCharge', params),
+  
+  // LEGACY-ONLY: Pool operations (blocked for forward model)
+  createBillingPool: (params) => guardedLegacyAction(
+    'createBillingPool', 
+    params, 
+    () => commitmentAction('createBillingPool', params)
+  ),
+  allocatePool: (params) => guardedLegacyAction(
+    'allocatePool', 
+    params, 
+    () => commitmentAction('allocatePool', params)
+  ),
+  recordVendorInvoiceCharge: (params) => guardedLegacyAction(
+    'recordVendorInvoiceCharge', 
+    params, 
+    () => commitmentAction('recordVendorInvoiceCharge', params)
+  ),
+  reversePoolAllocation: (params) => guardedLegacyAction(
+    'reversePoolAllocation', 
+    params, 
+    () => commitmentAction('reversePoolAllocation', params)
+  ),
+  reversePoolCharge: (params) => guardedLegacyAction(
+    'reversePoolCharge', 
+    params, 
+    () => commitmentAction('reversePoolCharge', params)
+  ),
+  recalculatePoolBalance: (params) => guardedLegacyAction(
+    'recalculatePoolBalance', 
+    params, 
+    () => commitmentAction('recalculatePoolBalance', params)
+  ),
+  recalculateProjectExposure: (params) => guardedLegacyAction(
+    'recalculateProjectExposure', 
+    params, 
+    () => commitmentAction('recalculateProjectExposure', params)
+  ),
+  getOrCreateCreditPool: (params) => guardedLegacyAction(
+    'getOrCreateCreditPool', 
+    params, 
+    () => commitmentAction('getOrCreateCreditPool', params)
+  ),
+  closePool: (params) => guardedLegacyAction(
+    'closePool', 
+    params, 
+    () => commitmentAction('closePool', params)
+  ),
+  transferPoolBalance: (params) => guardedLegacyAction(
+    'transferPoolBalance', 
+    params, 
+    () => commitmentAction('transferPoolBalance', params)
+  ),
+  
+  // Non-legacy operations (available for all models)
   removeCommitment: (params) => commitmentAction('removeCommitment', params),
   reduceCommitment: (params) => commitmentAction('reduceCommitment', params),
   reverseInstalledPart: (params) => commitmentAction('reverseInstalledPart', params),
-  reversePoolAllocation: (params) => commitmentAction('reversePoolAllocation', params),
-  reversePoolCharge: (params) => commitmentAction('reversePoolCharge', params),
-  recalculatePoolBalance: (params) => commitmentAction('recalculatePoolBalance', params),
-  recalculateProjectExposure: (params) => commitmentAction('recalculateProjectExposure', params),
-  getOrCreateCreditPool: (params) => commitmentAction('getOrCreateCreditPool', params),
-  closePool: (params) => commitmentAction('closePool', params),
-  transferPoolBalance: (params) => commitmentAction('transferPoolBalance', params)
 };
