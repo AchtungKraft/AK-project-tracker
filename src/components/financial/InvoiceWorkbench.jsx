@@ -271,11 +271,18 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
           >
             {allowSelection && (
               <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox 
-                  checked={selectedIds.has(item.id)}
-                  onCheckedChange={(checked) => onToggleSelection(item.id, checked)}
-                  disabled={item.is_queued || item.unit_retail <= 0}
-                />
+                {/* Phase 6.1: Use centralized isInvoiceReady helper */}
+                {(() => {
+                  const readiness = isInvoiceReady(item);
+                  return (
+                    <Checkbox 
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={(checked) => onToggleSelection(item.id, checked)}
+                      disabled={!readiness.ready || item.is_queued}
+                      title={!readiness.ready ? readiness.reasons.join(', ') : undefined}
+                    />
+                  );
+                })()}
               </TableCell>
             )}
             <TableCell>
