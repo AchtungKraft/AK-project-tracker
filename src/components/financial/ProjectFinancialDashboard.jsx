@@ -60,6 +60,19 @@ export default function ProjectFinancialDashboard({ projectId }) {
     enabled: !!projectId && isForwardModel,
   });
 
+  // FORWARD MODEL: Fetch cost summary from backend (PO lines as cost authority)
+  const { data: costSummary, isLoading: loadingCost } = useQuery({
+    queryKey: ['projectCostSummary', projectId],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getProjectCostSummary', { project_id: projectId });
+      if (res.data?.code === 'PROJECT_NOT_FOUND' || res.data?.code === 'LEGACY_MODEL_NOT_SUPPORTED') {
+        return { data: null };
+      }
+      return res;
+    },
+    enabled: !!projectId && isForwardModel,
+  });
+
   // Fetch all data in parallel - no aggregation, just reads
   const { data: commitments = [], isLoading: loadingCommitments } = useQuery({
     queryKey: ['partCommitments', projectId],
