@@ -106,6 +106,8 @@ const BATCH_MODES = {
   BY_CLIENT: { label: 'By Client', icon: Users, description: 'Per client' },
 };
 
+// LEGACY MODEL ONLY: Ordering safety for pool-based billing
+// Forward model does NOT use this - readiness is based on: has retail price + not already invoiced
 const ORDERING_SAFETY_CONFIG = {
   RED: { label: 'Not Billed', color: 'bg-red-600', textColor: 'text-red-400' },
   YELLOW: { label: 'Awaiting Payment', color: 'bg-yellow-600', textColor: 'text-yellow-400' },
