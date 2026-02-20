@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +25,10 @@ import {
 } from "@/components/ui/table";
 import {
   Layers, Search, RefreshCw, AlertTriangle, CheckCircle2,
-  Package, ChevronRight, ArrowUpDown
+  Package, ChevronRight, ArrowUpDown, Trash2, Eye, Loader2, ShieldAlert
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
@@ -40,6 +41,14 @@ export default function SupplyLanding() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('exposure');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check admin status
+  useEffect(() => {
+    base44.auth.me().then(user => {
+      setIsAdmin(user?.role === 'admin');
+    }).catch(() => setIsAdmin(false));
+  }, []);
 
   // Debounce search to avoid excessive API calls
   const [debouncedSearch, setDebouncedSearch] = useState('');
