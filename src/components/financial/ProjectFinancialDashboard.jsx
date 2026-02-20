@@ -111,7 +111,9 @@ export default function ProjectFinancialDashboard({ projectId }) {
   // Does NOT read: exposure_gap, billing_status, pool balances
   // ============================================
   const forwardRevenueSummary = useMemo(() => {
-    if (!isForwardModel || !revenueSummary?.data) return null;
+    if (!isForwardModel) return null;
+    // Handle 404/not found gracefully
+    if (revenueSummary?.notFound || !revenueSummary?.data) return null;
     const data = revenueSummary.data;
     return {
       totalBillable: data.total_billable ?? 0,
@@ -128,6 +130,9 @@ export default function ProjectFinancialDashboard({ projectId }) {
       invoiceBatches: data.invoice_batches ?? [],
     };
   }, [isForwardModel, revenueSummary]);
+  
+  // Handle project not found for forward model
+  const projectNotFound = isForwardModel && revenueSummary?.notFound;
 
   // LEGACY MODEL: Read precomputed totals from commitment fields
   // NULL SAFETY: All pool-related fields use (value ?? 0)
