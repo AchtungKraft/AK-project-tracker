@@ -1131,13 +1131,7 @@ export default function ProjectSupplyManager() {
 
             {/* Invoice tab content - FORWARD MODEL */}
             <TabsContent value="invoice" className="mt-4">
-              <ForwardInvoiceDashboard 
-                projectId={projectId}
-                onCreateInvoice={() => {
-                  audit.trackClick('create_invoice_from_tab');
-                  toast.info('Invoice creation - wire to batch modal');
-                }}
-              />
+              <ForwardInvoiceDashboard projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="buy" className="mt-4">

@@ -659,7 +659,7 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
 // MAIN COMPONENT
 // ============================================
 
-export default function InvoiceWorkbench({ onRowClick }) {
+export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowClick }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('assigned_needs_billing');
   const [searchTerm, setSearchTerm] = useState('');
@@ -673,6 +673,13 @@ export default function InvoiceWorkbench({ onRowClick }) {
   const [targetDraftBatchId, setTargetDraftBatchId] = useState('new');
 
   // Fetch lifecycle data
+  // Override project filter if projectId prop provided
+  React.useEffect(() => {
+    if (projectId) {
+      setProjectFilter(projectId);
+    }
+  }, [projectId]);
+
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['billingProcurementStates', projectFilter, financialRoleFilter, orderingSafetyFilter],
     queryFn: async () => {
@@ -734,6 +741,11 @@ export default function InvoiceWorkbench({ onRowClick }) {
         queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] });
         queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
         queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+        
+        // Call onSuccess prop if modal usage
+        if (onSuccess) {
+          onSuccess(data);
+        }
       } else {
         toast.error(data.message || 'Batch creation failed');
       }
@@ -844,7 +856,9 @@ export default function InvoiceWorkbench({ onRowClick }) {
 
   const kpis = lifecycleData?.kpis || {};
 
-  return (
+  // Modal wrapper when used as modal (has onClose prop)
+  const isModal = !!onClose;
+  const content = (
     <div className="space-y-4">
       {/* KPI Header */}
       <LifecycleKPIHeader kpis={kpis} />
@@ -1026,4 +1040,24 @@ export default function InvoiceWorkbench({ onRowClick }) {
       />
     </div>
   );
+
+  // Render as modal if onClose provided
+  if (isModal) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-700">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-green-400" />
+              Create Invoice
+            </DialogTitle>
+          </DialogHeader>
+          {content}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Render as standalone page
+  return content;
 }

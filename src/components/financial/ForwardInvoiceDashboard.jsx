@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
+import InvoiceWorkbench from "./InvoiceWorkbench";
 
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
@@ -58,12 +59,13 @@ import { useWiringAudit } from "@/components/dev/wiringAudit";
  * - InvoiceBatchLine for line items
  * - Payment recorded on InvoiceBatch (paid_date, payment_method, payment_reference, amount_paid)
  */
-export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) {
+export default function ForwardInvoiceDashboard({ projectId }) {
   const queryClient = useQueryClient();
   const audit = useWiringAudit('ForwardInvoiceDashboard');
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentBatch, setPaymentBatch] = useState(null);
+  const [showInvoiceWorkbench, setShowInvoiceWorkbench] = useState(false);
 
   // Fetch invoice batches for this project
   const { data: invoiceBatches = [], isLoading, refetch } = useQuery({
@@ -222,7 +224,7 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
 
   const handleCreateInvoice = () => {
     audit.trackClick('create_invoice');
-    onCreateInvoice?.();
+    setShowInvoiceWorkbench(true);
   };
 
   return (
@@ -449,6 +451,19 @@ export default function ForwardInvoiceDashboard({ projectId, onCreateInvoice }) 
         onSubmit={(data) => paymentMutation.mutate(data)}
         isLoading={paymentMutation.isPending}
       />
+
+      {/* Invoice Workbench Modal */}
+      {showInvoiceWorkbench && (
+        <InvoiceWorkbench
+          projectId={projectId}
+          onClose={() => setShowInvoiceWorkbench(false)}
+          onSuccess={() => {
+            setShowInvoiceWorkbench(false);
+            queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
+            queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
+          }}
+        />
+      )}
     </div>
   );
 }
