@@ -95,13 +95,18 @@ Deno.serve(async (req) => {
       }
 
       // EXECUTE DELETION
-      // Step 1: Unlink commitments (set invoice_batch_id = null)
+      // Step 1: Unlink commitments (set invoice_batch_id = null) - skip if commitment doesn't exist
       for (const line of attachedLines) {
         if (line.commitment_id) {
-          await base44.asServiceRole.entities.PartCommitment.update(line.commitment_id, {
-            invoice_batch_id: null,
-            billing_status: 'billable'  // Reset to unbilled
-          });
+          try {
+            await base44.asServiceRole.entities.PartCommitment.update(line.commitment_id, {
+              invoice_batch_id: null,
+              billing_status: 'billable'  // Reset to unbilled
+            });
+          } catch (err) {
+            // Commitment may have been deleted - ignore and continue
+            console.warn(`Could not unlink commitment ${line.commitment_id}: ${err.message}`);
+          }
         }
       }
 
