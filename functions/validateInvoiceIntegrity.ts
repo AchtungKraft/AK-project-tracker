@@ -29,12 +29,17 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json().catch(() => ({}));
 
-    // Fetch all data
-    const [batches, lines, commitments] = await Promise.all([
-      base44.asServiceRole.entities.InvoiceBatch.list(),
-      base44.asServiceRole.entities.InvoiceBatchLine.list(),
-      base44.asServiceRole.entities.PartCommitment.list(),
+    // Fetch all data - limit to recent batches to avoid timeout
+    const [batches, lines] = await Promise.all([
+      base44.asServiceRole.entities.InvoiceBatch.list('-created_date', 100),
+      base44.asServiceRole.entities.InvoiceBatchLine.list('-created_date', 500),
     ]);
+    
+    // Only fetch commitments referenced by lines to reduce load
+    const commitmentIds = [...new Set(lines.filter(l => l.commitment_id).map(l => l.commitment_id))];
+    const commitments = commitmentIds.length > 0 
+      ? await base44.asServiceRole.entities.PartCommitment.filter({ id: { $in: commitmentIds.slice(0, 100) } })
+      : [];
 
     const commitmentMap = new Map(commitments.map(c => [c.id, c]));
     const batchMap = new Map(batches.map(b => [b.id, b]));
