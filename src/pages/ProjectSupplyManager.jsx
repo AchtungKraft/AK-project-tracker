@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
+// LEGACY ONLY: Pool modals not rendered for forward model projects
 import CreatePoolModal from "@/components/financial/CreatePoolModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
 import ReverseInstallationModal from "@/components/project/ReverseInstallationModal";
