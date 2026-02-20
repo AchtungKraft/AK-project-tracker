@@ -46,6 +46,9 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
    * CANONICAL SUPPLY FLOW ENFORCED
    * All project part mutations must go through executeSupplyAction dispatcher.
    * Direct entity writes are blocked.
+   * 
+   * If commitment already exists: INCREMENT required_total by qtyNeeded
+   * If no commitment exists: CREATE new commitment with qtyNeeded
    */
   const createRequirementMutation = useMutation({
     mutationFn: async () => {
@@ -53,25 +56,49 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
         throw new Error('Please select a part');
       }
 
-      // Use canonical dispatcher - ADJUST_REQUIRED creates if missing
-      const response = await base44.functions.invoke('executeSupplyAction', {
-        action_type: 'ADJUST_REQUIRED',
-        commitment_ids: [], // Empty - will create new
-        payload: {
-          project_id: projectId,
-          part_id: selectedPartId,
-          required_total_set: qtyNeeded,
-          source_type: 'SHOP_PURCHASED'
-        },
-        dry_run: false
-      });
+      // Check if commitment already exists for this part
+      const existingCommitment = existingCommitments.find(c => c.part_id === selectedPartId);
+      
+      if (existingCommitment) {
+        // INCREMENT: Add qtyNeeded to existing required_total
+        const newTotal = (existingCommitment.required_total || 0) + qtyNeeded;
+        
+        const response = await base44.functions.invoke('executeSupplyAction', {
+          action_type: 'ADJUST_REQUIRED',
+          commitment_ids: [existingCommitment.id],
+          payload: {
+            required_total_set: newTotal
+          },
+          dry_run: false
+        });
 
-      const result = response.data;
-      if (result.error) {
-        throw new Error(result.error);
+        const result = response.data;
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        return { ...result, was_increment: true, previous_total: existingCommitment.required_total };
+      } else {
+        // CREATE: New commitment with qtyNeeded
+        const response = await base44.functions.invoke('executeSupplyAction', {
+          action_type: 'ADJUST_REQUIRED',
+          commitment_ids: [],
+          payload: {
+            project_id: projectId,
+            part_id: selectedPartId,
+            required_total_set: qtyNeeded,
+            source_type: 'SHOP_PURCHASED'
+          },
+          dry_run: false
+        });
+
+        const result = response.data;
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        return { ...result, was_increment: false };
       }
-
-      return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
@@ -80,9 +107,9 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
       
-      const message = result.is_new_commitment 
-        ? `Part added: ${result.required_total} required, ${result.reserved_from_stock} reserved`
-        : `Requirement updated to ${result.required_total}`;
+      const message = result.was_increment 
+        ? `Quantity increased: ${result.previous_total} → ${result.required_total}`
+        : `Part added: ${result.required_total} required, ${result.reserved_from_stock || 0} reserved`;
       toast.success(message);
       onClose();
     },
