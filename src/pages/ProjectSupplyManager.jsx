@@ -1590,7 +1590,8 @@ export default function ProjectSupplyManager() {
         />
       )}
 
-      {allocateModal && (
+      {/* LEGACY ONLY: AllocatePoolModal for pool-based allocation */}
+      {allocateModal && project?.financial_model_version !== 'forward' && (
         <AllocatePoolModal
           projectId={projectId}
           commitment={{
