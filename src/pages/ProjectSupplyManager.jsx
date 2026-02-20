@@ -1507,7 +1507,8 @@ export default function ProjectSupplyManager() {
       </div>
 
       {/* Modals */}
-      {showCreatePoolModal && (
+      {/* LEGACY ONLY: CreatePoolModal for pool-based billing */}
+      {showCreatePoolModal && project?.financial_model_version !== 'forward' && (
         <CreatePoolModal
           projectId={projectId}
           onClose={() => setShowCreatePoolModal(false)}
