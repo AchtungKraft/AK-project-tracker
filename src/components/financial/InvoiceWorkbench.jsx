@@ -230,6 +230,7 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
     );
   }
 
+  // CANONICAL: All selection and keying uses commitment_id exclusively
   return (
     <Table>
       <TableHeader>
@@ -237,9 +238,9 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
           {allowSelection && (
             <TableHead className="w-10">
               <Checkbox 
-                checked={items.length > 0 && items.every(i => selectedIds.has(i.id))}
+                checked={items.length > 0 && items.every(i => selectedIds.has(i.commitment_id))}
                 onCheckedChange={(checked) => {
-                  items.forEach(i => onToggleSelection(i.id, checked));
+                  items.forEach(i => onToggleSelection(i.commitment_id, checked));
                 }}
               />
             </TableHead>
@@ -260,9 +261,15 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
       <TableBody>
         {items.map(item => {
           const itemIsForward = isItemForwardModel(item);
+          
+          // FAIL-FAST: Log error if canonical fields missing
+          if (!item.commitment_id) {
+            console.error('[CANONICAL VIOLATION] Missing commitment_id in InvoiceWorkbench:', item);
+          }
+          
           return (
           <TableRow 
-            key={item.id}
+            key={item.commitment_id}
             className={cn(
               "border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer",
               item.is_queued && "opacity-50"
@@ -276,8 +283,8 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                   const readiness = isInvoiceReady(item);
                   return (
                     <Checkbox 
-                      checked={selectedIds.has(item.id)}
-                      onCheckedChange={(checked) => onToggleSelection(item.id, checked)}
+                      checked={selectedIds.has(item.commitment_id)}
+                      onCheckedChange={(checked) => onToggleSelection(item.commitment_id, checked)}
                       disabled={!readiness.ready || item.is_queued}
                       title={!readiness.ready ? readiness.reasons.join(', ') : undefined}
                     />
@@ -328,7 +335,7 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                 )}
               </TableCell>
             )}
-            <TableCell className="text-right text-gray-300">{item.assigned_qty}</TableCell>
+            <TableCell className="text-right text-gray-300">{item.required_total || 0}</TableCell>
             <TableCell className="text-right text-gray-300">
               {item.unit_retail > 0 ? `$${item.unit_retail.toFixed(2)}` : (
                 <Badge className="bg-red-600/30 text-red-400 text-xs">Missing</Badge>
