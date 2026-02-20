@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel.jsx";
+import { toast } from "sonner";
+import { useWiringAudit } from "@/components/dev/wiringAudit";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
@@ -37,6 +39,7 @@ import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel.jsx";
  */
 export default function SupplyLanding() {
   const navigate = useNavigate();
+  const audit = useWiringAudit('SupplyLanding');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('exposure');
@@ -95,8 +98,14 @@ export default function SupplyLanding() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refetch();
-    setIsRefreshing(false);
+    try {
+      await refetch();
+      toast.success('Portfolio refreshed');
+    } catch (error) {
+      toast.error('Refresh failed: ' + error.message);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleProjectClick = (projectId) => {

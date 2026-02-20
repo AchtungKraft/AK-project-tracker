@@ -28,6 +28,8 @@ import {
   Search, RefreshCw, ArrowLeft, ChevronRight, Layers, MapPin
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import { toast } from "sonner";
+import { useWiringAudit } from "@/components/dev/wiringAudit";
 
 /**
  * SupplyQueues - Global Work Queues (Screen 3)
@@ -39,6 +41,7 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
 export default function SupplyQueues() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const audit = useWiringAudit('SupplyQueues');
   const [activeQueue, setActiveQueue] = useState('ready_to_order');
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -92,13 +95,24 @@ export default function SupplyQueues() {
   }, [queueItems, searchTerm, projectFilter]);
 
   const handleRefresh = async () => {
+    audit.trackClick('refresh_queues');
     setIsRefreshing(true);
-    await refetch();
-    setIsRefreshing(false);
+    try {
+      await refetch();
+      audit.trackSuccess('refresh_queues');
+      toast.success('Queues refreshed');
+    } catch (error) {
+      audit.trackError('refresh_queues', error);
+      toast.error('Refresh failed');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleItemClick = (item) => {
-    navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${item.project_id}&tab=${getTabForQueue(activeQueue)}`);
+    const tab = getTabForQueue(activeQueue);
+    audit.trackClick('navigate_to_project', { queue: activeQueue, tab });
+    navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${item.project_id}&tab=${tab}`);
   };
 
   // CANONICAL: Tab keys must match ProjectSupplyManager exact tab values
