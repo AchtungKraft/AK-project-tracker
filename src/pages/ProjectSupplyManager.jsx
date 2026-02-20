@@ -33,6 +33,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   ShoppingCart, Package, Truck, AlertTriangle, DollarSign,
   ArrowLeft, Plus, MoreVertical, RefreshCw, Search, Wallet,
   Wrench, X, FileText, Edit, Trash2, Download,
