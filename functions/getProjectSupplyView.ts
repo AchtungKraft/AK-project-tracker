@@ -206,13 +206,11 @@ Deno.serve(async (req) => {
           partInventoryForAction
         );
 
-        // Part inventory snapshot
-        const partInv = partInventoryMap.get(c.part_id) || {};
-        const physical_stock = part?.physical_stock ?? 0;
+        // Part inventory snapshot from read model (using already-computed variables)
         const inventory_snapshot = {
-          physical_stock,
+          physical_stock: physical_stock_for_action,
           reserved_total: partInv.total_reserved || 0,
-          available: Math.max(0, physical_stock - (partInv.total_reserved || 0)),
+          available: partInventoryForAction.available,
           on_order_total: part?.on_order ?? 0,
           to_order_total: partInv.total_to_order || 0,
         };
