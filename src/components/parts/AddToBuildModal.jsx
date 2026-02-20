@@ -59,16 +59,10 @@ export default function AddToBuildModal({ part, onClose }) {
 
 
 
-  // Check for existing commitments (canonical) and legacy requirements
+  // CANONICAL: Check existing commitments only (PartProjectRequirement is deprecated)
   const { data: existingCommitments = [] } = useQuery({
     queryKey: ['partCommitments', 'forPart', part?.id],
     queryFn: () => base44.entities.PartCommitment.filter({ part_id: part?.id }),
-    enabled: !!part?.id,
-  });
-  
-  const { data: existingRequirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements', 'forPart', part?.id],
-    queryFn: () => base44.entities.PartProjectRequirement.filter({ part_id: part?.id }),
     enabled: !!part?.id,
   });
 
@@ -169,11 +163,11 @@ export default function AddToBuildModal({ part, onClose }) {
   // Filter to active projects only
   const activeProjects = projects.filter(p => p.status_id !== 'completed' && p.status_id !== 'cancelled');
 
-  // Get projects that already have this part (check both commitments and legacy requirements)
-  const projectsWithPart = [
-    ...existingCommitments.map(c => c.project_id),
-    ...existingRequirements.map(r => r.project_id)
-  ].filter((id, idx, arr) => arr.indexOf(id) === idx); // unique
+  // CANONICAL: A project is "already added" ONLY if PartCommitment exists AND is not archived
+  const projectsWithPart = existingCommitments
+    .filter(c => !c.is_archived)
+    .map(c => c.project_id)
+    .filter((id, idx, arr) => arr.indexOf(id) === idx); // unique
   
   // Get project type name
   const getTypeName = (typeId) => {
