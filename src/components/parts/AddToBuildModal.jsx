@@ -59,13 +59,16 @@ export default function AddToBuildModal({ part, onClose }) {
 
 
 
-  // Check for existing requirement
+  // Check for existing commitments (canonical) and legacy requirements
+  const { data: existingCommitments = [] } = useQuery({
+    queryKey: ['partCommitments', 'forPart', part?.id],
+    queryFn: () => base44.entities.PartCommitment.filter({ part_id: part?.id }),
+    enabled: !!part?.id,
+  });
+  
   const { data: existingRequirements = [] } = useQuery({
     queryKey: ['partProjectRequirements', 'forPart', part?.id],
-    queryFn: async () => {
-      const all = await base44.entities.PartProjectRequirement.list();
-      return all.filter(r => r.part_id === part?.id);
-    },
+    queryFn: () => base44.entities.PartProjectRequirement.filter({ part_id: part?.id }),
     enabled: !!part?.id,
   });
 
