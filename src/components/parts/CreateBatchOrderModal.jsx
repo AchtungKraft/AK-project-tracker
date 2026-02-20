@@ -590,30 +590,42 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 flex items-center justify-between pt-4 border-t border-gray-700">
-          {hasUnassignedVendor && (
-            <p className="text-xs text-yellow-400">
-              ⚠ Assign vendors to all items before creating orders
-            </p>
+        <div className="flex-shrink-0 flex flex-col gap-2 pt-4 border-t border-gray-700">
+          {/* Phase 6.2: Single-vendor enforcement notice */}
+          {hasMultipleVendors && (
+            <div className="flex items-center gap-2 p-2 bg-blue-900/20 border border-blue-700/50 rounded text-sm">
+              <AlertCircle className="w-4 h-4 text-blue-400 shrink-0" />
+              <span className="text-blue-300">
+                {vendorIds.length} vendors selected → {vendorIds.length} separate POs will be created (one per vendor)
+              </span>
+            </div>
           )}
-          <div className="flex gap-2 ml-auto">
-            <Button variant="outline" onClick={onClose} className="border-gray-700">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateOrders}
-              className="bg-red-600 hover:bg-red-700"
-              disabled={supplyAction.isPending || hasUnassignedVendor}
-            >
-              {supplyAction.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                `Create ${groupCount} Order${groupCount > 1 ? 's' : ''}`
-              )}
-            </Button>
+          
+          <div className="flex items-center justify-between">
+            {hasUnassignedVendor && (
+              <p className="text-xs text-yellow-400">
+                ⚠ Assign vendors to all items before creating orders
+              </p>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" onClick={onClose} className="border-gray-700">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateOrders}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={supplyAction.isPending || hasUnassignedVendor}
+              >
+                {supplyAction.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  `Create ${groupCount} Order${groupCount > 1 ? 's' : ''}`
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>
