@@ -78,17 +78,48 @@ function isInvoiceReady(item) {
   };
 }
 
+/**
+ * PHASE 9D-A: Invoice number generation
+ * 
+ * REMOVED: INV-MANUAL-* prefix - no longer allowed
+ * All invoices now use system-generated format: INV-YYYY-####
+ * 
+ * Legacy modes (BY_PROJECT, BY_CLIENT) kept for batch grouping
+ * but still use canonical numbering.
+ */
+async function generateCanonicalInvoiceNumber(base44) {
+  const year = new Date().getFullYear();
+  
+  // Find highest existing invoice number for this year
+  const existingBatches = await base44.entities.InvoiceBatch.list();
+  const yearPattern = new RegExp(`^INV-${year}-(\\d+)$`);
+  
+  let maxSeq = 0;
+  for (const batch of existingBatches) {
+    const invoiceNum = batch.invoice_number || '';
+    const match = invoiceNum.match(yearPattern);
+    if (match) {
+      const seq = parseInt(match[1], 10);
+      if (seq > maxSeq) maxSeq = seq;
+    }
+  }
+  
+  return `INV-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
+}
+
 function generateBatchName(mode, groupKey, timestamp) {
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
+  // NOTE: batch_name is for display/grouping only
+  // invoice_number is the canonical system-generated number
   switch (mode) {
     case 'BY_PROJECT':
-      return `INV-${groupKey}-${dateStr}`;
+      return `Batch-${groupKey}-${dateStr}`;
     case 'BY_CLIENT':
-      return `INV-CLIENT-${groupKey}-${dateStr}`;
+      return `Batch-CLIENT-${groupKey}-${dateStr}`;
     case 'BY_MILESTONE':
-      return `INV-MILE-${groupKey}-${dateStr}`;
+      return `Batch-MILE-${groupKey}-${dateStr}`;
     default:
-      return `INV-MANUAL-${dateStr}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+      return `Batch-${dateStr}`;
   }
 }
 
@@ -110,13 +141,29 @@ Deno.serve(async (req) => {
     console.log("Batch mode:", batch_mode);
     console.log("Target batch ID:", target_batch_id || 'NEW');
     
+    // ================================================================
+    // PHASE 9D-A: ENFORCE COMMITMENT-BASED INVOICE CREATION
+    // Invoices MUST originate from commitments - no empty/manual invoices
+    // ================================================================
     if (!items || !Array.isArray(items) || items.length === 0) {
       return Response.json({ 
         success: false,
-        error: 'No items selected for invoicing',
-        code: 'NO_ITEMS',
+        error: 'Invoice must originate from commitments',
+        code: 'NO_COMMITMENTS',
         blocked_items: [],
-        message: 'Please select at least one item to create an invoice batch.'
+        message: 'Invoices must be created from selected commitments. Empty or manual invoice creation is not allowed.'
+      }, { status: 400 });
+    }
+    
+    // Verify at least one item has a valid commitment_id
+    const hasCommitments = items.some(item => item.commitment_id);
+    if (!hasCommitments) {
+      return Response.json({ 
+        success: false,
+        error: 'Invoice must originate from commitments',
+        code: 'NO_COMMITMENT_IDS',
+        blocked_items: [],
+        message: 'All invoice items must have a commitment_id. Manual invoice line creation is not allowed.'
       }, { status: 400 });
     }
     
@@ -449,8 +496,12 @@ Deno.serve(async (req) => {
       const batchItems = groupData.items;
       const totalAmount = batchItems.reduce((sum, i) => sum + ((i.assigned_qty || i.qty || 1) * (i.unit_price || 0)), 0);
       
-      // Create batch
+      // PHASE 9D-A: Generate canonical invoice number (INV-YYYY-####)
+      const invoiceNumber = await generateCanonicalInvoiceNumber(base44);
+      
+      // Create batch with canonical invoice_number
       const batch = await base44.entities.InvoiceBatch.create({
+        invoice_number: invoiceNumber,  // CANONICAL: System-generated only
         batch_name: generateBatchName(batch_mode, groupData.project_name || groupData.client_name || groupKey, now),
         batch_mode,
         status: 'draft',
