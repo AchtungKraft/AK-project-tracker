@@ -628,6 +628,8 @@ export default function InvoiceWorkbench({ onRowClick }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [batchMode, setBatchMode] = useState('MANUAL');
   const [selectedBatch, setSelectedBatch] = useState(null);
+  // Phase 6.2: Draft invoice accumulation
+  const [targetDraftBatchId, setTargetDraftBatchId] = useState('new');
 
   // Fetch lifecycle data
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
