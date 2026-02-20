@@ -76,7 +76,11 @@ export default function ProjectSupplyManager() {
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('project_id');
-  const initialTab = urlParams.get('tab') || 'plan';
+  
+  // CANONICAL: Validate tab param against allowed values
+  const ALLOWED_TABS = ['plan', 'fund', 'buy', 'receive', 'install'];
+  const rawTab = urlParams.get('tab');
+  const initialTab = ALLOWED_TABS.includes(rawTab) ? rawTab : 'plan';
 
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
