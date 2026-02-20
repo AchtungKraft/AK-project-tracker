@@ -193,8 +193,28 @@ export default function ProjectFinancialDashboard({ projectId }) {
     return grouped;
   }, [charges, isForwardModel]);
 
-  // Procurement costs from precomputed line item fields (both models)
+  // FORWARD MODEL: Cost summary from backend (PO lines as sole cost authority)
+  const forwardCostSummary = useMemo(() => {
+    if (!isForwardModel) return null;
+    if (!costSummary?.data) return null;
+    const data = costSummary.data;
+    return {
+      orderedCost: data.ordered_cost ?? 0,
+      receivedCost: data.received_cost ?? 0,
+      unreceivedCost: data.unreceived_cost ?? 0,
+      totalFreight: data.total_freight ?? 0,
+      totalTariff: data.total_tariff ?? 0,
+      totalLandedCost: data.total_landed_cost ?? 0,
+      receivedPct: data.received_pct ?? 0,
+      lockedCostCount: data.locked_cost_count ?? 0,
+      lineItemCount: data.line_item_count ?? 0,
+      costAuthority: data.cost_authority,
+    };
+  }, [isForwardModel, costSummary]);
+
+  // LEGACY MODEL: Procurement costs from precomputed line item fields
   const procurementSummary = useMemo(() => {
+    if (isForwardModel) return null; // Forward model uses forwardCostSummary
     const activeLines = lineItems.filter(li => li.status !== 'Cancelled');
     return {
       totalOrderedCost: activeLines.reduce((sum, li) => sum + (li.line_total || 0), 0),
@@ -203,7 +223,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
       lockedCostCount: activeLines.filter(li => li.cost_locked_at).length,
       totalLineItems: activeLines.length,
     };
-  }, [lineItems]);
+  }, [lineItems, isForwardModel]);
 
   const isLoading = loadingProject || loadingCommitments || 
     (isForwardModel ? loadingRevenue : (loadingPools || loadingCharges)) || 
