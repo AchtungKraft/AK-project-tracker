@@ -346,6 +346,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
       {/* ============================================ */}
       {/* FORWARD MODEL: Cost Summary (PO Line Authority) */}
       {/* Does NOT read: commitment.unit_cost_snapshot, commitment.planned_cost_total, Part.cost */}
+      {/* Freight/Tariff from Order header, not line items */}
       {/* ============================================ */}
       {isForwardModel && forwardCostSummary && (
         <Card className="bg-gray-900/50 border-gray-700">
@@ -361,57 +362,68 @@ export default function ProjectFinancialDashboard({ projectId }) {
                 </Badge>
               </CardTitle>
               <Badge variant="outline" className="border-gray-600 text-gray-400">
-                {forwardCostSummary.lineItemCount} PO lines
+                {forwardCostSummary.lineItemCount} lines / {forwardCostSummary.orderCount} POs
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {/* Parts Cost Row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
               <MetricCard
-                label="Ordered Cost"
-                value={forwardCostSummary.orderedCost}
+                label="Ordered Parts Cost"
+                value={forwardCostSummary.orderedPartsCost}
                 color="text-blue-400"
               />
               <MetricCard
-                label="Received Cost"
-                value={forwardCostSummary.receivedCost}
+                label="Received Parts Cost"
+                value={forwardCostSummary.receivedPartsCost}
                 color="text-green-400"
               />
               <MetricCard
-                label="Unreceived Cost"
-                value={forwardCostSummary.unreceivedCost}
-                color={forwardCostSummary.unreceivedCost > 0 ? "text-yellow-400" : "text-green-400"}
+                label="Unreceived Parts Cost"
+                value={forwardCostSummary.unreceivedPartsCost}
+                color={forwardCostSummary.unreceivedPartsCost > 0 ? "text-yellow-400" : "text-green-400"}
+              />
+            </div>
+            
+            {/* Freight + Tariff + Landed Row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              <MetricCard
+                label="Freight"
+                value={forwardCostSummary.totalFreight}
+                color="text-orange-400"
               />
               <MetricCard
-                label="Total Landed"
+                label="Tariff/Duty"
+                value={forwardCostSummary.totalTariff}
+                color="text-red-400"
+              />
+              <MetricCard
+                label="Total Landed Cost"
                 value={forwardCostSummary.totalLandedCost}
                 color="text-purple-400"
               />
             </div>
 
-            {/* Cost Breakdown */}
-            <div className="flex items-center gap-4 p-3 bg-gray-800/30 rounded-lg">
+            {/* Status Row */}
+            <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-800/30 rounded-lg">
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-blue-400" />
                 <span className="text-gray-300">{forwardCostSummary.receivedPct.toFixed(1)}% Received</span>
               </div>
-              {forwardCostSummary.totalFreight > 0 && (
-                <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-orange-400" />
-                  <span className="text-gray-300">Freight: ${forwardCostSummary.totalFreight.toLocaleString()}</span>
-                </div>
-              )}
-              {forwardCostSummary.totalTariff > 0 && (
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-red-400" />
-                  <span className="text-gray-300">Tariff: ${forwardCostSummary.totalTariff.toLocaleString()}</span>
-                </div>
-              )}
               {forwardCostSummary.lockedCostCount > 0 && (
-                <div className="ml-auto flex items-center gap-1">
+                <div className="flex items-center gap-1">
                   <Lock className="w-4 h-4 text-green-400" />
                   <span className="text-gray-400 text-sm">
                     {forwardCostSummary.lockedCostCount} locked
+                  </span>
+                </div>
+              )}
+              {forwardCostSummary.costReviewCount > 0 && (
+                <div className="flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-400 text-sm">
+                    {forwardCostSummary.costReviewCount} need cost review
                   </span>
                 </div>
               )}
