@@ -169,8 +169,11 @@ export default function AddToBuildModal({ part, onClose }) {
   // Filter to active projects only
   const activeProjects = projects.filter(p => p.status_id !== 'completed' && p.status_id !== 'cancelled');
 
-  // Get projects that already have this part
-  const projectsWithPart = existingRequirements.map(r => r.project_id);
+  // Get projects that already have this part (check both commitments and legacy requirements)
+  const projectsWithPart = [
+    ...existingCommitments.map(c => c.project_id),
+    ...existingRequirements.map(r => r.project_id)
+  ].filter((id, idx, arr) => arr.indexOf(id) === idx); // unique
   
   // Get project type name
   const getTypeName = (typeId) => {
