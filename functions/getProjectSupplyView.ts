@@ -134,6 +134,25 @@ Deno.serve(async (req) => {
             `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} to_order=${to_order} sum=${coverage_sum}`
           );
         }
+        
+        // ============================================================================
+        // PHASE 9F: AUTO-RESERVE DRIFT DETECTION
+        // If there's available stock AND to_order > 0, this is a drift condition
+        // System should have auto-reserved all available stock
+        // ============================================================================
+        const physical_stock = part?.physical_stock ?? 0;
+        const partInvPrecompute = partInventoryMap.get(c.part_id) || {};
+        const part_available = Math.max(0, physical_stock - (partInvPrecompute.total_reserved || 0));
+        
+        if (part_available > 0 && to_order > 0) {
+          console.warn(
+            `[READ_MODEL_RESERVATION_DRIFT] part=${c.part_id} commitment=${c.id} ` +
+            `physical=${physical_stock} available=${part_available} to_order=${to_order}. ` +
+            `Stock should have been auto-reserved. Run repairAutoReservationDrift.`
+          );
+          // NOTE: We log warning instead of throwing to allow UI to render and show repair button
+          // The integrity banner will surface this drift condition
+        }
 
         // Calculate on-order and received from line items
         const on_order_qty = commitmentLineItems.reduce((sum, li) => {
@@ -172,9 +191,19 @@ Deno.serve(async (req) => {
         const source_type = mapSourceType(c.supply_source_type);
 
         // Determine next action and block status (FORWARD MODEL - no pool gating)
+        // PHASE 9F: Pass part inventory to check available stock before allowing CREATE_PO
+        const partInv = partInventoryMap.get(c.part_id) || {};
+        const physical_stock_for_action = part?.physical_stock ?? 0;
+        const partInventoryForAction = {
+          physical_stock: physical_stock_for_action,
+          reserved_total: partInv.total_reserved || 0,
+          available: Math.max(0, physical_stock_for_action - (partInv.total_reserved || 0)),
+        };
+        
         const { next_action, block_reason_code } = computeNextAction(
           { required_total, reserved_from_stock, covered_from_po, qty_installed },
-          !!vendor
+          !!vendor,
+          partInventoryForAction
         );
 
         // Part inventory snapshot
@@ -363,8 +392,8 @@ function mapSourceType(legacyType) {
   return mapping[legacyType] || 'SHOP_PURCHASED';
 }
 
-// FORWARD MODEL: No pool/funding gating - only vendor and qty checks
-function computeNextAction(commitment, partHasVendor) {
+// PHASE 9F: Mandatory auto-reserve enforcement - only show CREATE_PO when stock exhausted
+function computeNextAction(commitment, partHasVendor, partInventory = {}) {
   const {
     required_total = 0,
     reserved_from_stock = 0,
@@ -374,22 +403,32 @@ function computeNextAction(commitment, partHasVendor) {
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
+  
+  // Get available stock from part inventory
+  const available_stock = partInventory.available ?? 0;
 
   // Only block: no vendor
   if (to_order > 0 && !partHasVendor) {
     return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR' };
   }
 
-  // Determine next action based on lifecycle (no funding gates)
-  if (to_order > 0) {
+  // PHASE 9F: Only allow CREATE_PO when NO available stock remains
+  // If stock is available but to_order > 0, this is a drift condition
+  if (to_order > 0 && available_stock === 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null };
   }
+  
+  // If covered_from_po > 0 but not enough to install, need to receive
   if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
     return { next_action: 'RECEIVE', block_reason_code: null };
   }
+  
+  // If we have stock available to install
   if (available_to_install > 0 && qty_installed < required_total) {
     return { next_action: 'INSTALL', block_reason_code: null };
   }
+  
+  // Check if fully installed
   if (qty_installed >= required_total && required_total > 0) {
     return { next_action: 'COMPLETE', block_reason_code: null };
   }

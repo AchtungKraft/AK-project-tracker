@@ -312,7 +312,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     new_required = Math.max(0, current_required + (required_total_delta ?? 0));
   }
 
-  // =========== AUTO-RESERVE LOGIC ===========
+  // =========== PHASE 9F: MANDATORY AUTO-RESERVE ENFORCEMENT ===========
   // Get part inventory state
   const physical_stock = part.physical_stock ?? 0;
   
@@ -327,17 +327,33 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     return sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0);
   }, 0);
   
+  // Calculate current reservation for THIS commitment (not including in other_allocated)
+  const current_reserved = commitment?.reserved_from_stock ?? commitment?.qty_reserved ?? 0;
+  
+  // Available = physical - other allocations (current commitment's reservation is freed for recomputation)
   const available = Math.max(0, physical_stock - other_allocated);
   
-  // Calculate new reservation (auto-reserve up to available)
-  const current_reserved = commitment?.reserved_from_stock ?? commitment?.qty_reserved ?? 0;
-  const new_reserved = Math.min(new_required, available + current_reserved);
+  // MANDATORY AUTO-RESERVE: Reserve all available stock up to required
+  const auto_reserve_amount = Math.min(available, new_required);
+  const new_reserved = auto_reserve_amount;
   
   // Calculate covered_from_po (unchanged by this action)
   const covered_from_po = commitment?.covered_from_po ?? 0;
   
   // Compute to_order (the gap)
   const to_order = Math.max(0, new_required - new_reserved - covered_from_po);
+  
+  // =========== PHASE 9F: HARD INVARIANT ENFORCEMENT ===========
+  // If physical stock is available and there's still a gap, fail hard
+  const remaining_available = Math.max(0, available - new_reserved);
+  if (physical_stock > 0 && to_order > 0 && remaining_available > 0) {
+    throw new Error(
+      `AUTO_RESERVE_INVARIANT_FAILED: part=${part.id} physical=${physical_stock} ` +
+      `other_allocated=${other_allocated} available=${available} new_reserved=${new_reserved} ` +
+      `to_order=${to_order} remaining_available=${remaining_available}. ` +
+      `System MUST reserve all available stock before allowing order creation.`
+    );
+  }
 
   // Compute coverage status
   const coverage_total = new_reserved + covered_from_po;
@@ -953,13 +969,13 @@ async function install(ctx, commitment_ids, payload) {
     throw new Error(`Cannot install ${qty_to_install}, only ${available_to_install} available`);
   }
 
-  // PHASE 9C: HARD GUARD - Check if install would make stock negative
+  // PHASE 9F: HARD GUARD - Check if install would make stock negative
   if (affects_stock) {
     const current_physical = part.physical_stock ?? 0;
     if (current_physical < qty_to_install) {
       throw new Error(
-        `INSTALL_NEGATIVE_STOCK_VIOLATION: Cannot install ${qty_to_install} of ${part.part_name}, ` +
-        `only ${current_physical} in physical stock`
+        `NEGATIVE_STOCK_ATTEMPT: Cannot install ${qty_to_install} of ${part.part_name}, ` +
+        `only ${current_physical} in physical stock. Install blocked.`
       );
     }
   }
