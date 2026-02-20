@@ -916,14 +916,17 @@ export default function ProjectSupplyManager() {
                 projectId={projectId}
                 onOpenCommitment={(c) => setQtyManagerDrawer(c)}
               />
-              <Button
-                onClick={() => setShowCreatePoolModal(true)}
-                variant="outline"
-                className="border-green-600 text-green-400 gap-2"
-              >
-                <Wallet className="w-4 h-4" />
-                Create Pool
-              </Button>
+              {/* LEGACY ONLY: Pool creation for legacy financial model */}
+              {project?.financial_model_version !== 'forward' && (
+                <Button
+                  onClick={() => setShowCreatePoolModal(true)}
+                  variant="outline"
+                  className="border-green-600 text-green-400 gap-2"
+                >
+                  <Wallet className="w-4 h-4" />
+                  Create Pool
+                </Button>
+              )}
             </div>
           </div>
 
