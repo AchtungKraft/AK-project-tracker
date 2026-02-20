@@ -360,7 +360,45 @@ Deno.serve(async (req) => {
       });
     }
     
-    // Group items based on batch mode (use finalItems)
+    // Phase 6.2B: Check if any commitment is linked to a non-draft batch (for new batch creation)
+    const allBatchLinesForNew = await base44.entities.InvoiceBatchLine.filter({});
+    const allBatchesForNew = await base44.entities.InvoiceBatch.filter({});
+    const nonDraftBatchIdsForNew = new Set(allBatchesForNew.filter(b => b.status !== 'draft').map(b => b.id));
+    
+    const alreadyInvoicedForNew = new Set();
+    for (const line of allBatchLinesForNew) {
+      if (line.commitment_id && nonDraftBatchIdsForNew.has(line.batch_id)) {
+        alreadyInvoicedForNew.add(line.commitment_id);
+      }
+    }
+    
+    // Filter out already-invoiced commitments
+    const safeItems = [];
+    for (const item of finalItems) {
+      if (item.commitment_id && alreadyInvoicedForNew.has(item.commitment_id)) {
+        blockedItems.push({
+          commitment_id: item.commitment_id,
+          part_name: item.part_name || 'Unknown',
+          project_name: item.project_name || 'Unknown',
+          reasons: ['Commitment already invoiced'],
+          code: 'ALREADY_INVOICED',
+        });
+      } else {
+        safeItems.push(item);
+      }
+    }
+    
+    if (safeItems.length === 0) {
+      return Response.json({
+        success: false,
+        error: 'All items already invoiced or blocked',
+        code: 'ALL_ITEMS_BLOCKED',
+        blocked_items: blockedItems,
+        message: 'All selected items are already invoiced in finalized batches.',
+      }, { status: 400 });
+    }
+    
+    // Group items based on batch mode (use safeItems instead of finalItems)
     let groups = {};
     
     switch (batch_mode) {
