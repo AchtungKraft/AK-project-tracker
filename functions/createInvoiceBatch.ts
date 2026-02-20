@@ -198,6 +198,143 @@ Deno.serve(async (req) => {
     const createdBatches = [];
     const createdLines = [];
     
+    // Phase 6.2: Check for target draft batch accumulation
+    if (target_batch_id) {
+      console.log("Accumulating to existing draft batch:", target_batch_id);
+      
+      // Fetch and validate target batch
+      const targetBatches = await base44.entities.InvoiceBatch.filter({ id: target_batch_id });
+      const targetBatch = targetBatches[0];
+      
+      if (!targetBatch) {
+        return Response.json({
+          success: false,
+          error: 'Target batch not found',
+          code: 'BATCH_NOT_FOUND',
+          message: 'The selected draft invoice no longer exists.',
+        }, { status: 400 });
+      }
+      
+      if (targetBatch.status !== 'draft') {
+        return Response.json({
+          success: false,
+          error: 'Target batch is not a draft',
+          code: 'BATCH_NOT_DRAFT',
+          message: 'Can only add lines to draft invoices.',
+        }, { status: 400 });
+      }
+      
+      if (targetBatch.is_locked) {
+        return Response.json({
+          success: false,
+          error: 'Target batch is locked',
+          code: 'BATCH_LOCKED',
+          message: 'This draft invoice is locked and cannot be modified.',
+        }, { status: 400 });
+      }
+      
+      // Check for duplicates - commitment_id already in this batch
+      const existingLines = await base44.entities.InvoiceBatchLine.filter({ batch_id: target_batch_id });
+      const existingCommitmentIds = new Set(existingLines.filter(l => l.commitment_id).map(l => l.commitment_id));
+      
+      const itemsToAdd = [];
+      for (const item of finalItems) {
+        if (item.commitment_id && existingCommitmentIds.has(item.commitment_id)) {
+          blockedItems.push({
+            commitment_id: item.commitment_id,
+            part_name: item.part_name || 'Unknown',
+            project_name: item.project_name || 'Unknown',
+            reasons: ['Already in this invoice batch'],
+          });
+        } else {
+          itemsToAdd.push(item);
+        }
+      }
+      
+      if (itemsToAdd.length === 0) {
+        return Response.json({
+          success: false,
+          error: 'All items already in batch or blocked',
+          code: 'ALL_ITEMS_BLOCKED',
+          blocked_items: blockedItems,
+          message: 'All selected items are either already in this invoice or cannot be added.',
+        }, { status: 400 });
+      }
+      
+      // Add lines to existing batch
+      let addedTotal = 0;
+      for (const item of itemsToAdd) {
+        const qty = item.assigned_qty || item.qty || 1;
+        const unitPrice = item.unit_price || 0;
+        const lineTotal = qty * unitPrice;
+        addedTotal += lineTotal;
+        
+        const line = await base44.entities.InvoiceBatchLine.create({
+          batch_id: target_batch_id,
+          project_id: item.project_id,
+          part_id: item.part_id,
+          commitment_id: item.commitment_id || null,
+          qty,
+          unit_price: unitPrice,
+          line_total: lineTotal,
+          description: `${item.part_name}${item.part_number ? ` (${item.part_number})` : ''}`,
+          financial_role: item.financial_role,
+          source_type: item.source_type || 'installed_part',
+          source_id: item.source_id || item.id,
+          qb_status: 'queued',
+        });
+        
+        createdLines.push(line);
+      }
+      
+      // Update batch totals
+      const newTotal = (targetBatch.total_amount || 0) + addedTotal;
+      const newLineCount = (targetBatch.line_count || 0) + itemsToAdd.length;
+      
+      await base44.entities.InvoiceBatch.update(target_batch_id, {
+        total_amount: newTotal,
+        line_count: newLineCount,
+      });
+      
+      // Fetch updated batch
+      const updatedBatches = await base44.entities.InvoiceBatch.filter({ id: target_batch_id });
+      createdBatches.push(updatedBatches[0] || targetBatch);
+      
+      // Log lifecycle events for added lines
+      for (const line of createdLines) {
+        if (line.commitment_id) {
+          try {
+            await base44.entities.LifecycleEvent.create({
+              commitment_id: line.commitment_id,
+              event_type: 'CLIENT_INVOICED',
+              trigger_source: 'INVOICE_BATCH',
+              user_id: user.id,
+              part_id: line.part_id,
+              project_id: line.project_id,
+              notes: `Added to batch ${targetBatch.batch_name || target_batch_id}`,
+            });
+          } catch (eventErr) {
+            console.warn('Failed to create lifecycle event:', eventErr);
+          }
+        }
+      }
+      
+      return Response.json({
+        success: true,
+        batches_created: 0,
+        batches_updated: 1,
+        lines_created: createdLines.length,
+        batches: createdBatches,
+        batch_id: target_batch_id,
+        batch_name: targetBatch.batch_name,
+        total_amount: newTotal,
+        blocked_items: blockedItems,
+        message: blockedItems.length > 0 
+          ? `Added ${createdLines.length} lines to existing invoice. ${blockedItems.length} item(s) were blocked.`
+          : `Successfully added ${createdLines.length} lines to existing invoice.`,
+      });
+    }
+    
     // Group items based on batch mode (use finalItems)
     let groups = {};
     
