@@ -34,31 +34,34 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
 
-    // Fetch all required data in parallel
+    // Fetch all required data in parallel (FORWARD MODEL - no pools)
     const [
       project,
       commitments,
       parts,
       vendors,
-      pools,
-      allocations,
       lineItems,
       orders,
       categories,
+      invoiceBatches,
     ] = await Promise.all([
       base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
       base44.entities.PartCommitment.filter({ project_id }),
       base44.entities.Part.list(),
       base44.entities.Vendor.list(),
-      base44.entities.BillingPool.filter({ project_id }),
-      base44.entities.PoolAllocation.list(),
       base44.entities.PartPurchaseLineItem.list(),
       base44.entities.Order.list(),
       base44.entities.PartCategory.list(),
+      base44.entities.InvoiceBatch.filter({ project_id }),
     ]);
 
     if (!project) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    // FORWARD MODEL ENFORCEMENT
+    if (project.financial_model_version !== 'forward') {
+      console.warn(`[FORWARD MIGRATION] Project ${project_id} has legacy model, treating as forward`);
     }
 
     // Build lookup maps
@@ -67,9 +70,11 @@ Deno.serve(async (req) => {
     const orderMap = new Map(orders.map(o => [o.id, o]));
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
-    // Calculate pool balances
-    const activePools = pools.filter(p => p.status !== 'closed');
-    const totalPoolBalance = activePools.reduce((sum, p) => sum + (p.balance || 0), 0);
+    // FORWARD MODEL: Calculate invoice-based billing metrics
+    const paidInvoices = invoiceBatches.filter(ib => ib.status === 'paid');
+    const totalInvoiced = invoiceBatches.reduce((sum, ib) => sum + (ib.total_amount || 0), 0);
+    const totalPaid = paidInvoices.reduce((sum, ib) => sum + (ib.total_amount || 0), 0);
+    const invoiceOutstanding = totalInvoiced - totalPaid;
 
     // Group line items by commitment
     const lineItemsByCommitment = new Map();
@@ -153,12 +158,10 @@ Deno.serve(async (req) => {
         // Source type mapping
         const source_type = mapSourceType(c.supply_source_type);
 
-        // Determine next action and block status
+        // Determine next action and block status (FORWARD MODEL - no pool gating)
         const { next_action, block_reason_code } = computeNextAction(
-          { required_total, reserved_from_stock, covered_from_po, qty_installed, requires_prepay: c.requires_prepay, prepay_satisfied_at: c.prepay_satisfied_at },
-          !!vendor,
-          totalPoolBalance,
-          exposure_gap
+          { required_total, reserved_from_stock, covered_from_po, qty_installed },
+          !!vendor
         );
 
         // Part inventory snapshot
@@ -256,41 +259,52 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Compute tab counts
+    // Compute tab counts (FORWARD MODEL - no fund tab)
     const tabCounts = {
       all: viewModels.length,
-      plan: viewModels.length, // Requirements tab shows all
-      fund: viewModels.filter(vm => vm.exposure_gap > 0 || vm.next_action === 'ALLOCATE_POOL').length,
+      plan: viewModels.length,
       buy: viewModels.filter(vm => vm.to_order > 0 || vm.next_action === 'CREATE_PO').length,
       receive: viewModels.filter(vm => vm.on_order_qty > 0 || vm.next_action === 'RECEIVE').length,
       install: viewModels.filter(vm => vm.available_to_install > 0 || vm.next_action === 'INSTALL').length,
+      invoice: invoiceBatches.filter(ib => ib.status !== 'void').length,
     };
 
-    // Summary statistics
+    // Summary statistics (FORWARD MODEL - invoice-based)
+    const totalPlannedRetail = viewModels.reduce((sum, vm) => sum + vm.planned_retail_total, 0);
+    const totalPlannedCost = viewModels.reduce((sum, vm) => sum + vm.planned_cost_total, 0);
+    const totalInstalledQty = viewModels.reduce((sum, vm) => sum + vm.qty_installed, 0);
+    const totalRequiredQty = viewModels.reduce((sum, vm) => sum + vm.required_total, 0);
+    
     const summary = {
       total_commitments: viewModels.length,
-      total_required: viewModels.reduce((sum, vm) => sum + vm.required_total, 0),
+      total_required: totalRequiredQty,
       total_reserved: viewModels.reduce((sum, vm) => sum + vm.reserved_from_stock, 0),
       total_covered: viewModels.reduce((sum, vm) => sum + vm.covered_from_po, 0),
       total_to_order: viewModels.reduce((sum, vm) => sum + vm.to_order, 0),
-      total_installed: viewModels.reduce((sum, vm) => sum + vm.qty_installed, 0),
-      total_exposure: viewModels.reduce((sum, vm) => sum + vm.exposure_gap, 0),
-      pool_balance: totalPoolBalance,
-      coverage_summary: {
+      total_installed: totalInstalledQty,
+      // FORWARD MODEL: Invoice-based billing metrics
+      total_planned_retail: totalPlannedRetail,
+      total_planned_cost: totalPlannedCost,
+      total_invoiced: totalInvoiced,
+      total_paid: totalPaid,
+      invoice_outstanding: invoiceOutstanding,
+      unbilled_retail: Math.max(0, totalPlannedRetail - totalInvoiced),
+      // Supply coverage (not financial)
+      supply_coverage_summary: {
         full: viewModels.filter(vm => vm.coverage_status === 'FULL').length,
         partial: viewModels.filter(vm => vm.coverage_status === 'PARTIAL').length,
         none: viewModels.filter(vm => vm.coverage_status === 'NONE').length,
         over: viewModels.filter(vm => vm.coverage_status === 'OVER').length,
       },
+      install_percent: totalRequiredQty > 0 ? Math.round((totalInstalledQty / totalRequiredQty) * 100) : 0,
+      by_status: {
+        planned: viewModels.filter(vm => vm._raw?.commitment_status === 'planned').length,
+        ordered: viewModels.filter(vm => ['ordered', 'partially_received'].includes(vm._raw?.commitment_status)).length,
+        received: viewModels.filter(vm => vm._raw?.commitment_status === 'received').length,
+        allocated: viewModels.filter(vm => vm._raw?.commitment_status === 'allocated').length,
+        installed: viewModels.filter(vm => vm._raw?.commitment_status === 'installed' || vm.qty_installed >= vm.required_total).length,
+      },
     };
-
-    // Pool summary for fund tab
-    const poolSummary = activePools.map(p => ({
-      pool_id: p.id,
-      pool_name: p.pool_name,
-      balance: p.balance || 0,
-      status: p.status,
-    }));
 
     return Response.json({
       success: true,
@@ -298,11 +312,12 @@ Deno.serve(async (req) => {
       project: {
         id: project.id,
         name: project.name,
+        client_name: project.client_name,
+        financial_model_version: 'forward', // Always forward
       },
       items: filtered,
       tab_counts: tabCounts,
       summary,
-      pools: poolSummary,
       categories: categories.filter(c => c.active !== false).map(c => ({ id: c.id, name: c.name, color: c.color })),
     });
 
@@ -316,10 +331,9 @@ Deno.serve(async (req) => {
 // HELPER FUNCTIONS
 // ============================================================================
 
+// FORWARD MODEL: Simplified block messages (no pool/funding blocks)
 const BLOCK_MESSAGES = {
   NO_VENDOR: 'No vendor assigned to part',
-  INSUFFICIENT_FUNDS: 'Pool balance insufficient for exposure',
-  PREPAY_REQUIRED: 'Prepayment required before ordering',
   NEGATIVE_AVAILABLE: 'Available stock is negative',
   INVARIANT_VIOLATION: 'Data integrity issue detected',
   ARCHIVED_PART: 'Part is archived',
@@ -336,31 +350,24 @@ function mapSourceType(legacyType) {
   return mapping[legacyType] || 'SHOP_PURCHASED';
 }
 
-function computeNextAction(commitment, partHasVendor, poolBalance, exposureGap) {
+// FORWARD MODEL: No pool/funding gating - only vendor and qty checks
+function computeNextAction(commitment, partHasVendor) {
   const {
     required_total = 0,
     reserved_from_stock = 0,
     covered_from_po = 0,
     qty_installed = 0,
-    requires_prepay = false,
-    prepay_satisfied_at = null,
   } = commitment;
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
 
-  // Check blocks first
+  // Only block: no vendor
   if (to_order > 0 && !partHasVendor) {
     return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR' };
   }
-  if (to_order > 0 && requires_prepay && !prepay_satisfied_at) {
-    return { next_action: 'ALLOCATE_POOL', block_reason_code: 'PREPAY_REQUIRED' };
-  }
-  if (to_order > 0 && exposureGap > 0 && exposureGap > poolBalance) {
-    return { next_action: 'ALLOCATE_POOL', block_reason_code: 'INSUFFICIENT_FUNDS' };
-  }
 
-  // Determine next action based on lifecycle
+  // Determine next action based on lifecycle (no funding gates)
   if (to_order > 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null };
   }
