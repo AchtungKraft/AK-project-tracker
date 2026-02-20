@@ -344,6 +344,7 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
     );
   }
 
+  // CANONICAL: All selection and keying uses commitment_id exclusively
   return (
     <Table>
       <TableHeader>
@@ -351,9 +352,9 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
           {allowSelection && (
             <TableHead className="w-10">
               <Checkbox 
-                checked={items.length > 0 && items.every(i => selectedIds.has(i.id))}
+                checked={items.length > 0 && items.every(i => selectedIds.has(i.commitment_id))}
                 onCheckedChange={(checked) => {
-                  items.forEach(i => onToggleSelection(i.id, checked));
+                  items.forEach(i => onToggleSelection(i.commitment_id, checked));
                 }}
               />
             </TableHead>
@@ -367,71 +368,78 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
         </TableRow>
       </TableHeader>
       <TableBody>
-        {items.map(item => (
-          <TableRow 
-            key={item.id}
-            className="border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer"
-            onClick={() => onRowClick(item)}
-          >
-            {allowSelection && (
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox 
-                  checked={selectedIds.has(item.id)}
-                  onCheckedChange={(checked) => onToggleSelection(item.id, checked)}
-                  disabled={item.unit_retail <= 0}
-                />
-              </TableCell>
-            )}
-            <TableCell>
-              <div className="space-y-1">
-                <Link 
-                  to={`${createPageUrl('ProjectDetail')}?id=${item.project_id}`}
-                  className="text-blue-400 hover:text-blue-300 text-sm font-medium"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {item.project_name}
-                </Link>
-                <div className="flex items-center gap-2">
-                  <span className="text-white text-sm">{item.part_name}</span>
-                  {item.part_type_missing && (
-                    <Badge className="bg-amber-600/30 text-amber-400 text-xs">⚠</Badge>
+        {items.map(item => {
+          // FAIL-FAST: Log error if canonical fields missing
+          if (!item.commitment_id) {
+            console.error('[CANONICAL VIOLATION] Missing commitment_id:', item);
+          }
+          
+          return (
+            <TableRow 
+              key={item.commitment_id}
+              className="border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer"
+              onClick={() => onRowClick(item)}
+            >
+              {allowSelection && (
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox 
+                    checked={selectedIds.has(item.commitment_id)}
+                    onCheckedChange={(checked) => onToggleSelection(item.commitment_id, checked)}
+                    disabled={item.unit_retail <= 0}
+                  />
+                </TableCell>
+              )}
+              <TableCell>
+                <div className="space-y-1">
+                  <Link 
+                    to={`${createPageUrl('ProjectDetail')}?id=${item.project_id}`}
+                    className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {item.project_name}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm">{item.part_name}</span>
+                    {item.part_type_missing && (
+                      <Badge className="bg-amber-600/30 text-amber-400 text-xs">⚠</Badge>
+                    )}
+                  </div>
+                  {item.next_step_label && item.next_step_label !== 'Lifecycle Complete' && (
+                    <p className="text-xs text-yellow-400 font-medium">→ {item.next_step_label}</p>
                   )}
                 </div>
-                {item.next_step_label && item.next_step_label !== 'Lifecycle Complete' && (
-                  <p className="text-xs text-yellow-400 font-medium">→ {item.next_step_label}</p>
+              </TableCell>
+              <TableCell>
+                <LifecycleProgressStack
+                  clientBillingStatus={item.client_billing_status}
+                  procurementStatus={item.procurement_status}
+                  installStatus={item.install_status}
+                  compact
+                />
+              </TableCell>
+              <TableCell className="text-center">
+                <OrderingSafetyBadge safety={item.ordering_safety} size="sm" />
+              </TableCell>
+              <TableCell className="text-right text-gray-300 text-sm">
+                {item.required_total || 0}
+              </TableCell>
+              <TableCell className="text-right">
+                {item.unit_retail > 0 ? (
+                  <span className="text-green-400 font-medium">${(item.line_total || 0).toFixed(0)}</span>
+                ) : (
+                  <Badge className="bg-red-600/30 text-red-400 text-xs">No Price</Badge>
                 )}
-              </div>
-            </TableCell>
-            <TableCell>
-              <LifecycleProgressStack
-                clientBillingStatus={item.client_billing_status}
-                procurementStatus={item.procurement_status}
-                installStatus={item.install_status}
-                compact
-              />
-            </TableCell>
-            <TableCell className="text-center">
-              <OrderingSafetyBadge safety={item.ordering_safety} size="sm" />
-            </TableCell>
-            <TableCell className="text-right text-gray-300 text-sm">
-              {item.assigned_qty}
-            </TableCell>
-            <TableCell className="text-right">
-              {item.unit_retail > 0 ? (
-                <span className="text-green-400 font-medium">${item.line_total?.toFixed(0)}</span>
-              ) : (
-                <Badge className="bg-red-600/30 text-red-400 text-xs">No Price</Badge>
-              )}
-            </TableCell>
-            <TableCell onClick={(e) => e.stopPropagation()}>
-              <InlineActionButton 
-                item={item} 
-                onExecute={onExecuteAction}
-                isExecuting={executingIds?.has(item.commitment_id)}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <InlineActionButton 
+                  item={item} 
+                  onExecute={onExecuteAction}
+                  isExecuting={executingIds?.has(item.commitment_id)}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
@@ -647,14 +655,20 @@ export default function PartsActionWorkbench() {
     return items;
   }, [currentGroup, searchTerm]);
 
-  const selectedItems = currentItems.filter(item => selectedIds.has(item.id));
+  // CANONICAL: selectedItems filtered by commitment_id
+  const selectedItems = currentItems.filter(item => selectedIds.has(item.commitment_id));
   const kpis = queueData?.kpis || {};
 
-  const toggleSelection = (id, checked) => {
+  // CANONICAL: Toggle selection using commitment_id only
+  const toggleSelection = (commitmentId, checked) => {
+    if (!commitmentId) {
+      console.error('[CANONICAL VIOLATION] toggleSelection called with undefined commitmentId');
+      return;
+    }
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
+      if (checked) next.add(commitmentId);
+      else next.delete(commitmentId);
       return next;
     });
   };
@@ -696,7 +710,34 @@ export default function PartsActionWorkbench() {
       return;
     }
     
-    createBatchMutation.mutate(readyItems);
+    // CANONICAL: Send only required payload fields to backend
+    const payload = readyItems.map(item => {
+      // FAIL-FAST: Verify canonical fields exist
+      if (!item.commitment_id) {
+        console.error('[CANONICAL VIOLATION] Item missing commitment_id:', item);
+      }
+      if (item.unit_retail === undefined) {
+        console.error('[CANONICAL VIOLATION] Item missing unit_retail:', item);
+      }
+      if (item.line_total === undefined) {
+        console.error('[CANONICAL VIOLATION] Item missing line_total:', item);
+      }
+      
+      return {
+        commitment_id: item.commitment_id,
+        project_id: item.project_id,
+        part_id: item.part_id,
+        part_name: item.part_name,
+        project_name: item.project_name,
+        unit_retail: item.unit_retail,
+        unit_price: item.unit_retail, // Backend expects unit_price
+        line_total: item.line_total,
+        required_total: item.required_total || 0,
+        assigned_qty: item.required_total || 0, // Backend compatibility
+      };
+    });
+    
+    createBatchMutation.mutate(payload);
   };
   
   const handleFixItem = (item) => {
