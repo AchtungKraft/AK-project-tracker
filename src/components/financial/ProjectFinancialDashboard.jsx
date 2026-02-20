@@ -550,6 +550,17 @@ export default function ProjectFinancialDashboard({ projectId }) {
       )}
 
       {/* ============================================ */}
+      {/* FORWARD MODEL: QB Export Status Cards */}
+      {/* Phase 6.2: Show invoices needing export + failed exports */}
+      {/* ============================================ */}
+      {isForwardModel && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <QBNeedsExportCard projectId={projectId} />
+          <QBExportFailedCard projectId={projectId} />
+        </div>
+      )}
+
+      {/* ============================================ */}
       {/* FORWARD MODEL: Cost Summary (PO Line Authority) */}
       {/* Does NOT read: commitment.unit_cost_snapshot, commitment.planned_cost_total, Part.cost */}
       {/* Freight/Tariff from Order header, not line items */}
