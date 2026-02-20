@@ -473,13 +473,18 @@ export default function ProjectFinancialDashboard({ projectId }) {
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* Section 3: Pool Charges Breakdown */}
+      {/* ============================================ */}
+      {/* LEGACY MODEL: Pool Charges Breakdown */}
+      {/* ============================================ */}
+      {!isForwardModel && (
       <Card className="bg-gray-900/50 border-gray-700">
         <CardHeader className="border-b border-gray-700/50 pb-3">
           <CardTitle className="text-white flex items-center gap-2">
             <Truck className="w-5 h-5 text-orange-400" />
             Pool Charges Breakdown
+            <Badge className="bg-gray-600 text-white text-xs ml-2">Legacy</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4">
@@ -502,6 +507,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Tabs defaultValue="commitments" className="w-full">
         <TabsList className="bg-gray-800 border-gray-700">
