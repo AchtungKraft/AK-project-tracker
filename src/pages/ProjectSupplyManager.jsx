@@ -829,14 +829,19 @@ export default function ProjectSupplyManager() {
                     Reverse Install
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem 
-                  onClick={() => setAllocateModal(commitment)} 
-                  className="text-blue-400"
-                >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Allocate Pool
-                </DropdownMenuItem>
+                {/* LEGACY ONLY: Pool allocation option */}
+                {project?.financial_model_version !== 'forward' && (
+                  <>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => setAllocateModal(commitment)} 
+                      className="text-blue-400"
+                    >
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Allocate Pool
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuItem 
                   onClick={() => setQtyManagerDrawer(commitment)}
                   className="text-cyan-400"
