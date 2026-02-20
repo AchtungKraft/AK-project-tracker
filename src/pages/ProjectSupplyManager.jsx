@@ -1108,10 +1108,7 @@ export default function ProjectSupplyManager() {
                         className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
                       />
                     </div>
-                    <Button size="sm" className="bg-red-600 hover:bg-red-700 gap-1">
-                      <Plus className="w-4 h-4" />
-                      Add Part
-                    </Button>
+                    <AddPartButton projectId={projectId} onSuccess={() => invalidateSupply()} />
                   </div>
                   </div>
                 </CardHeader>
