@@ -688,6 +688,8 @@ export default function ProjectFinancialDashboard({ projectId }) {
         </TabsList>
 
         {/* Section 4: Commitment Financial Table */}
+        {/* FORWARD MODEL: Shows Part, Qty, Unit Retail, Total Retail, Status */}
+        {/* LEGACY MODEL: Shows Part, Qty, Unit Retail, Planned, Covered, Exposure, Coverage, Status */}
         <TabsContent value="commitments">
           <Card className="bg-gray-900/50 border-gray-700">
             <CardContent className="p-0">
@@ -698,10 +700,15 @@ export default function ProjectFinancialDashboard({ projectId }) {
                       <TableHead className="text-gray-400">Part</TableHead>
                       <TableHead className="text-gray-400 text-center">Qty</TableHead>
                       <TableHead className="text-gray-400 text-right">Unit Retail</TableHead>
-                      <TableHead className="text-gray-400 text-right">Planned</TableHead>
-                      <TableHead className="text-gray-400 text-right">Covered</TableHead>
-                      <TableHead className="text-gray-400 text-right">Exposure</TableHead>
-                      <TableHead className="text-gray-400">Coverage</TableHead>
+                      <TableHead className="text-gray-400 text-right">Total Retail</TableHead>
+                      {/* LEGACY ONLY: Exposure columns */}
+                      {!isForwardModel && (
+                        <>
+                          <TableHead className="text-gray-400 text-right">Covered</TableHead>
+                          <TableHead className="text-gray-400 text-right">Exposure</TableHead>
+                          <TableHead className="text-gray-400">Coverage</TableHead>
+                        </>
+                      )}
                       <TableHead className="text-gray-400">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -710,8 +717,9 @@ export default function ProjectFinancialDashboard({ projectId }) {
                       .filter(c => c.commitment_status !== 'cancelled')
                       .map(commitment => {
                         const part = partsMap[commitment.part_id];
-                        const exposureGap = commitment.exposure_gap || 0;
                         const lineItem = lineItems.find(li => li.commitment_id === commitment.id);
+                        // LEGACY ONLY: exposure_gap field
+                        const exposureGap = !isForwardModel ? (commitment.exposure_gap || 0) : 0;
                         
                         return (
                           <TableRow key={commitment.id} className="border-gray-700/50">
@@ -732,18 +740,23 @@ export default function ProjectFinancialDashboard({ projectId }) {
                             <TableCell className="text-right text-blue-400">
                               ${(commitment.planned_retail_total || 0).toFixed(2)}
                             </TableCell>
-                            <TableCell className="text-right text-green-400">
-                              ${(commitment.covered_retail_total || 0).toFixed(2)}
-                            </TableCell>
-                            <TableCell className={cn(
-                              "text-right",
-                              exposureGap > 0 ? "text-red-400" : "text-green-400"
-                            )}>
-                              ${exposureGap.toFixed(2)}
-                            </TableCell>
-                            <TableCell>
-                              <CoverageBadge commitment={commitment} poLine={lineItem} compact />
-                            </TableCell>
+                            {/* LEGACY ONLY: Coverage/Exposure columns */}
+                            {!isForwardModel && (
+                              <>
+                                <TableCell className="text-right text-green-400">
+                                  ${(commitment.covered_retail_total || 0).toFixed(2)}
+                                </TableCell>
+                                <TableCell className={cn(
+                                  "text-right",
+                                  exposureGap > 0 ? "text-red-400" : "text-green-400"
+                                )}>
+                                  ${exposureGap.toFixed(2)}
+                                </TableCell>
+                                <TableCell>
+                                  <CoverageBadge commitment={commitment} poLine={lineItem} compact />
+                                </TableCell>
+                              </>
+                            )}
                             <TableCell>
                               <CommitmentStatusBadge status={commitment.commitment_status} />
                             </TableCell>
