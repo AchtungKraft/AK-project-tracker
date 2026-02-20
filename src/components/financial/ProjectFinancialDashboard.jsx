@@ -34,6 +34,25 @@ import CoverageBadge from "./CoverageBadge";
  * 5. Procurement Cost Table
  */
 export default function ProjectFinancialDashboard({ projectId }) {
+  // Fetch project to determine financial model
+  const { data: project, isLoading: loadingProject } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const projects = await base44.entities.Project.filter({ id: projectId });
+      return projects[0];
+    },
+    enabled: !!projectId,
+  });
+
+  const isForwardModel = project?.financial_model_version === 'forward';
+
+  // FORWARD MODEL: Fetch revenue summary from backend
+  const { data: revenueSummary, isLoading: loadingRevenue } = useQuery({
+    queryKey: ['projectRevenueSummary', projectId],
+    queryFn: () => base44.functions.invoke('getProjectRevenueSummary', { project_id: projectId }),
+    enabled: !!projectId && isForwardModel,
+  });
+
   // Fetch all data in parallel - no aggregation, just reads
   const { data: commitments = [], isLoading: loadingCommitments } = useQuery({
     queryKey: ['partCommitments', projectId],
@@ -41,16 +60,17 @@ export default function ProjectFinancialDashboard({ projectId }) {
     enabled: !!projectId,
   });
 
+  // LEGACY MODEL ONLY: Fetch pool data
   const { data: pools = [], isLoading: loadingPools } = useQuery({
     queryKey: ['billingPools', projectId],
     queryFn: () => base44.entities.BillingPool.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && !isForwardModel,
   });
 
   const { data: charges = [], isLoading: loadingCharges } = useQuery({
     queryKey: ['poolCharges', projectId],
     queryFn: () => base44.entities.PoolCharge.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && !isForwardModel,
   });
 
   const { data: lineItems = [], isLoading: loadingLineItems } = useQuery({
@@ -79,9 +99,33 @@ export default function ProjectFinancialDashboard({ projectId }) {
     [pools]
   );
 
-  // Read precomputed totals - NO aggregation, just summing precomputed fields
-  // NULL SAFETY: All pool-related fields use (value ?? 0) for forward model projects
+  // ============================================
+  // FORWARD MODEL: Use revenue summary from backend
+  // Does NOT read: exposure_gap, billing_status, pool balances
+  // ============================================
+  const forwardRevenueSummary = useMemo(() => {
+    if (!isForwardModel || !revenueSummary?.data) return null;
+    const data = revenueSummary.data;
+    return {
+      totalBillable: data.total_billable ?? 0,
+      totalInvoiced: data.total_invoiced ?? 0,
+      totalCollected: data.total_collected ?? 0,
+      remainingToInvoice: data.remaining_to_invoice ?? 0,
+      outstandingReceivable: data.outstanding_receivable ?? 0,
+      commitmentCount: data.commitment_count ?? 0,
+      uninvoicedCount: data.uninvoiced_count ?? 0,
+      invoicedCount: data.invoiced_count ?? 0,
+      paidCount: data.paid_count ?? 0,
+      invoiceCoveragePct: data.invoice_coverage_pct ?? 0,
+      collectionRatePct: data.collection_rate_pct ?? 0,
+      invoiceBatches: data.invoice_batches ?? [],
+    };
+  }, [isForwardModel, revenueSummary]);
+
+  // LEGACY MODEL: Read precomputed totals from commitment fields
+  // NULL SAFETY: All pool-related fields use (value ?? 0)
   const exposureSummary = useMemo(() => {
+    if (isForwardModel) return null; // Skip for forward model
     const active = commitments.filter(c => !['cancelled', 'closed'].includes(c.commitment_status));
     return {
       totalPlannedRetail: active.reduce((sum, c) => sum + (c.planned_retail_total ?? 0), 0),
@@ -93,11 +137,12 @@ export default function ProjectFinancialDashboard({ projectId }) {
       partialCount: active.filter(c => (c.exposure_gap ?? 0) > 0 && (c.covered_retail_total ?? 0) > 0).length,
       uncoveredCount: active.filter(c => (c.exposure_gap ?? 0) > 0 && (c.covered_retail_total ?? 0) === 0).length,
     };
-  }, [commitments]);
+  }, [commitments, isForwardModel]);
 
-  // Pool summary from precomputed fields
+  // LEGACY MODEL: Pool summary from precomputed fields
   // NULL SAFETY: All pool fields use (value ?? 0)
   const poolSummary = useMemo(() => {
+    if (isForwardModel) return null; // Skip for forward model
     return {
       totalInvoiced: pools.reduce((sum, p) => sum + (p.invoiced_amount ?? 0), 0),
       totalPaid: pools.reduce((sum, p) => sum + (p.paid_amount ?? 0), 0),
@@ -106,10 +151,11 @@ export default function ProjectFinancialDashboard({ projectId }) {
       totalBalance: pools.reduce((sum, p) => sum + (p.balance ?? 0), 0),
       overdrawnCount: pools.filter(p => p.status === 'overdrawn').length,
     };
-  }, [pools]);
+  }, [pools, isForwardModel]);
 
-  // Charges by type from precomputed fields
+  // LEGACY MODEL: Charges by type from precomputed fields
   const chargesByType = useMemo(() => {
+    if (isForwardModel) return {}; // Skip for forward model
     const grouped = {};
     charges.filter(c => !c.is_reversed).forEach(charge => {
       const type = charge.charge_type || 'other';
@@ -120,9 +166,9 @@ export default function ProjectFinancialDashboard({ projectId }) {
       grouped[type].total += charge.amount || 0;
     });
     return grouped;
-  }, [charges]);
+  }, [charges, isForwardModel]);
 
-  // Procurement costs from precomputed line item fields
+  // Procurement costs from precomputed line item fields (both models)
   const procurementSummary = useMemo(() => {
     const activeLines = lineItems.filter(li => li.status !== 'Cancelled');
     return {
@@ -134,7 +180,9 @@ export default function ProjectFinancialDashboard({ projectId }) {
     };
   }, [lineItems]);
 
-  const isLoading = loadingCommitments || loadingPools || loadingCharges || loadingLineItems;
+  const isLoading = loadingProject || loadingCommitments || 
+    (isForwardModel ? loadingRevenue : (loadingPools || loadingCharges)) || 
+    loadingLineItems;
 
   if (isLoading) {
     return (
