@@ -111,8 +111,10 @@ export default function SupplyLanding() {
     }
   };
 
+  // CANONICAL: Route to plan tab (forward model has no fund tab)
   const handleProjectClick = (projectId) => {
-    navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${projectId}`);
+    audit.trackClick('navigate_to_project', { projectId });
+    navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${projectId}&tab=plan`);
   };
 
   const getCoverageColor = (pct) => {
