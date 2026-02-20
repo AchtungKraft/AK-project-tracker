@@ -112,25 +112,38 @@ Deno.serve(async (req) => {
         // Get batch lines and update commitments
         const lines = await base44.entities.InvoiceBatchLine.filter({ batch_id });
         
+        // Check project financial model version
+        const projectId = lines[0]?.project_id;
+        let isForwardModel = false;
+        if (projectId) {
+          const projects = await base44.entities.Project.filter({ id: projectId });
+          isForwardModel = projects[0]?.financial_model_version === 'forward';
+        }
+        
         for (const line of lines) {
           if (line.commitment_id) {
             try {
-              await base44.entities.PartCommitment.update(line.commitment_id, {
-                billing_status: 'paid',
-              });
+              // FORWARD MODEL: Skip commitment.billing_status writes
+              // Billing status is derived from InvoiceBatch.status instead
+              if (!isForwardModel) {
+                await base44.entities.PartCommitment.update(line.commitment_id, {
+                  billing_status: 'paid',
+                });
+              }
               results.updated_commitments.push(line.commitment_id);
               
-              // Create lifecycle event
+              // Create lifecycle event (always - for audit trail)
               const event = await base44.entities.LifecycleEvent.create({
                 commitment_id: line.commitment_id,
                 event_type: 'CLIENT_PAID',
                 previous_state: JSON.stringify({ billing_status: 'invoiced' }),
                 new_state: JSON.stringify({ 
-                  billing_status: 'paid',
+                  billing_status: isForwardModel ? 'derived_from_batch' : 'paid',
                   payment_source,
                   payment_method,
                   payment_date: payment_date || new Date().toISOString(),
                   reference_number,
+                  financial_model: isForwardModel ? 'forward' : 'legacy',
                 }),
                 trigger_source: 'USER_ACTION',
                 user_id: user.id,
@@ -161,7 +174,22 @@ Deno.serve(async (req) => {
               continue;
             }
             
-            // Validation
+            // Check project financial model version
+            const projects = await base44.entities.Project.filter({ id: commitment.project_id });
+            const project = projects[0];
+            const isForwardModel = project?.financial_model_version === 'forward';
+            
+            // FORWARD MODEL: Block direct commitment payment updates
+            // Must go through InvoiceBatch payment flow
+            if (isForwardModel) {
+              results.errors.push({ 
+                commitment_id: cid, 
+                error: 'LEGACY_FINANCIAL_WRITE_BLOCKED: Direct commitment payment not allowed in forward model. Use batch payment instead.' 
+              });
+              continue;
+            }
+            
+            // Validation (legacy model only from here)
             if (commitment.is_archived) {
               results.errors.push({ commitment_id: cid, error: 'Commitment is archived' });
               continue;
@@ -177,7 +205,7 @@ Deno.serve(async (req) => {
               continue;
             }
             
-            // Update commitment
+            // LEGACY: Update commitment billing_status
             await base44.entities.PartCommitment.update(cid, {
               billing_status: 'paid',
             });
@@ -194,6 +222,7 @@ Deno.serve(async (req) => {
                 payment_method,
                 payment_date: payment_date || new Date().toISOString(),
                 reference_number,
+                financial_model: 'legacy',
               }),
               trigger_source: 'USER_ACTION',
               user_id: user.id,
@@ -281,23 +310,35 @@ Deno.serve(async (req) => {
         
         results.updated_batches.push(batch_id);
         
+        // Check project financial model version
+        const projectIdForReversal = lines[0]?.project_id;
+        let isForwardModelReversal = false;
+        if (projectIdForReversal) {
+          const projectsForReversal = await base44.entities.Project.filter({ id: projectIdForReversal });
+          isForwardModelReversal = projectsForReversal[0]?.financial_model_version === 'forward';
+        }
+        
         // Revert commitment billing status
         for (const line of lines) {
           if (line.commitment_id) {
             try {
-              await base44.entities.PartCommitment.update(line.commitment_id, {
-                billing_status: 'invoiced', // Back to invoiced, not billable
-              });
+              // FORWARD MODEL: Skip commitment.billing_status writes
+              if (!isForwardModelReversal) {
+                await base44.entities.PartCommitment.update(line.commitment_id, {
+                  billing_status: 'invoiced', // Back to invoiced, not billable
+                });
+              }
               results.updated_commitments.push(line.commitment_id);
               
-              // Create lifecycle event
+              // Create lifecycle event (always - for audit trail)
               const event = await base44.entities.LifecycleEvent.create({
                 commitment_id: line.commitment_id,
                 event_type: 'CLIENT_PAYMENT_REVERSED',
                 previous_state: JSON.stringify({ billing_status: 'paid' }),
                 new_state: JSON.stringify({ 
-                  billing_status: 'invoiced',
+                  billing_status: isForwardModelReversal ? 'derived_from_batch' : 'invoiced',
                   reversal_reason,
+                  financial_model: isForwardModelReversal ? 'forward' : 'legacy',
                 }),
                 trigger_source: 'USER_ACTION',
                 user_id: user.id,

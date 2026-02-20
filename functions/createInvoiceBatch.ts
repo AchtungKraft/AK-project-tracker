@@ -239,12 +239,28 @@ Deno.serve(async (req) => {
     }
     
     // Update commitment billing status for created lines
+    // FORWARD MODEL: Skip billing_status writes - derive from InvoiceBatch instead
     for (const line of createdLines) {
       if (line.commitment_id) {
         try {
-          await base44.entities.PartCommitment.update(line.commitment_id, {
-            billing_status: 'invoiced',
-          });
+          // Fetch commitment to get project
+          const commitments = await base44.entities.PartCommitment.filter({ id: line.commitment_id });
+          const commitment = commitments[0];
+          
+          if (commitment) {
+            // Fetch project to check financial model version
+            const projects = await base44.entities.Project.filter({ id: commitment.project_id });
+            const project = projects[0];
+            const isForwardModel = project?.financial_model_version === 'forward';
+            
+            if (!isForwardModel) {
+              // LEGACY: Write billing_status to commitment
+              await base44.entities.PartCommitment.update(line.commitment_id, {
+                billing_status: 'invoiced',
+              });
+            }
+            // FORWARD: billing_status derived from InvoiceBatch.status - no write needed
+          }
         } catch (updateErr) {
           console.warn('Failed to update commitment billing status:', updateErr);
         }

@@ -228,13 +228,18 @@ function calculateMarginState(vendorPaymentStatus, clientBillingStatus, clientPa
 /**
  * Resolve financial status for a single context
  * Uses preloaded data maps to avoid N+1 queries
+ * 
+ * FORWARD MODEL: If project.financial_model_version === 'forward',
+ * billing status is derived ONLY from InvoiceBatch (ClientInvoice).
+ * Legacy cascading precedence is skipped.
  */
 function resolveForContext(context, dataMaps) {
   const { part_id, project_id, purchase_line_item_id, commitment_id } = context;
-  const { partsMap, lineItemsMap, ordersMap, commitmentsMap, vendorInvoicesMap } = dataMaps;
+  const { partsMap, lineItemsMap, ordersMap, commitmentsMap, vendorInvoicesMap, projectsMap, invoiceBatchLinesMap, invoiceBatchesMap } = dataMaps;
   
   const part = partsMap[part_id];
   const financialRole = getFinancialRole(part);
+  const project = projectsMap?.[project_id];
   
   // Initialize result
   const result = {
@@ -251,17 +256,81 @@ function resolveForContext(context, dataMaps) {
     margin_state: MARGIN_STATE.UNKNOWN,
     billing_source: BILLING_SOURCE.NONE,
     vendor_source: VENDOR_SOURCE.NONE,
+    financial_model: project?.financial_model_version || 'legacy',
     last_updated_at: new Date().toISOString(),
   };
   
   // Check if part is billable
   const isBillable = part?.requires_client_billing !== false;
   
-  // ---- CLIENT BILLING RESOLUTION (PRECEDENCE ORDER) ----
-  // 1. Line item override
-  // 2. Order billing status
-  // 3. Commitment billing status
-  // 4. Default
+  // ============================================
+  // FORWARD MODEL: Derive billing ONLY from InvoiceBatch (ClientInvoice)
+  // ============================================
+  if (project?.financial_model_version === 'forward') {
+    result.billing_source = 'CLIENT_INVOICE';
+    
+    // Find InvoiceBatchLine for this commitment
+    let batchLine = null;
+    let batch = null;
+    
+    if (commitment_id && invoiceBatchLinesMap) {
+      for (const line of Object.values(invoiceBatchLinesMap)) {
+        if (line.commitment_id === commitment_id && line.qb_status !== 'voided') {
+          batchLine = line;
+          batch = invoiceBatchesMap?.[line.batch_id];
+          break;
+        }
+      }
+    }
+    
+    if (batch) {
+      // Map InvoiceBatch.status to billing status
+      switch (batch.status) {
+        case 'paid':
+          result.client_billing_status = CLIENT_BILLING_STATUS.PAID;
+          result.client_payment_status = CLIENT_PAYMENT_STATUS.PAID;
+          break;
+        case 'invoiced':
+        case 'exported':
+          result.client_billing_status = CLIENT_BILLING_STATUS.INVOICED;
+          result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
+          break;
+        case 'voided':
+          result.client_billing_status = CLIENT_BILLING_STATUS.NOT_INVOICED;
+          result.client_payment_status = CLIENT_PAYMENT_STATUS.UNPAID;
+          break;
+        default:
+          result.client_billing_status = CLIENT_BILLING_STATUS.NOT_INVOICED;
+      }
+    } else {
+      // No invoice batch line = not invoiced
+      result.client_billing_status = isBillable ? CLIENT_BILLING_STATUS.NOT_INVOICED : CLIENT_BILLING_STATUS.NOT_BILLABLE;
+    }
+    
+    // FORWARD MODEL: Skip vendor invoice status (PO = paid at order)
+    result.vendor_invoice_status = VENDOR_INVOICE_STATUS.NOT_RECEIVED;
+    result.vendor_payment_status = VENDOR_PAYMENT_STATUS.PAID; // Assume paid at order
+    
+    // Calculate margin state for forward model
+    result.margin_state = calculateMarginState(
+      result.vendor_payment_status,
+      result.client_billing_status,
+      result.client_payment_status,
+      financialRole
+    );
+    
+    // Get commitment status if available
+    if (commitment_id) {
+      const commitment = commitmentsMap[commitment_id];
+      result.commitment_status = commitment?.commitment_status;
+    }
+    
+    return result;
+  }
+  
+  // ============================================
+  // LEGACY MODEL: Cascading precedence (original logic)
+  // ============================================
   
   let billingResolved = false;
   

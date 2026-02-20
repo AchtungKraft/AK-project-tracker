@@ -1582,8 +1582,15 @@ async function addPartToProject(txn, params) {
     pricing_integrity_status = 'missing_retail';
   }
 
-  // Create the PartCommitment
-  const commitment = await txn.base44.asServiceRole.entities.PartCommitment.create({
+  // Fetch project to check financial model version
+  const projects = await txn.base44.asServiceRole.entities.Project.filter({ id: project_id });
+  const project = projects[0];
+  const isForwardModel = project?.financial_model_version === 'forward';
+  
+  // Build commitment data
+  // FORWARD MODEL: billing_status defaults to 'billable' but is not used for status resolution
+  // (status derived from InvoiceBatch instead)
+  const commitmentData = {
     project_id,
     part_id,
     qty_committed,
@@ -1594,17 +1601,24 @@ async function addPartToProject(txn, params) {
     qty_cancelled: 0,
     commitment_status: 'planned',
     source_type: source_surface === 'migration:requirements' ? 'requirement' : 'manual_attachment',
-    billing_status: 'billable',
+    billing_status: 'billable', // Initial status allowed even for forward model
     unit_cost_snapshot,
     unit_retail_snapshot,
     planned_cost_total,
     planned_retail_total,
-    covered_retail_total: 0,
-    exposure_gap: planned_retail_total,
     pricing_integrity_status,
     commitment_version: 1,
     notes: notes || null
-  });
+  };
+  
+  // LEGACY MODEL ONLY: Set pool-related fields
+  if (!isForwardModel) {
+    commitmentData.covered_retail_total = 0;
+    commitmentData.exposure_gap = planned_retail_total;
+  }
+  
+  // Create the PartCommitment
+  const commitment = await txn.base44.asServiceRole.entities.PartCommitment.create(commitmentData);
 
   txn.addRollback(async () => {
     await txn.base44.asServiceRole.entities.PartCommitment.delete(commitment.id);

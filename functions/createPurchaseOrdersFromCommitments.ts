@@ -179,12 +179,18 @@ Deno.serve(async (req) => {
     const lifecycleEvents = [];
     const today = new Date().toISOString().split('T')[0];
 
+    // Fetch project to check financial model version
+    const projects = await base44.asServiceRole.entities.Project.filter({ id: project_id });
+    const project = projects[0];
+    const isForwardModel = project?.financial_model_version === 'forward';
+
     for (const [vendorId, items] of Object.entries(vendorGroups)) {
       // Generate canonical PO number
       const poNumber = await generateCanonicalPONumber(base44, poSequences);
 
       // Create Order
-      const order = await base44.asServiceRole.entities.Order.create({
+      // FORWARD MODEL: Do not write billing_status (legacy field)
+      const orderData = {
         vendor_id: vendorId,
         po_prefix: 'AK',
         po_number: poNumber,
@@ -192,8 +198,14 @@ Deno.serve(async (req) => {
         eta_date: eta_date || null,
         status: 'Ordered',
         notes: notes || `Created via Unified Supply Engine for ${items.length} commitment(s)`,
-        billing_status: 'Not Invoiced'
-      });
+      };
+      
+      // Only set billing_status for legacy projects
+      if (!isForwardModel) {
+        orderData.billing_status = 'Not Invoiced';
+      }
+      
+      const order = await base44.asServiceRole.entities.Order.create(orderData);
 
       const lineItemIds = [];
 
