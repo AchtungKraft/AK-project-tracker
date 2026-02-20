@@ -123,10 +123,29 @@ export function CoverageBadge({ commitment, compact = false }) {
   );
 }
 
-// Billing status badge
+/**
+ * BillingStatusBadge - LEGACY MODEL ONLY
+ * Uses pool-based billing_status field
+ * Forward model should use ForwardInvoiceStatusBadge instead
+ */
 export function BillingStatusBadge({ commitment }) {
   const status = commitment?.billing_status || "billable";
   const config = BILLING_STATUS_CONFIG[status] || BILLING_STATUS_CONFIG.billable;
+  
+  return (
+    <Badge className={config.color}>
+      {config.label}
+    </Badge>
+  );
+}
+
+/**
+ * ForwardInvoiceStatusBadge - FORWARD MODEL ONLY
+ * Uses InvoiceBatch linkage to determine status: Uninvoiced / Invoiced / Paid
+ */
+export function ForwardInvoiceStatusBadge({ commitment }) {
+  const status = getForwardInvoiceStatus(commitment);
+  const config = FORWARD_INVOICE_STATUS_CONFIG[status] || FORWARD_INVOICE_STATUS_CONFIG.uninvoiced;
   
   return (
     <Badge className={config.color}>
@@ -147,8 +166,11 @@ export function ExposureBasisLabel({ commitment }) {
   );
 }
 
-// Main FinancialColumns component - inline display
-export function FinancialColumns({ commitment, variant = "full" }) {
+/**
+ * Main FinancialColumns component - inline display
+ * Supports both forward and legacy financial models via isForwardModel prop
+ */
+export function FinancialColumns({ commitment, variant = "full", isForwardModel = false }) {
   if (!commitment) {
     return <span className="text-gray-500">—</span>;
   }
@@ -158,17 +180,24 @@ export function FinancialColumns({ commitment, variant = "full" }) {
   const plannedRetail = commitment.planned_retail_total || 0;
   const orderedCost = commitment.actual_extended_cost || (commitment.unit_cost_snapshot * effectiveRequired) || 0;
   const invoicedRetail = commitment.invoiced_retail_total || 0;
-  const coveredRetail = commitment.covered_retail_total || 0;
-  const exposureGap = commitment.exposure_gap ?? (plannedRetail - coveredRetail);
+  
+  // LEGACY ONLY fields - not used in forward model
+  const coveredRetail = isForwardModel ? 0 : (commitment.covered_retail_total || 0);
+  const exposureGap = isForwardModel ? 0 : (commitment.exposure_gap ?? (plannedRetail - coveredRetail));
   
   if (variant === "compact") {
     return (
       <div className="flex items-center gap-2">
         <span className="text-white font-medium">{formatCurrency(plannedRetail)}</span>
-        {exposureGap > 0 && (
+        {/* LEGACY ONLY: Show exposure gap */}
+        {!isForwardModel && exposureGap > 0 && (
           <Badge className="bg-red-600/20 text-red-400 text-xs">
             Gap: {formatCurrency(exposureGap)}
           </Badge>
+        )}
+        {/* FORWARD: Show invoice status */}
+        {isForwardModel && (
+          <ForwardInvoiceStatusBadge commitment={commitment} />
         )}
       </div>
     );
@@ -185,13 +214,43 @@ export function FinancialColumns({ commitment, variant = "full" }) {
           <span className="text-gray-500">Cost:</span>{" "}
           <span className="text-gray-300">{formatCurrency(orderedCost)}</span>
         </div>
-        <CoverageBadge commitment={commitment} compact />
-        <BillingStatusBadge commitment={commitment} />
+        {/* FORWARD: Show invoice status; LEGACY: Show coverage + billing badges */}
+        {isForwardModel ? (
+          <ForwardInvoiceStatusBadge commitment={commitment} />
+        ) : (
+          <>
+            <CoverageBadge commitment={commitment} compact />
+            <BillingStatusBadge commitment={commitment} />
+          </>
+        )}
       </div>
     );
   }
   
   // Full variant - vertical stack
+  // FORWARD: Simplified view without pool-based fields
+  if (isForwardModel) {
+    return (
+      <div className="space-y-1 text-sm">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+          <span className="text-gray-500">Planned Retail:</span>
+          <span className="text-white font-medium">{formatCurrency(plannedRetail)}</span>
+          
+          <span className="text-gray-500">Ordered Cost:</span>
+          <span className="text-gray-300">{formatCurrency(orderedCost)}</span>
+          
+          <span className="text-gray-500">Invoiced Retail:</span>
+          <span className="text-gray-300">{formatCurrency(invoicedRetail)}</span>
+        </div>
+        
+        <div className="flex items-center justify-end pt-1 border-t border-gray-700/50">
+          <ForwardInvoiceStatusBadge commitment={commitment} />
+        </div>
+      </div>
+    );
+  }
+  
+  // LEGACY: Full variant with pool-based coverage
   return (
     <div className="space-y-1 text-sm">
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
@@ -224,9 +283,18 @@ export function FinancialColumns({ commitment, variant = "full" }) {
   );
 }
 
-// Table cell variants for consistent column rendering
-export function FinancialCell({ commitment, field }) {
+/**
+ * Table cell variants for consistent column rendering
+ * LEGACY ONLY for exposure_gap and covered_retail fields
+ * Forward model should not render these fields
+ */
+export function FinancialCell({ commitment, field, isForwardModel = false }) {
   if (!commitment) return <span className="text-gray-500">—</span>;
+  
+  // Block legacy-only fields in forward model
+  if (isForwardModel && (field === 'exposure_gap' || field === 'covered_retail')) {
+    return <span className="text-gray-500">—</span>;
+  }
   
   // Use canonical required_total with legacy fallback
   const effectiveRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
@@ -235,6 +303,7 @@ export function FinancialCell({ commitment, field }) {
     planned_retail: commitment.planned_retail_total || 0,
     ordered_cost: commitment.actual_extended_cost || (commitment.unit_cost_snapshot * effectiveRequired) || 0,
     invoiced_retail: commitment.invoiced_retail_total || 0,
+    // LEGACY ONLY fields
     covered_retail: commitment.covered_retail_total || 0,
     exposure_gap: commitment.exposure_gap ?? ((commitment.planned_retail_total || 0) - (commitment.covered_retail_total || 0)),
   };
