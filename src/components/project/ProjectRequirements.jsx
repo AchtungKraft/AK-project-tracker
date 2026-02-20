@@ -200,15 +200,15 @@ export default function ProjectRequirements({ projectId }) {
 
       {isLoading ? (
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardContent className="p-8 text-center text-gray-500">Loading requirements...</CardContent>
+          <CardContent className="p-8 text-center text-gray-500">Loading commitments...</CardContent>
         </Card>
-      ) : filteredRequirements.length === 0 ? (
+      ) : filteredCommitments.length === 0 ? (
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
           <CardContent className="p-8 text-center">
             <Package className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-            <p className="text-gray-500 mb-3">No part requirements yet</p>
+            <p className="text-gray-500 mb-3">No part commitments yet</p>
             <Button onClick={() => setShowAddModal(true)} className="bg-red-600 hover:bg-red-700 gap-2">
-              <Plus className="w-4 h-4" /> Add First Requirement
+              <Plus className="w-4 h-4" /> Add First Part
             </Button>
           </CardContent>
         </Card>
@@ -220,23 +220,29 @@ export default function ProjectRequirements({ projectId }) {
                 <TableRow className="border-b border-red-900/20 hover:bg-transparent">
                   <TableHead className="text-gray-400 text-xs">Part</TableHead>
                   <TableHead className="text-gray-400 text-xs">Status</TableHead>
-                  <TableHead className="text-gray-400 text-xs text-center">Needed</TableHead>
-                  <TableHead className="text-gray-400 text-xs text-center">Allocated</TableHead>
-                  <TableHead className="text-gray-400 text-xs text-center">Ordered</TableHead>
+                  <TableHead className="text-gray-400 text-xs text-center">Required</TableHead>
+                  <TableHead className="text-gray-400 text-xs text-center">Reserved</TableHead>
+                  <TableHead className="text-gray-400 text-xs text-center">On Order</TableHead>
                   <TableHead className="text-gray-400 text-xs text-center">Installed</TableHead>
-                  <TableHead className="text-gray-400 text-xs text-center">To Order</TableHead>
+                  <TableHead className="text-gray-400 text-xs text-center">Gap</TableHead>
                   <TableHead className="text-gray-400 text-xs">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRequirements.map(req => {
-                  const part = getPartInfo(req.part_id);
-                  const statusConfig = STATUS_CONFIG[req.status] || STATUS_CONFIG['Needed'];
+                {filteredCommitments.map(commitment => {
+                  const part = getPartInfo(commitment.part_id);
+                  const statusConfig = STATUS_CONFIG[commitment.commitment_status] || STATUS_CONFIG['planned'];
                   const StatusIcon = statusConfig.icon;
-                  const toOrder = Math.max(0, (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0));
+                  
+                  // CANONICAL field names
+                  const required = commitment.required_total || commitment.qty_committed || 0;
+                  const reserved = commitment.reserved_from_stock || commitment.qty_allocated || 0;
+                  const onOrder = commitment.covered_from_po || commitment.qty_ordered || 0;
+                  const installed = commitment.qty_installed || 0;
+                  const gap = Math.max(0, required - reserved - onOrder);
 
                   return (
-                    <TableRow key={req.id} className="border-b border-red-900/10 hover:bg-red-950/20">
+                    <TableRow key={commitment.id} className="border-b border-red-900/10 hover:bg-red-950/20">
                       <TableCell>
                         <div>
                           <p className="text-white text-sm font-medium">{part.part_name}</p>
@@ -251,16 +257,16 @@ export default function ProjectRequirements({ projectId }) {
                       <TableCell>
                         <Badge style={{ backgroundColor: statusConfig.color }} className="text-white text-xs gap-1">
                           <StatusIcon className="w-3 h-3" />
-                          {req.status}
+                          {statusConfig.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-center text-white font-medium">{req.qty_needed || 0}</TableCell>
-                      <TableCell className="text-center text-blue-400">{req.qty_allocated || 0}</TableCell>
-                      <TableCell className="text-center text-purple-400">{req.qty_ordered || 0}</TableCell>
-                      <TableCell className="text-center text-green-400">{req.qty_installed || 0}</TableCell>
+                      <TableCell className="text-center text-white font-medium">{required}</TableCell>
+                      <TableCell className="text-center text-cyan-400">{reserved}</TableCell>
+                      <TableCell className="text-center text-purple-400">{onOrder}</TableCell>
+                      <TableCell className="text-center text-green-400">{installed}</TableCell>
                       <TableCell className="text-center">
-                        {toOrder > 0 ? (
-                          <span className="text-red-400 font-medium">{toOrder}</span>
+                        {gap > 0 ? (
+                          <span className="text-red-400 font-medium">{gap}</span>
                         ) : (
                           <span className="text-gray-500">0</span>
                         )}
@@ -273,22 +279,22 @@ export default function ProjectRequirements({ projectId }) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setAllocatingRequirement(req)}>
+                            <DropdownMenuItem onClick={() => setAllocatingRequirement(commitment)}>
                               Allocate from Inventory
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => {
-                                const allocatedUninstalled = (req.qty_allocated || 0) - (req.qty_installed || 0);
+                                const allocatedUninstalled = reserved - installed;
                                 const message = allocatedUninstalled > 0 
-                                  ? `Remove this requirement? ${allocatedUninstalled} allocated unit(s) will be released back to inventory.`
-                                  : 'Remove this requirement?';
+                                  ? `Cancel this commitment? ${allocatedUninstalled} reserved unit(s) will be released back to inventory.`
+                                  : 'Cancel this commitment?';
                                 if (confirm(message)) {
-                                  deleteMutation.mutate(req);
+                                  cancelMutation.mutate(commitment);
                                 }
                               }}
                               className="text-red-400"
                             >
-                              Remove
+                              Cancel
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
