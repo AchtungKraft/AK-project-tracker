@@ -741,6 +741,8 @@ async function createBillingPool(txn, params) {
 
 /**
  * Allocate pool funds to a commitment
+ * 
+ * LEGACY MODEL ONLY: Forward projects derive billing from InvoiceBatch status.
  */
 async function allocatePool(txn, params) {
   const { pool_id, commitment_id, amount, allocation_type, notes } = params;
@@ -754,6 +756,16 @@ async function allocatePool(txn, params) {
   const commitment = commitments[0];
   if (!pool) throw new Error('Pool not found');
   if (!commitment) throw new Error('Commitment not found');
+
+  // FORWARD MODEL GUARD: Block pool allocation for forward projects
+  const projects = await txn.base44.asServiceRole.entities.Project.filter({ id: commitment.project_id });
+  const project = projects[0];
+  if (project?.financial_model_version === 'forward') {
+    throw new Error(
+      'LEGACY_FLOW_BLOCKED: allocatePool is legacy-only and not available in forward financial model projects. ' +
+      'Use InvoiceBatch for client billing instead.'
+    );
+  }
 
   const poolVersion = pool.pool_version || 1;
   const commitmentVersion = commitment.commitment_version || 1;
