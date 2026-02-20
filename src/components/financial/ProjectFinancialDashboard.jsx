@@ -340,14 +340,73 @@ export default function ProjectFinancialDashboard({ projectId }) {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Section 2: Pool Summary Table */}
+      {/* ============================================ */}
+      {/* FORWARD MODEL: Invoice Batches Table */}
+      {/* ============================================ */}
+      {isForwardModel && forwardRevenueSummary?.invoiceBatches?.length > 0 && (
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardHeader className="border-b border-gray-700/50 pb-3">
+            <CardTitle className="text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-purple-400" />
+              Client Invoices
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-gray-700 hover:bg-transparent">
+                  <TableHead className="text-gray-400">Invoice</TableHead>
+                  <TableHead className="text-gray-400">Date</TableHead>
+                  <TableHead className="text-gray-400 text-right">Amount</TableHead>
+                  <TableHead className="text-gray-400">Status</TableHead>
+                  <TableHead className="text-gray-400">Payment</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {forwardRevenueSummary.invoiceBatches.map(batch => (
+                  <TableRow key={batch.id} className="border-gray-700/50">
+                    <TableCell className="text-white font-medium">
+                      {batch.invoice_number || batch.batch_name}
+                    </TableCell>
+                    <TableCell className="text-gray-400">
+                      {batch.invoice_date || '-'}
+                    </TableCell>
+                    <TableCell className="text-right text-green-400">
+                      ${(batch.total_amount ?? 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={cn(
+                        batch.status === 'paid' ? 'bg-green-600' :
+                        batch.status === 'sent' || batch.status === 'invoiced' ? 'bg-purple-600' :
+                        'bg-gray-600'
+                      )}>
+                        {batch.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-gray-400 text-sm">
+                      {batch.payment_received_at ? new Date(batch.payment_received_at).toLocaleDateString() : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================ */}
+      {/* LEGACY MODEL: Pool Summary Table */}
+      {/* ============================================ */}
+      {!isForwardModel && poolSummary && (
       <Card className="bg-gray-900/50 border-gray-700">
         <CardHeader className="border-b border-gray-700/50 pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-green-400" />
               Pool Summary
+              <Badge className="bg-gray-600 text-white text-xs ml-2">Legacy</Badge>
             </CardTitle>
             {poolSummary.overdrawnCount > 0 && (
               <Badge variant="destructive" className="gap-1">
@@ -378,15 +437,15 @@ export default function ProjectFinancialDashboard({ projectId }) {
                   {pools.map(pool => (
                     <TableRow key={pool.id} className="border-gray-700/50">
                       <TableCell className="text-white font-medium">{pool.pool_name}</TableCell>
-                      <TableCell className="text-right text-blue-400">${(pool.invoiced_amount || 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-green-400">${(pool.paid_amount || 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-purple-400">${(pool.allocated_total || 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-orange-400">${(pool.charges_total || 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-blue-400">${(pool.invoiced_amount ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-green-400">${(pool.paid_amount ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-purple-400">${(pool.allocated_total ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-orange-400">${(pool.charges_total ?? 0).toFixed(2)}</TableCell>
                       <TableCell className={cn(
                         "text-right font-medium",
-                        (pool.balance || 0) < 0 ? "text-red-400" : "text-green-400"
+                        (pool.balance ?? 0) < 0 ? "text-red-400" : "text-green-400"
                       )}>
-                        ${(pool.balance || 0).toFixed(2)}
+                        ${(pool.balance ?? 0).toFixed(2)}
                       </TableCell>
                       <TableCell>
                         <PoolStatusBadge status={pool.status} />
