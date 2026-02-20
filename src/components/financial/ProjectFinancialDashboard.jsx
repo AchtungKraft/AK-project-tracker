@@ -206,6 +206,18 @@ export default function ProjectFinancialDashboard({ projectId }) {
     );
   }
 
+  // Handle project not found gracefully
+  if (projectNotFound) {
+    return (
+      <Card className="bg-gray-900/50 border-gray-700">
+        <CardContent className="p-8 text-center text-gray-500">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
+          Project not found or financial data unavailable.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ============================================ */}
