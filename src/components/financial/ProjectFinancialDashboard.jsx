@@ -23,6 +23,8 @@ import { differenceInDays, parseISO } from "date-fns";
 // LEGACY ONLY: Pool components not rendered for forward model
 import PoolPanel from "./PoolPanel";
 import CoverageBadge from "./CoverageBadge";
+// Phase 6.1: PO Cost Review Card for forward model
+import POCostReviewCard from "./POCostReviewCard";
 
 /**
  * InvoiceAgingSummary - Shows aging buckets for outstanding invoices
