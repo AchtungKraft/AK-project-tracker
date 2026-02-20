@@ -49,6 +49,16 @@ import { toast } from "sonner";
 // CONSTANTS
 // ============================================
 
+/**
+ * LIFECYCLE_TABS - Workflow stages for invoicing
+ * 
+ * NOTE: The "Safety" column and ORDERING_SAFETY_CONFIG are LEGACY MODEL ONLY.
+ * Forward model determines invoice readiness based on:
+ * - Has commitment retail price (unit_retail_snapshot > 0)
+ * - Not already linked to InvoiceBatchLine
+ * 
+ * Forward model does NOT use: billing_status, exposure_gap, covered_retail_total
+ */
 const LIFECYCLE_TABS = {
   ASSIGNED_NEEDS_BILLING: {
     key: 'assigned_needs_billing',
