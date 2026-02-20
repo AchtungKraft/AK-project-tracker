@@ -87,7 +87,7 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       groups[vendorId].items.push({
         ...item,
         qty_to_order: item.qty_to_order || item.part?.reorder_quantity || 1,
-        unit_price: partCost,
+        unit_cost: partCost,  // RENAMED: unit_price → unit_cost for PO lines
         original_cost: partCost, // Track original for override detection
         cost_overridden: false,
         vendorOverride: null,
@@ -129,7 +129,7 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           if (idx !== itemIndex) return item;
           const updated = { ...item, [field]: value };
           // Track if cost was manually overridden
-          if (field === 'unit_price') {
+          if (field === 'unit_cost') {
             updated.cost_overridden = value !== item.original_cost;
           }
           return updated;
@@ -214,9 +214,9 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       
       group.items.forEach(item => {
         totalItems += item.qty_to_order;
-        totalPartsValue += (item.qty_to_order || 0) * (item.unit_price || 0);
+        totalPartsValue += (item.qty_to_order || 0) * (item.unit_cost || 0);
         if (item.cost_overridden) overriddenCount++;
-        if (!item.unit_price || item.unit_price <= 0) zerosCostCount++;
+        if (!item.unit_cost || item.unit_cost <= 0) zerosCostCount++;
       });
     });
     
