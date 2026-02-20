@@ -41,6 +41,10 @@ function PoolStatusBadge({ status }) {
 
 /**
  * PoolPanel - Displays billing pool summary with financial status
+ * 
+ * NOTE: This component is LEGACY MODEL ONLY.
+ * Forward model projects should NOT render this component.
+ * Forward model uses InvoiceBatch for revenue tracking, not billing pools.
  */
 export default function PoolPanel({ 
   pool,

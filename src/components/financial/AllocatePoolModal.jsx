@@ -19,6 +19,10 @@ import { toast } from "sonner";
 /**
  * AllocatePoolModal - Allocate pool funds to a commitment
  * 
+ * NOTE: This modal is LEGACY MODEL ONLY. 
+ * Forward model projects should NOT render this modal.
+ * Forward model uses InvoiceBatch for revenue tracking, not pool allocation.
+ * 
  * Features:
  * - Display all pools for project with balance/status
  * - Show commitment exposure details

@@ -18,6 +18,10 @@ import { CommitmentActions } from "./financialMutationGuard";
 /**
  * CreatePoolModal - Create a new billing pool for a project
  * 
+ * NOTE: This modal is LEGACY MODEL ONLY.
+ * Forward model projects should NOT render this modal.
+ * Forward model uses InvoiceBatch for revenue tracking, not billing pools.
+ * 
  * Always visible from PoolPanel (no lifecycle restriction)
  * Routes through CommitmentActions.createBillingPool()
  */
