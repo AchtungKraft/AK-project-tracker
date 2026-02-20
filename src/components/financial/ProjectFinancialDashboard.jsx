@@ -194,21 +194,33 @@ export default function ProjectFinancialDashboard({ projectId }) {
   }, [charges, isForwardModel]);
 
   // FORWARD MODEL: Cost summary from backend (PO lines as sole cost authority)
+  // Uses Order.freight_cost and Order.tariff_cost (header level)
   const forwardCostSummary = useMemo(() => {
     if (!isForwardModel) return null;
     if (!costSummary?.data) return null;
     const data = costSummary.data;
     return {
-      orderedCost: data.ordered_cost ?? 0,
-      receivedCost: data.received_cost ?? 0,
-      unreceivedCost: data.unreceived_cost ?? 0,
+      // Parts cost (from PO lines)
+      orderedPartsCost: data.ordered_parts_cost ?? data.ordered_cost ?? 0,
+      receivedPartsCost: data.received_parts_cost ?? data.received_cost ?? 0,
+      unreceivedPartsCost: data.unreceived_parts_cost ?? data.unreceived_cost ?? 0,
+      // Legacy aliases for backward compat
+      orderedCost: data.ordered_parts_cost ?? data.ordered_cost ?? 0,
+      receivedCost: data.received_parts_cost ?? data.received_cost ?? 0,
+      unreceivedCost: data.unreceived_parts_cost ?? data.unreceived_cost ?? 0,
+      // Freight + Tariff (from Order header)
       totalFreight: data.total_freight ?? 0,
       totalTariff: data.total_tariff ?? 0,
+      // Landed total
       totalLandedCost: data.total_landed_cost ?? 0,
+      // Status
       receivedPct: data.received_pct ?? 0,
       lockedCostCount: data.locked_cost_count ?? 0,
+      costReviewCount: data.cost_review_count ?? 0,
       lineItemCount: data.line_item_count ?? 0,
+      orderCount: data.order_count ?? 0,
       costAuthority: data.cost_authority,
+      freightTariffSource: data.freight_tariff_source,
     };
   }, [isForwardModel, costSummary]);
 
