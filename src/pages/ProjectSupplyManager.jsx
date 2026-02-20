@@ -106,7 +106,8 @@ export default function ProjectSupplyManager() {
     invalidate: invalidateSupply
   } = useProjectSupplyView(projectId);
 
-  const isForwardModel = project?.financial_model_version === 'forward';
+  // CANONICAL: All projects use forward model (invoice-based billing)
+  const isForwardModel = true;
   
   // CANONICAL: Dynamic allowed tabs based on financial model
   const ALLOWED_TABS = isForwardModel 
