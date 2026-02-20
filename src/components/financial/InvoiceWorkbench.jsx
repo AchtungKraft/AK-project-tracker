@@ -118,13 +118,9 @@ const BATCH_MODES = {
   BY_CLIENT: { label: 'By Client', icon: Users, description: 'Per client' },
 };
 
-// LEGACY MODEL ONLY: Ordering safety for pool-based billing
-// Forward model does NOT use this - readiness is based on: has retail price + not already invoiced
-const ORDERING_SAFETY_CONFIG = {
-  RED: { label: 'Not Billed', color: 'bg-red-600', textColor: 'text-red-400' },
-  YELLOW: { label: 'Awaiting Payment', color: 'bg-yellow-600', textColor: 'text-yellow-400' },
-  GREEN: { label: 'Paid', color: 'bg-green-600', textColor: 'text-green-400' },
-};
+// PHASE 9E: ORDERING_SAFETY_CONFIG REMOVED
+// Pool-based billing has been permanently removed.
+// Forward model uses Invoice status: Uninvoiced / Invoiced / Paid
 
 const FINANCIAL_ROLE_LABELS = {
   VENDOR_MARGIN: 'Vendor Margin',
@@ -218,8 +214,8 @@ function isItemForwardModel(item) {
 function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick }) {
   const allowSelection = tabConfig.allowSelection;
   
-  // Check if any items are from legacy model (to show/hide Safety column header)
-  const hasLegacyItems = items.some(item => !isItemForwardModel(item));
+  // PHASE 9E: Legacy pool model removed - all items are forward model
+  const hasLegacyItems = false;
 
   if (!items || items.length === 0) {
     return (
@@ -247,10 +243,6 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
           )}
           <TableHead className="text-gray-400 text-xs">Project</TableHead>
           <TableHead className="text-gray-400 text-xs">Part</TableHead>
-          {/* LEGACY ONLY: Safety column for pool-based billing - show if any legacy items exist */}
-          {hasLegacyItems && (
-            <TableHead className="text-gray-400 text-xs text-center">Safety</TableHead>
-          )}
           <TableHead className="text-gray-400 text-xs text-right">Qty</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Unit</TableHead>
           <TableHead className="text-gray-400 text-xs text-right">Total</TableHead>
@@ -323,18 +315,7 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                 )}
               </div>
             </TableCell>
-            {/* LEGACY ONLY: Safety badge for pool-based billing */}
-            {hasLegacyItems && (
-              <TableCell className="text-center">
-                {itemIsForward ? (
-                  <span className="text-gray-500">—</span>
-                ) : (
-                  <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>
-                    {item.ordering_safety}
-                  </Badge>
-                )}
-              </TableCell>
-            )}
+
             <TableCell className="text-right text-gray-300">{item.required_total || 0}</TableCell>
             <TableCell className="text-right text-gray-300">
               {item.unit_retail > 0 ? `$${item.unit_retail.toFixed(2)}` : (
@@ -665,7 +646,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [financialRoleFilter, setFinancialRoleFilter] = useState('all');
-  const [orderingSafetyFilter, setOrderingSafetyFilter] = useState('all');
+  // PHASE 9E: orderingSafetyFilter removed - legacy pool model no longer supported
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [batchMode, setBatchMode] = useState('MANUAL');
   const [selectedBatch, setSelectedBatch] = useState(null);
@@ -681,12 +662,11 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   }, [projectId]);
 
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['billingProcurementStates', projectFilter, financialRoleFilter, orderingSafetyFilter],
+    queryKey: ['billingProcurementStates', projectFilter, financialRoleFilter],
     queryFn: async () => {
       const filters = {};
       if (projectFilter !== 'all') filters.project_id = projectFilter;
       if (financialRoleFilter !== 'all') filters.financial_role = financialRoleFilter;
-      if (orderingSafetyFilter !== 'all') filters.ordering_safety = orderingSafetyFilter;
       
       const response = await base44.functions.invoke('getBillingAndProcurementStates', { filters });
       return response.data;
@@ -918,17 +898,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
                     <SelectItem value="LABOR_ONLY">Labor Only</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={orderingSafetyFilter} onValueChange={setOrderingSafetyFilter}>
-                  <SelectTrigger className="bg-gray-900/50 border-gray-700 h-9">
-                    <SelectValue placeholder="All Safety" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Safety Levels</SelectItem>
-                    <SelectItem value="RED">🔴 Not Billed</SelectItem>
-                    <SelectItem value="YELLOW">🟡 Awaiting Pay</SelectItem>
-                    <SelectItem value="GREEN">🟢 Paid</SelectItem>
-                  </SelectContent>
-                </Select>
+
               </div>
             </CardHeader>
             
@@ -994,22 +964,24 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
             </CardContent>
           </Card>
 
-          {/* Legend - LEGACY ONLY: Ordering Safety explanation */}
+          {/* Forward Model Invoice Status Legend */}
           <Card className="bg-black/40 border-gray-800">
             <CardHeader className="border-b border-gray-800 p-3">
-              <CardTitle className="text-white text-sm">Ordering Safety (Legacy)</CardTitle>
+              <CardTitle className="text-white text-sm">Invoice Status</CardTitle>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
-              {Object.entries(ORDERING_SAFETY_CONFIG).map(([key, config]) => (
-                <div key={key} className="flex items-center gap-2">
-                  <Badge className={cn("text-xs w-16 justify-center", config.color)}>{key}</Badge>
-                  <span className="text-xs text-gray-400">{config.label}</span>
-                </div>
-              ))}
-              <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-700">
-                Safety only applies to legacy pool-based billing.
-                Forward model uses Invoice status.
-              </p>
+              <div className="flex items-center gap-2">
+                <Badge className="text-xs w-20 justify-center bg-gray-700">Uninvoiced</Badge>
+                <span className="text-xs text-gray-400">Ready to bill</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="text-xs w-20 justify-center bg-purple-600">Invoiced</Badge>
+                <span className="text-xs text-gray-400">Awaiting payment</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="text-xs w-20 justify-center bg-green-600">Paid</Badge>
+                <span className="text-xs text-gray-400">Payment received</span>
+              </div>
             </CardContent>
           </Card>
         </div>

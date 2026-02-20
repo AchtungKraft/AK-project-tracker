@@ -108,8 +108,9 @@ Deno.serve(async (req) => {
         result = await reverseInstall(context, commitment_ids, payload);
         break;
       case 'ALLOCATE_POOL':
-        result = await allocatePool(context, commitment_ids, payload);
-        break;
+        // PHASE 9E: Pool-based billing PERMANENTLY REMOVED
+        // Forward model uses InvoiceBatch exclusively
+        throw new Error('ALLOCATE_POOL action has been removed. Use InvoiceBatch for billing.');
       case 'CANCEL_COMMITMENT':
         result = await cancelCommitment(context, commitment_ids, payload);
         break;
@@ -1104,33 +1105,9 @@ async function reverseInstall(ctx, commitment_ids, payload) {
   };
 }
 
-/**
- * ALLOCATE_POOL - Allocate billing pool to commitment
- */
-async function allocatePool(ctx, commitment_ids, payload) {
-  const { pool_id, amount } = payload;
-  const commitmentId = commitment_ids?.[0];
-  
-  if (!commitmentId || !pool_id || amount === undefined) {
-    throw new Error('commitment_id, pool_id, and amount required');
-  }
-
-  // Delegate to commitmentService for pool operations
-  const result = await ctx.base44.functions.invoke('commitmentService', {
-    action: 'allocatePool',
-    pool_id,
-    commitment_id: commitmentId,
-    amount
-  });
-
-  if (result.data?.error) {
-    throw new Error(result.data.error);
-  }
-
-  ctx.mutations.push({ entity: 'PoolAllocation', id: 'new', action: 'ALLOCATE_POOL' });
-  
-  return result.data;
-}
+// PHASE 9E: allocatePool function REMOVED
+// Pool-based billing has been permanently removed.
+// Forward model uses InvoiceBatch for all billing operations.
 
 /**
  * CANCEL_COMMITMENT - Cancel a commitment
