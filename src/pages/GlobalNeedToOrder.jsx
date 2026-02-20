@@ -550,8 +550,9 @@ export default function GlobalNeedToOrder() {
             <div className="space-y-3">
               {groupedItems.map(group => {
                 const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
-                const allOrderable = group.items.filter(i => i.canOrder);
-                const allSelected = allOrderable.length > 0 && allOrderable.every(i => selectedItems.has(i.id));
+                // CANONICAL: Use is_orderable and commitment_id
+                const allOrderable = group.items.filter(i => i.is_orderable);
+                const allSelected = allOrderable.length > 0 && allOrderable.every(i => selectedItems.has(i.commitment_id));
 
                 return (
                   <Card key={group.id} className="bg-black/40 border-gray-800 overflow-hidden">
@@ -596,7 +597,8 @@ export default function GlobalNeedToOrder() {
                               className="border-green-600 text-green-400 hover:bg-green-900/30"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const ids = group.items.filter(i => i.canOrder).map(i => i.id);
+                                // CANONICAL: Use is_orderable and commitment_id
+                                const ids = group.items.filter(i => i.is_orderable).map(i => i.commitment_id);
                                 setSelectedItems(new Set(ids));
                                 setShowBatchOrderModal(true);
                               }}
@@ -633,11 +635,11 @@ export default function GlobalNeedToOrder() {
       {showBatchOrderModal && (
         <CreateBatchOrderModal
           selectedItems={getSelectedItemsData().map(item => ({
-            id: item.id,
+            commitment_id: item.commitment_id,
             part: { id: item.part_id, part_name: item.part_name },
             requirement: { project_id: item.project_id },
-            qty_to_order: item.qtyToOrder,
-            estimated_cost: item.estimatedCost,
+            qty_to_order: item.to_order,
+            estimated_cost: item.estimated_cost,
           }))}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {
@@ -650,10 +652,10 @@ export default function GlobalNeedToOrder() {
       {deltaOrderCommitment && (
         <DeltaOrderModal
           commitment={{
-            id: deltaOrderCommitment.commitment_id,
+            commitment_id: deltaOrderCommitment.commitment_id,
             commitment_status: deltaOrderCommitment.commitment_status,
-            qty_committed: deltaOrderCommitment.qty_committed,
-            qty_ordered: deltaOrderCommitment.qty_ordered,
+            required_total: deltaOrderCommitment.required_total,
+            covered_from_po: deltaOrderCommitment.covered_from_po,
           }}
           part={{ id: deltaOrderCommitment.part_id, part_name: deltaOrderCommitment.part_name }}
           onClose={() => setDeltaOrderCommitment(null)}
