@@ -196,13 +196,95 @@ export default function ProjectFinancialDashboard({ projectId }) {
 
   return (
     <div className="space-y-6">
-      {/* Section 1: Retail Exposure Summary */}
+      {/* ============================================ */}
+      {/* FORWARD MODEL: Revenue Summary (Invoice-based) */}
+      {/* ============================================ */}
+      {isForwardModel && forwardRevenueSummary && (
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardHeader className="border-b border-gray-700/50 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-green-400" />
+                Revenue Summary
+                <Badge className="bg-blue-600 text-white text-xs ml-2">Forward Model</Badge>
+              </CardTitle>
+              <Badge variant="outline" className="border-gray-600 text-gray-400">
+                {forwardRevenueSummary.commitmentCount} commitments
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <MetricCard
+                label="Total Billable"
+                value={forwardRevenueSummary.totalBillable}
+                color="text-blue-400"
+              />
+              <MetricCard
+                label="Invoiced"
+                value={forwardRevenueSummary.totalInvoiced}
+                color="text-purple-400"
+              />
+              <MetricCard
+                label="Collected"
+                value={forwardRevenueSummary.totalCollected}
+                color="text-green-400"
+              />
+              <MetricCard
+                label="Remaining to Invoice"
+                value={forwardRevenueSummary.remainingToInvoice}
+                color={forwardRevenueSummary.remainingToInvoice > 0 ? "text-yellow-400" : "text-green-400"}
+                icon={forwardRevenueSummary.remainingToInvoice > 0 ? AlertTriangle : CheckCircle2}
+              />
+            </div>
+
+            {/* Invoice Status Distribution */}
+            <div className="flex items-center gap-4 p-3 bg-gray-800/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                <span className="text-gray-300">{forwardRevenueSummary.uninvoicedCount} Uninvoiced</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-400" />
+                <span className="text-gray-300">{forwardRevenueSummary.invoicedCount} Invoiced</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span className="text-gray-300">{forwardRevenueSummary.paidCount} Paid</span>
+              </div>
+              <div className="ml-auto">
+                <span className="text-gray-400 text-sm">
+                  Coverage: {forwardRevenueSummary.invoiceCoveragePct.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Outstanding Receivable */}
+            {forwardRevenueSummary.outstandingReceivable > 0 && (
+              <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-yellow-400 text-sm">Outstanding Receivable</span>
+                  <span className="text-yellow-400 font-medium">
+                    ${forwardRevenueSummary.outstandingReceivable.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================ */}
+      {/* LEGACY MODEL: Retail Exposure Summary (Pool-based) */}
+      {/* ============================================ */}
+      {!isForwardModel && exposureSummary && (
       <Card className="bg-gray-900/50 border-gray-700">
         <CardHeader className="border-b border-gray-700/50 pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-400" />
               Retail Exposure Summary
+              <Badge className="bg-gray-600 text-white text-xs ml-2">Legacy</Badge>
             </CardTitle>
             <Badge variant="outline" className="border-gray-600 text-gray-400">
               {exposureSummary.commitmentCount} commitments
