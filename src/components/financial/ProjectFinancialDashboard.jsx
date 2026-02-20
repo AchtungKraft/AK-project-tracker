@@ -80,28 +80,30 @@ export default function ProjectFinancialDashboard({ projectId }) {
   );
 
   // Read precomputed totals - NO aggregation, just summing precomputed fields
+  // NULL SAFETY: All pool-related fields use (value ?? 0) for forward model projects
   const exposureSummary = useMemo(() => {
     const active = commitments.filter(c => !['cancelled', 'closed'].includes(c.commitment_status));
     return {
-      totalPlannedRetail: active.reduce((sum, c) => sum + (c.planned_retail_total || 0), 0),
-      totalCoveredRetail: active.reduce((sum, c) => sum + (c.covered_retail_total || 0), 0),
-      totalExposureGap: active.reduce((sum, c) => sum + Math.max(0, c.exposure_gap || 0), 0),
-      totalInvoicedRetail: active.reduce((sum, c) => sum + (c.invoiced_retail_total || 0), 0),
+      totalPlannedRetail: active.reduce((sum, c) => sum + (c.planned_retail_total ?? 0), 0),
+      totalCoveredRetail: active.reduce((sum, c) => sum + (c.covered_retail_total ?? 0), 0),
+      totalExposureGap: active.reduce((sum, c) => sum + Math.max(0, c.exposure_gap ?? 0), 0),
+      totalInvoicedRetail: active.reduce((sum, c) => sum + (c.invoiced_retail_total ?? 0), 0),
       commitmentCount: active.length,
-      coveredCount: active.filter(c => (c.exposure_gap || 0) <= 0).length,
-      partialCount: active.filter(c => (c.exposure_gap || 0) > 0 && (c.covered_retail_total || 0) > 0).length,
-      uncoveredCount: active.filter(c => (c.exposure_gap || 0) > 0 && (c.covered_retail_total || 0) === 0).length,
+      coveredCount: active.filter(c => (c.exposure_gap ?? 0) <= 0).length,
+      partialCount: active.filter(c => (c.exposure_gap ?? 0) > 0 && (c.covered_retail_total ?? 0) > 0).length,
+      uncoveredCount: active.filter(c => (c.exposure_gap ?? 0) > 0 && (c.covered_retail_total ?? 0) === 0).length,
     };
   }, [commitments]);
 
   // Pool summary from precomputed fields
+  // NULL SAFETY: All pool fields use (value ?? 0)
   const poolSummary = useMemo(() => {
     return {
-      totalInvoiced: pools.reduce((sum, p) => sum + (p.invoiced_amount || 0), 0),
-      totalPaid: pools.reduce((sum, p) => sum + (p.paid_amount || 0), 0),
-      totalAllocated: pools.reduce((sum, p) => sum + (p.allocated_total || 0), 0),
-      totalCharges: pools.reduce((sum, p) => sum + (p.charges_total || 0), 0),
-      totalBalance: pools.reduce((sum, p) => sum + (p.balance || 0), 0),
+      totalInvoiced: pools.reduce((sum, p) => sum + (p.invoiced_amount ?? 0), 0),
+      totalPaid: pools.reduce((sum, p) => sum + (p.paid_amount ?? 0), 0),
+      totalAllocated: pools.reduce((sum, p) => sum + (p.allocated_total ?? 0), 0),
+      totalCharges: pools.reduce((sum, p) => sum + (p.charges_total ?? 0), 0),
+      totalBalance: pools.reduce((sum, p) => sum + (p.balance ?? 0), 0),
       overdrawnCount: pools.filter(p => p.status === 'overdrawn').length,
     };
   }, [pools]);

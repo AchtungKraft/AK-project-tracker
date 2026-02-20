@@ -61,7 +61,11 @@ export default function CreateProjectModal({ onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    createMutation.mutate(projectData);
+    // FORWARD MODEL: Explicitly set financial_model_version for new projects
+    createMutation.mutate({
+      ...projectData,
+      financial_model_version: 'forward'
+    });
   };
 
   const toggleTeamMember = (memberId) => {

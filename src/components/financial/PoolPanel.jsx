@@ -92,11 +92,12 @@ export default function PoolPanel({
     );
   }
 
-  const invoiced = pool.invoiced_amount || 0;
-  const allocated = pool.allocated_total || 0;
-  const charges = pool.charges_total || 0;
+  // NULL SAFETY: All pool fields use ?? 0
+  const invoiced = pool.invoiced_amount ?? 0;
+  const allocated = pool.allocated_total ?? 0;
+  const charges = pool.charges_total ?? 0;
   const balance = pool.balance ?? (invoiced - allocated - charges);
-  const paid = pool.paid_amount || 0;
+  const paid = pool.paid_amount ?? 0;
   
   const isOverdrawn = balance < 0;
   const utilizationPct = invoiced > 0 ? ((allocated + charges) / invoiced * 100).toFixed(1) : 0;

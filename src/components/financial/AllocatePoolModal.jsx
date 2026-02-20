@@ -62,18 +62,19 @@ export default function AllocatePoolModal({
   });
 
   // Calculate pool data with allocations
+  // NULL SAFETY: All pool fields use ?? 0
   const poolsWithData = useMemo(() => {
     return pools.map(pool => {
       const poolAllocations = allocations.filter(a => 
         a.pool_id === pool.id && !a.is_reversed
       );
-      const totalAllocated = poolAllocations.reduce((sum, a) => sum + (a.amount_allocated || 0), 0);
+      const totalAllocated = poolAllocations.reduce((sum, a) => sum + (a.amount_allocated ?? 0), 0);
       
       return {
         ...pool,
         allocations: poolAllocations,
         computedAllocated: totalAllocated,
-        available: (pool.paid_amount || 0) - totalAllocated - (pool.charges_total || 0),
+        available: (pool.paid_amount ?? 0) - totalAllocated - (pool.charges_total ?? 0),
         isActive: ['draft', 'invoiced', 'paid'].includes(pool.status)
       };
     }).filter(p => p.isActive);
