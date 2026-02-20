@@ -426,20 +426,42 @@ function BatchBuilderPanel({
             </div>
             
             {isInvoiceAction && (
-              <RadioGroup value={batchMode} onValueChange={setBatchMode} className="flex gap-4 mt-3">
-                {Object.entries(BATCH_MODES).map(([mode, config]) => {
-                  const Icon = config.icon;
-                  return (
-                    <div key={mode} className="flex items-center gap-2">
-                      <RadioGroupItem value={mode} id={mode} />
-                      <Label htmlFor={mode} className="flex items-center gap-1 text-gray-300 cursor-pointer">
-                        <Icon className="w-4 h-4" />
-                        {config.label}
-                      </Label>
-                    </div>
-                  );
-                })}
-              </RadioGroup>
+              <div className="flex flex-wrap items-center gap-4 mt-3">
+                <RadioGroup value={batchMode} onValueChange={setBatchMode} className="flex gap-4">
+                  {Object.entries(BATCH_MODES).map(([mode, config]) => {
+                    const Icon = config.icon;
+                    return (
+                      <div key={mode} className="flex items-center gap-2">
+                        <RadioGroupItem value={mode} id={mode} />
+                        <Label htmlFor={mode} className="flex items-center gap-1 text-gray-300 cursor-pointer">
+                          <Icon className="w-4 h-4" />
+                          {config.label}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </RadioGroup>
+                
+                {/* Phase 6.2: Draft Invoice Accumulation */}
+                {draftBatches.length > 0 && setTargetDraftBatchId && (
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
+                    <Label className="text-gray-400 text-sm">Target:</Label>
+                    <Select value={targetDraftBatchId} onValueChange={setTargetDraftBatchId}>
+                      <SelectTrigger className="w-48 h-8 bg-gray-800/50 border-gray-600 text-sm">
+                        <SelectValue placeholder="New Invoice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new">➕ Create New Invoice</SelectItem>
+                        {draftBatches.map(batch => (
+                          <SelectItem key={batch.id} value={batch.id}>
+                            📄 {batch.invoice_number || batch.batch_name} (${batch.total_amount?.toFixed(0) || 0})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           
