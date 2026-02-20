@@ -40,7 +40,9 @@ Deno.serve(async (req) => {
       override_vendor_id = null,
       eta_date = null,
       notes = null,
-      dry_run = false
+      dry_run = false,
+      // Phase 6.2A: Per-vendor order data including freight/tariff
+      vendor_order_data = {}
     } = payload;
 
     if (!project_id) {
