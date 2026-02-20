@@ -33,17 +33,31 @@ export function useProjectSupplyView(projectId, filters = {}) {
 
   const items = query.data?.items || [];
   
-  // DEV ONLY: Runtime schema validation
+  // DEV ONLY: Runtime schema validation and coverage invariant check
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
     const sample = items[0];
     console.log('[DEV] Project Supply View - Sample commitment shape:', sample);
     
     // FAIL-FAST: Check canonical fields
-    const required = ['commitment_id', 'required_total', 'to_order', 'coverage_status'];
+    const required = ['commitment_id', 'required_total', 'to_order', 'coverage_status', 'reserved_from_stock', 'covered_from_po'];
     const missing = required.filter(f => sample[f] === undefined);
     if (missing.length > 0) {
       console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
     }
+    
+    // COVERAGE INVARIANT CHECK: required_total MUST equal sum of coverage + to_order
+    items.forEach(item => {
+      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order } = item;
+      const sum = (reserved_from_stock || 0) + (covered_from_po || 0) + (to_order || 0);
+      
+      // Allow small floating point differences
+      if (Math.abs(sum - required_total) > 0.01) {
+        console.error(
+          `[COVERAGE INVARIANT BROKEN] commitment=${commitment_id}: ` +
+          `required_total(${required_total}) !== reserved(${reserved_from_stock}) + covered(${covered_from_po}) + to_order(${to_order}) = ${sum}`
+        );
+      }
+    });
   }
   
   return {
@@ -102,11 +116,25 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     console.log('[DEV] Ops Supply View - Sample commitment shape:', sample);
     
     // FAIL-FAST: Check canonical fields
-    const required = ['commitment_id', 'to_order', 'is_orderable', 'coverage_status'];
+    const required = ['commitment_id', 'to_order', 'coverage_status'];
     const missing = required.filter(f => sample[f] === undefined);
     if (missing.length > 0) {
       console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
     }
+    
+    // COVERAGE INVARIANT CHECK for ops view
+    items.forEach(item => {
+      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order } = item;
+      if (required_total !== undefined) {
+        const sum = (reserved_from_stock || 0) + (covered_from_po || 0) + (to_order || 0);
+        if (Math.abs(sum - required_total) > 0.01) {
+          console.error(
+            `[COVERAGE INVARIANT BROKEN] commitment=${commitment_id}: ` +
+            `required_total(${required_total}) !== sum(${sum})`
+          );
+        }
+      }
+    });
   }
   
   return {
