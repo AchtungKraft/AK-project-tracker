@@ -7,6 +7,9 @@ import { getEffectiveBillingStatus, getBillingStatusColor } from "./partTypeBeha
 /**
  * BillingStatusBadge
  * Displays billing status for line items or orders
+ * 
+ * NOTE: This component is LEGACY ONLY. Forward model projects should NOT render this badge.
+ * Forward model uses InvoiceBatch status instead of line-item billing_status.
  */
 export default function BillingStatusBadge({
   status,
