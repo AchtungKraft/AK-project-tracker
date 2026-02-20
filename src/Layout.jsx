@@ -113,6 +113,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Settings,
       },
       {
+        title: "Wiring Audit",
+        url: createPageUrl("WiringAuditDashboard"),
+        icon: Settings,
+      },
+      {
         title: "Data Normalization",
         url: createPageUrl("SupplyNormalization"),
         icon: Settings,
