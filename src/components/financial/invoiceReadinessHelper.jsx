@@ -27,8 +27,14 @@ export function isInvoiceReady(commitment, options = {}) {
     return { ready: false, reasons: ['No commitment provided'] };
   }
 
-  // 1. Check quantity
-  const qty = commitment.required_total || commitment.assigned_qty || commitment.qty || 0;
+  // CANONICAL: Require commitment_id - fail fast if missing
+  if (!commitment.commitment_id) {
+    console.error('[CANONICAL VIOLATION] isInvoiceReady: Missing commitment_id', commitment);
+    reasons.push('Missing commitment_id - cannot process');
+  }
+
+  // 1. Check quantity - CANONICAL: use required_total only, no fallbacks
+  const qty = commitment.required_total || 0;
   if (qty <= 0) {
     reasons.push('Quantity must be greater than 0');
   }
