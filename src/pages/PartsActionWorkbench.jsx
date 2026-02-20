@@ -639,6 +639,19 @@ export default function PartsActionWorkbench() {
   const currentGroup = actionGroups.find(g => g.key === activeTab);
   const currentTabConfig = ACTION_TAB_CONFIG[activeTab] || ACTION_TAB_CONFIG.invoice_client;
 
+  // DEV ONLY: Runtime schema validation
+  if (process.env.NODE_ENV === 'development' && currentGroup?.commitments?.length > 0) {
+    const sample = currentGroup.commitments[0];
+    console.log('[DEV] PartsActionWorkbench - Sample commitment shape:', sample);
+    
+    // FAIL-FAST: Check canonical fields
+    const required = ['commitment_id', 'required_total', 'unit_retail', 'line_total'];
+    const missing = required.filter(f => sample[f] === undefined);
+    if (missing.length > 0) {
+      console.error('[CANONICAL VIOLATION] Missing required fields in action queue:', missing);
+    }
+  }
+
   // Filter items for current tab
   const currentItems = useMemo(() => {
     let items = currentGroup?.commitments || [];
