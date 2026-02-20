@@ -41,8 +41,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  ShoppingCart, Package, Truck, AlertTriangle, DollarSign,
-  ArrowLeft, Plus, MoreVertical, RefreshCw, Search, Wallet,
+  ShoppingCart, Package, Truck, AlertTriangle,
+  ArrowLeft, Plus, MoreVertical, RefreshCw, Search,
   Wrench, X, FileText, Edit, Trash2, Download,
   AlertCircle
 } from "lucide-react";
@@ -50,15 +50,11 @@ import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
-// LEGACY ONLY: Pool modals not rendered for forward model projects
-import CreatePoolModal from "@/components/financial/CreatePoolModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
 import ReverseInstallationModal from "@/components/project/ReverseInstallationModal";
 import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
-import AllocatePoolModal from "@/components/financial/AllocatePoolModal";
 import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
-import PoolActionsMenu from "@/components/financial/PoolActionsMenu";
 import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
@@ -98,7 +94,6 @@ export default function ProjectSupplyManager() {
   const { 
     items: supplyItems, 
     summary: supplySummary, 
-    pools, 
     categories,
     project,
     isLoading: supplyLoading, 
@@ -106,24 +101,12 @@ export default function ProjectSupplyManager() {
     invalidate: invalidateSupply
   } = useProjectSupplyView(projectId);
 
-  // CANONICAL: All projects use forward model (invoice-based billing)
-  const isForwardModel = true;
-  
-  // CANONICAL: Dynamic allowed tabs based on financial model
-  const ALLOWED_TABS = isForwardModel 
-    ? ['plan', 'buy', 'receive', 'install', 'invoice', 'report']
-    : ['plan', 'fund', 'buy', 'receive', 'install', 'report'];
+  // FORWARD MODEL ONLY - No legacy support
+  const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'report'];
   
   const rawTab = urlParams.get('tab');
-  
-  // CANONICAL: Tab remapping for forward model - fund -> invoice
-  const remapTab = (tab) => {
-    if (isForwardModel && tab === 'fund') return 'invoice';
-    if (!isForwardModel && tab === 'invoice') return 'fund';
-    return tab;
-  };
-  
-  const remappedTab = remapTab(rawTab);
+  // Remap legacy fund tab to invoice
+  const remappedTab = rawTab === 'fund' ? 'invoice' : rawTab;
   const initialTab = ALLOWED_TABS.includes(remappedTab) ? remappedTab : 'plan';
 
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -133,14 +116,12 @@ export default function ProjectSupplyManager() {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Modal states
-  const [showCreatePoolModal, setShowCreatePoolModal] = useState(false);
+  // Modal states (FORWARD MODEL - no pool modals)
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [installModal, setInstallModal] = useState(null);
   const [reverseInstallModal, setReverseInstallModal] = useState(null);
   const [receiveModal, setReceiveModal] = useState(null);
-  const [allocateModal, setAllocateModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
   const [actionsEnabled, setActionsEnabled] = useState(true);
   const [qtyManagerDrawer, setQtyManagerDrawer] = useState(null);
@@ -187,7 +168,7 @@ export default function ProjectSupplyManager() {
     return supplyItems.filter(item => item.part_name === 'Unknown Part');
   }, [supplyItems]);
 
-  // Metrics from read model summary
+  // Metrics from read model summary (FORWARD MODEL - invoice-based)
   const metrics = useMemo(() => {
     const s = supplySummary;
     return {
@@ -195,15 +176,15 @@ export default function ProjectSupplyManager() {
         planned: 0, ordered: 0, partiallyReceived: 0,
         received: 0, allocated: 0, installed: 0
       },
-      totalPlanned: s.total_planned_retail || 0,
-      totalCovered: s.total_covered_retail || 0,
-      totalExposure: s.total_exposure || 0,
-      coveragePct: s.coverage_percent || 0,
-      poolBalance: s.pool_balance || 0,
-      poolPaid: s.pool_paid || 0,
-      hasOverdrawn: s.has_overdrawn || false,
+      totalPlannedRetail: s.total_planned_retail || 0,
+      totalPlannedCost: s.total_planned_cost || 0,
+      totalInvoiced: s.total_invoiced || 0,
+      totalPaid: s.total_paid || 0,
+      invoiceOutstanding: s.invoice_outstanding || 0,
+      unbilledRetail: s.unbilled_retail || 0,
       installPct: s.install_percent || 0,
       totalCommitments: supplyItems.length,
+      supplyCoverage: s.supply_coverage_summary || { full: 0, partial: 0, none: 0, over: 0 },
     };
   }, [supplySummary, supplyItems.length]);
 
@@ -708,15 +689,9 @@ export default function ProjectSupplyManager() {
   };
 
   const resolveBilling = (commitmentId) => {
-    // FORWARD MODEL: Navigate to invoice tab instead of pool allocation
-    if (isForwardModel) {
-      handleTabChange('invoice');
-      toast.info('Create invoice to cover this commitment');
-      return;
-    }
-    // LEGACY: Open pool allocation modal
-    const commitment = enrichedCommitments.find(c => c.id === commitmentId);
-    if (commitment) setAllocateModal(commitment);
+    // FORWARD MODEL: Navigate to invoice tab
+    handleTabChange('invoice');
+    toast.info('Create invoice to cover this commitment');
   };
 
   const resolveQty = (commitmentId) => {
@@ -895,19 +870,6 @@ export default function ProjectSupplyManager() {
                     Reverse Install
                   </DropdownMenuItem>
                 )}
-                {/* LEGACY ONLY: Pool allocation option */}
-                {project?.financial_model_version !== 'forward' && (
-                  <>
-                    <DropdownMenuSeparator className="bg-gray-700" />
-                    <DropdownMenuItem 
-                      onClick={() => setAllocateModal(commitment)} 
-                      className="text-blue-400"
-                    >
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Allocate Pool
-                    </DropdownMenuItem>
-                  </>
-                )}
                 <DropdownMenuItem 
                   onClick={() => setQtyManagerDrawer(commitment)}
                   className="text-cyan-400"
@@ -987,17 +949,6 @@ export default function ProjectSupplyManager() {
                 projectId={projectId}
                 onOpenCommitment={(c) => setQtyManagerDrawer(c)}
               />
-              {/* LEGACY ONLY: Pool creation for legacy financial model */}
-              {project?.financial_model_version !== 'forward' && (
-                <Button
-                  onClick={() => setShowCreatePoolModal(true)}
-                  variant="outline"
-                  className="border-green-600 text-green-400 gap-2"
-                >
-                  <Wallet className="w-4 h-4" />
-                  Create Pool
-                </Button>
-              )}
             </div>
           </div>
 
@@ -1024,55 +975,34 @@ export default function ProjectSupplyManager() {
             </div>
           )}
 
-          {/* Summary Row */}
-          {/* FORWARD MODEL: Shows Commitments, Planned Retail, Installed - NO exposure/pool metrics */}
-          {/* LEGACY MODEL: Shows all including Exposure Gap, Pool Balance */}
-          <div className={`grid gap-3 ${project?.financial_model_version === 'forward' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-6'}`}>
+          {/* Summary Row - FORWARD MODEL: Invoice-based metrics */}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Commitments</p>
                 <p className="text-xl font-bold text-white">{metrics.totalCommitments}</p>
               </CardContent>
             </Card>
-            {/* LEGACY ONLY: Coverage percentage (pool-based) */}
-            {project?.financial_model_version !== 'forward' && (
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-gray-500">Coverage</p>
-                  <p className={`text-xl font-bold ${metrics.coveragePct >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {metrics.coveragePct}%
-                  </p>
-                </CardContent>
-              </Card>
-            )}
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Planned Retail</p>
-                <p className="text-xl font-bold text-white">${metrics.totalPlanned.toFixed(0)}</p>
+                <p className="text-xl font-bold text-white">${metrics.totalPlannedRetail.toFixed(0)}</p>
               </CardContent>
             </Card>
-            {/* LEGACY ONLY: Exposure Gap (pool-based) */}
-            {project?.financial_model_version !== 'forward' && (
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-gray-500">Exposure Gap</p>
-                  <p className={`text-xl font-bold ${metrics.totalExposure > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    ${metrics.totalExposure.toFixed(0)}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-            {/* LEGACY ONLY: Pool Balance */}
-            {project?.financial_model_version !== 'forward' && (
-              <Card className={`bg-black/40 ${metrics.hasOverdrawn ? 'border-red-600' : 'border-gray-800'}`}>
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-gray-500">Pool Balance</p>
-                  <p className={`text-xl font-bold ${metrics.poolBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${metrics.poolBalance.toFixed(0)}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Invoiced</p>
+                <p className="text-xl font-bold text-blue-400">${metrics.totalInvoiced.toFixed(0)}</p>
+              </CardContent>
+            </Card>
+            <Card className={`bg-black/40 ${metrics.invoiceOutstanding > 0 ? 'border-yellow-600' : 'border-gray-800'}`}>
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-gray-500">Outstanding</p>
+                <p className={`text-xl font-bold ${metrics.invoiceOutstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                  ${metrics.invoiceOutstanding.toFixed(0)}
+                </p>
+              </CardContent>
+            </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Installed</p>
@@ -1105,27 +1035,13 @@ export default function ProjectSupplyManager() {
             </CardContent>
           </Card>
 
-          {/* Tabs */}
+          {/* Tabs - FORWARD MODEL ONLY */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="bg-black/40 border border-gray-800 w-full justify-start overflow-x-auto">
               <TabsTrigger value="plan" className="data-[state=active]:bg-gray-700 gap-1.5">
                 <Package className="w-4 h-4" />
                 Plan
               </TabsTrigger>
-              {/* FORWARD: Invoice tab for invoice-based billing */}
-              {isForwardModel && (
-                <TabsTrigger value="invoice" className="data-[state=active]:bg-green-900/30 gap-1.5">
-                  <Receipt className="w-4 h-4" />
-                  Invoices
-                </TabsTrigger>
-              )}
-              {/* LEGACY ONLY: Fund tab for pool management */}
-              {!isForwardModel && (
-                <TabsTrigger value="fund" className="data-[state=active]:bg-green-900/30 gap-1.5">
-                  <Wallet className="w-4 h-4" />
-                  Fund
-                </TabsTrigger>
-              )}
               <TabsTrigger value="buy" className="data-[state=active]:bg-purple-900/30 gap-1.5">
                 <ShoppingCart className="w-4 h-4" />
                 Buy
@@ -1137,6 +1053,10 @@ export default function ProjectSupplyManager() {
               <TabsTrigger value="install" className="data-[state=active]:bg-emerald-900/30 gap-1.5">
                 <Wrench className="w-4 h-4" />
                 Install
+              </TabsTrigger>
+              <TabsTrigger value="invoice" className="data-[state=active]:bg-green-900/30 gap-1.5">
+                <Receipt className="w-4 h-4" />
+                Invoice
               </TabsTrigger>
               <TabsTrigger value="report" className="data-[state=active]:bg-red-900/30 gap-1.5">
                 <FileText className="w-4 h-4" />
@@ -1209,103 +1129,16 @@ export default function ProjectSupplyManager() {
               </Card>
             </TabsContent>
 
-            {/* FORWARD: Invoice tab content */}
-            {isForwardModel && (
-              <TabsContent value="invoice" className="mt-4">
-                <ForwardInvoiceDashboard 
-                  projectId={projectId}
-                  onCreateInvoice={() => {
-                    audit.trackClick('create_invoice_from_tab');
-                    // TODO: Wire to createInvoiceBatch modal when implemented
-                    toast.info('Invoice creation - wire to batch modal');
-                  }}
-                />
-              </TabsContent>
-            )}
-
-            {/* LEGACY ONLY: Fund tab content for pool management */}
-            {!isForwardModel && (
-            <TabsContent value="fund" className="mt-4 space-y-4">
-              {/* Pools Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pools.map(pool => (
-                  <Card key={pool.id} className={`bg-black/40 ${pool.status === 'overdrawn' ? 'border-red-600' : 'border-gray-800'}`}>
-                  <CardHeader className="p-4 pb-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-white text-base">{pool.pool_name}</CardTitle>
-                        <Badge variant="outline" className={
-                          pool.status === 'paid' ? 'border-green-600 text-green-400' :
-                          pool.status === 'invoiced' ? 'border-yellow-600 text-yellow-400' :
-                          pool.status === 'overdrawn' ? 'border-red-600 text-red-400' :
-                          pool.status === 'closed' ? 'border-gray-500 text-gray-400' :
-                          'border-gray-600 text-gray-400'
-                        }>
-                          {pool.status}
-                        </Badge>
-                      </div>
-                      <PoolActionsMenu 
-                        pool={pool} 
-                        disabled={!actionsEnabled}
-                        onRefresh={() => invalidateSupply()}
-                      />
-                    </div>
-                  </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Invoiced</span>
-                        <span className="text-white">${(pool.invoiced_amount || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Paid</span>
-                        <span className="text-green-400">${(pool.paid_amount || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Allocated</span>
-                        <span className="text-blue-400">${(pool.allocated_total || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Charges</span>
-                        <span className="text-orange-400">${(pool.charges_total || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="border-t border-gray-700 pt-2 flex justify-between">
-                        <span className="text-gray-400 font-medium">Balance</span>
-                        <span className={`font-bold ${(pool.balance || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${(pool.balance || 0).toFixed(2)}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {pools.length === 0 && (
-                  <Card className="bg-black/40 border-gray-800 border-dashed col-span-full">
-                    <CardContent className="p-8 text-center">
-                      <Wallet className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-                      <p className="text-gray-400 mb-3">No billing pools created</p>
-                      <Button onClick={() => setShowCreatePoolModal(true)} className="bg-green-600 hover:bg-green-700">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Pool
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Exposure Basis Info */}
-              <Card className="bg-black/40 border-gray-800">
-                <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-white text-base">Exposure Rules</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 text-sm text-gray-400">
-                  <ul className="list-disc list-inside space-y-1">
-                    <li><strong>Before Invoice:</strong> Exposure = Planned Retail Total</li>
-                    <li><strong>After Invoice:</strong> Exposure = Invoiced Retail Total</li>
-                    <li>Pool charges (freight/tariff) reduce available balance and can cause overdraw</li>
-                  </ul>
-                </CardContent>
-              </Card>
+            {/* Invoice tab content - FORWARD MODEL */}
+            <TabsContent value="invoice" className="mt-4">
+              <ForwardInvoiceDashboard 
+                projectId={projectId}
+                onCreateInvoice={() => {
+                  audit.trackClick('create_invoice_from_tab');
+                  toast.info('Invoice creation - wire to batch modal');
+                }}
+              />
             </TabsContent>
-            )}
 
             <TabsContent value="buy" className="mt-4">
               <Card className="bg-black/40 border-gray-800">
@@ -1501,7 +1334,7 @@ export default function ProjectSupplyManager() {
             </TabsContent>
 
             <TabsContent value="report" className="mt-4 space-y-4">
-              {/* Report Summary */}
+              {/* Report Summary - FORWARD MODEL */}
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-center justify-between">
@@ -1523,70 +1356,43 @@ export default function ProjectSupplyManager() {
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Planned Retail</p>
-                        <p className="text-xl font-bold text-white">${metrics.totalPlanned.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-white">${metrics.totalPlannedRetail.toFixed(2)}</p>
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
-                        <p className="text-xs text-gray-500">Covered</p>
-                        <p className="text-xl font-bold text-green-400">${metrics.totalCovered.toFixed(2)}</p>
+                        <p className="text-xs text-gray-500">Invoiced</p>
+                        <p className="text-xl font-bold text-blue-400">${metrics.totalInvoiced.toFixed(2)}</p>
                       </div>
-                      {/* FORWARD: No exposure gap (invoice-based) */}
-                      {!isForwardModel && (
-                        <div className="bg-gray-800/50 p-3 rounded">
-                          <p className="text-xs text-gray-500">Exposure Gap</p>
-                          <p className={`text-xl font-bold ${metrics.totalExposure > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                            ${metrics.totalExposure.toFixed(2)}
-                          </p>
-                        </div>
-                      )}
-                      {isForwardModel && (
-                        <div className="bg-gray-800/50 p-3 rounded">
-                          <p className="text-xs text-gray-500">To Invoice</p>
-                          <p className="text-xl font-bold text-yellow-400">
-                            ${Math.max(0, metrics.totalPlanned - metrics.totalCovered).toFixed(2)}
-                          </p>
-                        </div>
-                      )}
+                      <div className="bg-gray-800/50 p-3 rounded">
+                        <p className="text-xs text-gray-500">Unbilled</p>
+                        <p className={`text-xl font-bold ${metrics.unbilledRetail > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                          ${metrics.unbilledRetail.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* LEGACY ONLY: Pool Ledger Summary */}
-                  {!isForwardModel && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-400 mb-2">Pool Ledger Summary</h4>
-                      <div className="bg-gray-800/50 p-3 rounded">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                          <div>
-                            <p className="text-xs text-gray-500">Total Invoiced</p>
-                            <p className="text-lg font-bold text-white">
-                              ${pools.reduce((sum, p) => sum + (p.invoiced_amount || 0), 0).toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Total Paid</p>
-                            <p className="text-lg font-bold text-green-400">${metrics.poolPaid.toFixed(2)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Allocations</p>
-                            <p className="text-lg font-bold text-blue-400">
-                              ${pools.reduce((sum, p) => sum + (p.allocated_total || 0), 0).toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Charges</p>
-                            <p className="text-lg font-bold text-orange-400">
-                              ${pools.reduce((sum, p) => sum + (p.charges_total || 0), 0).toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Balance</p>
-                            <p className={`text-lg font-bold ${metrics.poolBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              ${metrics.poolBalance.toFixed(2)}
-                            </p>
-                          </div>
+                  {/* Invoice Summary */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-400 mb-2">Invoice Summary</h4>
+                    <div className="bg-gray-800/50 p-3 rounded">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-xs text-gray-500">Total Invoiced</p>
+                          <p className="text-lg font-bold text-white">${metrics.totalInvoiced.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Total Paid</p>
+                          <p className="text-lg font-bold text-green-400">${metrics.totalPaid.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Outstanding</p>
+                          <p className={`text-lg font-bold ${metrics.invoiceOutstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                            ${metrics.invoiceOutstanding.toFixed(2)}
+                          </p>
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Install Progress */}
                   <div>
@@ -1608,19 +1414,7 @@ export default function ProjectSupplyManager() {
         </div>
       </div>
 
-      {/* Modals */}
-      {/* LEGACY ONLY: CreatePoolModal for pool-based billing */}
-      {showCreatePoolModal && project?.financial_model_version !== 'forward' && (
-        <CreatePoolModal
-          projectId={projectId}
-          onClose={() => setShowCreatePoolModal(false)}
-          onSuccess={() => {
-            invalidateSupply();
-            setShowCreatePoolModal(false);
-          }}
-        />
-      )}
-
+      {/* Modals - FORWARD MODEL (no pool modals) */}
       {deltaOrderCommitment && (
         <DeltaOrderModal
           commitment={{
@@ -1689,26 +1483,6 @@ export default function ProjectSupplyManager() {
           onSuccess={() => {
             invalidateSupply();
             setReceiveModal(null);
-          }}
-        />
-      )}
-
-      {/* LEGACY ONLY: AllocatePoolModal for pool-based allocation */}
-      {allocateModal && project?.financial_model_version !== 'forward' && (
-        <AllocatePoolModal
-          projectId={projectId}
-          commitment={{
-            id: allocateModal.id,
-            commitment_status: allocateModal.commitment_status,
-            required_total: allocateModal.required_total,
-            unit_retail_snapshot: allocateModal.unit_retail,
-            planned_retail_total: allocateModal.planned_retail_total,
-            covered_retail_total: allocateModal.covered_retail_total,
-            exposure_gap: allocateModal.exposure_gap,
-          }}
-          onClose={() => setAllocateModal(null)}
-          onSuccess={() => {
-            invalidateSupply();
           }}
         />
       )}

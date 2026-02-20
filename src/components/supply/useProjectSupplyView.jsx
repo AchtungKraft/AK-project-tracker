@@ -49,7 +49,6 @@ export function useProjectSupplyView(projectId, filters = {}) {
   return {
     items,
     summary: query.data?.summary || {},
-    pools: query.data?.pools || [],
     categories: query.data?.categories || [],
     tabCounts: query.data?.tab_counts || {},
     project: query.data?.project || null,
