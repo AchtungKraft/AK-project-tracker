@@ -101,24 +101,27 @@ export default function ProjectRequirements({ projectId }) {
     return cat?.name || '';
   };
 
-  const filteredRequirements = requirements.filter(req => {
-    const part = getPartInfo(req.part_id);
+  // Filter to active (non-cancelled) commitments
+  const activeCommitments = commitments.filter(c => c.commitment_status !== 'cancelled');
+
+  const filteredCommitments = activeCommitments.filter(c => {
+    const part = getPartInfo(c.part_id);
     const matchesSearch = part.part_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          part.vendor_part_number?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || c.commitment_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate totals
+  // CANONICAL: Calculate totals from PartCommitment fields
   const totals = {
-    needed: requirements.reduce((sum, r) => sum + (r.qty_needed || 0), 0),
-    allocated: requirements.reduce((sum, r) => sum + (r.qty_allocated || 0), 0),
-    installed: requirements.reduce((sum, r) => sum + (r.qty_installed || 0), 0),
-    toOrder: requirements.reduce((sum, r) => {
-      const needed = r.qty_needed || 0;
-      const allocated = r.qty_allocated || 0;
-      const ordered = r.qty_ordered || 0;
-      return sum + Math.max(0, needed - allocated - ordered);
+    needed: activeCommitments.reduce((sum, c) => sum + (c.required_total || c.qty_committed || 0), 0),
+    allocated: activeCommitments.reduce((sum, c) => sum + (c.reserved_from_stock || c.qty_allocated || 0), 0),
+    installed: activeCommitments.reduce((sum, c) => sum + (c.qty_installed || 0), 0),
+    toOrder: activeCommitments.reduce((sum, c) => {
+      const required = c.required_total || c.qty_committed || 0;
+      const reserved = c.reserved_from_stock || c.qty_allocated || 0;
+      const covered = c.covered_from_po || c.qty_ordered || 0;
+      return sum + Math.max(0, required - reserved - covered);
     }, 0)
   };
 
