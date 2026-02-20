@@ -372,7 +372,19 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
 // BATCH BUILDER PANEL
 // ============================================
 
-function BatchBuilderPanel({ selectedItems, batchMode, setBatchMode, onCreateBatch, onClearSelection, isCreating, actionType }) {
+function BatchBuilderPanel({ 
+  selectedItems, 
+  batchMode, 
+  setBatchMode, 
+  onCreateBatch, 
+  onClearSelection, 
+  isCreating, 
+  actionType,
+  // Phase 6.2: Draft accumulation props
+  draftBatches = [],
+  targetDraftBatchId = 'new',
+  setTargetDraftBatchId,
+}) {
   const selectedCount = selectedItems.length;
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
   
