@@ -847,6 +847,11 @@ async function allocatePool(txn, params) {
 /**
  * Record a vendor invoice charge and lock costs
  */
+/**
+ * Record vendor invoice charge (freight/tariff allocation)
+ * 
+ * LEGACY MODEL ONLY: Forward projects use PO header for freight/tariff.
+ */
 async function recordVendorInvoiceCharge(txn, params) {
   const { vendor_invoice_line_id, freight_allocation, tariff_allocation } = params;
 
@@ -861,6 +866,22 @@ async function recordVendorInvoiceCharge(txn, params) {
   const poLines = await txn.base44.asServiceRole.entities.PartPurchaseLineItem.filter({ id: invoiceLine.purchase_line_item_id });
   const poLine = poLines[0];
   if (!poLine) throw new Error('PO line not found');
+
+  // FORWARD MODEL GUARD: Block vendor invoice charge for forward projects
+  if (poLine.commitment_id) {
+    const commitments = await txn.base44.asServiceRole.entities.PartCommitment.filter({ id: poLine.commitment_id });
+    const commitment = commitments[0];
+    if (commitment) {
+      const projects = await txn.base44.asServiceRole.entities.Project.filter({ id: commitment.project_id });
+      const project = projects[0];
+      if (project?.financial_model_version === 'forward') {
+        throw new Error(
+          'LEGACY_FLOW_BLOCKED: recordVendorInvoiceCharge is legacy-only and not available in forward financial model projects. ' +
+          'Use Order header freight_cost/tariff_cost fields instead.'
+        );
+      }
+    }
+  }
 
   // Store previous state for rollback
   const prevPoLine = { ...poLine };
