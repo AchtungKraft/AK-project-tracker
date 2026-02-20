@@ -40,6 +40,9 @@ import { useWiringAudit } from "@/components/dev/wiringAudit";
 export default function SupplyLanding() {
   const navigate = useNavigate();
   const audit = useWiringAudit('SupplyLanding');
+  
+  // CANONICAL: Financial model determines routing
+  // Forward projects never route to tab=fund
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('exposure');
