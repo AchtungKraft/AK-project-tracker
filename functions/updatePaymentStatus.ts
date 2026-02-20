@@ -99,11 +99,19 @@ Deno.serve(async (req) => {
           }, { status: 400 });
         }
         
-        // Update batch
+        // Update batch with payment fields + auto-lock
+        const paidDate = payment_date || new Date().toISOString();
         await base44.entities.InvoiceBatch.update(batch_id, {
           status: 'paid',
-          payment_received_at: payment_date || new Date().toISOString(),
+          // Payment tracking fields
+          paid_date: paidDate,
+          payment_received_at: paidDate,
+          payment_method: payment_method || null,
+          payment_reference: reference_number || null,
+          amount_paid: batch.total_amount, // Default to full payment
           payment_sync_status: payment_source === 'qb_synced' ? 'synced' : 'manual',
+          // Auto-lock when paid
+          is_locked: true,
           notes: batch.notes ? `${batch.notes}\n\nPayment: ${notes || 'Marked paid'}` : `Payment: ${notes || 'Marked paid'}`,
         });
         
