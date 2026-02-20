@@ -840,7 +840,8 @@ export default function ProjectSupplyManager() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                {allowed.canCreatePO && (
+                {/* PHASE 9F: Only show Create PO if to_order > 0 AND no available stock */}
+                {allowed.canCreatePO && commitment.to_order > 0 && (commitment.inventory_snapshot?.available ?? 0) === 0 && (
                   <DropdownMenuItem onClick={() => handleSinglePOCreate(commitment)} className="text-green-400">
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Create PO
