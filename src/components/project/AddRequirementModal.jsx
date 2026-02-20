@@ -38,9 +38,10 @@ export default function AddRequirementModal({ projectId, onClose }) {
     }
   });
 
-  const { data: existingRequirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements', projectId],
-    queryFn: () => base44.entities.PartProjectRequirement.filter({ project_id: projectId }),
+  // CANONICAL: Use PartCommitment only (PartProjectRequirement is deprecated)
+  const { data: existingCommitments = [] } = useQuery({
+    queryKey: ['partCommitments', projectId],
+    queryFn: () => base44.entities.PartCommitment.filter({ project_id: projectId }),
     enabled: !!projectId
   });
 
@@ -70,7 +71,6 @@ export default function AddRequirementModal({ projectId, onClose }) {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
       
       let message = 'Part added to project';
       if (result.needs_cost_review) {
@@ -91,10 +91,10 @@ export default function AddRequirementModal({ projectId, onClose }) {
       return;
     }
     
-    // Check if part already has a requirement
-    const existing = existingRequirements.find(r => r.part_id === formData.part_id);
+    // CANONICAL: Check if part already has an active commitment
+    const existing = existingCommitments.find(c => c.part_id === formData.part_id && !c.is_archived);
     if (existing) {
-      toast.error('This part already has a requirement for this project. Update the existing one instead.');
+      toast.error('This part already has a commitment for this project. Update the existing one instead.');
       return;
     }
     
