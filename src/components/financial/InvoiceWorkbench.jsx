@@ -652,15 +652,29 @@ export default function InvoiceWorkbench({ onRowClick }) {
     queryFn: () => base44.entities.Project.list(),
   });
 
+  // Phase 6.2: Fetch existing draft batches for accumulation
+  const { data: draftBatches = [] } = useQuery({
+    queryKey: ['draftInvoiceBatches', projectFilter],
+    queryFn: async () => {
+      const filter = { status: 'draft', is_locked: false };
+      if (projectFilter !== 'all') filter.project_id = projectFilter;
+      return base44.entities.InvoiceBatch.filter(filter, '-created_date');
+    },
+    staleTime: 30000,
+  });
+
   // Create batch mutation
   const createBatchMutation = useMutation({
     mutationFn: async (items) => {
       console.log("Create Invoice Batch clicked");
       console.log("Selected items:", items.length);
+      console.log("Target draft batch:", targetDraftBatchId);
       
       const response = await base44.functions.invoke('createInvoiceBatch', {
         items,
         batch_mode: batchMode,
+        // Phase 6.2: Pass target draft batch for accumulation
+        target_batch_id: targetDraftBatchId !== 'new' ? targetDraftBatchId : null,
       });
       return response.data;
     },
