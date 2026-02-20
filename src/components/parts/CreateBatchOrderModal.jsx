@@ -75,14 +75,21 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
             order_date: new Date().toISOString().split('T')[0],
             eta_date: '',
             notes: '',
+            // Phase 6: Freight + Tariff at PO header level
+            freight_cost: 0,
+            tariff_cost: 0,
           },
           items: [],
         };
       }
+      // Use Part.cost as canonical cost source, track if manually overridden
+      const partCost = item.part?.cost ?? item.part?.default_cost ?? 0;
       groups[vendorId].items.push({
         ...item,
         qty_to_order: item.qty_to_order || item.part?.reorder_quantity || 1,
-        unit_price: item.part?.default_cost || 0,
+        unit_price: partCost,
+        original_cost: partCost, // Track original for override detection
+        cost_overridden: false,
         vendorOverride: null,
       });
     });
@@ -118,9 +125,15 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       ...prev,
       [vendorId]: {
         ...prev[vendorId],
-        items: prev[vendorId].items.map((item, idx) =>
-          idx === itemIndex ? { ...item, [field]: value } : item
-        ),
+        items: prev[vendorId].items.map((item, idx) => {
+          if (idx !== itemIndex) return item;
+          const updated = { ...item, [field]: value };
+          // Track if cost was manually overridden
+          if (field === 'unit_price') {
+            updated.cost_overridden = value !== item.original_cost;
+          }
+          return updated;
+        }),
       },
     }));
   };
@@ -186,19 +199,36 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     });
   };
 
-  // Calculate totals
+  // Calculate totals including freight/tariff
   const totals = useMemo(() => {
     let totalItems = 0;
-    let totalValue = 0;
+    let totalPartsValue = 0;
+    let totalFreight = 0;
+    let totalTariff = 0;
+    let overriddenCount = 0;
+    let zerosCostCount = 0;
     
     Object.values(vendorGroups).forEach(group => {
+      totalFreight += group.orderData.freight_cost || 0;
+      totalTariff += group.orderData.tariff_cost || 0;
+      
       group.items.forEach(item => {
         totalItems += item.qty_to_order;
-        totalValue += (item.qty_to_order || 0) * (item.unit_price || 0);
+        totalPartsValue += (item.qty_to_order || 0) * (item.unit_price || 0);
+        if (item.cost_overridden) overriddenCount++;
+        if (!item.unit_price || item.unit_price <= 0) zerosCostCount++;
       });
     });
     
-    return { totalItems, totalValue };
+    return { 
+      totalItems, 
+      totalPartsValue,
+      totalFreight,
+      totalTariff,
+      totalLandedCost: totalPartsValue + totalFreight + totalTariff,
+      overriddenCount,
+      zerosCostCount,
+    };
   }, [vendorGroups]);
 
   // Use canonical supply action dispatcher
