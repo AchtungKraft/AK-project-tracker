@@ -701,9 +701,21 @@ async function createDeltaOrder(txn, params) {
 
 /**
  * Create a new Billing Pool for a project
+ * 
+ * LEGACY MODEL ONLY: Forward projects must use InvoiceBatch for billing.
  */
 async function createBillingPool(txn, params) {
   const { project_id, pool_name, invoiced_amount, notes } = params;
+
+  // FORWARD MODEL GUARD: Block pool creation for forward projects
+  const projects = await txn.base44.asServiceRole.entities.Project.filter({ id: project_id });
+  const project = projects[0];
+  if (project?.financial_model_version === 'forward') {
+    throw new Error(
+      'LEGACY_FLOW_BLOCKED: createBillingPool is legacy-only and not available in forward financial model projects. ' +
+      'Use InvoiceBatch for client billing instead.'
+    );
+  }
 
   const pool = await txn.base44.asServiceRole.entities.BillingPool.create({
     project_id,
