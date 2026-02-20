@@ -102,17 +102,18 @@ export default function SupplyQueues() {
   };
 
   // CANONICAL: Tab keys must match ProjectSupplyManager exact tab values
-  // Allowed: 'plan' | 'fund' | 'buy' | 'receive' | 'install'
+  // Allowed: 'plan' | 'buy' | 'receive' | 'install'
+  // FORWARD MODEL: No 'fund' tab - funding queues route to 'plan' (invoice-based billing)
   const getTabForQueue = (queue) => {
     switch (queue) {
-      case 'need_funding': return 'fund';
+      case 'need_funding': return 'plan'; // Forward: handled via invoice dashboard
       case 'ready_to_order': return 'buy';
       case 'on_order': return 'receive';
       case 'ready_to_receive': return 'receive';
       case 'unassigned_inventory': return 'install';
       case 'ready_to_install': return 'install';
-      case 'installed_uncovered': return 'fund';
-      case 'overdrawn_pools': return 'fund';
+      case 'installed_uncovered': return 'plan'; // Forward: handled via invoice dashboard
+      case 'overdrawn_pools': return 'plan'; // Legacy-only queue
       default: return 'plan';
     }
   };

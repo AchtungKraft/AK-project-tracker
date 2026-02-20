@@ -358,10 +358,6 @@ export default function GlobalNeedToOrder() {
                 Go to Project
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-gray-700" />
-              <DropdownMenuItem className="text-blue-400">
-                <DollarSign className="w-4 h-4 mr-2" />
-                Allocate Pool
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
