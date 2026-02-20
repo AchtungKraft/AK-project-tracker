@@ -37,6 +37,7 @@ import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/com
 import InventoryChip from "@/components/supply/InventoryChip";
 import SourceTypeBadge from "@/components/supply/SourceTypeBadge";
 import NextActionBadge from "@/components/supply/NextActionBadge";
+import { useWiringAudit } from "@/components/dev/wiringAudit";
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
@@ -61,6 +62,7 @@ import NextActionBadge from "@/components/supply/NextActionBadge";
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
+  const audit = useWiringAudit('GlobalNeedToOrder');
   const urlParams = new URLSearchParams(window.location.search);
   const filterProjectId = urlParams.get('project_id');
   const filterVendorId = urlParams.get('vendor_id');
@@ -178,6 +180,7 @@ export default function GlobalNeedToOrder() {
 
   // Batch PO creation handler using dispatcher
   const handleBatchCreatePO = async () => {
+    audit.trackClick('batch_create_po', { selected_count: selectedItems.size });
     const selectedData = getSelectedItemsData();
     if (selectedData.length === 0) {
       toast.error('Select items to create PO');
@@ -195,19 +198,23 @@ export default function GlobalNeedToOrder() {
       });
 
       if (preview.blocked_items?.length > 0) {
+        audit.trackError('batch_create_po', new Error('Items blocked'));
         toast.error(`${preview.blocked_items.length} items blocked from ordering`);
         return;
       }
 
+      audit.trackSuccess('batch_create_po');
       // Show batch order modal with preview data
       setShowBatchOrderModal(true);
     } catch (error) {
+      audit.trackError('batch_create_po', error);
       toast.error('Failed to preview: ' + error.message);
     }
   };
 
   // Go to receiving after PO creation
   const handleGoToReceiving = () => {
+    audit.trackClick('navigate_to_receiving');
     navigate(createPageUrl('POReceiving'));
   };
 
