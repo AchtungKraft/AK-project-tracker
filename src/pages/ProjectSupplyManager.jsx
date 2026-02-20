@@ -954,43 +954,54 @@ export default function ProjectSupplyManager() {
           )}
 
           {/* Summary Row */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          {/* FORWARD MODEL: Shows Commitments, Planned Retail, Installed - NO exposure/pool metrics */}
+          {/* LEGACY MODEL: Shows all including Exposure Gap, Pool Balance */}
+          <div className={`grid gap-3 ${project?.financial_model_version === 'forward' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-6'}`}>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Commitments</p>
                 <p className="text-xl font-bold text-white">{metrics.totalCommitments}</p>
               </CardContent>
             </Card>
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Coverage</p>
-                <p className={`text-xl font-bold ${metrics.coveragePct >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>
-                  {metrics.coveragePct}%
-                </p>
-              </CardContent>
-            </Card>
+            {/* LEGACY ONLY: Coverage percentage (pool-based) */}
+            {project?.financial_model_version !== 'forward' && (
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-gray-500">Coverage</p>
+                  <p className={`text-xl font-bold ${metrics.coveragePct >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {metrics.coveragePct}%
+                  </p>
+                </CardContent>
+              </Card>
+            )}
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Planned Retail</p>
                 <p className="text-xl font-bold text-white">${metrics.totalPlanned.toFixed(0)}</p>
               </CardContent>
             </Card>
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Exposure Gap</p>
-                <p className={`text-xl font-bold ${metrics.totalExposure > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                  ${metrics.totalExposure.toFixed(0)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className={`bg-black/40 ${metrics.hasOverdrawn ? 'border-red-600' : 'border-gray-800'}`}>
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Pool Balance</p>
-                <p className={`text-xl font-bold ${metrics.poolBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ${metrics.poolBalance.toFixed(0)}
-                </p>
-              </CardContent>
-            </Card>
+            {/* LEGACY ONLY: Exposure Gap (pool-based) */}
+            {project?.financial_model_version !== 'forward' && (
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-gray-500">Exposure Gap</p>
+                  <p className={`text-xl font-bold ${metrics.totalExposure > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    ${metrics.totalExposure.toFixed(0)}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            {/* LEGACY ONLY: Pool Balance */}
+            {project?.financial_model_version !== 'forward' && (
+              <Card className={`bg-black/40 ${metrics.hasOverdrawn ? 'border-red-600' : 'border-gray-800'}`}>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-gray-500">Pool Balance</p>
+                  <p className={`text-xl font-bold ${metrics.poolBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${metrics.poolBalance.toFixed(0)}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Installed</p>
