@@ -104,10 +104,11 @@ Deno.serve(async (req) => {
     }
     
     const payload = await req.json();
-    const { items, batch_mode = 'MANUAL', notes } = payload;
+    const { items, batch_mode = 'MANUAL', notes, target_batch_id } = payload;
     
     console.log("Incoming items count:", items?.length || 0);
     console.log("Batch mode:", batch_mode);
+    console.log("Target batch ID:", target_batch_id || 'NEW');
     
     if (!items || !Array.isArray(items) || items.length === 0) {
       return Response.json({ 
