@@ -17,8 +17,17 @@ import {
   Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+// LEGACY ONLY: Pool components not rendered for forward model
 import PoolPanel from "./PoolPanel";
 import CoverageBadge from "./CoverageBadge";
+
+/**
+ * FINANCIAL MODEL ROUTING:
+ * - forward: Shows Cost Summary (PO-based) + Revenue Summary (InvoiceBatch-based) + Client Invoices
+ * - legacy: Shows Pool Panel, Retail Exposure, Pool Summary, Pool Charges, Coverage Badges
+ * 
+ * FORWARD MODEL EXCLUDES: billing_status, exposure_gap, covered_retail_total, BillingPool, VendorInvoice
+ */
 
 /**
  * ProjectFinancialDashboard
@@ -433,7 +442,8 @@ export default function ProjectFinancialDashboard({ projectId }) {
       )}
 
       {/* ============================================ */}
-      {/* LEGACY MODEL: Retail Exposure Summary (Pool-based) */}
+      {/* LEGACY MODEL ONLY: Retail Exposure Summary (Pool-based) */}
+      {/* NOT rendered for forward model - uses exposure_gap, covered_retail_total */}
       {/* ============================================ */}
       {!isForwardModel && exposureSummary && (
       <Card className="bg-gray-900/50 border-gray-700">
