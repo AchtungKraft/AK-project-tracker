@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   Wallet, AlertTriangle, DollarSign, CheckCircle2, 
-  Package, TrendingDown, AlertCircle 
+  Package, TrendingDown, AlertCircle, Ban 
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +23,9 @@ import { toast } from "sonner";
  * Forward model projects should NOT render this modal.
  * Forward model uses InvoiceBatch for revenue tracking, not pool allocation.
  * 
+ * HARD BLOCK: If project.financial_model_version === 'forward', this modal
+ * will render a blocked state and NOT allow pool allocation.
+ * 
  * Features:
  * - Display all pools for project with balance/status
  * - Show commitment exposure details
@@ -32,11 +35,61 @@ import { toast } from "sonner";
  */
 export default function AllocatePoolModal({ 
   projectId,
+  project,
   commitment = null,
   onClose,
   onSuccess
 }) {
   const queryClient = useQueryClient();
+
+  // ============================================
+  // HARD BLOCK: Forward model projects cannot use PoolAllocation
+  // ============================================
+  const { data: fetchedProject } = useQuery({
+    queryKey: ['project-for-allocation', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const projects = await base44.entities.Project.filter({ id: projectId });
+      return projects[0] || null;
+    },
+    enabled: !project && !!projectId,
+  });
+
+  const effectiveProject = project || fetchedProject;
+  const isForwardModel = effectiveProject?.financial_model_version === 'forward';
+
+  // HARD BLOCK: Render blocked UI for forward projects
+  if (isForwardModel) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-400" />
+              Not Available
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <Ban className="w-8 h-8 text-red-400" />
+            </div>
+            <p className="text-gray-300 mb-2">
+              Pool Allocation is not available for forward model projects.
+            </p>
+            <p className="text-sm text-gray-500">
+              Forward model uses Invoice Batches for client billing. Use the Invoice Workbench instead.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const [selectedPoolId, setSelectedPoolId] = useState(null);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');

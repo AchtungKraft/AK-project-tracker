@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Plus, Trash2, Upload, DollarSign, AlertTriangle } from "lucide-react";
+import { FileText, Plus, Trash2, Upload, DollarSign, AlertTriangle, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { CommitmentActions } from "@/components/financial/financialMutationGuard";
@@ -19,14 +19,76 @@ import { CommitmentActions } from "@/components/financial/financialMutationGuard
  * NOTE: This modal is LEGACY MODEL ONLY.
  * Forward model does NOT use VendorInvoice entity or this modal.
  * Forward model uses Order header for freight/tariff and InvoiceBatch for client billing.
+ * 
+ * HARD BLOCK: If project.financial_model_version === 'forward', this modal
+ * will render a blocked state and NOT load any vendor invoice data.
  */
 export default function VendorInvoiceModal({ 
   order,
   existingInvoice,
-  onClose 
+  onClose,
+  project // Accept project prop for model check
 }) {
   const queryClient = useQueryClient();
   const isEditing = !!existingInvoice;
+
+  // ============================================
+  // HARD BLOCK: Forward model projects cannot use VendorInvoice
+  // ============================================
+  // If project not passed as prop, fetch it from order's commitments
+  const { data: fetchedProject } = useQuery({
+    queryKey: ['project-for-vendor-invoice', order?.id],
+    queryFn: async () => {
+      if (!order?.id) return null;
+      // Get a commitment from this order to find the project
+      const lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: order.id });
+      if (lineItems.length === 0) return null;
+      const commitmentId = lineItems[0].commitment_id;
+      if (!commitmentId) return null;
+      const commitment = await base44.entities.PartCommitment.filter({ id: commitmentId });
+      if (commitment.length === 0) return null;
+      const projectId = commitment[0].project_id;
+      if (!projectId) return null;
+      const projects = await base44.entities.Project.filter({ id: projectId });
+      return projects[0] || null;
+    },
+    enabled: !project && !!order?.id,
+  });
+
+  const effectiveProject = project || fetchedProject;
+  const isForwardModel = effectiveProject?.financial_model_version === 'forward';
+
+  // HARD BLOCK: Render blocked UI for forward projects
+  if (isForwardModel) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-400" />
+              Not Available
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <Ban className="w-8 h-8 text-red-400" />
+            </div>
+            <p className="text-gray-300 mb-2">
+              Vendor Invoice is not available for forward model projects.
+            </p>
+            <p className="text-sm text-gray-500">
+              Forward model uses Order header for freight/tariff costs and InvoiceBatch for client billing.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   const [invoice, setInvoice] = useState(existingInvoice || {
     invoice_number: '',

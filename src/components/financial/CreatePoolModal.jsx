@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { DollarSign, Plus, Loader2 } from "lucide-react";
+import { DollarSign, Plus, Loader2, Ban } from "lucide-react";
 import { CommitmentActions } from "./financialMutationGuard";
 
 /**
@@ -22,12 +23,63 @@ import { CommitmentActions } from "./financialMutationGuard";
  * Forward model projects should NOT render this modal.
  * Forward model uses InvoiceBatch for revenue tracking, not billing pools.
  * 
+ * HARD BLOCK: If project.financial_model_version === 'forward', this modal
+ * will render a blocked state and NOT allow pool creation.
+ * 
  * Always visible from PoolPanel (no lifecycle restriction)
  * Routes through CommitmentActions.createBillingPool()
  */
-export default function CreatePoolModal({ projectId, onClose, onSuccess }) {
+export default function CreatePoolModal({ projectId, project, onClose, onSuccess }) {
   const queryClient = useQueryClient();
   
+  // ============================================
+  // HARD BLOCK: Forward model projects cannot use BillingPool
+  // ============================================
+  const { data: fetchedProject } = useQuery({
+    queryKey: ['project-for-pool', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const projects = await base44.entities.Project.filter({ id: projectId });
+      return projects[0] || null;
+    },
+    enabled: !project && !!projectId,
+  });
+
+  const effectiveProject = project || fetchedProject;
+  const isForwardModel = effectiveProject?.financial_model_version === 'forward';
+
+  // HARD BLOCK: Render blocked UI for forward projects
+  if (isForwardModel) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-400" />
+              Not Available
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <Ban className="w-8 h-8 text-red-400" />
+            </div>
+            <p className="text-gray-300 mb-2">
+              Billing Pools are not available for forward model projects.
+            </p>
+            <p className="text-sm text-gray-500">
+              Forward model uses Invoice Batches for client billing. Use the Invoice Workbench instead.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const [poolName, setPoolName] = useState("Main Pool");
   const [invoicedAmount, setInvoicedAmount] = useState(0);
   const [notes, setNotes] = useState("");
