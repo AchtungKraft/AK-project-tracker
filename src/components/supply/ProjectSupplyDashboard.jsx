@@ -36,6 +36,7 @@ export default function ProjectSupplyDashboard({ projects, statuses }) {
 
   // Calculate supply metrics per project
   const projectMetrics = useMemo(() => {
+    if (!projects || !Array.isArray(projects)) return [];
     return projects.map(project => {
       const projectCommitments = commitments.filter(c => c.project_id === project.id && c.commitment_status !== 'cancelled');
       const projectPools = pools.filter(p => p.project_id === project.id);
