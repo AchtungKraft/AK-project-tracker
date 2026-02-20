@@ -47,9 +47,16 @@ export default function ProjectFinancialDashboard({ projectId }) {
   const isForwardModel = project?.financial_model_version === 'forward';
 
   // FORWARD MODEL: Fetch revenue summary from backend
-  const { data: revenueSummary, isLoading: loadingRevenue } = useQuery({
+  const { data: revenueSummary, isLoading: loadingRevenue, error: revenueError } = useQuery({
     queryKey: ['projectRevenueSummary', projectId],
-    queryFn: () => base44.functions.invoke('getProjectRevenueSummary', { project_id: projectId }),
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getProjectRevenueSummary', { project_id: projectId });
+      // Handle 404 or error responses gracefully
+      if (res.data?.code === 'PROJECT_NOT_FOUND' || res.data?.code === 'MISSING_PROJECT_ID') {
+        return { data: null, notFound: true };
+      }
+      return res;
+    },
     enabled: !!projectId && isForwardModel,
   });
 

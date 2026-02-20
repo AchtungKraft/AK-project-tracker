@@ -124,28 +124,27 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 3. Calculate totals from invoice batches for this project
-      // Sum by batch status (not by line, to avoid double-counting)
+      // 3. Calculate totals from InvoiceBatch.total_amount (NOT lines)
+      // This avoids double-counting and uses the batch-level totals directly
       let totalInvoiced = 0;
       let totalCollected = 0;
       
-      // For accurate totals, sum line totals grouped by batch status
-      const processedBatches = new Set();
+      // Filter batches for this project with relevant statuses
+      const projectBatches = invoiceBatches.filter(b => 
+        b.project_id === project_id && b.status !== 'voided' && b.status !== 'draft'
+      );
       
-      for (const line of invoiceBatchLines) {
-        const batch = batchesMap[line.batch_id];
-        if (!batch || batch.status === 'voided' || batch.status === 'draft') continue;
-        
-        const lineTotal = line.line_total ?? ((line.qty ?? 1) * (line.unit_price ?? 0));
+      for (const batch of projectBatches) {
+        const batchAmount = batch.total_amount ?? 0;
         
         // Invoiced = sent, exported, invoiced, paid
         if (['sent', 'exported', 'invoiced', 'paid'].includes(batch.status)) {
-          totalInvoiced += lineTotal;
+          totalInvoiced += batchAmount;
         }
         
         // Collected = paid only
         if (batch.status === 'paid') {
-          totalCollected += lineTotal;
+          totalCollected += batchAmount;
         }
       }
       
