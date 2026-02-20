@@ -105,10 +105,37 @@ Deno.serve(async (req) => {
         const vendorId = override_vendor_id || part?.default_vendor_id;
         const vendor = vendorMap.get(vendorId);
         
-        // FORWARD MODEL: Cost authority is PO line, source from Part.cost directly
-        // LEGACY MODEL: Can use commitment.unit_cost_snapshot if available
-        // The actual cost is written to PO line and becomes the authoritative source
-        const unit_cost = part?.cost || part?.default_cost || commitment.unit_cost_snapshot || 0;
+        // FORWARD MODEL: Cost authority is PO line
+        // Priority: Part.cost > Part.default_cost > 0 (with review flag)
+        // Do NOT use commitment.unit_cost_snapshot in forward path
+        // LEGACY MODEL: Can use commitment.unit_cost_snapshot as fallback
+        let unit_cost;
+        let cost_source_reference;
+        let cost_requires_review = false;
+        
+        // Check if project is forward model
+        const projectForForward = await base44.asServiceRole.entities.Project.filter({ id: project_id });
+        const isForward = projectForForward[0]?.financial_model_version === 'forward';
+        
+        if (isForward) {
+          // FORWARD MODEL: Only use Part.cost, never commitment snapshot
+          if (part?.cost && part.cost > 0) {
+            unit_cost = part.cost;
+            cost_source_reference = 'part_cost';
+          } else if (part?.default_cost && part.default_cost > 0) {
+            unit_cost = part.default_cost;
+            cost_source_reference = 'default_estimate';
+            cost_requires_review = true; // Default estimate needs review
+          } else {
+            unit_cost = 0;
+            cost_source_reference = 'default_estimate';
+            cost_requires_review = true; // $0 cost always needs review
+          }
+        } else {
+          // LEGACY MODEL: Use commitment snapshot if available
+          unit_cost = part?.cost || part?.default_cost || commitment.unit_cost_snapshot || 0;
+          cost_source_reference = `commitment:${commitment.id}`;
+        }
         
         eligible.push({
           commitment,
@@ -116,7 +143,9 @@ Deno.serve(async (req) => {
           vendor_id: vendorId,
           vendor_name: vendor?.vendor_name || 'Unknown Vendor',
           qty_to_order: commitment.qty_to_order || 0,
-          unit_cost
+          unit_cost,
+          cost_source_reference,
+          cost_requires_review
         });
       }
     }
