@@ -31,8 +31,23 @@ export function useProjectSupplyView(projectId, filters = {}) {
     queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
   };
 
+  const items = query.data?.items || [];
+  
+  // DEV ONLY: Runtime schema validation
+  if (process.env.NODE_ENV === 'development' && items.length > 0) {
+    const sample = items[0];
+    console.log('[DEV] Project Supply View - Sample commitment shape:', sample);
+    
+    // FAIL-FAST: Check canonical fields
+    const required = ['commitment_id', 'required_total', 'to_order', 'coverage_status'];
+    const missing = required.filter(f => sample[f] === undefined);
+    if (missing.length > 0) {
+      console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
+    }
+  }
+  
   return {
-    items: query.data?.items || [],
+    items,
     summary: query.data?.summary || {},
     pools: query.data?.pools || [],
     categories: query.data?.categories || [],
@@ -80,8 +95,23 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     categories: rawFilterOptions.categories || [],
   };
 
+  const items = query.data?.items || [];
+  
+  // DEV ONLY: Runtime schema validation
+  if (process.env.NODE_ENV === 'development' && items.length > 0) {
+    const sample = items[0];
+    console.log('[DEV] Ops Supply View - Sample commitment shape:', sample);
+    
+    // FAIL-FAST: Check canonical fields
+    const required = ['commitment_id', 'to_order', 'is_orderable', 'coverage_status'];
+    const missing = required.filter(f => sample[f] === undefined);
+    if (missing.length > 0) {
+      console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
+    }
+  }
+  
   return {
-    items: query.data?.items || [],
+    items,
     summary: query.data?.summary || {},
     filterOptions,
     isLoading: query.isLoading,
