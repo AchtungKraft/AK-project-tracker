@@ -207,8 +207,18 @@ function getForwardInvoiceStatus(item) {
   return 'Uninvoiced';
 }
 
-function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick, isForwardModel = false }) {
+/**
+ * Check if an item is from a forward-model project
+ */
+function isItemForwardModel(item) {
+  return item.financial_model_version === 'forward' || item.project_financial_model === 'forward';
+}
+
+function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick }) {
   const allowSelection = tabConfig.allowSelection;
+  
+  // Check if any items are from legacy model (to show/hide Safety column header)
+  const hasLegacyItems = items.some(item => !isItemForwardModel(item));
 
   if (!items || items.length === 0) {
     return (
@@ -235,8 +245,8 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
           )}
           <TableHead className="text-gray-400 text-xs">Project</TableHead>
           <TableHead className="text-gray-400 text-xs">Part</TableHead>
-          {/* LEGACY ONLY: Safety column for pool-based billing */}
-          {!isForwardModel && (
+          {/* LEGACY ONLY: Safety column for pool-based billing - show if any legacy items exist */}
+          {hasLegacyItems && (
             <TableHead className="text-gray-400 text-xs text-center">Safety</TableHead>
           )}
           <TableHead className="text-gray-400 text-xs text-right">Qty</TableHead>
@@ -247,7 +257,9 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
         </TableRow>
       </TableHeader>
       <TableBody>
-        {items.map(item => (
+        {items.map(item => {
+          const itemIsForward = isItemForwardModel(item);
+          return (
           <TableRow 
             key={item.id}
             className={cn(
@@ -290,14 +302,22 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                     ⚠ Missing Type
                   </Badge>
                 )}
+                {/* Forward model indicator */}
+                {itemIsForward && (
+                  <Badge className="bg-blue-600/30 text-blue-400 text-xs shrink-0">F</Badge>
+                )}
               </div>
             </TableCell>
             {/* LEGACY ONLY: Safety badge for pool-based billing */}
-            {!isForwardModel && (
+            {hasLegacyItems && (
               <TableCell className="text-center">
-                <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>
-                  {item.ordering_safety}
-                </Badge>
+                {itemIsForward ? (
+                  <span className="text-gray-500">—</span>
+                ) : (
+                  <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[item.ordering_safety]?.color || 'bg-gray-600')}>
+                    {item.ordering_safety}
+                  </Badge>
+                )}
               </TableCell>
             )}
             <TableCell className="text-right text-gray-300">{item.assigned_qty}</TableCell>
@@ -312,7 +332,7 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
             <TableCell>
               <div className="flex flex-col gap-1">
                 {/* FORWARD: Show invoice status; LEGACY: Show billing status */}
-                {isForwardModel ? (
+                {itemIsForward ? (
                   <Badge className={cn(
                     "text-xs",
                     getForwardInvoiceStatus(item) === 'Paid' ? 'bg-green-600' :
@@ -333,7 +353,8 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
               <span className="text-xs text-gray-400">{item.recommended_action}</span>
             </TableCell>
           </TableRow>
-        ))}
+          );
+        })}
       </TableBody>
     </Table>
   );
