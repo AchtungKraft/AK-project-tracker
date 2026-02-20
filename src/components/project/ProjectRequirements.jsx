@@ -20,16 +20,23 @@ import {
 import { toast } from "sonner";
 import AddRequirementModal from "./AddRequirementModal";
 import AllocatePartModal from "./AllocatePartModal";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+
+/**
+ * CANONICAL SUPPLY FLOW - ProjectRequirements
+ * 
+ * Now reads from PartCommitment (canonical source).
+ * PartProjectRequirement is deprecated and fully removed.
+ */
 
 const STATUS_CONFIG = {
-  'Needed': { color: '#EF4444', icon: AlertTriangle },
-  'Partially Allocated': { color: '#F59E0B', icon: Package },
-  'Allocated': { color: '#3B82F6', icon: Package },
-  'Ordered': { color: '#8B5CF6', icon: ShoppingCart },
-  'Partially Received': { color: '#F59E0B', icon: Truck },
-  'Ready': { color: '#10B981', icon: CheckCircle2 },
-  'Partially Installed': { color: '#F59E0B', icon: Wrench },
-  'Installed': { color: '#059669', icon: CheckCircle2 },
+  'planned': { color: '#EF4444', icon: AlertTriangle, label: 'Planned' },
+  'ordered': { color: '#8B5CF6', icon: ShoppingCart, label: 'Ordered' },
+  'partially_received': { color: '#F59E0B', icon: Truck, label: 'Partially Received' },
+  'received': { color: '#10B981', icon: Package, label: 'Received' },
+  'allocated': { color: '#3B82F6', icon: Package, label: 'Allocated' },
+  'installed': { color: '#059669', icon: CheckCircle2, label: 'Installed' },
+  'cancelled': { color: '#6B7280', icon: AlertTriangle, label: 'Cancelled' },
 };
 
 export default function ProjectRequirements({ projectId }) {
@@ -39,9 +46,10 @@ export default function ProjectRequirements({ projectId }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [allocatingRequirement, setAllocatingRequirement] = useState(null);
 
-  const { data: requirements = [], isLoading } = useQuery({
-    queryKey: ['partProjectRequirements', projectId],
-    queryFn: () => base44.entities.PartProjectRequirement.filter({ project_id: projectId }),
+  // CANONICAL: Read from PartCommitment only
+  const { data: commitments = [], isLoading } = useQuery({
+    queryKey: ['partCommitments', projectId],
+    queryFn: () => base44.entities.PartCommitment.filter({ project_id: projectId }),
     enabled: !!projectId
   });
 
@@ -61,49 +69,26 @@ export default function ProjectRequirements({ projectId }) {
     enabled: !!projectId
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.PartProjectRequirement.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      toast.success('Requirement updated');
-    }
-  });
-
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems'],
-    queryFn: () => base44.entities.InventoryItem.list(),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (requirement) => {
-      // Release any reserved inventory before deleting
-      const allocatedQty = (requirement.qty_allocated || 0) - (requirement.qty_installed || 0);
-      
-      if (allocatedQty > 0) {
-        // Find inventory items for this part and release reserved quantities
-        const partInventory = inventoryItems.filter(i => i.part_id === requirement.part_id);
-        let remainingToRelease = allocatedQty;
-        
-        for (const item of partInventory) {
-          if (remainingToRelease <= 0) break;
-          
-          const reservedHere = Math.min(item.quantity_reserved || 0, remainingToRelease);
-          if (reservedHere > 0) {
-            await base44.entities.InventoryItem.update(item.id, {
-              quantity_reserved: Math.max(0, (item.quantity_reserved || 0) - reservedHere)
-            });
-            remainingToRelease -= reservedHere;
-          }
-        }
+  // CANONICAL: Updates go through executeSupplyAction
+  const cancelMutation = useMutation({
+    mutationFn: async (commitment) => {
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'CANCEL_COMMITMENT',
+        commitment_ids: [commitment.id],
+        payload: { reason: 'Removed from project requirements' },
+        dry_run: false
+      });
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
-      
-      // Now delete the requirement
-      await base44.entities.PartProjectRequirement.delete(requirement.id);
+      return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      toast.success('Requirement removed and reserved inventory released');
+      invalidateSupplyQueries(queryClient, { project_ids: [projectId], invalidateAll: true });
+      toast.success('Commitment cancelled');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to cancel commitment');
     }
   });
 
