@@ -105,13 +105,18 @@ Deno.serve(async (req) => {
         const vendorId = override_vendor_id || part?.default_vendor_id;
         const vendor = vendorMap.get(vendorId);
         
+        // FORWARD MODEL: Cost authority is PO line, source from Part.cost directly
+        // LEGACY MODEL: Can use commitment.unit_cost_snapshot if available
+        // The actual cost is written to PO line and becomes the authoritative source
+        const unit_cost = part?.cost || part?.default_cost || commitment.unit_cost_snapshot || 0;
+        
         eligible.push({
           commitment,
           part,
           vendor_id: vendorId,
           vendor_name: vendor?.vendor_name || 'Unknown Vendor',
           qty_to_order: commitment.qty_to_order || 0,
-          unit_cost: commitment.unit_cost_snapshot || part?.cost || part?.default_cost || 0
+          unit_cost
         });
       }
     }
