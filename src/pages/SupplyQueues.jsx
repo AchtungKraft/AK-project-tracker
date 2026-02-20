@@ -101,6 +101,8 @@ export default function SupplyQueues() {
     navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${item.project_id}&tab=${getTabForQueue(activeQueue)}`);
   };
 
+  // CANONICAL: Tab keys must match ProjectSupplyManager exact tab values
+  // Allowed: 'plan' | 'fund' | 'buy' | 'receive' | 'install'
   const getTabForQueue = (queue) => {
     switch (queue) {
       case 'need_funding': return 'fund';
