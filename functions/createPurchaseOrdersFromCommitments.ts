@@ -245,10 +245,11 @@ Deno.serve(async (req) => {
 
       // Create line items and update commitments
       for (const item of items) {
-        const { commitment, part, qty_to_order, unit_cost } = item;
+        const { commitment, part, qty_to_order, unit_cost, cost_source_reference, cost_requires_review } = item;
         
         // Create PartPurchaseLineItem
-        const lineItem = await base44.asServiceRole.entities.PartPurchaseLineItem.create({
+        // FORWARD MODEL: cost_source_reference and cost_requires_review come from eligibility check
+        const lineItemData = {
           order_id: order.id,
           part_id: part.id,
           commitment_id: commitment.id,
@@ -259,12 +260,19 @@ Deno.serve(async (req) => {
           unit_price: unit_cost, // deprecated but kept for compatibility
           extended_cost: unit_cost * qty_to_order,
           line_total: unit_cost * qty_to_order,
-          cost_source_reference: `commitment:${commitment.id}`,
+          cost_source_reference: cost_source_reference || `commitment:${commitment.id}`,
           status: 'Ordered',
           is_legacy: false,
           legacy_link_status: 'linked',
           is_delta_order: false
-        });
+        };
+        
+        // FORWARD MODEL: Flag lines that need cost review
+        if (isForwardModel && cost_requires_review) {
+          lineItemData.cost_requires_review = true;
+        }
+        
+        const lineItem = await base44.asServiceRole.entities.PartPurchaseLineItem.create(lineItemData);
 
         lineItemIds.push(lineItem.id);
 
