@@ -547,14 +547,15 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                             type="number"
                             step="0.01"
                             min="0"
-                            value={item.unit_price}
-                            onChange={(e) => updateLineItem(vendorId, idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                            value={item.unit_cost}
+                            onChange={(e) => updateLineItem(vendorId, idx, 'unit_cost', parseFloat(e.target.value) || 0)}
                             className={cn(
                               "h-7 bg-gray-800 text-sm",
                               item.cost_overridden ? "border-yellow-600 bg-yellow-900/20" : "border-gray-700",
-                              (!item.unit_price || item.unit_price <= 0) && "border-red-600 bg-red-900/20"
+                              (!item.unit_cost || item.unit_cost <= 0) && "border-red-600 bg-red-900/20"
                             )}
-                            title={item.cost_overridden ? `Original: $${item.original_cost?.toFixed(2)}` : undefined}
+                            title={item.cost_overridden ? `Original: $${item.original_cost?.toFixed(2)}` : "Unit Cost"}
+                            placeholder="Unit Cost"
                           />
                           {item.cost_overridden && (
                             <span className="text-yellow-500 text-xs" title="Cost manually overridden">*</span>
@@ -562,7 +563,7 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                         </div>
                         
                         <span className="text-xs text-gray-400 w-16 text-right">
-                          ${((item.qty_to_order || 0) * (item.unit_price || 0)).toFixed(2)}
+                          ${((item.qty_to_order || 0) * (item.unit_cost || 0)).toFixed(2)}
                         </span>
                         
                         <Button
