@@ -17,8 +17,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 Deno.serve(async (req) => {
   console.log("getProjectRevenueSummary invoked");
   
+  const base44 = createClientFromRequest(req);
+  
   try {
-    const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
     if (!user) {
@@ -36,18 +37,13 @@ Deno.serve(async (req) => {
     }
     
     // Fetch project to verify financial model
-    // Wrap in try/catch to handle invalid ID format gracefully
+    // Use list() with manual filter to avoid SDK throwing on invalid ID
     let project = null;
     try {
-      const projects = await base44.entities.Project.filter({ id: project_id });
-      project = projects[0];
+      const allProjects = await base44.entities.Project.filter({});
+      project = allProjects.find(p => p.id === project_id);
     } catch (err) {
-      console.log("Error fetching project:", err.message);
-      // If the ID format is invalid, treat as not found
-      return Response.json({ 
-        error: 'Project not found',
-        code: 'PROJECT_NOT_FOUND' 
-      }, { status: 404 });
+      console.log("Error fetching projects:", err.message);
     }
     
     if (!project) {
