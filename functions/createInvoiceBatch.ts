@@ -120,16 +120,30 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
     
-    // Validate items using centralized isInvoiceReady helper
+    // CANONICAL: Validate items using centralized isInvoiceReady helper
+    // All items MUST have commitment_id - fail fast if missing
     const blockedItems = [];
     const validItems = [];
     
     for (const item of items) {
+      // CANONICAL: Verify required fields exist
+      if (!item.commitment_id) {
+        console.error('[CANONICAL VIOLATION] Item missing commitment_id:', JSON.stringify(item));
+        blockedItems.push({
+          commitment_id: 'MISSING',
+          part_name: item.part_name || 'Unknown',
+          project_name: item.project_name || 'Unknown',
+          reasons: ['Missing commitment_id - cannot process'],
+          lifecycle_stage: item.client_billing_status || item.lifecycle_stage,
+        });
+        continue;
+      }
+      
       const readiness = isInvoiceReady(item);
       
       if (!readiness.ready) {
         blockedItems.push({
-          commitment_id: item.commitment_id || item.id,
+          commitment_id: item.commitment_id,
           part_name: item.part_name || 'Unknown',
           project_name: item.project_name || 'Unknown',
           reasons: readiness.reasons,
