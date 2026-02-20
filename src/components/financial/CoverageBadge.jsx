@@ -17,7 +17,11 @@ import {
 /**
  * CoverageBadge - Shows coverage status for a commitment
  * 
- * Coverage states:
+ * NOTE: This component is LEGACY MODEL ONLY.
+ * Forward model projects should NOT render this badge.
+ * Forward model uses InvoiceBatch status (Uninvoiced/Invoiced/Paid) instead.
+ * 
+ * Legacy Coverage states (based on pool allocation):
  * - Covered: exposure_gap <= 0
  * - Partial: exposure_gap > 0 AND covered_retail_total > 0
  * - Uncovered: exposure_gap > 0 AND covered_retail_total = 0
