@@ -889,10 +889,10 @@ export default function InvoiceWorkbench({ onRowClick }) {
             </CardContent>
           </Card>
 
-          {/* Legend */}
+          {/* Legend - LEGACY ONLY: Ordering Safety explanation */}
           <Card className="bg-black/40 border-gray-800">
             <CardHeader className="border-b border-gray-800 p-3">
-              <CardTitle className="text-white text-sm">Ordering Safety</CardTitle>
+              <CardTitle className="text-white text-sm">Ordering Safety (Legacy)</CardTitle>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
               {Object.entries(ORDERING_SAFETY_CONFIG).map(([key, config]) => (
@@ -901,6 +901,10 @@ export default function InvoiceWorkbench({ onRowClick }) {
                   <span className="text-xs text-gray-400">{config.label}</span>
                 </div>
               ))}
+              <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-700">
+                Safety only applies to legacy pool-based billing.
+                Forward model uses Invoice status.
+              </p>
             </CardContent>
           </Card>
         </div>
