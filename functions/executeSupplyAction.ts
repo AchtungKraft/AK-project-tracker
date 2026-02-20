@@ -227,7 +227,14 @@ async function adjustRequired(ctx, commitment_ids, payload) {
         isNewCommitment = true;
       } else {
         // Create commitment with canonical fields
-        const retail_effective = part.retail_override ?? part.retail_matrix_price ?? part.default_retail ?? 0;
+        // PRICING FIX: Use truthy check, not just null check, and prioritize override > matrix > 0
+        const unit_cost = part.cost || 0;
+        const retail_effective = part.retail_override || part.retail_matrix_price || 0;
+        
+        // Determine pricing integrity
+        let pricing_integrity_status = 'ok';
+        if (unit_cost <= 0) pricing_integrity_status = 'missing_cost';
+        else if (retail_effective <= 0) pricing_integrity_status = 'missing_retail';
         
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
           project_id,
@@ -247,10 +254,12 @@ async function adjustRequired(ctx, commitment_ids, payload) {
           coverage_status: 'NOT_COVERED',
           source_type: 'manual_attachment',
           billing_status: 'billable',
-          unit_cost_snapshot: part.cost ?? 0,
+          requires_prepay: payload.requires_prepay || false, // FIX C: Support prepay flag
+          unit_cost_snapshot: unit_cost,
           unit_retail_snapshot: retail_effective,
-          planned_cost_total: (part.cost ?? 0) * initialRequired,
+          planned_cost_total: unit_cost * initialRequired,
           planned_retail_total: retail_effective * initialRequired,
+          pricing_integrity_status, // Track pricing health
           commitment_version: 1,
           state_version: 1,
           last_recomputed_at: ctx.timestamp

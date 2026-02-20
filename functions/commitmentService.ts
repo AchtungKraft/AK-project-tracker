@@ -1565,8 +1565,9 @@ async function addPartToProject(txn, params) {
   }
 
   // Compute pricing snapshots (SERVICE-AUTHORED - UI MUST NOT SET THESE)
-  const unit_cost_snapshot = part.cost || part.default_cost || 0;
-  const unit_retail_snapshot = part.retail_override || part.retail_matrix_price || part.default_retail || 0;
+  // PRICING FIX: Use truthy OR checks to avoid 0 being treated as falsy incorrectly
+  const unit_cost_snapshot = part.cost || 0;
+  const unit_retail_snapshot = part.retail_override || part.retail_matrix_price || 0;
   
   // Calculate totals
   const planned_cost_total = unit_cost_snapshot * qty_committed;

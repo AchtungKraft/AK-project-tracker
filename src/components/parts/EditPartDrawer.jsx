@@ -693,8 +693,39 @@ export default function EditPartDrawer({ partId, onClose }) {
                     </div>
                   </div>
 
-                  {/* Pricing fields are admin-only. Retail is matrix-driven. */}
-                  {/* Cost editing removed for non-admin users to prevent pricing contamination */}
+                  {/* FIX D: Pricing fields restored - Cost is admin-editable, Retail is matrix-driven or override */}
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
+                    <div>
+                      <Label className="text-gray-400 text-xs">Cost (What we pay)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editedPart.cost || ''}
+                        onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="0.00"
+                      />
+                      {(!editedPart.cost || editedPart.cost <= 0) && (
+                        <p className="text-xs text-amber-400 mt-1">⚠️ Missing cost - will flag for review</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-gray-400 text-xs">Retail Override (optional)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editedPart.retail_override || ''}
+                        onChange={(e) => setEditedPart({ ...editedPart, retail_override: parseFloat(e.target.value) || null })}
+                        className="bg-gray-800 border-gray-700 text-white"
+                        placeholder="Auto from matrix"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Matrix: ${(editedPart.retail_matrix_price || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>

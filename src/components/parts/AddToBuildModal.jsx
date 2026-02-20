@@ -40,6 +40,7 @@ export default function AddToBuildModal({ part, onClose }) {
   
   const [allocateImmediately, setAllocateImmediately] = useState(false);
   const [flagNeedToOrder, setFlagNeedToOrder] = useState(false);
+  const [requiresPrepay, setRequiresPrepay] = useState(false); // FIX C: Order before/after pay toggle
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -86,6 +87,7 @@ export default function AddToBuildModal({ part, onClose }) {
           source_type: 'SHOP_PURCHASED', // Default source type
           notes: formData.notes || null,
           source_surface: 'AddToBuildModal',
+          requires_prepay: requiresPrepay, // FIX C: Pass prepay gating choice
         },
         dry_run: false
       });
@@ -338,6 +340,24 @@ export default function AddToBuildModal({ part, onClose }) {
                 </Label>
                 <p className="text-xs text-gray-500 mt-1">
                   Part will appear in the Need to Buy list
+                </p>
+              </div>
+            </div>
+            
+            {/* FIX C: Order before/after payment toggle */}
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="requiresPrepay"
+                checked={requiresPrepay}
+                onCheckedChange={setRequiresPrepay}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <Label htmlFor="requiresPrepay" className="text-gray-300 cursor-pointer text-sm">
+                  Require prepayment before ordering
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Order will be blocked until client payment is received
                 </p>
               </div>
             </div>
