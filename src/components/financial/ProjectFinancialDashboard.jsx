@@ -25,6 +25,8 @@ import PoolPanel from "./PoolPanel";
 import CoverageBadge from "./CoverageBadge";
 // Phase 6.1: PO Cost Review Card for forward model
 import POCostReviewCard from "./POCostReviewCard";
+// Phase 6.2: QB Export Status Cards
+import { QBNeedsExportCard, QBExportFailedCard } from "./QBExportStatusCards";
 
 /**
  * InvoiceAgingSummary - Shows aging buckets for outstanding invoices
