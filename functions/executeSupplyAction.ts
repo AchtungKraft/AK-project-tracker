@@ -806,6 +806,13 @@ async function receiveBatch(ctx, payload) {
 
 /**
  * Receive a single line item
+ * 
+ * PHASE 9C: RECEIVE LOGIC
+ * - part.physical_stock += received_qty
+ * - commitment.qty_received += received_qty
+ * - commitment.covered_from_po decreases (received moves to physical)
+ * - commitment.reserved_from_stock increases (auto-reserve received)
+ * - INVARIANT is maintained: required = reserved + covered + to_order
  */
 async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   // Fetch line item
@@ -844,7 +851,7 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     status: line_status
   });
 
-  // Update part physical stock
+  // PHASE 9C: Update part physical stock (RECEIVE increases physical)
   const new_physical = (part.physical_stock ?? 0) + qty_received;
   await ctx.base44.asServiceRole.entities.Part.update(part.id, {
     physical_stock: new_physical
@@ -854,16 +861,20 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   if (lineItem.commitment_id) {
     const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
     if (commitment) {
-      // Receiving decreases covered_from_po (it's now physical stock)
-      // and the reserved_from_stock increases (auto-reserve the received)
+      // PHASE 9C: Receiving moves from covered_from_po to reserved_from_stock
+      // This maintains the invariant: required = reserved + covered + to_order
+      // covered decreases by received, reserved increases by received
       const current_covered = commitment.covered_from_po ?? 0;
       const current_reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
       
+      const new_covered = Math.max(0, current_covered - qty_received);
+      const new_reserved = current_reserved + qty_received;
+      
       await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, {
-        covered_from_po: Math.max(0, current_covered - qty_received),
-        reserved_from_stock: current_reserved + qty_received,
+        covered_from_po: new_covered,
+        reserved_from_stock: new_reserved,
         qty_received: (commitment.qty_received ?? 0) + qty_received,
-        qty_reserved: current_reserved + qty_received,
+        qty_reserved: new_reserved,
         commitment_status: 'received',
         commitment_version: (commitment.commitment_version ?? 0) + 1
       });
@@ -907,6 +918,12 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
 
 /**
  * INSTALL - Consume reserved inventory
+ * 
+ * PHASE 9C: INSTALL LOGIC
+ * - part.physical_stock -= install_qty (decrements)
+ * - commitment.qty_installed += install_qty
+ * - commitment.reserved_from_stock -= install_qty (installed consumes reserved)
+ * - HARD GUARD: physical_stock cannot go negative
  */
 async function install(ctx, commitment_ids, payload) {
   const { qty_to_install } = payload;
@@ -935,6 +952,17 @@ async function install(ctx, commitment_ids, payload) {
     throw new Error(`Cannot install ${qty_to_install}, only ${available_to_install} available`);
   }
 
+  // PHASE 9C: HARD GUARD - Check if install would make stock negative
+  if (affects_stock) {
+    const current_physical = part.physical_stock ?? 0;
+    if (current_physical < qty_to_install) {
+      throw new Error(
+        `INSTALL_NEGATIVE_STOCK_VIOLATION: Cannot install ${qty_to_install} of ${part.part_name}, ` +
+        `only ${current_physical} in physical stock`
+      );
+    }
+  }
+
   if (ctx.dry_run) {
     return {
       preview: {
@@ -947,19 +975,26 @@ async function install(ctx, commitment_ids, payload) {
   }
 
   const new_installed = current_installed + qty_to_install;
+  const new_reserved = affects_stock ? reserved - qty_to_install : reserved;
   
-  // Update commitment
+  // Update commitment - reserved decreases as items are installed
   await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
     qty_installed: new_installed,
-    reserved_from_stock: affects_stock ? reserved - qty_to_install : reserved,
-    qty_reserved: affects_stock ? reserved - qty_to_install : reserved,
+    reserved_from_stock: new_reserved,
+    qty_reserved: new_reserved,
     commitment_status: new_installed >= required ? 'installed' : commitment.commitment_status,
     commitment_version: (commitment.commitment_version ?? 0) + 1
   });
 
-  // Update part physical stock (if affects stock)
+  // PHASE 9C: Update part physical stock (INSTALL decrements physical)
   if (affects_stock) {
-    const new_physical = Math.max(0, (part.physical_stock ?? 0) - qty_to_install);
+    const new_physical = (part.physical_stock ?? 0) - qty_to_install;
+    
+    // Double-check negative guard (should not happen due to earlier check)
+    if (new_physical < 0) {
+      throw new Error(`INSTALL_NEGATIVE_STOCK_VIOLATION: Result would be ${new_physical}`);
+    }
+    
     await ctx.base44.asServiceRole.entities.Part.update(part.id, {
       physical_stock: new_physical
     });

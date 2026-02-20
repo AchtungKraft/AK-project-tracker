@@ -122,6 +122,19 @@ Deno.serve(async (req) => {
         const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
         const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
 
+        // ============================================================================
+        // PHASE 9C: HARD INVARIANT ENFORCEMENT
+        // Coverage Invariant: required_total MUST equal reserved + covered + to_order
+        // This is a HARD FAIL - UI must NEVER render mathematically invalid rows
+        // ============================================================================
+        const coverage_sum = reserved_from_stock + covered_from_po + to_order;
+        if (Math.abs(coverage_sum - required_total) > 0.01) {
+          throw new Error(
+            `COVERAGE_INVARIANT_VIOLATION: part=${c.part_id} commitment=${c.id} ` +
+            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} to_order=${to_order} sum=${coverage_sum}`
+          );
+        }
+
         // Calculate on-order and received from line items
         const on_order_qty = commitmentLineItems.reduce((sum, li) => {
           const order = orderMap.get(li.order_id);

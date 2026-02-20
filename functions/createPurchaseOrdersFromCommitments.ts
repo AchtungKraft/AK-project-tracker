@@ -287,16 +287,27 @@ Deno.serve(async (req) => {
 
         lineItemIds.push(lineItem.id);
 
-        // Update commitment quantities
-        const newQtyOrdered = (commitment.qty_ordered || 0) + qty_to_order;
+        // PHASE 9C: Update commitment quantities with INVARIANT ENFORCEMENT
+        // covered_from_po += ordered_qty
+        // to_order = max(0, required - reserved - covered)
+        const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
+        const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
+        const current_covered = commitment.covered_from_po ?? 0;
         
-        // Recompute qty_to_order from invariant:
-        // qty_to_order = qty_committed - qty_reserved - qty_ordered
-        const newQtyToOrder = Math.max(0, 
-          (commitment.qty_committed || 0) - 
-          (commitment.qty_reserved || 0) - 
-          newQtyOrdered
-        );
+        const new_covered_from_po = current_covered + qty_to_order;
+        const new_to_order = Math.max(0, required_total - reserved_from_stock - new_covered_from_po);
+
+        // PHASE 9C: INVARIANT RECHECK
+        const invariant_sum = reserved_from_stock + new_covered_from_po + new_to_order;
+        if (Math.abs(invariant_sum - required_total) > 0.01) {
+          throw new Error(
+            `COVERAGE_INVARIANT_VIOLATION after PO creation: commitment=${commitment.id} ` +
+            `required=${required_total} reserved=${reserved_from_stock} covered=${new_covered_from_po} to_order=${new_to_order} sum=${invariant_sum}`
+          );
+        }
+
+        // Legacy fields kept in sync
+        const newQtyOrdered = (commitment.qty_ordered || 0) + qty_to_order;
 
         // Determine new status
         let newStatus = commitment.commitment_status;
@@ -304,10 +315,13 @@ Deno.serve(async (req) => {
           newStatus = 'ordered';
         }
 
-        // Update commitment
+        // Update commitment with both canonical and legacy fields
         await base44.asServiceRole.entities.PartCommitment.update(commitment.id, {
+          // Canonical fields (PHASE 9C)
+          covered_from_po: new_covered_from_po,
+          qty_to_order: new_to_order,
+          // Legacy fields (for compatibility)
           qty_ordered: newQtyOrdered,
-          qty_to_order: newQtyToOrder,
           commitment_status: newStatus,
           order_line_item_ids: [...(commitment.order_line_item_ids || []), lineItem.id]
         });
