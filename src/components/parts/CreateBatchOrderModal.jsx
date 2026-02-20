@@ -284,6 +284,12 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
   const activeVendors = vendors.filter(v => v.active);
   const hasUnassignedVendor = Object.keys(vendorGroups).includes('unassigned');
   const groupCount = Object.keys(vendorGroups).length;
+  
+  // Phase 6.2: Single-vendor enforcement
+  // Each PO group must have only one vendor - this is already enforced by grouping
+  // But warn if user tries to mix vendors in a single group
+  const vendorIds = Object.keys(vendorGroups).filter(v => v !== 'unassigned');
+  const hasMultipleVendors = vendorIds.length > 1;
 
   if (groupCount === 0) {
     return (
