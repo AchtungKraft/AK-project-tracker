@@ -8,14 +8,28 @@
  * This module provides client-side guards for UI components.
  * It prevents direct mutations to protected financial and lifecycle entities.
  * 
+ * FORWARD MODEL GUARDRAILS:
+ * Forward model projects (financial_model_version='forward') CANNOT use:
+ * - BillingPool / PoolAllocation / PoolCharge (pool-based billing)
+ * - VendorInvoice / VendorPayment (vendor invoice tracking)
+ * - Direct commitment billing_status writes
+ * 
+ * Forward model uses ONLY:
+ * - InvoiceBatch / InvoiceBatchLine for client billing
+ * - PO header for freight/tariff
+ * - Derived billing status from batch status
+ * 
  * USAGE:
- * import { guardedUpdate, guardedDelete, isProtectedEntity, CommitmentActions, blockLegacyCreate } from '@/components/financial/financialMutationGuard';
+ * import { guardedUpdate, guardedDelete, isProtectedEntity, CommitmentActions, blockLegacyCreate, assertNotForwardModel } from '@/components/financial/financialMutationGuard';
  * 
  * // Instead of: base44.entities.BillingPool.update(id, data)
  * // Use: await guardedUpdate('BillingPool', id, data) // Will throw if not allowed
  * 
  * // For financial operations, use:
  * await CommitmentActions.allocatePool({ pool_id, commitment_id, amount });
+ * 
+ * // For forward model guard:
+ * assertNotForwardModel(project, 'createPool'); // Throws if forward model
  */
 
 import { base44 } from '@/api/base44Client';
