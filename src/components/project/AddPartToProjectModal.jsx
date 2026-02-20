@@ -27,9 +27,13 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
     queryFn: () => base44.entities.Part.list(),
   });
 
-  const { data: existingRequirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements', projectId],
-    queryFn: () => base44.entities.PartProjectRequirement.filter({ project_id: projectId }),
+  // Check existing COMMITMENTS (canonical), not deprecated requirements
+  const { data: existingCommitments = [] } = useQuery({
+    queryKey: ['partCommitments', projectId],
+    queryFn: () => base44.entities.PartCommitment.filter({ 
+      project_id: projectId,
+      commitment_status: { $nin: ['cancelled', 'closed'] }
+    }),
     enabled: !!projectId,
   });
 
