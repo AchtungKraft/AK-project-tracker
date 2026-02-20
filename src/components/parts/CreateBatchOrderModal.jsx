@@ -268,6 +268,22 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       return;
     }
 
+    // Build per-vendor order data including freight/tariff
+    // Phase 6.2A: Each vendor PO has its own freight_cost and tariff_cost
+    const vendorOrderData = {};
+    for (const [vendorId, group] of Object.entries(vendorGroups)) {
+      vendorOrderData[vendorId] = {
+        po_prefix: group.orderData.po_prefix || 'AK',
+        order_number: group.orderData.order_number || '',
+        order_url: group.orderData.order_url || '',
+        order_date: group.orderData.order_date || new Date().toISOString().split('T')[0],
+        eta_date: group.orderData.eta_date || null,
+        notes: group.orderData.notes || '',
+        freight_cost: group.orderData.freight_cost || 0,
+        tariff_cost: group.orderData.tariff_cost || 0,
+      };
+    }
+
     // Route through canonical dispatcher - NO direct entity writes
     supplyAction.mutate({
       action_type: 'CREATE_PO',
@@ -275,7 +291,8 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
       payload: {
         po_prefix: Object.values(vendorGroups)[0]?.orderData?.po_prefix || 'AK',
         allow_multi_vendor: true,
-        vendor_overrides: vendorOverrides
+        vendor_overrides: vendorOverrides,
+        vendor_order_data: vendorOrderData, // Phase 6.2A: Per-vendor freight/tariff
       },
       dry_run: false
     });
