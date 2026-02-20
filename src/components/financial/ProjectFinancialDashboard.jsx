@@ -332,6 +332,83 @@ export default function ProjectFinancialDashboard({ projectId }) {
       )}
 
       {/* ============================================ */}
+      {/* FORWARD MODEL: Cost Summary (PO Line Authority) */}
+      {/* Does NOT read: commitment.unit_cost_snapshot, commitment.planned_cost_total, Part.cost */}
+      {/* ============================================ */}
+      {isForwardModel && forwardCostSummary && (
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardHeader className="border-b border-gray-700/50 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-orange-400" />
+                Cost Summary
+                <Badge className="bg-blue-600 text-white text-xs ml-2">Forward Model</Badge>
+                <Badge variant="outline" className="border-orange-600 text-orange-400 text-xs ml-1">
+                  <Lock className="w-3 h-3 mr-1" />
+                  PO Authority
+                </Badge>
+              </CardTitle>
+              <Badge variant="outline" className="border-gray-600 text-gray-400">
+                {forwardCostSummary.lineItemCount} PO lines
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <MetricCard
+                label="Ordered Cost"
+                value={forwardCostSummary.orderedCost}
+                color="text-blue-400"
+              />
+              <MetricCard
+                label="Received Cost"
+                value={forwardCostSummary.receivedCost}
+                color="text-green-400"
+              />
+              <MetricCard
+                label="Unreceived Cost"
+                value={forwardCostSummary.unreceivedCost}
+                color={forwardCostSummary.unreceivedCost > 0 ? "text-yellow-400" : "text-green-400"}
+              />
+              <MetricCard
+                label="Total Landed"
+                value={forwardCostSummary.totalLandedCost}
+                color="text-purple-400"
+              />
+            </div>
+
+            {/* Cost Breakdown */}
+            <div className="flex items-center gap-4 p-3 bg-gray-800/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-400" />
+                <span className="text-gray-300">{forwardCostSummary.receivedPct.toFixed(1)}% Received</span>
+              </div>
+              {forwardCostSummary.totalFreight > 0 && (
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-orange-400" />
+                  <span className="text-gray-300">Freight: ${forwardCostSummary.totalFreight.toLocaleString()}</span>
+                </div>
+              )}
+              {forwardCostSummary.totalTariff > 0 && (
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-red-400" />
+                  <span className="text-gray-300">Tariff: ${forwardCostSummary.totalTariff.toLocaleString()}</span>
+                </div>
+              )}
+              {forwardCostSummary.lockedCostCount > 0 && (
+                <div className="ml-auto flex items-center gap-1">
+                  <Lock className="w-4 h-4 text-green-400" />
+                  <span className="text-gray-400 text-sm">
+                    {forwardCostSummary.lockedCostCount} locked
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================ */}
       {/* LEGACY MODEL: Retail Exposure Summary (Pool-based) */}
       {/* ============================================ */}
       {!isForwardModel && exposureSummary && (
