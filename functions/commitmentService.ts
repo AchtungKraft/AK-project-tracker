@@ -1592,6 +1592,7 @@ async function addPartToProject(txn, params) {
   // Build commitment data
   // FORWARD MODEL: billing_status defaults to 'billable' but is not used for status resolution
   // (status derived from InvoiceBatch instead)
+  // FORWARD MODEL: Cost snapshots are stored for reference only - PO lines are cost authority
   const commitmentData = {
     project_id,
     part_id,
@@ -1604,14 +1605,19 @@ async function addPartToProject(txn, params) {
     commitment_status: 'planned',
     source_type: source_surface === 'migration:requirements' ? 'requirement' : 'manual_attachment',
     billing_status: 'billable', // Initial status allowed even for forward model
-    unit_cost_snapshot,
+    // Retail snapshot always written (used for revenue calculations in both models)
     unit_retail_snapshot,
-    planned_cost_total,
     planned_retail_total,
     pricing_integrity_status,
     commitment_version: 1,
     notes: notes || null
   };
+  
+  // LEGACY MODEL ONLY: Write cost snapshots (forward model uses PO lines as cost authority)
+  if (!isForwardModel) {
+    commitmentData.unit_cost_snapshot = unit_cost_snapshot;
+    commitmentData.planned_cost_total = planned_cost_total;
+  }
   
   // LEGACY MODEL ONLY: Set pool-related fields
   if (!isForwardModel) {
