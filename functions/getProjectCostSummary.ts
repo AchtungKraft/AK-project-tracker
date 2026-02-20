@@ -83,12 +83,19 @@ Deno.serve(async (req) => {
     // Filter to active (non-cancelled) lines only
     const activeLineItems = projectLineItems.filter(li => li.status !== 'Cancelled');
     
+    // Get unique order IDs to fetch Order-level freight/tariff
+    const orderIds = [...new Set(activeLineItems.map(li => li.order_id).filter(Boolean))];
+    const allOrders = await base44.entities.Order.list();
+    const projectOrders = allOrders.filter(o => orderIds.includes(o.id));
+    const orderMap = Object.fromEntries(projectOrders.map(o => [o.id, o]));
+    
     // Calculate cost rollups from PO LINES ONLY
-    let ordered_cost = 0;
-    let received_cost = 0;
+    let ordered_parts_cost = 0;
+    let received_parts_cost = 0;
     let total_qty_ordered = 0;
     let total_qty_received = 0;
     let locked_cost_count = 0;
+    let cost_review_count = 0;
     
     const lineItemDetails = [];
     
@@ -100,13 +107,17 @@ Deno.serve(async (req) => {
       const line_received_cost = unit_cost * qty_received;
       const line_unreceived_cost = unit_cost * (qty_ordered - qty_received);
       
-      ordered_cost += extended_cost;
-      received_cost += line_received_cost;
+      ordered_parts_cost += extended_cost;
+      received_parts_cost += line_received_cost;
       total_qty_ordered += qty_ordered;
       total_qty_received += qty_received;
       
       if (li.cost_locked_at) {
         locked_cost_count++;
+      }
+      
+      if (li.cost_requires_review) {
+        cost_review_count++;
       }
       
       // Get commitment info for context
@@ -125,21 +136,29 @@ Deno.serve(async (req) => {
         unreceived_cost: line_unreceived_cost,
         status: li.status,
         cost_locked_at: li.cost_locked_at,
-        freight_cost: li.freight_cost ?? 0,
-        tariff_cost: li.tariff_cost ?? 0,
+        cost_requires_review: li.cost_requires_review ?? false,
+        cost_source_reference: li.cost_source_reference,
         // Commitment context (but NOT using commitment cost fields)
         commitment_part_id: commitment?.part_id,
         commitment_qty: commitment?.required_total ?? commitment?.qty_committed ?? 0
       });
     }
     
-    // Calculate unreceived cost
-    const unreceived_cost = ordered_cost - received_cost;
+    // Calculate unreceived parts cost
+    const unreceived_parts_cost = ordered_parts_cost - received_parts_cost;
     
-    // Calculate additional cost components (freight/tariff)
-    const total_freight = activeLineItems.reduce((sum, li) => sum + (li.freight_cost ?? 0), 0);
-    const total_tariff = activeLineItems.reduce((sum, li) => sum + (li.tariff_cost ?? 0), 0);
-    const total_landed_cost = ordered_cost + total_freight + total_tariff;
+    // Calculate freight/tariff from ORDER HEADER (not line items)
+    // This is the FORWARD MODEL approach - freight/tariff at PO header level
+    let total_freight = 0;
+    let total_tariff = 0;
+    
+    for (const order of projectOrders) {
+      total_freight += order.freight_cost ?? order.shipping_cost ?? 0; // shipping_cost is legacy field
+      total_tariff += order.tariff_cost ?? 0;
+    }
+    
+    // Total landed cost = parts + freight + tariff
+    const total_landed_cost = ordered_parts_cost + total_freight + total_tariff;
     
     // Calculate percentages
     const received_pct = ordered_cost > 0 ? (received_cost / ordered_cost) * 100 : 0;
