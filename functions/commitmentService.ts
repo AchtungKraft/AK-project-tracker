@@ -1570,6 +1570,8 @@ async function addPartToProject(txn, params) {
   const unit_retail_snapshot = part.retail_override || part.retail_matrix_price || 0;
   
   // Calculate totals
+  // FORWARD MODEL: Cost totals are NOT authoritative - PO lines are the cost authority
+  // These are kept as planning estimates only for forward projects
   const planned_cost_total = unit_cost_snapshot * qty_committed;
   const planned_retail_total = unit_retail_snapshot * qty_committed;
 
