@@ -28,7 +28,7 @@ import {
   Package, ChevronRight, ArrowUpDown, Trash2, Eye, Loader2, ShieldAlert
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
-import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel";
+import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel.jsx";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
