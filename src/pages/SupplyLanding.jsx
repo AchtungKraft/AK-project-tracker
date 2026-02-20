@@ -234,8 +234,7 @@ export default function SupplyLanding() {
                       <TableHead className="text-gray-400">Project</TableHead>
                       <TableHead className="text-gray-400 text-center">Items</TableHead>
                       <TableHead className="text-gray-400 text-center">Coverage</TableHead>
-                      <TableHead className="text-gray-400 text-right">Exposure</TableHead>
-                      <TableHead className="text-gray-400 text-right">Pool Bal</TableHead>
+                      <TableHead className="text-gray-400 text-right">To Order</TableHead>
                       <TableHead className="text-gray-400 text-center">Install %</TableHead>
                       <TableHead className="text-gray-400 text-center">Status</TableHead>
                       <TableHead className="w-10"></TableHead>
@@ -270,13 +269,8 @@ export default function SupplyLanding() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <span className={project.total_exposure > 0 ? 'text-red-400' : 'text-green-400'}>
-                            ${(project.total_exposure || 0).toFixed(0)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className={project.total_pool_balance >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            ${(project.total_pool_balance || 0).toFixed(0)}
+                          <span className={project.needs_order_count > 0 ? 'text-purple-400' : 'text-gray-400'}>
+                            {project.needs_order_count || 0}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
@@ -287,18 +281,18 @@ export default function SupplyLanding() {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
-                            {project.is_funding_blocked && (
-                              <Badge variant="outline" className="border-red-600 text-red-400 text-xs">
-                                <AlertTriangle className="w-3 h-3 mr-1" />
-                                Blocked
+                            {project.needs_order_count > 0 && (
+                              <Badge variant="outline" className="border-purple-600 text-purple-400 text-xs">
+                                <Package className="w-3 h-3 mr-1" />
+                                Order
                               </Badge>
                             )}
-                            {project.has_overdrawn_pool && (
-                              <Badge variant="outline" className="border-orange-600 text-orange-400 text-xs">
-                                Overdrawn
+                            {project.ready_to_install_count > 0 && (
+                              <Badge variant="outline" className="border-green-600 text-green-400 text-xs">
+                                Install
                               </Badge>
                             )}
-                            {!project.is_funding_blocked && !project.has_overdrawn_pool && project.total_commitments > 0 && (
+                            {!project.needs_order_count && !project.ready_to_install_count && project.total_commitments > 0 && (
                               <CheckCircle2 className="w-4 h-4 text-green-500" />
                             )}
                           </div>
