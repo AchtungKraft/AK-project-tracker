@@ -27,6 +27,8 @@ import CoverageBadge from "./CoverageBadge";
 import POCostReviewCard from "./POCostReviewCard";
 // Phase 6.2: QB Export Status Cards
 import { QBNeedsExportCard, QBExportFailedCard } from "./QBExportStatusCards";
+// Phase 8: Forward Invoice Dashboard for forward model projects
+import ForwardInvoiceDashboard from "./ForwardInvoiceDashboard";
 
 /**
  * InvoiceAgingSummary - Shows aging buckets for outstanding invoices
@@ -456,6 +458,23 @@ export default function ProjectFinancialDashboard({ projectId }) {
 
   return (
     <div className="space-y-6">
+      {/* ============================================ */}
+      {/* FORWARD MODEL: Invoice Dashboard (Replaces Pool UI) */}
+      {/* ============================================ */}
+      {isForwardModel ? (
+        <ForwardInvoiceDashboard 
+          projectId={projectId} 
+          onCreateInvoice={() => {
+            // Navigate to invoice creation or open modal
+            toast.info('Invoice creation modal - wire to createInvoiceBatch');
+          }}
+        />
+      ) : (
+        <>
+          {/* LEGACY MODEL: Retail Exposure Summary & Pool UI below */}
+        </>
+      )}
+
       {/* ============================================ */}
       {/* FORWARD MODEL: Revenue Summary (Invoice-based) */}
       {/* ============================================ */}

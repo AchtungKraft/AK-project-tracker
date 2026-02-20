@@ -66,6 +66,7 @@ import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
+import AddPartButton from "@/components/supply/AddPartButton";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
