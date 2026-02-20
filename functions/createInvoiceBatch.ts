@@ -403,7 +403,7 @@ Deno.serve(async (req) => {
     
     switch (batch_mode) {
       case 'BY_PROJECT':
-        finalItems.forEach(item => {
+        safeItems.forEach(item => {
           const key = item.project_id;
           if (!groups[key]) groups[key] = { items: [], project_name: item.project_name };
           groups[key].items.push(item);
@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
         break;
         
       case 'BY_CLIENT':
-        finalItems.forEach(item => {
+        safeItems.forEach(item => {
           const key = item.client_name || 'Unknown Client';
           if (!groups[key]) groups[key] = { items: [], client_name: key };
           groups[key].items.push(item);
@@ -420,7 +420,7 @@ Deno.serve(async (req) => {
         
       case 'BY_MILESTONE':
         // Group by milestone if available, otherwise fall back to project
-        finalItems.forEach(item => {
+        safeItems.forEach(item => {
           const key = item.milestone || item.project_id;
           if (!groups[key]) groups[key] = { items: [], milestone: item.milestone, project_name: item.project_name };
           groups[key].items.push(item);
@@ -428,7 +428,7 @@ Deno.serve(async (req) => {
         break;
         
       default: // MANUAL
-        groups['manual'] = { items: finalItems };
+        groups['manual'] = { items: safeItems };
     }
     
     // Create batches and lines
