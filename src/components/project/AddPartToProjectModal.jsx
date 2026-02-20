@@ -12,7 +12,7 @@ import { Search, Plus, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import UnifiedAddPartModal from "../parts/UnifiedAddPartModal";
 
-export default function AddPartToProjectModal({ projectId, onClose }) {
+export default function AddPartToProjectModal({ projectId, onClose, onSuccess, onError }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("existing");
   const [searchTerm, setSearchTerm] = useState("");
@@ -107,14 +107,24 @@ export default function AddPartToProjectModal({ projectId, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
       
-      const message = result.was_increment 
-        ? `Quantity increased: ${result.previous_total} → ${result.required_total}`
-        : `Part added: ${result.required_total} required, ${result.reserved_from_stock || 0} reserved`;
-      toast.success(message);
-      onClose();
+      // Call external success handler if provided (AddPartButton uses this for audit)
+      if (onSuccess) {
+        onSuccess(result);
+      } else {
+        const message = result.was_increment 
+          ? `Quantity increased: ${result.previous_total} → ${result.required_total}`
+          : `Part added: ${result.required_total} required, ${result.reserved_from_stock || 0} reserved`;
+        toast.success(message);
+        onClose();
+      }
     },
     onError: (error) => {
-      toast.error('Failed to add part: ' + error.message);
+      // Call external error handler if provided (AddPartButton uses this for audit)
+      if (onError) {
+        onError(error);
+      } else {
+        toast.error('Failed to add part: ' + error.message);
+      }
     }
   });
 
