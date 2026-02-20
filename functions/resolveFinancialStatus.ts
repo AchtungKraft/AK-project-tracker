@@ -452,13 +452,22 @@ async function resolveFinancialStatusBatch(base44, contexts) {
     if (ctx.commitment_id) commitmentIds.add(ctx.commitment_id);
   }
   
-  // Batch fetch all required data
-  const [parts, lineItems, commitments, orders, vendorInvoices] = await Promise.all([
+  // Collect project IDs from contexts
+  const projectIds = new Set();
+  for (const ctx of contexts) {
+    if (ctx.project_id) projectIds.add(ctx.project_id);
+  }
+  
+  // Batch fetch all required data (including projects for forward model check)
+  const [parts, lineItems, commitments, orders, vendorInvoices, projects, invoiceBatchLines, invoiceBatches] = await Promise.all([
     partIds.size > 0 ? base44.entities.Part.filter({}) : [],
     base44.entities.PartPurchaseLineItem.filter({}),
     base44.entities.PartCommitment.filter({}),
     base44.entities.Order.filter({}),
     base44.entities.VendorInvoice.filter({}),
+    projectIds.size > 0 ? base44.entities.Project.filter({}) : [],
+    base44.entities.InvoiceBatchLine.filter({}),
+    base44.entities.InvoiceBatch.filter({}),
   ]);
   
   // Build lookup maps
@@ -468,6 +477,9 @@ async function resolveFinancialStatusBatch(base44, contexts) {
     commitmentsMap: Object.fromEntries(commitments.map(c => [c.id, c])),
     ordersMap: Object.fromEntries(orders.map(o => [o.id, o])),
     vendorInvoicesMap: Object.fromEntries(vendorInvoices.map(vi => [vi.id, vi])),
+    projectsMap: Object.fromEntries(projects.map(p => [p.id, p])),
+    invoiceBatchLinesMap: Object.fromEntries(invoiceBatchLines.map(l => [l.id, l])),
+    invoiceBatchesMap: Object.fromEntries(invoiceBatches.map(b => [b.id, b])),
   };
   
   // Resolve each context
