@@ -12,8 +12,12 @@ import { cn } from "@/lib/utils";
 /**
  * Phase 9.7d — CoverageBadge Component
  * 
- * Renders commitment coverage status from precomputed backend values.
+ * Renders commitment QUANTITY coverage status from precomputed backend values.
  * GOVERNANCE: No local coverage computation allowed. All values from validator/resolver.
+ * 
+ * NOTE: This is for QUANTITY coverage (reserved + ordered vs required_total).
+ * This is NOT the same as financial coverage (exposure_gap/covered_retail_total) which is LEGACY ONLY.
+ * Quantity coverage applies to BOTH forward and legacy models.
  * 
  * Props:
  * - coverage_status: 'FULL' | 'PARTIAL' | 'NONE' | 'OVER'
