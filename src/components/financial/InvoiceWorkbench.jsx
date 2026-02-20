@@ -978,6 +978,10 @@ export default function InvoiceWorkbench({ onRowClick }) {
           onClearSelection={() => setSelectedIds(new Set())}
           isCreating={createBatchMutation.isPending}
           actionType={currentTabConfig.selectionAction}
+          // Phase 6.2: Draft invoice accumulation
+          draftBatches={draftBatches}
+          targetDraftBatchId={targetDraftBatchId}
+          setTargetDraftBatchId={setTargetDraftBatchId}
         />
       )}
 
