@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign } from "lucide-react";
+import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign, Truck, AlertCircle } from "lucide-react";
 import { useSupplyAction } from "@/components/supply/useSupplyState";
 
 /**
@@ -311,10 +311,45 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           <DialogTitle className="flex items-center justify-between">
             <span>Create Orders ({groupCount} vendor{groupCount > 1 ? 's' : ''})</span>
             <div className="text-sm font-normal text-gray-400">
-              {totals.totalItems} items · ${totals.totalValue.toFixed(2)} total
+              {totals.totalItems} items
             </div>
           </DialogTitle>
         </DialogHeader>
+
+        {/* Live Cost Summary */}
+        <div className="flex-shrink-0 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+          <div className="grid grid-cols-4 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Parts</span>
+              <p className="text-white font-medium">${totals.totalPartsValue.toFixed(2)}</p>
+            </div>
+            <div>
+              <span className="text-orange-400">Freight</span>
+              <p className="text-orange-300 font-medium">${totals.totalFreight.toFixed(2)}</p>
+            </div>
+            <div>
+              <span className="text-red-400">Tariff</span>
+              <p className="text-red-300 font-medium">${totals.totalTariff.toFixed(2)}</p>
+            </div>
+            <div>
+              <span className="text-purple-400">Landed Cost</span>
+              <p className="text-purple-300 font-bold">${totals.totalLandedCost.toFixed(2)}</p>
+            </div>
+          </div>
+          {(totals.overriddenCount > 0 || totals.zerosCostCount > 0) && (
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              {totals.overriddenCount > 0 && (
+                <span className="text-yellow-400">⚠ {totals.overriddenCount} cost override{totals.overriddenCount > 1 ? 's' : ''}</span>
+              )}
+              {totals.zerosCostCount > 0 && (
+                <span className="text-red-400 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {totals.zerosCostCount} item{totals.zerosCostCount > 1 ? 's' : ''} with $0 cost
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {Object.entries(vendorGroups).map(([vendorId, group]) => (
@@ -413,6 +448,44 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                     placeholder="Order notes..."
                     className="bg-gray-800 border-gray-700 h-12 text-sm"
                   />
+                </div>
+
+                {/* Phase 6: Freight + Tariff at PO header */}
+                <div className="grid grid-cols-2 gap-3 p-3 bg-orange-900/10 border border-orange-700/30 rounded-lg">
+                  <div>
+                    <Label className="text-orange-400 text-xs flex items-center gap-1">
+                      <Truck className="w-3 h-3" /> Freight Cost
+                    </Label>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-gray-500 text-xs">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={group.orderData.freight_cost || ''}
+                        onChange={(e) => updateVendorGroup(vendorId, 'freight_cost', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="bg-gray-800 border-gray-700 h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-red-400 text-xs flex items-center gap-1">
+                      <DollarSign className="w-3 h-3" /> Tariff/Duty
+                    </Label>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-gray-500 text-xs">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={group.orderData.tariff_cost || ''}
+                        onChange={(e) => updateVendorGroup(vendorId, 'tariff_cost', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="bg-gray-800 border-gray-700 h-8 text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                   <Separator className="bg-gray-700" />
