@@ -773,15 +773,21 @@ export default function InvoiceWorkbench({ onRowClick }) {
     return items;
   }, [lifecycleData, activeTab, searchTerm]);
 
-  const selectedItems = currentItems.filter(item => selectedIds.has(item.id));
+  // CANONICAL: selectedItems filtered by commitment_id
+  const selectedItems = currentItems.filter(item => selectedIds.has(item.commitment_id));
 
-  const toggleSelection = (id, checked) => {
+  // CANONICAL: Toggle selection using commitment_id only
+  const toggleSelection = (commitmentId, checked) => {
+    if (!commitmentId) {
+      console.error('[CANONICAL VIOLATION] toggleSelection called with undefined commitmentId');
+      return;
+    }
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (checked) {
-        next.add(id);
+        next.add(commitmentId);
       } else {
-        next.delete(id);
+        next.delete(commitmentId);
       }
       return next;
     });
@@ -807,7 +813,27 @@ export default function InvoiceWorkbench({ onRowClick }) {
       return;
     }
     
-    createBatchMutation.mutate(selectedItems);
+    // CANONICAL: Send only required payload fields to backend
+    const payload = selectedItems.map(item => {
+      if (!item.commitment_id) {
+        console.error('[CANONICAL VIOLATION] Item missing commitment_id:', item);
+      }
+      
+      return {
+        commitment_id: item.commitment_id,
+        project_id: item.project_id,
+        part_id: item.part_id,
+        part_name: item.part_name,
+        project_name: item.project_name,
+        unit_retail: item.unit_retail,
+        unit_price: item.unit_retail || item.unit_price,
+        line_total: item.line_total,
+        required_total: item.required_total || item.assigned_qty || 0,
+        assigned_qty: item.required_total || item.assigned_qty || 0,
+      };
+    });
+    
+    createBatchMutation.mutate(payload);
   };
 
   // Clear selection when changing tabs
