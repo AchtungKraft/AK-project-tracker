@@ -20,6 +20,7 @@ import {
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileCollapsibleHeader from "@/components/mobile/MobileCollapsibleHeader";
+import ActionAuditPanel from "@/components/dev/ActionAuditPanel";
 import {
   Sidebar,
   SidebarContent,
@@ -670,14 +671,17 @@ export default function Layout({ children, currentPageName }) {
               </div>
             </div>
           </SidebarFooter>
-        </Sidebar>
+          </Sidebar>
 
-        <main className="flex-1 flex flex-col overflow-auto">
-          <div className="flex-1">
-            {children}
+          <main className="flex-1 flex flex-col overflow-auto">
+            <div className="flex-1">
+              {children}
+            </div>
+          </main>
+
+          {/* Admin-only Action Audit Panel */}
+          <ActionAuditPanel />
           </div>
-        </main>
-      </div>
-    </SidebarProvider>
-  );
-}
+          </SidebarProvider>
+          );
+          }
