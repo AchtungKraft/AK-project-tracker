@@ -15,6 +15,10 @@ import { CommitmentActions } from "@/components/financial/financialMutationGuard
 
 /**
  * VendorInvoiceModal - Create/edit vendor invoice attached to PO
+ * 
+ * NOTE: This modal is LEGACY MODEL ONLY.
+ * Forward model does NOT use VendorInvoice entity or this modal.
+ * Forward model uses Order header for freight/tariff and InvoiceBatch for client billing.
  */
 export default function VendorInvoiceModal({ 
   order,
