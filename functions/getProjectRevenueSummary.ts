@@ -36,8 +36,19 @@ Deno.serve(async (req) => {
     }
     
     // Fetch project to verify financial model
-    const projects = await base44.entities.Project.filter({ id: project_id });
-    const project = projects[0];
+    // Wrap in try/catch to handle invalid ID format gracefully
+    let project = null;
+    try {
+      const projects = await base44.entities.Project.filter({ id: project_id });
+      project = projects[0];
+    } catch (err) {
+      console.log("Error fetching project:", err.message);
+      // If the ID format is invalid, treat as not found
+      return Response.json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND' 
+      }, { status: 404 });
+    }
     
     if (!project) {
       return Response.json({ 
