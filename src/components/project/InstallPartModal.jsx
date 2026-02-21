@@ -31,11 +31,10 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
   // Fetch canonical commitment state from resolver
   const { data: commitmentState } = useCommitmentState(commitmentId);
   
-  // Calculate max installable from canonical state
-  const available_for_install = commitmentState?.available_for_install ?? 0;
-  const maxInstallable = passedCommitment 
-    ? available_for_install
-    : (requirement?.qty_allocated || 0) - (requirement?.qty_installed || 0);
+  // PHASE 14: installable = reserved_from_stock - qty_installed (NO InventoryItem dependency)
+  const reserved = commitmentState?.reserved_from_stock ?? passedCommitment?.reserved_from_stock ?? 0;
+  const installed = commitmentState?.qty_installed ?? passedCommitment?.qty_installed ?? 0;
+  const maxInstallable = Math.max(0, reserved - installed);
   
   const [qtyToInstall, setQtyToInstall] = useState(Math.min(maxInstallable, 1));
   const [notes, setNotes] = useState('');
@@ -88,11 +87,7 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
       return;
     }
     
-    // Validate location selection if part affects inventory
-    if (affectsInventory && !selectedLocationId && availableInventory.length > 0) {
-      toast.error('Please select a source location');
-      return;
-    }
+    // PHASE 14: Location selection is now optional - system auto-deducts
     
     // Show confirmation modal
     setShowConfirmModal(true);
@@ -163,33 +158,28 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
                 />
               </div>
 
-              {/* Source Location Selection */}
-              {affectsInventory && (
+              {/* PHASE 14: Source Location Selection (optional - system will auto-deduct) */}
+              {affectsInventory && availableInventory.length > 0 && (
                 <div>
                   <Label className="text-gray-300 flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
-                    Source Location *
+                    Source Location (optional)
                   </Label>
-                  {availableInventory.length === 0 ? (
-                    <div className="bg-red-900/30 border border-red-600 rounded-lg p-3 flex items-center gap-2 mt-1">
-                      <AlertTriangle className="w-4 h-4 text-red-500" />
-                      <span className="text-red-200 text-sm">No inventory available for this part</span>
-                    </div>
-                  ) : (
-                    <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
-                        <SelectValue placeholder="Select inventory location..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableInventory.map((inv) => (
-                          <SelectItem key={inv.id} value={inv.location_id || inv.id}>
-                            {inv.location?.name || inv.location?.location_area || 'Unassigned'} 
-                            {' '}({inv.available} available)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                      <SelectValue placeholder="Auto-select from available stock..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>Auto-select</SelectItem>
+                      {availableInventory.map((inv) => (
+                        <SelectItem key={inv.id} value={inv.location_id || inv.id}>
+                          {inv.location?.name || inv.location?.location_area || 'Unassigned'} 
+                          {' '}({inv.available} available)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">System will deduct from available stock locations</p>
                 </div>
               )}
 
@@ -228,7 +218,7 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
             <Button 
               onClick={handleInstall}
               className="bg-green-600 hover:bg-green-700"
-              disabled={supplyAction.isPending || maxInstallable <= 0 || (affectsInventory && availableInventory.length === 0)}
+              disabled={supplyAction.isPending || maxInstallable <= 0}
             >
               {supplyAction.isPending ? 'Installing...' : `Install ${qtyToInstall} Unit(s)`}
             </Button>

@@ -49,8 +49,21 @@ Deno.serve(async (req) => {
       c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed'
     );
 
-    // Compute canonical inventory metrics
-    const physical_stock = part.physical_stock ?? 0;
+    // PHASE 14: Fetch InventoryItems for location breakdown
+    const inventoryItems = await base44.entities.InventoryItem.filter({ part_id });
+    
+    // PHASE 14: physical_stock is derived from InventoryItem sum (authoritative)
+    const computed_physical_stock = inventoryItems.reduce((sum, item) => {
+      return sum + (item.quantity_on_hand ?? 0);
+    }, 0);
+    
+    // Use computed value, but log warning if Part.physical_stock differs
+    const stored_physical_stock = part.physical_stock ?? 0;
+    if (Math.abs(computed_physical_stock - stored_physical_stock) > 0.001) {
+      console.warn(`PHASE 14 WARNING: Part ${part_id} physical_stock mismatch - stored: ${stored_physical_stock}, computed: ${computed_physical_stock}`);
+    }
+    
+    const physical_stock = computed_physical_stock;
     
     const reserved_total = activeCommitments.reduce((sum, c) => {
       return sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0);
@@ -113,18 +126,30 @@ Deno.serve(async (req) => {
       );
     }
 
+    // PHASE 14: Build location breakdown from InventoryItem
+    const by_location = inventoryItems.map(item => ({
+      location_id: item.location_id,
+      quantity_on_hand: item.quantity_on_hand ?? 0,
+      quantity_reserved: item.quantity_reserved ?? 0
+    }));
+
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
       part_id,
       part_name: part.part_name,
-      // Canonical inventory metrics
+      // PHASE 14: Canonical inventory metrics (derived from InventoryItem)
       physical_stock,
+      allocated_stock: reserved_total,
+      available_stock: available_unreserved,
       reserved_total,
       covered_from_po_total,
       open_required_total,
       to_order_total,
       available_unreserved,
+      // PHASE 14: Location breakdown
+      by_location,
+      inventory_item_count: inventoryItems.length,
       // Invariant status
       invariant_ok,
       // Commitment breakdown
@@ -132,14 +157,14 @@ Deno.serve(async (req) => {
       commitments: activeCommitments.map(c => ({
         commitment_id: c.id,
         project_id: c.project_id,
-        required_total: c.required_total ?? c.qty_committed ?? 0,
-        reserved_from_stock: c.reserved_from_stock ?? c.qty_reserved ?? 0,
-        covered_from_po: c.covered_from_po ?? c.qty_ordered ?? 0,
+        required_total: c.required_total ?? 0,
+        reserved_from_stock: c.reserved_from_stock ?? 0,
+        covered_from_po: c.covered_from_po ?? 0,
         qty_installed: c.qty_installed ?? 0,
         to_order: Math.max(0, 
-          (c.required_total ?? c.qty_committed ?? 0) - 
-          (c.reserved_from_stock ?? c.qty_reserved ?? 0) - 
-          (c.covered_from_po ?? c.qty_ordered ?? 0)
+          (c.required_total ?? 0) - 
+          (c.reserved_from_stock ?? 0) - 
+          (c.covered_from_po ?? 0)
         )
       }))
     });
