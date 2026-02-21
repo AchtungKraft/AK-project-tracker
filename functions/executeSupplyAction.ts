@@ -836,10 +836,11 @@ async function receiveBatch(ctx, payload) {
 /**
  * Receive a single line item
  * 
- * PHASE 9G: RECEIVE LOGIC
- * - part.physical_stock += received_qty
- * - commitment.covered_from_po decreases (received moves to physical)
- * - Call rebalancePartReservations to redistribute stock
+ * PHASE 14: RECEIVE LOGIC - InventoryItem authoritative
+ * 1. Upsert InventoryItem by (part_id, location_id)
+ * 2. Recompute Part.physical_stock from InventoryItem sum
+ * 3. Update commitment.covered_from_po (received moves to physical)
+ * 4. Call rebalancePartReservations
  */
 async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   // Fetch line item
@@ -857,6 +858,27 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     throw new Error(`Cannot receive ${qty_received} of ${part.part_name}, only ${remaining} remaining`);
   }
 
+  // PHASE 14: Location enforcement - default to UNASSIGNED_SYSTEM
+  let effective_location_id = location_id;
+  if (!effective_location_id) {
+    const systemLocations = await ctx.base44.asServiceRole.entities.Location.filter({
+      location_area: 'UNASSIGNED_SYSTEM'
+    });
+    
+    if (systemLocations.length === 0) {
+      const newLoc = await ctx.base44.asServiceRole.entities.Location.create({
+        location_area: 'UNASSIGNED_SYSTEM',
+        description: 'System default location for inventory without explicit assignment',
+        active: true
+      });
+      effective_location_id = newLoc.id;
+    } else {
+      effective_location_id = systemLocations[0].id;
+    }
+  }
+
+  const old_physical = part.physical_stock ?? 0;
+
   if (ctx.dry_run) {
     return {
       preview: {
@@ -864,7 +886,8 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
         part_name: part.part_name,
         qty_receiving: qty_received,
         remaining_after: remaining - qty_received,
-        new_physical_stock: (part.physical_stock ?? 0) + qty_received
+        estimated_new_physical_stock: old_physical + qty_received,
+        location_id: effective_location_id
       }
     };
   }
@@ -878,11 +901,46 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     status: line_status
   });
 
-  // Update part physical stock (RECEIVE increases physical)
-  const new_physical = (part.physical_stock ?? 0) + qty_received;
-  await ctx.base44.asServiceRole.entities.Part.update(part.id, {
-    physical_stock: new_physical
+  // PHASE 14: Upsert InventoryItem (authoritative source)
+  const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
+    part_id: part.id,
+    location_id: effective_location_id
   });
+  
+  if (existingItems.length > 1) {
+    throw new Error(
+      `INVENTORY_LOCATION_DUPLICATE_ERROR: Found ${existingItems.length} records. ` +
+      `Call consolidateInventoryLocations() to fix.`
+    );
+  } else if (existingItems.length === 1) {
+    const existing = existingItems[0];
+    await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
+      quantity_on_hand: (existing.quantity_on_hand ?? 0) + qty_received
+    });
+    ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'RECEIVE_UPDATE' });
+  } else {
+    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+      part_id: part.id,
+      location_id: effective_location_id,
+      quantity_on_hand: qty_received,
+      quantity_reserved: 0,
+      received_date: new Date().toISOString().split('T')[0],
+      notes: `Received from PO line ${line_item_id}`
+    });
+    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'RECEIVE_CREATE' });
+  }
+
+  // PHASE 14: Recompute Part.physical_stock from InventoryItem sum
+  const recomputeResult = await ctx.base44.asServiceRole.functions.invoke('recomputePartPhysicalStock', {
+    part_id: part.id,
+    dry_run: false
+  });
+  
+  if (recomputeResult.data?.error) {
+    throw new Error(recomputeResult.data.error);
+  }
+  
+  const new_physical = recomputeResult.data?.computed_physical_stock ?? (old_physical + qty_received);
 
   // Update commitment if linked - only update covered_from_po
   if (lineItem.commitment_id) {
@@ -903,7 +961,7 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     }
   }
 
-  // PHASE 9G: Call canonical rebalance for this part
+  // PHASE 14: Call canonical rebalance for this part
   const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id: part.id,
     dry_run: false
@@ -919,20 +977,20 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     order_id: lineItem.order_id,
     line_item_id,
     qty_received,
-    location_id: location_id || null,
+    location_id: effective_location_id,
     received_by: ctx.user.email,
     received_date: ctx.timestamp
   });
 
   ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: line_item_id, action: 'RECEIVE' });
-  ctx.mutations.push({ entity: 'Part', id: part.id, action: 'RECEIVE' });
+  ctx.mutations.push({ entity: 'Part', id: part.id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
   
   ctx.lifecycle_events.push({
     entity_type: 'Part',
     entity_id: part.id,
     event_type: 'INVENTORY_RECEIVED',
     actor_email: ctx.user.email,
-    details: JSON.stringify({ qty: qty_received, from_po: lineItem.order_id, location_id }),
+    details: JSON.stringify({ qty: qty_received, from_po: lineItem.order_id, location_id: effective_location_id }),
     created_date: ctx.timestamp
   });
 
@@ -943,21 +1001,27 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     qty_received,
     new_physical_stock: new_physical,
     line_status,
+    recompute_result: recomputeResult.data,
     rebalance_result: rebalanceResult.data
   };
 }
 
 /**
- * INSTALL - Consume reserved inventory
+ * INSTALL - PHASE 14 CANONICAL
  * 
- * PHASE 9C: INSTALL LOGIC
- * - part.physical_stock -= install_qty (decrements)
- * - commitment.qty_installed += install_qty
- * - commitment.reserved_from_stock -= install_qty (installed consumes reserved)
- * - HARD GUARD: physical_stock cannot go negative
+ * Consume reserved inventory via InventoryItem deduction.
+ * 
+ * CANONICAL RULE:
+ * - installable = reserved_from_stock - qty_installed (NO InventoryItem dependency)
+ * - Deduct from InventoryItem.quantity_on_hand
+ * - Recompute Part.physical_stock from InventoryItem sum
+ * - Update commitment: qty_installed++, reserved_from_stock--
+ * - Call rebalancePartReservations
+ * 
+ * HARD GUARD: physical_stock cannot go negative
  */
 async function install(ctx, commitment_ids, payload) {
-  const { qty_to_install } = payload;
+  const { qty_to_install, location_id } = payload;
   const commitmentId = commitment_ids?.[0];
   
   if (!commitmentId || qty_to_install === undefined) {
@@ -970,20 +1034,21 @@ async function install(ctx, commitment_ids, payload) {
   const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
   if (!part) throw new Error('Part not found');
 
-  const reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
+  // PHASE 14: Installable = reserved_from_stock - qty_installed (canonical, NO InventoryItem dependency)
+  const reserved = commitment.reserved_from_stock ?? 0;
   const current_installed = commitment.qty_installed ?? 0;
-  const required = commitment.required_total ?? commitment.qty_committed ?? 0;
-  const available_to_install = reserved - current_installed;
+  const required = commitment.required_total ?? 0;
+  const installable = Math.max(0, reserved - current_installed);
 
   // For CLIENT_SUPPLIED, don't touch stock
   const supply_type = commitment.supply_source_type ?? 'VENDOR';
   const affects_stock = supply_type !== 'CLIENT_SUPPLIED';
 
-  if (qty_to_install > available_to_install && affects_stock) {
-    throw new Error(`Cannot install ${qty_to_install}, only ${available_to_install} available`);
+  if (qty_to_install > installable && affects_stock) {
+    throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable (reserved=${reserved}, installed=${current_installed})`);
   }
 
-  // PHASE 9F: HARD GUARD - Check if install would make stock negative
+  // PHASE 14: HARD GUARD - Check if install would make stock negative
   if (affects_stock) {
     const current_physical = part.physical_stock ?? 0;
     if (current_physical < qty_to_install) {
@@ -1000,6 +1065,7 @@ async function install(ctx, commitment_ids, payload) {
         commitment_id: commitmentId,
         qty_installing: qty_to_install,
         new_installed: current_installed + qty_to_install,
+        installable,
         affects_stock
       }
     };
@@ -1007,8 +1073,7 @@ async function install(ctx, commitment_ids, payload) {
 
   const new_installed = current_installed + qty_to_install;
   
-  // PHASE 12R-HARDENING: Decrement reserved_from_stock when installing
-  // Installing consumes reserved stock, so reserved should decrease
+  // PHASE 14: Decrement reserved_from_stock when installing
   const new_reserved = Math.max(0, reserved - qty_to_install);
   
   // Update commitment - qty_installed increases, reserved_from_stock decreases
@@ -1020,22 +1085,64 @@ async function install(ctx, commitment_ids, payload) {
     commitment_version: (commitment.commitment_version ?? 0) + 1
   });
 
-  // Update part physical stock (INSTALL decrements physical)
+  // PHASE 14: Deduct from InventoryItem (authoritative source)
   if (affects_stock) {
-    const new_physical = (part.physical_stock ?? 0) - qty_to_install;
+    // Find InventoryItem to deduct from
+    let deduct_location_id = location_id;
     
-    // Double-check negative guard
-    if (new_physical < 0) {
-      throw new Error(`NEGATIVE_STOCK_ATTEMPT: Result would be ${new_physical}`);
+    if (!deduct_location_id) {
+      // Find first location with available stock
+      const inventoryItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id: part.id });
+      const itemWithStock = inventoryItems.find(i => (i.quantity_on_hand ?? 0) >= qty_to_install);
+      if (itemWithStock) {
+        deduct_location_id = itemWithStock.location_id;
+      } else {
+        // Deduct from multiple locations if needed
+        let remaining_to_deduct = qty_to_install;
+        for (const item of inventoryItems.filter(i => (i.quantity_on_hand ?? 0) > 0)) {
+          const deduct_from_this = Math.min(item.quantity_on_hand ?? 0, remaining_to_deduct);
+          if (deduct_from_this > 0) {
+            await ctx.base44.asServiceRole.entities.InventoryItem.update(item.id, {
+              quantity_on_hand: (item.quantity_on_hand ?? 0) - deduct_from_this
+            });
+            ctx.mutations.push({ entity: 'InventoryItem', id: item.id, action: 'INSTALL_DEDUCT' });
+            remaining_to_deduct -= deduct_from_this;
+          }
+          if (remaining_to_deduct <= 0) break;
+        }
+        deduct_location_id = null; // Handled above
+      }
     }
     
-    await ctx.base44.asServiceRole.entities.Part.update(part.id, {
-      physical_stock: new_physical
-    });
-    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'INSTALL' });
+    // Single location deduction if we found one
+    if (deduct_location_id) {
+      const [invItem] = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
+        part_id: part.id,
+        location_id: deduct_location_id
+      });
+      
+      if (invItem) {
+        const new_qty = Math.max(0, (invItem.quantity_on_hand ?? 0) - qty_to_install);
+        await ctx.base44.asServiceRole.entities.InventoryItem.update(invItem.id, {
+          quantity_on_hand: new_qty
+        });
+        ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'INSTALL_DEDUCT' });
+      }
+    }
     
-    // PHASE 12R: Call canonical rebalance for this part
-    // Rebalance will recalculate remaining needs accounting for qty_installed
+    // PHASE 14: Recompute Part.physical_stock from InventoryItem sum
+    const recomputeResult = await ctx.base44.asServiceRole.functions.invoke('recomputePartPhysicalStock', {
+      part_id: part.id,
+      dry_run: false
+    });
+    
+    if (recomputeResult.data?.error) {
+      throw new Error(recomputeResult.data.error);
+    }
+    
+    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
+    
+    // PHASE 14: Call canonical rebalance for this part
     const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
       part_id: part.id,
       dry_run: false
@@ -1070,7 +1177,8 @@ async function install(ctx, commitment_ids, payload) {
   return {
     commitment_id: commitmentId,
     qty_installed: qty_to_install,
-    total_installed: new_installed
+    total_installed: new_installed,
+    new_reserved
   };
 }
 
@@ -1258,22 +1366,29 @@ async function cancelCommitment(ctx, commitment_ids, payload) {
 // ============================================================================
 
 /**
- * ADD_STOCK - Add physical inventory without a PO or commitment
+ * ADD_STOCK - PHASE 14 CANONICAL
  * 
- * This is the canonical way to add "found inventory", "gifts", "transfers in", etc.
- * It updates Part.physical_stock and optionally creates an InventoryItem for location tracking.
+ * Add physical inventory without a PO or commitment.
+ * 
+ * CANONICAL RULE: InventoryItem is authoritative.
+ * 1. Upsert InventoryItem by (part_id, location_id)
+ * 2. Recompute Part.physical_stock from InventoryItem sum
+ * 3. Call rebalancePartReservations
+ * 
+ * NO direct Part.physical_stock increment - derived only.
  * 
  * Inputs:
  * - part_id: ID of the part
  * - qty: Quantity to add (positive)
- * - location_id: Optional storage location
+ * - location_id: Storage location (REQUIRED - defaults to UNASSIGNED_SYSTEM)
  * - note: Optional note describing why
  * - purchase_cost: Optional cost per unit
  * 
  * Returns: updated part snapshot + inventory state
  */
 async function addStock(ctx, payload) {
-  const { part_id, qty, location_id, note, purchase_cost } = payload;
+  const { part_id, qty, note, purchase_cost } = payload;
+  let { location_id } = payload;
 
   if (!part_id) {
     throw new Error('part_id is required for ADD_STOCK');
@@ -1288,8 +1403,27 @@ async function addStock(ctx, payload) {
   const [part] = await ctx.base44.entities.Part.filter({ id: part_id });
   if (!part) throw new Error('Part not found');
 
+  // PHASE 14: Location enforcement - default to UNASSIGNED_SYSTEM
+  if (!location_id) {
+    // Find or create UNASSIGNED_SYSTEM location
+    const systemLocations = await ctx.base44.asServiceRole.entities.Location.filter({
+      location_area: 'UNASSIGNED_SYSTEM'
+    });
+    
+    if (systemLocations.length === 0) {
+      // Create system location
+      const newLoc = await ctx.base44.asServiceRole.entities.Location.create({
+        location_area: 'UNASSIGNED_SYSTEM',
+        description: 'System default location for inventory without explicit assignment',
+        active: true
+      });
+      location_id = newLoc.id;
+    } else {
+      location_id = systemLocations[0].id;
+    }
+  }
+
   const old_physical = part.physical_stock ?? 0;
-  const new_physical = old_physical + quantity;
 
   if (ctx.dry_run) {
     return {
@@ -1298,20 +1432,65 @@ async function addStock(ctx, payload) {
         part_name: part.part_name,
         qty_adding: quantity,
         old_physical_stock: old_physical,
-        new_physical_stock: new_physical,
+        estimated_new_physical_stock: old_physical + quantity,
         location_id
       }
     };
   }
 
-  // Update Part.physical_stock
-  await ctx.base44.asServiceRole.entities.Part.update(part_id, {
-    physical_stock: new_physical
+  // PHASE 14: Upsert InventoryItem (authoritative source)
+  let inventoryItemId = null;
+  const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
+    part_id,
+    location_id
   });
+  
+  if (existingItems.length > 1) {
+    throw new Error(
+      `INVENTORY_LOCATION_DUPLICATE_ERROR: Found ${existingItems.length} records for part ${part.part_name} at location ${location_id}. ` +
+      `Call consolidateInventoryLocations() to fix.`
+    );
+  } else if (existingItems.length === 1) {
+    // UPDATE existing record
+    const existing = existingItems[0];
+    const new_quantity = (existing.quantity_on_hand ?? 0) + quantity;
+    
+    await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
+      quantity_on_hand: new_quantity,
+      notes: `${existing.notes || ''}\n[${new Date().toISOString()}] Added ${quantity} via ADD_STOCK`.trim()
+    });
+    
+    inventoryItemId = existing.id;
+    ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'UPDATE' });
+  } else {
+    // CREATE new record
+    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+      part_id,
+      location_id,
+      quantity_on_hand: quantity,
+      quantity_reserved: 0,
+      purchase_cost: purchase_cost ? Number(purchase_cost) : null,
+      received_date: new Date().toISOString().split('T')[0],
+      notes: note || 'Added via ADD_STOCK action'
+    });
+    inventoryItemId = invItem.id;
+    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'CREATE' });
+  }
 
-  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'ADD_STOCK' });
+  // PHASE 14: Recompute Part.physical_stock from InventoryItem sum (authoritative)
+  const recomputeResult = await ctx.base44.asServiceRole.functions.invoke('recomputePartPhysicalStock', {
+    part_id,
+    dry_run: false
+  });
+  
+  if (recomputeResult.data?.error) {
+    throw new Error(recomputeResult.data.error);
+  }
+  
+  const new_physical = recomputeResult.data?.computed_physical_stock ?? (old_physical + quantity);
+  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
 
-  // PHASE 9G: Call canonical rebalance for this part
+  // PHASE 14: Call canonical rebalance for this part
   const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id,
     dry_run: false
@@ -1321,49 +1500,6 @@ async function addStock(ctx, payload) {
     throw new Error(rebalanceResult.data.error);
   }
 
-  // PHASE 13B: HARD UPSERT - One InventoryItem per (part_id + location_id)
-  let inventoryItemId = null;
-  if (location_id) {
-    // Query existing inventory items for this part at this location
-    const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
-      part_id,
-      location_id
-    });
-    
-    if (existingItems.length > 1) {
-      // HARD ERROR: Duplicate records detected
-      throw new Error(
-        `INVENTORY_LOCATION_DUPLICATE_ERROR: Found ${existingItems.length} records for part ${part.part_name} at location ${location_id}. ` +
-        `Call consolidateInventoryLocations() to fix.`
-      );
-    } else if (existingItems.length === 1) {
-      // UPDATE existing record
-      const existing = existingItems[0];
-      const new_quantity = (existing.quantity_on_hand ?? 0) + quantity;
-      
-      await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
-        quantity_on_hand: new_quantity,
-        notes: `${existing.notes || ''}\n[${new Date().toISOString()}] Added ${quantity} via ADD_STOCK`.trim()
-      });
-      
-      inventoryItemId = existing.id;
-      ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'UPDATE' });
-    } else {
-      // CREATE new record (no duplicates)
-      const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
-        part_id,
-        location_id,
-        quantity_on_hand: quantity,
-        quantity_reserved: 0,
-        purchase_cost: purchase_cost ? Number(purchase_cost) : null,
-        received_date: new Date().toISOString().split('T')[0],
-        notes: note || 'Added via ADD_STOCK action'
-      });
-      inventoryItemId = invItem.id;
-      ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'CREATE' });
-    }
-  }
-
   // Create audit log entry
   await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
     part_id,
@@ -1371,14 +1507,11 @@ async function addStock(ctx, payload) {
     qty_delta: quantity,
     old_qty: old_physical,
     new_qty: new_physical,
-    location_id: location_id || null,
+    location_id,
     notes: note || null,
     performed_by: ctx.user.email,
     performed_at: ctx.timestamp
   });
-
-  // Note: Lifecycle events require commitment_id, so we skip for stock-level operations
-  // The InventoryAuditLog above serves as the audit trail for stock additions
 
   // Return updated state
   return {
@@ -1390,7 +1523,7 @@ async function addStock(ctx, payload) {
     new_physical_stock: new_physical,
     location_id,
     inventory_item_id: inventoryItemId,
-    // Context for invalidation
+    recompute_result: recomputeResult.data,
     invalidation_context: {
       part_ids: [part_id],
       invalidateAll: true
