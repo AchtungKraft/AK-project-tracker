@@ -262,8 +262,8 @@ export default function GlobalNeedToOrder() {
   };
 
   const renderItem = (item) => {
-    // Use canonical fields from read model - NO local derivation
-    const isOrderable = item.is_orderable;
+    // PHASE 9K: Use ONLY backend is_orderable - NO local gating logic
+    const isOrderable = item.is_orderable === true;
 
     return (
       <div 
@@ -328,15 +328,26 @@ export default function GlobalNeedToOrder() {
             billingStatus={item.billing_status}
           />
 
+          {/* PHASE 9K: Status badge from backend only */}
           {isOrderable ? (
             <Badge className="bg-green-600 text-white">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Ready
             </Badge>
+          ) : !item.has_vendor ? (
+            <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+              <AlertTriangle className="w-3 h-3 mr-1" />
+              No Vendor
+            </Badge>
+          ) : item.block_reason === 'REQUIRES_PREPAY' ? (
+            <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+              <AlertTriangle className="w-3 h-3 mr-1" />
+              Prepay Req
+            </Badge>
           ) : (
             <Badge variant="outline" className="border-red-600 text-red-400">
               <XCircle className="w-3 h-3 mr-1" />
-              {item.block_reason_code === 'INSUFFICIENT_FUNDS' ? 'Need Funds' : 'Blocked'}
+              Blocked
             </Badge>
           )}
 

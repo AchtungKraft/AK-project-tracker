@@ -89,26 +89,25 @@ Deno.serve(async (req) => {
       const project = projectMap.get(commitment.project_id);
       const vendor = vendorMap.get(part.default_vendor_id);
 
-      // PHASE 9H Step 7: STRICT billing gating
-      // can_order = to_order > 0 AND (requires_prepay === false OR billing_status in [INVOICED, PAID])
-      const billing_status = commitment.billing_status || 'billable';
-      const can_order = 
-        to_order > 0 && (
-          requires_prepay === false ||
-          billing_status === 'INVOICED' ||
-          billing_status === 'invoiced' ||
-          billing_status === 'PAID' ||
-          billing_status === 'paid'
-        );
+      // PHASE 9K: SIMPLIFIED GATING - ONLY explicit boolean fields
+      // can_order = (to_order > 0) AND (requires_prepay === false OR prepay_ok === true)
+      // NO billing_status checks, NO invoice checks, NO pool checks
+      const prepay_ok = commitment.prepay_ok ?? (requires_prepay === false);
+      
+      const can_order = to_order > 0 && (requires_prepay === false || prepay_ok === true);
 
       // Determine block reason if blocked
       let block_reason = null;
-      if (!can_order) {
-        if (requires_prepay === true && !['INVOICED', 'invoiced', 'PAID', 'paid'].includes(billing_status)) {
+      if (!can_order && to_order > 0) {
+        if (requires_prepay === true && prepay_ok !== true) {
           block_reason = 'REQUIRES_PREPAY';
-        } else if (!vendor) {
-          block_reason = 'NO_VENDOR';
         }
+      }
+      
+      // PHASE 9K: HARD DEBUG - Detect invalid blocks
+      if (!can_order && to_order > 0 && requires_prepay === false) {
+        console.error(`[INVALID_ORDER_BLOCK] commitment=${commitment.id} to_order=${to_order} requires_prepay=${requires_prepay} prepay_ok=${prepay_ok}`);
+        throw new Error(`INVALID_ORDER_BLOCK: commitment ${commitment.id} blocked but requires_prepay is false`);
       }
 
       needToOrderItems.push({
@@ -129,13 +128,14 @@ Deno.serve(async (req) => {
         covered_from_po,
         to_order,
         coverage_status,
-        // Billing state (explicit booleans only)
+        // Billing state (ONLY explicit booleans - PHASE 9K)
         requires_prepay,
-        billing_status,
+        prepay_ok,
         can_order,
         block_reason,
-        // Flag for UI display
+        // Flag for UI display - CANONICAL, no UI computation
         is_orderable: can_order && !!vendor,
+        has_vendor: !!vendor,
         // Cost estimation (canonical)
         unit_cost: commitment.unit_cost_snapshot ?? part.cost ?? 0,
         estimated_cost: to_order * (commitment.unit_cost_snapshot ?? part.cost ?? 0),

@@ -102,8 +102,11 @@ Deno.serve(async (req) => {
         });
 
         if (!dry_run) {
+          // PHASE 9K: Also set prepay_ok and billing_status defaults
           await base44.asServiceRole.entities.PartCommitment.update(commitment.id, {
             requires_prepay: new_requires_prepay,
+            prepay_ok: new_requires_prepay === false ? true : (commitment.prepay_ok ?? false),
+            billing_status: commitment.billing_status ?? 'billable',
             billing_flag_normalized_at: timestamp,
             billing_flag_normalized_by: user.email
           });
