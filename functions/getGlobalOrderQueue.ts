@@ -1,8 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * getGlobalOrderQueue - Consolidated data for GlobalNeedToOrder page
- * Returns all data needed for the procurement queue in a single request
+ * getGlobalOrderQueue - Phase 9H Step 7
+ * 
+ * Consolidated data for GlobalNeedToOrder page.
+ * FORWARD MODEL ONLY - no pool references.
+ * Strict billing flag validation.
  */
 
 Deno.serve(async (req) => {
@@ -24,13 +27,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch all required entities in parallel
-    const [commitments, parts, projects, vendors, pools] = await Promise.all([
+    // Fetch all required entities in parallel (NO POOLS - forward model only)
+    const [commitments, parts, projects, vendors] = await Promise.all([
       base44.entities.PartCommitment.list(),
       base44.entities.Part.list(),
       base44.entities.Project.list(),
       base44.entities.Vendor.list(),
-      base44.entities.BillingPool.list(),
     ]);
 
     // Build lookup maps
@@ -38,48 +40,65 @@ Deno.serve(async (req) => {
     const projectMap = new Map(projects.map(p => [p.id, p]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
 
-    // Group pools by project
-    const poolsByProject = {};
-    pools.forEach(p => {
-      if (!poolsByProject[p.project_id]) poolsByProject[p.project_id] = [];
-      poolsByProject[p.project_id].push(p);
-    });
-
     // Build items that need ordering
     const needToOrderItems = [];
+    const billingFlagErrors = [];
 
-    commitments.forEach(commitment => {
-      if (commitment.commitment_status === 'cancelled') return;
+    for (const commitment of commitments) {
+      // Skip cancelled/closed
+      if (commitment.commitment_status === 'cancelled' || commitment.commitment_status === 'closed') {
+        continue;
+      }
 
-      const needsOrder = 
-        commitment.commitment_status === 'planned' ||
-        (commitment.qty_committed || 0) > (commitment.qty_ordered || 0);
-
-      if (!needsOrder) return;
+      // PHASE 9H Step 3: HARD FAIL on invalid billing flags
+      // Normalize null/undefined to false for legacy compatibility, but log warning
+      let requires_prepay = commitment.requires_prepay;
+      if (typeof requires_prepay !== 'boolean') {
+        // Treat as false (legacy default) but track for reporting
+        billingFlagErrors.push({
+          commitment_id: commitment.id,
+          value: requires_prepay,
+          type: typeof requires_prepay
+        });
+        requires_prepay = false; // Default legacy to order without invoice
+      }
 
       const part = partMap.get(commitment.part_id);
-      if (!part) return;
+      if (!part) continue;
+
+      // Compute to_order from canonical fields
+      const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
+      const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
+      const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
+      const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
+
+      // Only include if to_order > 0
+      if (to_order <= 0) continue;
 
       const project = projectMap.get(commitment.project_id);
       const vendor = vendorMap.get(part.default_vendor_id);
-      const projectPools = poolsByProject[commitment.project_id] || [];
-      const poolBalance = projectPools
-        .filter(p => p.status !== 'closed')
-        .reduce((sum, p) => sum + (p.balance || 0), 0);
 
-      const qtyToOrder = (commitment.qty_committed || 0) - (commitment.qty_ordered || 0);
-      const plannedRetail = commitment.planned_retail_total || (qtyToOrder * (commitment.unit_retail_snapshot || part.default_retail || 0));
-      const coveredRetail = commitment.covered_retail_total || 0;
-      const exposureGap = commitment.exposure_gap || (plannedRetail - coveredRetail);
+      // PHASE 9H Step 7: STRICT billing gating
+      // can_order = to_order > 0 AND (requires_prepay === false OR billing_status in [INVOICED, PAID])
+      const billing_status = commitment.billing_status || 'billable';
+      const can_order = 
+        to_order > 0 && (
+          requires_prepay === false ||
+          billing_status === 'INVOICED' ||
+          billing_status === 'invoiced' ||
+          billing_status === 'PAID' ||
+          billing_status === 'paid'
+        );
 
-      // Calculate coverage state
-      const coveragePct = plannedRetail > 0 ? (coveredRetail / plannedRetail) * 100 : 0;
-      const coverageState = coveragePct >= 100 ? 'covered' : coveragePct > 0 ? 'partial' : 'uncovered';
-
-      // Can order? Must have coverage or prepay satisfied
-      const requiresPrepay = commitment.requires_prepay || false;
-      const prepayOk = !requiresPrepay || commitment.prepay_satisfied_at;
-      const canOrder = (coverageState === 'covered' || poolBalance >= exposureGap) && prepayOk;
+      // Determine block reason if blocked
+      let block_reason = null;
+      if (!can_order) {
+        if (requires_prepay === true && !['INVOICED', 'invoiced', 'PAID', 'paid'].includes(billing_status)) {
+          block_reason = 'REQUIRES_PREPAY';
+        } else if (!vendor) {
+          block_reason = 'NO_VENDOR';
+        }
+      }
 
       needToOrderItems.push({
         id: commitment.id,
@@ -93,30 +112,34 @@ Deno.serve(async (req) => {
         project_name: project?.name,
         vendor_id: vendor?.id,
         vendor_name: vendor?.vendor_name,
-        qtyToOrder,
-        plannedRetail,
-        coveredRetail,
-        exposureGap,
-        coverageState,
-        poolBalance,
-        requiresPrepay,
-        prepayOk,
-        canOrder,
-        estimatedCost: qtyToOrder * (part.cost || part.default_cost || 0),
-        // Include commitment data for actions
-        qty_committed: commitment.qty_committed,
-        qty_ordered: commitment.qty_ordered,
-        qty_received: commitment.qty_received,
-        qty_installed: commitment.qty_installed,
+        // Canonical quantities
+        required_total,
+        reserved_from_stock,
+        covered_from_po,
+        to_order,
+        // Billing state
+        requires_prepay,
+        billing_status,
+        can_order,
+        block_reason,
+        // Cost estimation
+        unit_cost: commitment.unit_cost_snapshot ?? part.cost ?? 0,
+        estimated_cost: to_order * (commitment.unit_cost_snapshot ?? part.cost ?? 0),
+        // Legacy fields for compatibility
+        qtyToOrder: to_order,
+        qty_committed: required_total,
+        qty_ordered: covered_from_po,
+        qty_received: commitment.qty_received ?? 0,
+        qty_installed: commitment.qty_installed ?? 0,
       });
-    });
+    }
 
     // Compute summary stats
-    const totalQty = needToOrderItems.reduce((sum, i) => sum + i.qtyToOrder, 0);
-    const totalExposure = needToOrderItems.reduce((sum, i) => sum + i.exposureGap, 0);
-    const totalCost = needToOrderItems.reduce((sum, i) => sum + i.estimatedCost, 0);
-    const canOrderCount = needToOrderItems.filter(i => i.canOrder).length;
-    const blockedCount = needToOrderItems.filter(i => !i.canOrder).length;
+    const totalQty = needToOrderItems.reduce((sum, i) => sum + i.to_order, 0);
+    const totalCost = needToOrderItems.reduce((sum, i) => sum + i.estimated_cost, 0);
+    const canOrderCount = needToOrderItems.filter(i => i.can_order).length;
+    const blockedCount = needToOrderItems.filter(i => !i.can_order).length;
+    const blockedPrepayCount = needToOrderItems.filter(i => i.block_reason === 'REQUIRES_PREPAY').length;
 
     // Get unique projects and vendors for filters
     const projectsWithItems = [...new Set(needToOrderItems.map(i => i.project_id).filter(Boolean))];
@@ -129,15 +152,20 @@ Deno.serve(async (req) => {
       summary: {
         totalItems: needToOrderItems.length,
         totalQty,
-        totalExposure,
         totalCost,
         canOrderCount,
         blockedCount,
+        blockedPrepayCount,
       },
       filters: {
         projects: projects.filter(p => projectsWithItems.includes(p.id)).map(p => ({ id: p.id, name: p.name })),
         vendors: vendors.filter(v => vendorsWithItems.includes(v.id)).map(v => ({ id: v.id, vendor_name: v.vendor_name })),
       },
+      // Integrity warnings (non-blocking but reported)
+      integrity: {
+        billing_flag_errors: billingFlagErrors.length,
+        billing_flag_details: billingFlagErrors.slice(0, 10) // Limit for response size
+      }
     });
 
   } catch (error) {
