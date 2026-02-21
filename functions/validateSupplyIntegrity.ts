@@ -115,14 +115,6 @@ Deno.serve(async (req) => {
           location_sum: locationSum,
           diff: locationSum - physical
         });
-        
-        // Flag integrity warning on Part
-        if (part && !dry_run) {
-          await base44.asServiceRole.entities.Part.update(partId, {
-            integrity_warning: true,
-            integrity_warning_details: `Location sum (${locationSum}) != physical_stock (${physical})`
-          });
-        }
       }
     }
 
