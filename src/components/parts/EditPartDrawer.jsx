@@ -713,39 +713,37 @@ export default function EditPartDrawer({ partId, onClose }) {
                     </div>
                   </div>
 
-                  {/* FIX D: Pricing fields restored - Cost is admin-editable, Retail is matrix-driven or override */}
-                  <div className="grid grid-cols-2 gap-4 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
-                    <div>
-                      <Label className="text-gray-400 text-xs">Cost (What we pay)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={editedPart.cost || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, cost: parseFloat(e.target.value) || 0 })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="0.00"
-                      />
-                      {(!editedPart.cost || editedPart.cost <= 0) && (
-                        <p className="text-xs text-amber-400 mt-1">⚠️ Missing cost - will flag for review</p>
-                      )}
+                  {/* PHASE 15: HARD LOCK Pricing Editor */}
+                  <PricingModeEditor
+                    part={editedPart}
+                    onPricingChange={(data) => setPricingData(data)}
+                  />
+                  
+                  {/* Save Pricing Button */}
+                  {pricingData && (
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => {
+                          if (!pricingData.is_valid) {
+                            toast.error('Fix pricing errors before saving');
+                            return;
+                          }
+                          setPricingSaving(true);
+                          pricingUpdateMutation.mutate(pricingData);
+                        }}
+                        disabled={pricingSaving || !pricingData.is_valid || pricingUpdateMutation.isPending}
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {pricingSaving || pricingUpdateMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-2" />
+                        ) : (
+                          <DollarSign className="w-3 h-3 mr-2" />
+                        )}
+                        {pricingSaving || pricingUpdateMutation.isPending ? 'Saving Pricing...' : 'Save Pricing'}
+                      </Button>
                     </div>
-                    <div>
-                      <Label className="text-gray-400 text-xs">Retail Override (optional)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={editedPart.retail_override || ''}
-                        onChange={(e) => setEditedPart({ ...editedPart, retail_override: parseFloat(e.target.value) || null })}
-                        className="bg-gray-800 border-gray-700 text-white"
-                        placeholder="Auto from matrix"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Matrix: ${(editedPart.retail_matrix_price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -849,16 +847,50 @@ export default function EditPartDrawer({ partId, onClose }) {
                       <p className="text-white">{vendors.find(v => v.id === part?.default_vendor_id)?.vendor_name || '-'}</p>
                     </div>
                   </div>
-                  {/* Pricing is managed through Admin Config - not editable here */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Cost (Admin)</p>
-                      <p className="text-white">${part?.cost || part?.default_cost || '0.00'}</p>
+                  {/* PHASE 15: Pricing Display with Mode Badge */}
+                  <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-400 font-medium">Pricing</p>
+                      <div className="flex gap-1">
+                        {part?.pricing_mode === 'matrix' && (
+                          <Badge className="bg-blue-600 text-white text-xs">MATRIX</Badge>
+                        )}
+                        {part?.pricing_mode === 'manual' && (
+                          <Badge className="bg-purple-600 text-white text-xs">OVERRIDE</Badge>
+                        )}
+                        {(!part?.cost || part.cost <= 0) && (
+                          <Badge className="bg-red-600 text-white text-xs">NO COST</Badge>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Retail (Matrix)</p>
-                      <p className="text-white">${part?.retail_matrix_price || part?.retail_override || part?.default_retail || '0.00'}</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Cost</p>
+                        <p className="text-white font-semibold">${(part?.cost || 0).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">
+                          {part?.pricing_mode === 'manual' ? 'Override' : 'Matrix Retail'}
+                        </p>
+                        <p className="text-white font-semibold">
+                          ${(part?.pricing_mode === 'manual' 
+                            ? part?.retail_override 
+                            : part?.retail_matrix_price
+                          )?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Markup</p>
+                        <p className="text-white font-semibold">
+                          {part?.applied_markup_pct !== null && part?.applied_markup_pct !== undefined
+                            ? `${Math.round(part.applied_markup_pct * 100)}%`
+                            : '-'}
+                        </p>
+                      </div>
                     </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Reorder Point</p>
                       <p className="text-white font-semibold">{part?.reorder_point || 0}</p>
