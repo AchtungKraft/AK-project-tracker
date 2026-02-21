@@ -15,27 +15,44 @@ import { useSupplyAction } from "@/components/supply/useSupplyState";
 import { cn } from "@/lib/utils";
 
 /**
- * CreateBatchOrderModal - Create orders from selected parts grouped by vendor
+ * CreateBatchOrderModal - Create orders from selected commitments grouped by vendor
+ * 
+ * PHASE 10B: COMMITMENT-ONLY ORDERING
+ * - All items MUST have commitment_id
+ * - All items MUST have vendor_id (from read model)
+ * - Groups strictly by vendor_id
+ * - NO Part entity fetch for vendor/pricing
  * 
  * CANONICAL DISPATCHER: Routes through executeSupplyAction with action_type='CREATE_PO'
  * NO direct Order.create or PartPurchaseLineItem.create allowed
+ * 
+ * Required item shape:
+ * {
+ *   commitment_id,  // REQUIRED
+ *   part_id,
+ *   part_name,
+ *   vendor_id,      // REQUIRED - from read model
+ *   vendor_name,    // from read model
+ *   project_id,
+ *   project_name,
+ *   qty_to_order,   // from to_order
+ *   default_cost,   // from read model
+ *   estimated_cost  // from read model
+ * }
  */
 export default function CreateBatchOrderModal({ selectedItems, onClose, onSuccess }) {
   const queryClient = useQueryClient();
   
+  // PHASE 10B: Validate all items have commitment_id and vendor_id
+  const invalidItems = selectedItems.filter(item => !item.commitment_id || !item.vendor_id);
+  if (invalidItems.length > 0) {
+    console.error('[PHASE 10B VIOLATION] Items missing commitment_id or vendor_id:', invalidItems);
+  }
+  
+  // Only fetch vendors for display names (not for deriving vendor from parts)
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
-  });
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
-  });
-
-  const { data: parts = [] } = useQuery({
-    queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list(),
   });
 
   const { data: poSequences = [] } = useQuery({
@@ -58,15 +75,23 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     return `${prefix}_${mm}${dd}${yyyy}_${String(nextSeq).padStart(3, '0')}`;
   };
 
-  // State for vendor-grouped items with editable fields
+  // PHASE 10B: State for vendor-grouped items - vendor comes from read model, not Part entity
   const [vendorGroups, setVendorGroups] = useState(() => {
     const groups = {};
     
     selectedItems.forEach(item => {
-      const vendorId = item.part?.default_vendor_id || 'unassigned';
+      // PHASE 10B: vendor_id comes from read model directly
+      const vendorId = item.vendor_id || 'unassigned';
+      
+      // PHASE 10B: HARD ERROR if no commitment_id
+      if (!item.commitment_id) {
+        console.error('[PHASE 10B VIOLATION] Item missing commitment_id:', item);
+      }
+      
       if (!groups[vendorId]) {
         groups[vendorId] = {
           vendorId,
+          vendorName: item.vendor_name || null,
           expanded: true,
           orderData: {
             po_prefix: 'AK',
@@ -83,13 +108,14 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           items: [],
         };
       }
-      // Use Part.cost as canonical cost source, track if manually overridden
-      const partCost = item.part?.cost ?? item.part?.default_cost ?? 0;
+      // PHASE 10B: Cost comes from read model (default_cost or estimated_cost)
+      const itemCost = item.default_cost ?? item.estimated_cost ?? 0;
       groups[vendorId].items.push({
         ...item,
-        qty_to_order: item.qty_to_order || item.part?.reorder_quantity || 1,
-        unit_cost: partCost,  // RENAMED: unit_price → unit_cost for PO lines
-        original_cost: partCost, // Track original for override detection
+        commitment_id: item.commitment_id, // Ensure commitment_id is preserved
+        qty_to_order: item.qty_to_order || 1,
+        unit_cost: itemCost,
+        original_cost: itemCost,
         cost_overridden: false,
         vendorOverride: null,
       });
@@ -98,14 +124,17 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     return groups;
   });
 
-  const getVendorName = (vendorId) => {
+  // PHASE 10B: Prefer vendor name from group (came from read model) over lookup
+  const getVendorName = (vendorId, groupVendorName) => {
     if (vendorId === 'unassigned') return 'No Vendor Assigned';
-    return vendors.find(v => v.id === vendorId)?.vendor_name || 'Unknown Vendor';
+    return groupVendorName || vendors.find(v => v.id === vendorId)?.vendor_name || 'Unknown Vendor';
   };
 
-  const getProjectName = (projectId) => {
-    if (!projectId) return 'General / AK Stock';
-    return projects.find(p => p.id === projectId)?.name || 'Unknown Project';
+  // PHASE 10B: Project name comes from item directly (from read model)
+  const getProjectName = (item) => {
+    if (item.project_name) return item.project_name;
+    if (!item.project_id) return 'General / AK Stock';
+    return 'Project';
   };
 
   const updateVendorGroup = (vendorId, field, value) => {
@@ -243,25 +272,35 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
   });
 
   const handleCreateOrders = () => {
-    // Check for unassigned vendors
+    // PHASE 10B: HARD ERROR - no unassigned vendors allowed
     if (Object.keys(vendorGroups).includes('unassigned')) {
-      toast.error('Please assign a vendor to all items before creating orders');
+      toast.error('PO_VENDOR_REQUIRED: All items must have a vendor assigned');
       return;
     }
 
-    // Collect all commitment IDs from selected items
+    // PHASE 10B: Collect all commitment IDs - REQUIRED for all items
     const commitmentIds = [];
     const vendorOverrides = {};
+    let missingCommitmentCount = 0;
     
     for (const [vendorId, group] of Object.entries(vendorGroups)) {
       for (const item of group.items) {
-        if (item.commitment_id) {
+        if (!item.commitment_id) {
+          missingCommitmentCount++;
+          console.error('[PHASE 10B VIOLATION] Item missing commitment_id:', item);
+        } else {
           commitmentIds.push(item.commitment_id);
           if (item.vendorOverride) {
             vendorOverrides[item.commitment_id] = item.vendorOverride;
           }
         }
       }
+    }
+
+    // PHASE 10B: HARD ERROR - all items must have commitment_id
+    if (missingCommitmentCount > 0) {
+      toast.error(`PO_COMMITMENT_REQUIRED: ${missingCommitmentCount} items missing commitment_id`);
+      return;
     }
 
     if (commitmentIds.length === 0) {
@@ -387,11 +426,11 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                   {group.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   <div>
                     <p className={`font-medium ${vendorId === 'unassigned' ? 'text-yellow-400' : 'text-white'}`}>
-                      {getVendorName(vendorId)}
+                      {getVendorName(vendorId, group.vendorName)}
                     </p>
                     <p className="text-xs text-gray-400">
                       {group.items.length} item{group.items.length > 1 ? 's' : ''} · 
-                      ${group.items.reduce((sum, i) => sum + (i.qty_to_order * i.unit_price), 0).toFixed(2)}
+                      ${group.items.reduce((sum, i) => sum + (i.qty_to_order * (i.unit_cost || 0)), 0).toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -526,22 +565,12 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                       <div key={idx} className="flex items-center gap-2 p-2 bg-gray-800/30 rounded">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1">
-                            <p className="text-sm text-white truncate">{item.part?.part_name}</p>
-                            {item.part?.order_url && (
-                              <a
-                                href={item.part.order_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-blue-400 hover:text-blue-300 shrink-0"
-                                title="Open product URL"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
+                            {/* PHASE 10B: part_name comes from read model directly */}
+                            <p className="text-sm text-white truncate">{item.part_name || item.part?.part_name}</p>
                           </div>
                           <p className="text-xs text-gray-500">
-                            {getProjectName(item.requirement?.project_id)}
+                            {/* PHASE 10B: project info comes from read model directly */}
+                            {getProjectName(item)}
                           </p>
                         </div>
                         
