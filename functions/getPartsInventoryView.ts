@@ -114,8 +114,11 @@ Deno.serve(async (req) => {
       const installed_total = partCommitments.reduce((sum, c) => 
         sum + (c.qty_installed ?? 0), 0);
       
-      // DERIVED: Available = physical - reserved
+      // CANONICAL: Available = physical - reserved (computed server-side, NOT in UI)
       const available = Math.max(0, physical_stock - reserved_total);
+      
+      // CANONICAL: Net Position (computed server-side for display)
+      const net_position = available + on_order - required_total;
       
       // DERIVED: Coverage status
       let coverage_status = 'NOT_COVERED';
@@ -153,7 +156,7 @@ Deno.serve(async (req) => {
         car_make_id: part.car_make_id,
         car_model_id: part.car_model_id,
         
-        // CANONICAL INVENTORY STATE
+        // CANONICAL INVENTORY STATE (NO UI derivation allowed)
         physical_stock,
         reserved_total,
         available,
@@ -161,6 +164,7 @@ Deno.serve(async (req) => {
         to_order,
         installed_total,
         required_total,
+        net_position,
         
         // Supply metrics
         projects_using_count,

@@ -106,14 +106,18 @@ export default function InventoryManagement({ onPartClick }) {
     const aggregates = {};
 
     // Use canonical read model for inventory stats
+    // PHASE 9J: Use ONLY canonical values from read model
     partsInventoryView.forEach(pv => {
       aggregates[pv.part_id] = {
         partId: pv.part_id,
+        // CANONICAL: All values from read model - NO local computation
         onHand: pv.physical_stock ?? 0,
         reserved: pv.reserved_total ?? 0,
+        available: pv.available ?? 0,  // From read model
         needed: pv.required_total ?? 0,
         onOrder: pv.on_order ?? 0,
         toOrder: pv.to_order ?? 0,
+        netPosition: pv.net_position ?? 0,  // From read model
         locations: [], // Populated below from commitments for drill-down
         requirementsByProject: [],
         orderLineItems: []
