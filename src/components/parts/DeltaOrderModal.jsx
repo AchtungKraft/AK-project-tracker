@@ -38,8 +38,8 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
   const queryClient = useQueryClient();
   
   const [deltaQty, setDeltaQty] = useState(1);
-  const [unitCost, setUnitCost] = useState(commitment?.actual_unit_cost || part?.default_cost || 0);
-  const [vendorId, setVendorId] = useState(part?.default_vendor_id || "");
+  const [unitCost, setUnitCost] = useState(commitment?.actual_unit_cost || commitment?.unit_cost || 0);
+  const [vendorId, setVendorId] = useState(commitment?.vendor_id || "");
   const [notes, setNotes] = useState("");
 
   const { data: vendors = [] } = useQuery({

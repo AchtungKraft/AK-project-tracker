@@ -30,6 +30,7 @@ export default function CancelCommitmentModal({
   const [reduceQty, setReduceQty] = useState(false);
   const [newQtyCommitted, setNewQtyCommitted] = useState(commitment.qty_installed || 0);
 
+  // CANONICAL: Use required_total, not qty_committed
   const canCancel = (commitment.qty_installed || 0) === 0;
   const canReduce = (commitment.qty_installed || 0) > 0;
   const minQty = commitment.qty_installed || 0;
@@ -72,8 +73,10 @@ export default function CancelCommitmentModal({
 
   const reduceMutation = useMutation({
     mutationFn: async () => {
-      // Route through CommitmentService for proper handling with pool recalculation
-      const qtyReduced = commitment.qty_committed - newQtyCommitted;
+      // Route through CommitmentService for proper handling
+      // CANONICAL: Use required_total, not qty_committed
+      const currentQty = commitment.required_total ?? commitment.qty_committed ?? 0;
+      const qtyReduced = currentQty - newQtyCommitted;
       
       const response = await base44.functions.invoke('commitmentService', {
         action: 'reduceCommitment',
@@ -133,15 +136,15 @@ export default function CancelCommitmentModal({
             </div>
           </div>
 
-          {/* Current Quantities */}
+          {/* Current Quantities - CANONICAL fields */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-xs text-gray-400">Committed</p>
-              <p className="text-lg font-bold text-white">{commitment.qty_committed || 0}</p>
+              <p className="text-xs text-gray-400">Required</p>
+              <p className="text-lg font-bold text-white">{commitment.required_total ?? commitment.qty_committed ?? 0}</p>
             </div>
             <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-xs text-gray-400">Ordered</p>
-              <p className="text-lg font-bold text-purple-400">{commitment.qty_ordered || 0}</p>
+              <p className="text-xs text-gray-400">On Order</p>
+              <p className="text-lg font-bold text-purple-400">{commitment.covered_from_po ?? commitment.qty_ordered ?? 0}</p>
             </div>
             <div className="bg-gray-800/50 rounded p-2">
               <p className="text-xs text-gray-400">Installed</p>
@@ -171,7 +174,7 @@ export default function CancelCommitmentModal({
                 <Input
                   type="number"
                   min={minQty}
-                  max={commitment.qty_committed}
+                  max={commitment.required_total ?? commitment.qty_committed}
                   value={newQtyCommitted}
                   onChange={(e) => setNewQtyCommitted(Math.max(minQty, parseInt(e.target.value) || minQty))}
                   className="w-24 bg-gray-800 border-gray-600"

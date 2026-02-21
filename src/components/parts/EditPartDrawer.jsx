@@ -17,7 +17,7 @@ import PartJournalSection from "./PartJournalSection";
 import PartStatusSummary from "./PartStatusSummary";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import { InventoryLocationsList } from "../inventory/InventoryLocationEditor";
-import OrderPartModal from "./OrderPartModal";
+
 import AddToBuildModal from "./AddToBuildModal";
 import PartTypeSelector, { PartTypeBadge } from "./PartTypeSelector";
 import ArchivePartModal from "./ArchivePartModal";
@@ -39,7 +39,6 @@ export default function EditPartDrawer({ partId, onClose }) {
   const [showCreateModal, setShowCreateModal] = useState(null);
   const [editing, setEditing] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
-  const [showOrderModal, setShowOrderModal] = useState(false);
   const [showBuildModal, setShowBuildModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [deletabilityCheck, setDeletabilityCheck] = useState(null);
@@ -434,15 +433,6 @@ export default function EditPartDrawer({ partId, onClose }) {
               >
                 <Package className="w-4 h-4 mr-2" />
                 Add Inventory
-              </Button>
-              <Button
-                onClick={() => setShowOrderModal(true)}
-                variant="outline"
-                className="flex-1 border-blue-700 text-blue-400 hover:bg-blue-900/30"
-                disabled={part?.is_archived || !canOrder}
-              >
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Order Part
               </Button>
               <Button
                 onClick={() => setShowBuildModal(true)}
@@ -1043,17 +1033,6 @@ export default function EditPartDrawer({ partId, onClose }) {
             // Modal handles its own invalidation via supplyInvalidation helper
           }}
           preselectedPartId={partId}
-        />
-      )}
-
-      {showOrderModal && part && (
-        <OrderPartModal
-          part={part}
-          onClose={() => {
-            setShowOrderModal(false);
-            // Modal handles its own invalidation via supplyInvalidation helper
-          }}
-          onPartClick={null}
         />
       )}
 

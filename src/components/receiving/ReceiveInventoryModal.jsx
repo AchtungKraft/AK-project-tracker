@@ -115,20 +115,8 @@ export default function ReceiveInventoryModal({
         throw new Error(response.data.error);
       }
       
-      // CANONICAL: Also update Part.physical_stock directly for immediate consistency
-      // mutateInventory should handle this, but we ensure it here
-      try {
-        const currentPart = await base44.entities.Part.filter({ id: part.id });
-        if (currentPart[0]) {
-          const currentStock = currentPart[0].physical_stock ?? 0;
-          await base44.entities.Part.update(part.id, {
-            physical_stock: currentStock + data.quantity
-          });
-        }
-      } catch (stockError) {
-        console.warn('[ReceiveInventoryModal] Failed to update physical_stock:', stockError);
-        // Don't fail the whole operation if this fails - mutateInventory should have done it
-      }
+      // CANONICAL: mutateInventory backend handles Part.physical_stock update
+      // No direct Part entity writes allowed from UI
       
       return { ...response.data, part_id: part.id };
     },
