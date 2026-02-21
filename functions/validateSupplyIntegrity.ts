@@ -92,6 +92,41 @@ Deno.serve(async (req) => {
     }
 
     // ================================================================
+    // PHASE 13B: CHECK D - InventoryItem SUM vs Part.physical_stock
+    // ================================================================
+    const inventoryItems = await base44.asServiceRole.entities.InventoryItem.list();
+    const locationSumViolations = [];
+    
+    const partLocationSums = new Map();
+    inventoryItems.forEach(item => {
+      const qty = item.quantity_on_hand ?? 0;
+      partLocationSums.set(item.part_id, (partLocationSums.get(item.part_id) || 0) + qty);
+    });
+    
+    for (const [partId, locationSum] of partLocationSums) {
+      const part = partMap.get(partId);
+      const physical = part?.physical_stock ?? 0;
+      
+      if (Math.abs(locationSum - physical) > 0.001) {
+        locationSumViolations.push({
+          part_id: partId,
+          part_name: part?.part_name || 'Unknown',
+          physical_stock: physical,
+          location_sum: locationSum,
+          diff: locationSum - physical
+        });
+        
+        // Flag integrity warning on Part
+        if (part && !dry_run) {
+          await base44.asServiceRole.entities.Part.update(partId, {
+            integrity_warning: true,
+            integrity_warning_details: `Location sum (${locationSum}) != physical_stock (${physical})`
+          });
+        }
+      }
+    }
+
+    // ================================================================
     // CHECK C: Coverage Invariant (per-commitment)
     // ================================================================
     const coverageViolations = [];
@@ -109,22 +144,28 @@ Deno.serve(async (req) => {
 
       const commitmentErrors = [];
 
-      // Coverage Invariant
+      // PHASE 12R-HARDENING: Coverage Invariant accounting for installed qty
+      // remaining_required = required_total - qty_installed
+      // remaining_required === reserved_from_stock + covered_from_po + qty_to_order
+      const remaining_required = Math.max(0, required_total - qty_installed);
       const sum = reserved_from_stock + covered_from_po + to_order;
-      if (Math.abs(sum - required_total) > 0.01) {
+      
+      if (Math.abs(sum - remaining_required) > 0.01) {
         commitmentErrors.push({
           code: 'COVERAGE_INVARIANT',
-          message: `required(${required_total}) != reserved(${reserved_from_stock}) + covered(${covered_from_po}) + to_order(${to_order}) = ${sum}`,
+          message: `remaining_required(${remaining_required}) != reserved(${reserved_from_stock}) + covered(${covered_from_po}) + to_order(${to_order}) = ${sum}. (required=${required_total}, installed=${qty_installed})`,
           severity: 'CRITICAL'
         });
         coverageViolations.push({
           commitment_id: c.id,
           required_total,
+          qty_installed,
+          remaining_required,
           reserved_from_stock,
           covered_from_po,
           to_order,
           sum,
-          diff: sum - required_total
+          diff: sum - remaining_required
         });
       }
 
@@ -201,7 +242,7 @@ Deno.serve(async (req) => {
 
     // Determine overall status
     let integrity_status = 'OK';
-    if (billingViolations.length > 0 || stockViolations.length > 0 || coverageViolations.length > 0) {
+    if (billingViolations.length > 0 || stockViolations.length > 0 || coverageViolations.length > 0 || locationSumViolations.length > 0) {
       integrity_status = 'FAIL';
     } else if (warnings.length > 0) {
       integrity_status = 'DEGRADED';
@@ -221,12 +262,16 @@ Deno.serve(async (req) => {
         billing_violations: billingViolations.length,
         stock_violations: stockViolations.length,
         coverage_violations: coverageViolations.length,
+        // Phase 13B
+        location_sum_violations: locationSumViolations.length,
         integrity_status
       },
       // Phase 9H specific details
       billing_flag_issues: billingViolations.slice(0, 20),
       stock_drift_issues: stockViolations.slice(0, 20),
       coverage_issues: coverageViolations.slice(0, 20),
+      // Phase 13B
+      location_sum_issues: locationSumViolations.slice(0, 20),
       // Legacy format
       violations,
       warnings,

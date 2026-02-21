@@ -1321,20 +1321,47 @@ async function addStock(ctx, payload) {
     throw new Error(rebalanceResult.data.error);
   }
 
-  // Create InventoryItem for location tracking (optional, backward compatibility)
+  // PHASE 13B: HARD UPSERT - One InventoryItem per (part_id + location_id)
   let inventoryItemId = null;
   if (location_id) {
-    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+    // Query existing inventory items for this part at this location
+    const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
       part_id,
-      location_id,
-      quantity_on_hand: quantity,
-      quantity_reserved: 0,
-      purchase_cost: purchase_cost ? Number(purchase_cost) : null,
-      received_date: new Date().toISOString().split('T')[0],
-      notes: note || 'Added via ADD_STOCK action'
+      location_id
     });
-    inventoryItemId = invItem.id;
-    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'CREATE' });
+    
+    if (existingItems.length > 1) {
+      // HARD ERROR: Duplicate records detected
+      throw new Error(
+        `INVENTORY_LOCATION_DUPLICATE_ERROR: Found ${existingItems.length} records for part ${part.part_name} at location ${location_id}. ` +
+        `Call consolidateInventoryLocations() to fix.`
+      );
+    } else if (existingItems.length === 1) {
+      // UPDATE existing record
+      const existing = existingItems[0];
+      const new_quantity = (existing.quantity_on_hand ?? 0) + quantity;
+      
+      await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
+        quantity_on_hand: new_quantity,
+        notes: `${existing.notes || ''}\n[${new Date().toISOString()}] Added ${quantity} via ADD_STOCK`.trim()
+      });
+      
+      inventoryItemId = existing.id;
+      ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'UPDATE' });
+    } else {
+      // CREATE new record (no duplicates)
+      const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+        part_id,
+        location_id,
+        quantity_on_hand: quantity,
+        quantity_reserved: 0,
+        purchase_cost: purchase_cost ? Number(purchase_cost) : null,
+        received_date: new Date().toISOString().split('T')[0],
+        notes: note || 'Added via ADD_STOCK action'
+      });
+      inventoryItemId = invItem.id;
+      ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'CREATE' });
+    }
   }
 
   // Create audit log entry

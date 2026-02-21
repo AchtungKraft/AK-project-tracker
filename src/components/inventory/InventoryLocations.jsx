@@ -177,12 +177,14 @@ export default function InventoryLocations({ onPartClick }) {
     return allocatedPartIds;
   }, [selectedBuildId, buildAssignments, requirements]);
 
-  // Calculate inventory stats for a part at a specific location (or all locations)
+  // PHASE 13B: Calculate inventory stats ONLY from InventoryItem.quantity_on_hand
+  // NEVER use Part.physical_stock per location - it's global, not location-specific
   const getInventoryStats = (partId, locationId = null) => {
     const items = locationId 
       ? inventoryItems.filter(i => i.part_id === partId && i.location_id === locationId)
       : inventoryItems.filter(i => i.part_id === partId);
     
+    // CANONICAL: Sum from InventoryItem records only
     const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
     const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
     
