@@ -16,45 +16,54 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 /**
- * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2A
+ * CANONICAL SUPPLY FLOW ENFORCED - PHASE 10B
  * 
- * OrderPartModal - Create or add to an order for a specific part
+ * OrderPartModal - Create PO from commitment (COMMITMENT-ONLY)
  * 
- * CANONICAL IMPLEMENTATION:
- * - For STOCK ORDERS (no project): Creates PO + Line Item via executeSupplyAction
- * - For PROJECT ORDERS: BLOCKED - must use ProjectSupplyManager with CREATE_PO
+ * PHASE 10B ENFORCEMENT:
+ * - REQUIRES commitment_id - part-only ordering is BLOCKED
+ * - Vendor pre-populated from canonical read model
+ * - Qty pre-populated from to_order
+ * - Cost pre-populated from default_cost
+ * - NO fetching vendor or pricing from Part entity
  * 
- * STOCK ORDER FLOW:
- * 1. Creates or selects an Order entity
- * 2. Uses executeSupplyAction with CREATE_PO action (commitment_scope = STOCK)
- * 3. Updates Part.on_order via canonical path
- * 
- * BLOCKED:
- * - If commitment/projectContext is provided, shows guard and blocks submission
- * - UI-provided unit_price is IGNORED - cost comes from Part.cost
+ * Required props:
+ * {
+ *   commitment_id,  // REQUIRED
+ *   part_id,
+ *   part_name,
+ *   vendor_id,      // Pre-populated from read model
+ *   vendor_name,    // Pre-populated from read model  
+ *   qty_to_order,   // Pre-populated from to_order
+ *   default_cost,   // Pre-populated from read model
+ *   default_retail  // Pre-populated from read model
+ * }
  */
 export default function OrderPartModal({ 
   part, 
   onClose, 
   onPartClick,
-  // NEW: Guard props - if these are provided, block legacy usage
+  // Legacy props - no longer used
   commitment = null,
   projectContext = null,
   isProjectLinked = false
 }) {
-  // PROJECT GUARD: Block legacy modal for project-linked ordering
-  const isBlockedByProjectGuard = !!(commitment || projectContext || isProjectLinked);
+  // PHASE 10B: HARD GUARD - commitment_id is REQUIRED
+  const hasCommitmentId = !!part?.commitment_id;
+  const isBlockedByProjectGuard = !hasCommitmentId;
+  
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [isCreatingOrder, setIsCreatingOrder] = useState(true); // Default to creating new order
   
+  // PHASE 10B: Initialize from canonical read model data - NO Part entity fetch
   const [formData, setFormData] = useState({
     order_id: '',
-    qty_ordered: 1,
-    unit_price: part?.default_cost || '',
+    qty_ordered: part?.qty_to_order || 1,
+    unit_price: part?.default_cost || part?.estimated_cost || '',
     notes: '',
-    // New order fields
-    new_order_vendor_id: part?.default_vendor_id || '',
+    // Pre-populate vendor from read model
+    new_order_vendor_id: part?.vendor_id || '',
     new_order_po_number: '',
     new_order_eta_date: '',
   });
@@ -137,93 +146,50 @@ export default function OrderPartModal({
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
+      // PHASE 10B: HARD GUARD - commitment_id is REQUIRED
+      if (!part?.commitment_id) {
+        throw new Error('PO_MODAL_COMMITMENT_REQUIRED: Cannot create PO without commitment_id');
+      }
+      
       const qty = Number(formData.qty_ordered) || 1;
-      const vendorId = isCreatingOrder ? formData.new_order_vendor_id : null;
+      const vendorId = formData.new_order_vendor_id || part.vendor_id;
+      
+      // PHASE 10B: HARD GUARD - vendor_id is REQUIRED
+      if (!vendorId) {
+        throw new Error('PO_VENDOR_REQUIRED: Cannot create PO without vendor_id');
+      }
 
-      // CANONICAL: Use executeSupplyAction for stock ordering
-      // This creates a "stock commitment" (project_id = null) and PO in one atomic operation
+      // CANONICAL: Use executeSupplyAction with CREATE_PO for commitment-based ordering
       const response = await base44.functions.invoke('executeSupplyAction', {
-        action_type: 'CREATE_STOCK_ORDER',
-        commitment_ids: [], // Empty for new stock order
+        action_type: 'CREATE_PO',
+        commitment_ids: [part.commitment_id],
         payload: {
-          part_id: part.id,
-          qty: qty,
-          vendor_id: vendorId || part.default_vendor_id,
-          order_id: !isCreatingOrder ? formData.order_id : null, // Existing order if selected
-          po_number: isCreatingOrder ? (formData.new_order_po_number || null) : null,
-          eta_date: formData.new_order_eta_date || null,
-          notes: formData.notes || null,
+          vendor_id: vendorId,
+          po_prefix: 'AK',
+          vendor_order_data: {
+            [vendorId]: {
+              order_number: '',
+              order_url: '',
+              order_date: new Date().toISOString().split('T')[0],
+              eta_date: formData.new_order_eta_date || null,
+              notes: formData.notes || null,
+              freight_cost: 0,
+              tariff_cost: 0,
+            }
+          },
           source_surface: 'OrderPartModal',
         },
         dry_run: false
       });
-
-      // If CREATE_STOCK_ORDER is not implemented, fall back to legacy creation
-      // This is a transitional path - will be removed once backend supports CREATE_STOCK_ORDER
-      if (response.data?.error === 'Unknown action_type: CREATE_STOCK_ORDER') {
-        console.warn('[OrderPartModal] Falling back to legacy order creation - implement CREATE_STOCK_ORDER action');
-        
-        let orderId = formData.order_id;
-
-        // Create new order if needed
-        if (isCreatingOrder) {
-          if (!formData.new_order_vendor_id) {
-            throw new Error('Please select a vendor for the new order');
-          }
-          
-          const poNumber = formData.new_order_po_number || await generatePONumber();
-          
-          const newOrder = await base44.entities.Order.create({
-            vendor_id: formData.new_order_vendor_id,
-            po_number: poNumber,
-            order_date: new Date().toISOString().split('T')[0],
-            eta_date: formData.new_order_eta_date || null,
-            status: 'Ordered',
-            notes: formData.notes || null,
-          });
-          orderId = newOrder.id;
-        }
-
-        if (!orderId) {
-          throw new Error('Please select or create an order');
-        }
-
-        // COST ENFORCEMENT: Always use Part.cost
-        const partCost = part.cost ?? part.default_cost ?? 0;
-        
-        const lineItem = await base44.entities.PartPurchaseLineItem.create({
-          order_id: orderId,
-          part_id: part.id,
-          qty_ordered: qty,
-          qty_received: 0,
-          unit_cost: partCost,
-          unit_price: partCost,
-          extended_cost: partCost * qty,
-          line_total: partCost * qty,
-          cost_source_reference: 'part_cost',
-          status: 'Ordered',
-          notes: formData.notes || null,
-          is_legacy: true,
-          legacy_reason: 'Created via OrderPartModal (stock order)',
-        });
-
-        // Update Part.on_order for immediate visibility
-        const currentOnOrder = part.on_order ?? 0;
-        await base44.entities.Part.update(part.id, {
-          on_order: currentOnOrder + qty
-        });
-
-        return { orderId, lineItem, part_id: part.id };
-      }
 
       if (response.data?.error) {
         throw new Error(response.data.error);
       }
 
       return { 
-        orderId: response.data.order_id, 
-        lineItem: response.data.line_item,
-        part_id: part.id 
+        orderId: response.data.created_orders?.[0]?.order_id, 
+        part_id: part.part_id,
+        commitment_id: part.commitment_id
       };
     },
     onSuccess: ({ orderId, part_id }) => {
@@ -251,20 +217,28 @@ export default function OrderPartModal({
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
-          {/* PROJECT GUARD BANNER */}
+          {/* PHASE 10B: COMMITMENT REQUIRED GUARD */}
           {isBlockedByProjectGuard && (
             <div className="p-4 bg-red-900/30 border border-red-600 rounded-lg">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-red-200 font-medium">Legacy Flow Disabled</p>
+                  <p className="text-red-200 font-medium">PO_MODAL_COMMITMENT_REQUIRED</p>
                   <p className="text-sm text-red-300/70 mt-1">
-                    This ordering flow is disabled for project-linked parts. 
-                    Use the "Create PO" button in the Project Supply Manager instead, 
-                    which routes through the Unified Supply Execution Engine.
+                    Phase 10B: All PO creation requires a commitment_id.
+                    Part-only ordering has been removed. Use the Global Order Queue
+                    or Project Supply Manager which provide commitment context.
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+          
+          {/* Pre-populated vendor display */}
+          {hasCommitmentId && part?.vendor_name && (
+            <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
+              <p className="text-xs text-green-400 mb-1">Vendor (from commitment)</p>
+              <p className="text-white font-medium">{part.vendor_name}</p>
             </div>
           )}
 

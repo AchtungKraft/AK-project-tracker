@@ -553,12 +553,14 @@ async function autoReserve(ctx, commitment_ids, payload) {
 /**
  * CREATE_PO - Create purchase order for gap quantity
  * Phase 6.2A: Each vendor PO has its own freight_cost and tariff_cost
+ * Phase 10B: HARD GUARDS for commitment and vendor
  */
 async function createPO(ctx, commitment_ids, payload) {
   const { vendor_id, po_prefix = 'AK', vendor_order_data = {} } = payload;
   
+  // PHASE 10B: HARD GUARD - commitment_ids required
   if (!commitment_ids || commitment_ids.length === 0) {
-    throw new Error('commitment_ids required');
+    throw new Error('PO_COMMITMENT_REQUIRED: commitment_ids array is required for CREATE_PO');
   }
 
   // Fetch all commitments
@@ -577,14 +579,11 @@ async function createPO(ctx, commitment_ids, payload) {
       continue;
     }
 
+    // PHASE 10B: HARD GUARD - vendor_id is REQUIRED
     const effectiveVendor = vendor_id || part.default_vendor_id;
     if (!effectiveVendor) {
-      blocked.push({ 
-        commitment_id: commitment.id, 
-        reason_code: 'NO_VENDOR',
-        part_name: part.part_name
-      });
-      continue;
+      // PHASE 10B: This is now a HARD ERROR, not just a blocked item
+      throw new Error(`PO_VENDOR_REQUIRED: Commitment ${commitment.id} (${part.part_name}) has no vendor_id`);
     }
 
     const required = commitment.required_total ?? commitment.qty_committed ?? 0;

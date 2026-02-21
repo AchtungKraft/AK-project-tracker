@@ -359,7 +359,17 @@ export default function GlobalNeedToOrder() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
               {isOrderable && (
-                <DropdownMenuItem onClick={() => setOrderModalPart({ id: item.part_id, part_name: item.part_name })} className="text-green-400">
+                <DropdownMenuItem onClick={() => setOrderModalPart({
+                  commitment_id: item.commitment_id,
+                  part_id: item.part_id,
+                  part_name: item.part_name,
+                  vendor_id: item.vendor_id,
+                  vendor_name: item.vendor_name,
+                  qty_to_order: item.to_order,
+                  estimated_cost: item.estimated_cost,
+                  default_cost: item.unit_cost,
+                  default_retail: item.unit_retail
+                })} className="text-green-400">
                   <ShoppingCart className="w-4 h-4 mr-2" />
                   Create PO
                 </DropdownMenuItem>
@@ -651,10 +661,16 @@ export default function GlobalNeedToOrder() {
         <CreateBatchOrderModal
           selectedItems={getSelectedItemsData().map(item => ({
             commitment_id: item.commitment_id,
-            part: { id: item.part_id, part_name: item.part_name },
-            requirement: { project_id: item.project_id },
+            part_id: item.part_id,
+            part_name: item.part_name,
+            vendor_id: item.vendor_id,
+            vendor_name: item.vendor_name,
+            project_id: item.project_id,
+            project_name: item.project_name,
             qty_to_order: item.to_order,
             estimated_cost: item.estimated_cost,
+            default_cost: item.unit_cost,
+            default_retail: item.unit_retail,
           }))}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {
