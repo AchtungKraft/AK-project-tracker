@@ -3,20 +3,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 /**
  * rebalancePartReservations - CANONICAL reservation math
  * 
- * Phase 9G: This is the SINGLE SOURCE OF TRUTH for reservation calculations.
+ * Phase 12R-HARDENING: This is the SINGLE SOURCE OF TRUTH for reservation calculations.
  * All other functions MUST call this after any stock/commitment mutation.
  * 
  * Algorithm:
  * 1. Fetch Part.physical_stock
  * 2. Fetch all open commitments for that part (status != cancelled/closed)
- * 3. Order by created_at ASC (FIFO allocation)
- * 4. Greedy allocate stock to commitments
- * 5. Update reserved_from_stock and to_order for each
+ * 3. Order by priority DESC, created_date ASC (highest priority first, then FIFO)
+ * 4. Greedy allocate stock to commitments (accounting for already-installed qty)
+ * 5. Update reserved_from_stock and qty_to_order for each
  * 6. Enforce invariant - HARD FAIL if violated
  * 
- * Invariants enforced:
- * - required_total === reserved_from_stock + covered_from_po + to_order
- * - SUM(reserved_from_stock) <= physical_stock
+ * ============================================================================
+ * CANONICAL INVARIANT (Phase 12R)
+ * ============================================================================
+ * For each commitment:
+ *   remaining_required = required_total - qty_installed
+ *   remaining_required === reserved_from_stock + covered_from_po + qty_to_order
+ * 
+ * Global constraint:
+ *   SUM(reserved_from_stock) <= physical_stock
+ * 
+ * CANONICAL FIELDS ONLY (no legacy fallbacks):
+ * - required_total (not qty_committed)
+ * - reserved_from_stock (not qty_reserved - though we mirror on write)
+ * - qty_to_order (canonical gap field)
+ * - qty_installed (consumed quantity)
+ * ============================================================================
  */
 
 Deno.serve(async (req) => {
@@ -83,19 +96,24 @@ Deno.serve(async (req) => {
     const violations = [];
 
     for (const c of openCommitments) {
-      const required_total = c.required_total ?? c.qty_committed ?? 0;
+      // PHASE 12R: CANONICAL FIELDS ONLY - no legacy fallbacks
+      const required_total = c.required_total ?? 0;
+      const qty_installed = c.qty_installed ?? 0;
       const covered_from_po = c.covered_from_po ?? 0;
-      const current_reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const current_reserved = c.reserved_from_stock ?? 0;
       const current_to_order = c.qty_to_order ?? 0;
 
-      // How much do we need from stock? (required minus what PO covers)
-      const need_from_stock = Math.max(0, required_total - covered_from_po);
+      // PHASE 12R: Account for installed qty - only allocate for remaining need
+      const remaining_required = Math.max(0, required_total - qty_installed);
+      
+      // How much do we need from stock? (remaining minus what PO covers)
+      const need_from_stock = Math.max(0, remaining_required - covered_from_po);
       
       // Allocate from remaining stock
       const new_reserved = Math.min(remaining_stock, need_from_stock);
       
-      // Compute to_order (the gap)
-      const new_to_order = Math.max(0, required_total - new_reserved - covered_from_po);
+      // Compute to_order (the gap after reservation and PO coverage)
+      const new_to_order = Math.max(0, remaining_required - new_reserved - covered_from_po);
 
       // Deduct from remaining
       remaining_stock = Math.max(0, remaining_stock - new_reserved);
@@ -108,6 +126,8 @@ Deno.serve(async (req) => {
           commitment_id: c.id,
           project_id: c.project_id,
           required_total,
+          qty_installed,
+          remaining_required,
           covered_from_po,
           old_reserved: current_reserved,
           new_reserved,
@@ -118,17 +138,21 @@ Deno.serve(async (req) => {
       }
 
       // 5. INVARIANT CHECK - HARD FAIL
+      // PHASE 12R INVARIANT: remaining_required === reserved + covered + to_order
       const sum = new_reserved + covered_from_po + new_to_order;
-      if (Math.abs(sum - required_total) > 0.001) {
+      if (Math.abs(sum - remaining_required) > 0.001) {
         violations.push({
           commitment_id: c.id,
           violation: 'COVERAGE_MATH_VIOLATION',
           required_total,
+          qty_installed,
+          remaining_required,
           reserved: new_reserved,
           covered: covered_from_po,
           to_order: new_to_order,
           sum,
-          diff: sum - required_total
+          expected: remaining_required,
+          diff: sum - remaining_required
         });
       }
     }

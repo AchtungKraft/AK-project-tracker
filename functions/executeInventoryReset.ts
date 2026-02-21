@@ -64,60 +64,107 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // Validate confirm_token format (basic validation)
-    if (!dry_run && confirm_token) {
-      if (!confirm_token.startsWith('reset_')) {
-        return Response.json({ 
-          error: 'INVALID_CONFIRM_TOKEN: Token must be from previewInventoryReset'
-        }, { status: 400 });
-      }
-      
-      // Extract timestamp from token and check it's within 10 minutes
-      const tokenParts = confirm_token.split('_');
-      const tokenTime = parseInt(tokenParts[1], 10);
-      const maxAge = 10 * 60 * 1000; // 10 minutes
-      
-      if (isNaN(tokenTime) || (Date.now() - tokenTime) > maxAge) {
-        return Response.json({ 
-          error: 'CONFIRM_TOKEN_EXPIRED: Preview token is older than 10 minutes. Run previewInventoryReset again.'
-        }, { status: 400 });
-      }
-    }
-
-    // Fetch all parts based on scope
-    let partsToReset = [];
-    
-    if (scope === 'all') {
-      partsToReset = await base44.entities.Part.list();
-    } else if (scope === 'part_ids' && part_ids.length > 0) {
-      partsToReset = await base44.entities.Part.filter({ id: { $in: part_ids } });
-    } else if (scope === 'vendor_id' && vendor_id) {
-      partsToReset = await base44.entities.Part.filter({ default_vendor_id: vendor_id });
-    } else if (scope === 'project_id' && project_id) {
-      const commitments = await base44.entities.PartCommitment.filter({ project_id });
-      const partIdsFromProject = [...new Set(commitments.map(c => c.part_id))];
-      if (partIdsFromProject.length > 0) {
-        partsToReset = await base44.entities.Part.filter({ id: { $in: partIdsFromProject } });
-      }
-    } else {
-      return Response.json({ error: 'Invalid scope or missing parameters' }, { status: 400 });
-    }
-
-    // Filter to only parts with physical_stock > 0
-    const partsWithStock = partsToReset.filter(p => (p.physical_stock ?? 0) > 0);
-    const totalPhysicalStock = partsWithStock.reduce((sum, p) => sum + (p.physical_stock ?? 0), 0);
-
-    // Get all commitments for these parts
-    const partIdsInScope = partsToReset.map(p => p.id);
+    // PHASE 12R-HARDENING: Load and validate token from persisted entity
+    let tokenRecord = null;
+    let partsWithStock = [];
+    let totalPhysicalStock = 0;
     let affectedCommitments = [];
     
-    if (partIdsInScope.length > 0) {
-      const allCommitments = await base44.entities.PartCommitment.list();
-      affectedCommitments = allCommitments.filter(c => 
-        partIdsInScope.includes(c.part_id) &&
-        c.commitment_status !== 'cancelled' &&
-        c.commitment_status !== 'closed'
-      );
+    if (!dry_run && confirm_token) {
+      // Load token from entity
+      const tokens = await base44.entities.InventoryResetToken.filter({ token: confirm_token });
+      tokenRecord = tokens[0];
+      
+      if (!tokenRecord) {
+        return Response.json({ 
+          error: 'INVALID_CONFIRM_TOKEN: Token not found. Run previewInventoryReset first.'
+        }, { status: 400 });
+      }
+      
+      // Check if already used
+      if (tokenRecord.used_at) {
+        return Response.json({ 
+          error: 'TOKEN_ALREADY_USED: This preview token has already been consumed.',
+          used_at: tokenRecord.used_at,
+          used_by: tokenRecord.used_by
+        }, { status: 400 });
+      }
+      
+      // Check expiration
+      if (new Date(tokenRecord.expires_at) < new Date()) {
+        return Response.json({ 
+          error: 'CONFIRM_TOKEN_EXPIRED: Preview token has expired. Run previewInventoryReset again.'
+        }, { status: 400 });
+      }
+      
+      // Verify scope parameters match
+      const storedParams = tokenRecord.scope_params || {};
+      if (tokenRecord.scope !== scope) {
+        return Response.json({ 
+          error: 'SCOPE_MISMATCH: Request scope does not match preview scope.',
+          expected_scope: tokenRecord.scope,
+          received_scope: scope
+        }, { status: 400 });
+      }
+      
+      // Use stored part_ids as authoritative source
+      const authoritative_part_ids = tokenRecord.part_ids_affected || [];
+      
+      if (authoritative_part_ids.length > 0) {
+        const allParts = await base44.entities.Part.filter({ id: { $in: authoritative_part_ids } });
+        partsWithStock = allParts.filter(p => (p.physical_stock ?? 0) > 0);
+      }
+      
+      totalPhysicalStock = partsWithStock.reduce((sum, p) => sum + (p.physical_stock ?? 0), 0);
+      
+      // Get commitments for these parts
+      if (authoritative_part_ids.length > 0) {
+        const allCommitments = await base44.entities.PartCommitment.list();
+        affectedCommitments = allCommitments.filter(c => 
+          authoritative_part_ids.includes(c.part_id) &&
+          c.commitment_status !== 'cancelled' &&
+          c.commitment_status !== 'closed'
+        );
+      }
+      
+      // Mark token as used
+      await base44.asServiceRole.entities.InventoryResetToken.update(tokenRecord.id, {
+        used_at: timestamp,
+        used_by: user.email
+      });
+      
+    } else {
+      // DRY RUN: Fetch parts based on scope (original logic)
+      let partsToReset = [];
+      
+      if (scope === 'all') {
+        partsToReset = await base44.entities.Part.list();
+      } else if (scope === 'part_ids' && part_ids.length > 0) {
+        partsToReset = await base44.entities.Part.filter({ id: { $in: part_ids } });
+      } else if (scope === 'vendor_id' && vendor_id) {
+        partsToReset = await base44.entities.Part.filter({ default_vendor_id: vendor_id });
+      } else if (scope === 'project_id' && project_id) {
+        const commitments = await base44.entities.PartCommitment.filter({ project_id });
+        const partIdsFromProject = [...new Set(commitments.map(c => c.part_id))];
+        if (partIdsFromProject.length > 0) {
+          partsToReset = await base44.entities.Part.filter({ id: { $in: partIdsFromProject } });
+        }
+      } else {
+        return Response.json({ error: 'Invalid scope or missing parameters' }, { status: 400 });
+      }
+
+      partsWithStock = partsToReset.filter(p => (p.physical_stock ?? 0) > 0);
+      totalPhysicalStock = partsWithStock.reduce((sum, p) => sum + (p.physical_stock ?? 0), 0);
+
+      const partIdsInScope = partsToReset.map(p => p.id);
+      if (partIdsInScope.length > 0) {
+        const allCommitments = await base44.entities.PartCommitment.list();
+        affectedCommitments = allCommitments.filter(c => 
+          partIdsInScope.includes(c.part_id) &&
+          c.commitment_status !== 'cancelled' &&
+          c.commitment_status !== 'closed'
+        );
+      }
     }
 
     // DRY RUN - just return what would happen
@@ -189,7 +236,24 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Run validateSupplyIntegrity
+    // 3. PHASE 12R-HARDENING: Invoke rebalance for each affected part
+    const rebalanceResults = [];
+    const uniquePartIds = [...new Set(partsWithStock.map(p => p.id))];
+    
+    for (const part_id of uniquePartIds) {
+      try {
+        const rebalanceResponse = await base44.asServiceRole.functions.invoke('rebalancePartReservations', {
+          part_id,
+          dry_run: false
+        });
+        rebalanceResults.push({ part_id, success: true, result: rebalanceResponse.data });
+      } catch (err) {
+        rebalanceResults.push({ part_id, success: false, error: err.message });
+        results.errors.push({ part_id, error: `Rebalance failed: ${err.message}` });
+      }
+    }
+
+    // 4. Run validateSupplyIntegrity
     let validationResult = null;
     try {
       const validationResponse = await base44.asServiceRole.functions.invoke('validateSupplyIntegrity', {});
@@ -217,8 +281,19 @@ Deno.serve(async (req) => {
       
       validation_after_reset: validationResult?.summary || validationResult,
       
+      rebalance_summary: {
+        parts_rebalanced: rebalanceResults.filter(r => r.success).length,
+        rebalance_errors: rebalanceResults.filter(r => !r.success).length
+      },
+      
+      token_used: tokenRecord ? {
+        token: tokenRecord.token,
+        created_at: tokenRecord.created_date,
+        used_at: timestamp
+      } : null,
+      
       message: results.errors.length === 0 
-        ? `✅ Reset complete: ${results.parts_reset} parts, ${results.commitments_updated} commitments`
+        ? `✅ Reset complete: ${results.parts_reset} parts, ${results.commitments_updated} commitments, ${rebalanceResults.filter(r => r.success).length} rebalanced`
         : `⚠️ Reset completed with ${results.errors.length} errors`
     });
 

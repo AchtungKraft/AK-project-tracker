@@ -121,10 +121,27 @@ Deno.serve(async (req) => {
 
     // Generate preview token for later use
     const previewToken = `reset_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // Store preview token (expires in 10 minutes)
-    // In real impl, would use a cache or temp table
-    // For now, return it for client to pass back
+    // PHASE 12R-HARDENING: Persist preview token to entity for secure validation
+    await base44.asServiceRole.entities.InventoryResetToken.create({
+      token: previewToken,
+      scope,
+      scope_params: { part_ids, vendor_id, project_id },
+      part_ids_affected: partsWithStock.map(p => p.id),
+      summary: {
+        parts_in_scope: partsToReset.length,
+        parts_with_stock: partsWithStock.length,
+        total_physical_stock_to_remove: totalPhysicalStock,
+        commitments_in_scope: affectedCommitments.length,
+        commitments_with_reservations: commitmentsWithReservations.length,
+        total_reserved_to_release: totalReserved,
+        total_to_order_increase: totalToOrderIncrease
+      },
+      expires_at: expiresAt,
+      used_at: null,
+      used_by: null
+    });
 
     return Response.json({
       success: true,

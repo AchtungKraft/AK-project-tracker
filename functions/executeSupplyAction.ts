@@ -480,74 +480,95 @@ function mapSourceType(source_type) {
 
 /**
  * AUTO_RESERVE - Reserve from available physical stock
+ * 
+ * PHASE 12R-HARDENING: Delegates to canonical rebalancePartReservations
+ * to prevent drift between manual reservation logic and rebalance.
  */
 async function autoReserve(ctx, commitment_ids, payload) {
-  const results = [];
+  if (!commitment_ids || commitment_ids.length === 0) {
+    return { results: [], message: 'No commitments provided' };
+  }
 
-  for (const commitmentId of (commitment_ids || [])) {
+  // Get unique part_ids from commitments
+  const partIds = new Set();
+  const commitmentDetails = [];
+  
+  for (const commitmentId of commitment_ids) {
     const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
     if (!commitment) continue;
-
-    const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
-    if (!part) continue;
-
-    const required = commitment.required_total ?? commitment.qty_committed ?? 0;
-    const current_reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
-    const physical_stock = part.physical_stock ?? 0;
-
-    // Get other allocations
-    const otherCommitments = await ctx.base44.entities.PartCommitment.filter({
-      part_id: commitment.part_id,
-      id: { $ne: commitmentId },
-      commitment_status: { $nin: ['cancelled', 'closed'] }
-    });
     
-    const other_allocated = otherCommitments.reduce((sum, c) => {
-      return sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0);
-    }, 0);
-
-    const available = Math.max(0, physical_stock - other_allocated - current_reserved);
-    const can_reserve = Math.min(available, required - current_reserved);
-    const new_reserved = current_reserved + can_reserve;
-
-    if (ctx.dry_run) {
-      results.push({
-        commitment_id: commitmentId,
-        current_reserved,
-        available,
-        can_reserve,
-        new_reserved
-      });
-      continue;
-    }
-
-    if (can_reserve > 0) {
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-        reserved_from_stock: new_reserved,
-        qty_reserved: new_reserved,
-        qty_to_order: Math.max(0, required - new_reserved),
-        commitment_version: (commitment.commitment_version ?? 0) + 1
-      });
-
-      ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'AUTO_RESERVE' });
-      ctx.lifecycle_events.push({
-        entity_type: 'PartCommitment',
-        entity_id: commitmentId,
-        event_type: 'AUTO_RESERVE',
-        actor_email: ctx.user.email,
-        details: JSON.stringify({ reserved: can_reserve, new_total: new_reserved }),
-        created_date: ctx.timestamp
-      });
-    }
-
-    results.push({
+    partIds.add(commitment.part_id);
+    commitmentDetails.push({
       commitment_id: commitmentId,
-      reserved: can_reserve,
-      new_reserved
+      part_id: commitment.part_id,
+      old_reserved: commitment.reserved_from_stock ?? 0
     });
   }
 
-  return { results };
+  // PHASE 12R: Delegate to canonical rebalance for each affected part
+  const rebalanceResults = [];
+  
+  for (const part_id of partIds) {
+    const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
+      part_id,
+      dry_run: ctx.dry_run
+    });
+    
+    if (rebalanceResult.data?.error) {
+      throw new Error(rebalanceResult.data.error);
+    }
+    
+    rebalanceResults.push(rebalanceResult.data);
+    
+    if (!ctx.dry_run) {
+      ctx.mutations.push({ entity: 'Part', id: part_id, action: 'AUTO_RESERVE_REBALANCE' });
+    }
+  }
+
+  // Build results from rebalance output
+  const results = commitmentDetails.map(cd => {
+    // Find the rebalance result for this part
+    const partRebalance = rebalanceResults.find(r => r.part_id === cd.part_id);
+    const update = partRebalance?.updates?.find(u => u.commitment_id === cd.commitment_id);
+    
+    return {
+      commitment_id: cd.commitment_id,
+      part_id: cd.part_id,
+      old_reserved: cd.old_reserved,
+      new_reserved: update?.new_reserved ?? cd.old_reserved,
+      delta_reserved: update?.delta_reserved ?? 0,
+      rebalanced: !!update
+    };
+  });
+
+  // Emit lifecycle events for commitments that changed
+  if (!ctx.dry_run) {
+    for (const r of results) {
+      if (r.delta_reserved > 0) {
+        ctx.lifecycle_events.push({
+          commitment_id: r.commitment_id,
+          event_type: 'AUTO_RESERVE',
+          actor_email: ctx.user.email,
+          trigger_source: 'UNIFIED_ENGINE',
+          triggered_by: ctx.user.email,
+          metadata: JSON.stringify({ 
+            reserved: r.delta_reserved, 
+            new_total: r.new_reserved,
+            via_rebalance: true 
+          }),
+          event_date: ctx.timestamp
+        });
+      }
+    }
+  }
+
+  return { 
+    results,
+    rebalance_summary: {
+      parts_rebalanced: partIds.size,
+      commitments_updated: results.filter(r => r.delta_reserved !== 0).length
+    }
+  };
 }
 
 /**
@@ -986,9 +1007,15 @@ async function install(ctx, commitment_ids, payload) {
 
   const new_installed = current_installed + qty_to_install;
   
-  // Update commitment - qty_installed increases
+  // PHASE 12R-HARDENING: Decrement reserved_from_stock when installing
+  // Installing consumes reserved stock, so reserved should decrease
+  const new_reserved = Math.max(0, reserved - qty_to_install);
+  
+  // Update commitment - qty_installed increases, reserved_from_stock decreases
   await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
     qty_installed: new_installed,
+    reserved_from_stock: new_reserved,
+    qty_reserved: new_reserved, // Mirror legacy field
     commitment_status: new_installed >= required ? 'installed' : commitment.commitment_status,
     commitment_version: (commitment.commitment_version ?? 0) + 1
   });
@@ -1007,7 +1034,8 @@ async function install(ctx, commitment_ids, payload) {
     });
     ctx.mutations.push({ entity: 'Part', id: part.id, action: 'INSTALL' });
     
-    // PHASE 9G: Call canonical rebalance for this part (other commitments may now be reservable)
+    // PHASE 12R: Call canonical rebalance for this part
+    // Rebalance will recalculate remaining needs accounting for qty_installed
     const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
       part_id: part.id,
       dry_run: false
