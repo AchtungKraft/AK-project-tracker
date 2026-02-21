@@ -1,14 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * validateSupplyIntegrity - Phase 9H Step 8
+ * validateSupplyIntegrity - Phase 13B
  * 
  * Admin tool for comprehensive supply math validation.
  * 
  * Validates ALL invariants:
  * CHECK A - Billing Flag Integrity: requires_prepay must be explicit boolean
  * CHECK B - Inventory Drift: physical_stock >= SUM(reserved_from_stock)
- * CHECK C - Coverage Invariant: required_total = reserved + covered + to_order
+ * CHECK C - Coverage Invariant: remaining_required = reserved + covered + to_order
+ * CHECK D - Location Sum Integrity: SUM(InventoryItem.quantity_on_hand) = Part.physical_stock
  * 
  * Additional checks:
  * - Stock Non-Negative: physical_stock >= 0
@@ -35,9 +36,10 @@ Deno.serve(async (req) => {
 
     // Fetch data
     const filter = project_id ? { project_id } : {};
-    const [commitments, parts] = await Promise.all([
+    const [commitments, parts, inventoryItems] = await Promise.all([
       scan_all ? base44.asServiceRole.entities.PartCommitment.list() : base44.asServiceRole.entities.PartCommitment.filter(filter),
       base44.asServiceRole.entities.Part.list(),
+      base44.asServiceRole.entities.InventoryItem.list()
     ]);
 
     const partMap = new Map(parts.map(p => [p.id, p]));
@@ -94,7 +96,6 @@ Deno.serve(async (req) => {
     // ================================================================
     // PHASE 13B: CHECK D - InventoryItem SUM vs Part.physical_stock
     // ================================================================
-    const inventoryItems = await base44.asServiceRole.entities.InventoryItem.list();
     const locationSumViolations = [];
     
     const partLocationSums = new Map();
