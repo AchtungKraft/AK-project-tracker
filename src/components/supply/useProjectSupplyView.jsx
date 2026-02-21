@@ -235,6 +235,14 @@ export function useSupplyAction() {
           ...context,
           invalidateAll: true,
         });
+        
+        // PHASE 9I: Show toast for auto-reservation
+        if (data.toast_notification) {
+          // Import toast dynamically to avoid circular deps
+          import('sonner').then(({ toast }) => {
+            toast.success(data.toast_notification.message);
+          });
+        }
       }
     },
   });
