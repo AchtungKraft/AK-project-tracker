@@ -325,7 +325,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   // =========== DRY RUN PREVIEW ===========
   if (ctx.dry_run) {
     // Get preview from rebalance
-    const rebalancePreview = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    const rebalancePreview = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
       part_id: part.id,
       dry_run: true
     });
@@ -380,7 +380,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'ADJUST_REQUIRED' });
   
   // PHASE 9G: Call canonical rebalance for this part
-  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+  const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id: part.id,
     dry_run: ctx.dry_run
   });
@@ -875,7 +875,7 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   }
 
   // PHASE 9G: Call canonical rebalance for this part
-  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+  const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id: part.id,
     dry_run: false
   });
@@ -1188,7 +1188,7 @@ async function cancelCommitment(ctx, commitment_ids, payload) {
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CANCEL' });
   
   // PHASE 9G: Call canonical rebalance for this part (released stock may be allocated elsewhere)
-  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+  const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id: commitment.part_id,
     dry_run: false
   });
@@ -1276,7 +1276,7 @@ async function addStock(ctx, payload) {
   ctx.mutations.push({ entity: 'Part', id: part_id, action: 'ADD_STOCK' });
 
   // PHASE 9G: Call canonical rebalance for this part
-  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+  const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
     part_id,
     dry_run: false
   });

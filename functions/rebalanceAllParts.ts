@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       results.parts_processed++;
 
       try {
-        const rebalanceResult = await base44.functions.invoke('rebalancePartReservations', {
+        const rebalanceResult = await base44.asServiceRole.functions.invoke('rebalancePartReservations', {
           part_id: part.id,
           dry_run
         });
