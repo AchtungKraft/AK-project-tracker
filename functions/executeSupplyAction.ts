@@ -312,60 +312,26 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     new_required = Math.max(0, current_required + (required_total_delta ?? 0));
   }
 
-  // =========== PHASE 9F: MANDATORY AUTO-RESERVE ENFORCEMENT ===========
-  // Get part inventory state
-  const physical_stock = part.physical_stock ?? 0;
+  // =========== PHASE 9G: DEFER TO CANONICAL REBALANCE ===========
+  // Reservation math is handled by rebalancePartReservations after commit
+  // Here we just prepare the data - rebalance will be called at the end
   
-  // Get total allocated to OTHER commitments for this part
-  const otherCommitments = await ctx.base44.entities.PartCommitment.filter({
-    part_id: part.id,
-    id: commitmentId ? { $ne: commitmentId } : undefined,
-    commitment_status: { $nin: ['cancelled', 'closed'] }
-  });
-  
-  const other_allocated = otherCommitments.reduce((sum, c) => {
-    return sum + (c.reserved_from_stock ?? c.qty_reserved ?? 0);
-  }, 0);
-  
-  // Calculate current reservation for THIS commitment (not including in other_allocated)
-  const current_reserved = commitment?.reserved_from_stock ?? commitment?.qty_reserved ?? 0;
-  
-  // Available = physical - other allocations (current commitment's reservation is freed for recomputation)
-  const available = Math.max(0, physical_stock - other_allocated);
-  
-  // MANDATORY AUTO-RESERVE: Reserve all available stock up to required
-  const auto_reserve_amount = Math.min(available, new_required);
-  const new_reserved = auto_reserve_amount;
-  
-  // Calculate covered_from_po (unchanged by this action)
   const covered_from_po = commitment?.covered_from_po ?? 0;
   
-  // Compute to_order (the gap)
-  const to_order = Math.max(0, new_required - new_reserved - covered_from_po);
-  
-  // =========== PHASE 9F: HARD INVARIANT ENFORCEMENT ===========
-  // If physical stock is available and there's still a gap, fail hard
-  const remaining_available = Math.max(0, available - new_reserved);
-  if (physical_stock > 0 && to_order > 0 && remaining_available > 0) {
-    throw new Error(
-      `AUTO_RESERVE_INVARIANT_FAILED: part=${part.id} physical=${physical_stock} ` +
-      `other_allocated=${other_allocated} available=${available} new_reserved=${new_reserved} ` +
-      `to_order=${to_order} remaining_available=${remaining_available}. ` +
-      `System MUST reserve all available stock before allowing order creation.`
-    );
-  }
-
-  // Compute coverage status
-  const coverage_total = new_reserved + covered_from_po;
-  let coverage_status = 'NOT_COVERED';
-  if (coverage_total >= new_required && new_required > 0) {
-    coverage_status = 'FULLY_COVERED';
-  } else if (coverage_total > 0) {
-    coverage_status = 'PARTIALLY_COVERED';
-  }
+  // Temporary values - will be recomputed by rebalance
+  const new_reserved = 0; // Placeholder
+  const to_order = Math.max(0, new_required - covered_from_po); // Placeholder
 
   // =========== DRY RUN PREVIEW ===========
   if (ctx.dry_run) {
+    // Get preview from rebalance
+    const rebalancePreview = await ctx.base44.functions.invoke('rebalancePartReservations', {
+      part_id: part.id,
+      dry_run: true
+    });
+    
+    const physical_stock = part.physical_stock ?? 0;
+    
     const preview = {
       commitment_id: commitmentId ?? 'NEW',
       is_new_commitment: isNewCommitment || !commitmentId,
@@ -375,18 +341,12 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       old_required: current_required,
       new_required,
       delta: new_required - current_required,
-      old_reserved: current_reserved,
-      new_reserved,
       covered_from_po,
-      to_order,
-      coverage_status,
-      coverage_pct: new_required > 0 ? Math.round((coverage_total / new_required) * 100) : 100,
       source_type,
+      rebalance_preview: rebalancePreview.data,
       inventory_snapshot: {
         physical_stock,
-        other_allocated,
-        available,
-        on_order_total: 0 // Would need line item query
+        on_order_total: 0
       }
     };
     return { preview };
@@ -395,16 +355,14 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   // =========== PERSIST CHANGES ===========
   const retail_effective = part.retail_override ?? part.retail_matrix_price ?? part.default_retail ?? 0;
   
+  // Update commitment with required_total and covered_from_po
+  // reserved_from_stock and to_order will be set by rebalance
   const updateData = {
     required_total: new_required,
-    reserved_from_stock: new_reserved,
     covered_from_po,
     supply_source_type: mapSourceType(source_type),
-    // Legacy fields kept in sync during migration
+    // Legacy fields
     qty_committed: new_required,
-    qty_reserved: new_reserved,
-    qty_to_order: to_order,
-    coverage_status,
     // Pricing recompute
     planned_cost_total: (commitment?.unit_cost_snapshot ?? part.cost ?? 0) * new_required,
     planned_retail_total: (commitment?.unit_retail_snapshot ?? retail_effective) * new_required,
@@ -421,8 +379,23 @@ async function adjustRequired(ctx, commitment_ids, payload) {
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'ADJUST_REQUIRED' });
   
-  // Only emit lifecycle event for actual changes, not initial creation
-  if (!isNewCommitment && (new_required !== current_required || new_reserved !== current_reserved)) {
+  // PHASE 9G: Call canonical rebalance for this part
+  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    part_id: part.id,
+    dry_run: ctx.dry_run
+  });
+  
+  if (rebalanceResult.data?.error) {
+    throw new Error(rebalanceResult.data.error);
+  }
+  
+  // Get updated values from rebalance
+  const updatedCommitment = rebalanceResult.data?.updates?.find(u => u.commitment_id === commitmentId);
+  const final_reserved = updatedCommitment?.new_reserved ?? 0;
+  const final_to_order = updatedCommitment?.new_to_order ?? 0;
+  
+  // Emit lifecycle event for actual changes
+  if (!isNewCommitment && new_required !== current_required) {
     const event_type = new_required > current_required ? 'QTY_INCREASED' : 'QTY_DECREASED';
     ctx.lifecycle_events.push({
       commitment_id: commitmentId,
@@ -430,8 +403,8 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       actor_email: ctx.user.email,
       trigger_source: 'UNIFIED_ENGINE',
       triggered_by: ctx.user.email,
-      old_values: JSON.stringify({ required_total: current_required, reserved_from_stock: current_reserved }),
-      new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: new_reserved, to_order }),
+      old_values: JSON.stringify({ required_total: current_required }),
+      new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: final_reserved, to_order: final_to_order }),
       part_id: part.id,
       project_id: commitment?.project_id || project_id,
       qty_delta: new_required - current_required,
@@ -441,18 +414,28 @@ async function adjustRequired(ctx, commitment_ids, payload) {
 
   // =========== RETURN VIEW MODEL ROW ===========
   const [project] = await ctx.base44.entities.Project.filter({ id: commitment?.project_id || project_id });
+  const physical_stock = part.physical_stock ?? 0;
+  
+  // Compute coverage status from final values
+  const coverage_total = final_reserved + covered_from_po;
+  let coverage_status = 'NOT_COVERED';
+  if (coverage_total >= new_required && new_required > 0) {
+    coverage_status = 'FULLY_COVERED';
+  } else if (coverage_total > 0) {
+    coverage_status = 'PARTIALLY_COVERED';
+  }
   
   return {
     success: true,
     commitment_id: commitmentId,
     is_new_commitment: isNewCommitment,
-    // Canonical state
+    // Canonical state (from rebalance)
     required_total: new_required,
-    reserved_from_stock: new_reserved,
+    reserved_from_stock: final_reserved,
     covered_from_po,
-    to_order,
+    to_order: final_to_order,
     coverage_status,
-    coverage_pct: new_required > 0 ? Math.round(((new_reserved + covered_from_po) / new_required) * 100) : 100,
+    coverage_pct: new_required > 0 ? Math.round((coverage_total / new_required) * 100) : 100,
     // Context
     project_id: commitment?.project_id || project_id,
     project_name: project?.name,
@@ -462,12 +445,12 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     // Inventory snapshot
     inventory_snapshot: {
       physical_stock,
-      allocated_total: other_allocated + new_reserved,
-      available: Math.max(0, physical_stock - other_allocated - new_reserved),
-      on_order_total: 0 // TODO: sum from line items
+      on_order_total: 0
     },
     // Next action hint
-    next_action: to_order > 0 ? 'CREATE_PO' : (new_reserved > (commitment?.qty_installed ?? 0) ? 'INSTALL' : 'COMPLETE')
+    next_action: final_to_order > 0 ? 'CREATE_PO' : (final_reserved > (commitment?.qty_installed ?? 0) ? 'INSTALL' : 'COMPLETE'),
+    // Rebalance details
+    rebalance_result: rebalanceResult.data
   };
 }
 
@@ -824,12 +807,10 @@ async function receiveBatch(ctx, payload) {
 /**
  * Receive a single line item
  * 
- * PHASE 9C: RECEIVE LOGIC
+ * PHASE 9G: RECEIVE LOGIC
  * - part.physical_stock += received_qty
- * - commitment.qty_received += received_qty
  * - commitment.covered_from_po decreases (received moves to physical)
- * - commitment.reserved_from_stock increases (auto-reserve received)
- * - INVARIANT is maintained: required = reserved + covered + to_order
+ * - Call rebalancePartReservations to redistribute stock
  */
 async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   // Fetch line item
@@ -868,36 +849,39 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     status: line_status
   });
 
-  // PHASE 9C: Update part physical stock (RECEIVE increases physical)
+  // Update part physical stock (RECEIVE increases physical)
   const new_physical = (part.physical_stock ?? 0) + qty_received;
   await ctx.base44.asServiceRole.entities.Part.update(part.id, {
     physical_stock: new_physical
   });
 
-  // Update commitment if linked
+  // Update commitment if linked - only update covered_from_po
   if (lineItem.commitment_id) {
     const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
     if (commitment) {
-      // PHASE 9C: Receiving moves from covered_from_po to reserved_from_stock
-      // This maintains the invariant: required = reserved + covered + to_order
-      // covered decreases by received, reserved increases by received
+      // Receiving decreases covered_from_po (goods moved from PO to physical stock)
       const current_covered = commitment.covered_from_po ?? 0;
-      const current_reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
-      
       const new_covered = Math.max(0, current_covered - qty_received);
-      const new_reserved = current_reserved + qty_received;
       
       await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, {
         covered_from_po: new_covered,
-        reserved_from_stock: new_reserved,
         qty_received: (commitment.qty_received ?? 0) + qty_received,
-        qty_reserved: new_reserved,
         commitment_status: 'received',
         commitment_version: (commitment.commitment_version ?? 0) + 1
       });
 
       ctx.mutations.push({ entity: 'PartCommitment', id: lineItem.commitment_id, action: 'RECEIVE' });
     }
+  }
+
+  // PHASE 9G: Call canonical rebalance for this part
+  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    part_id: part.id,
+    dry_run: false
+  });
+  
+  if (rebalanceResult.data?.error) {
+    throw new Error(rebalanceResult.data.error);
   }
 
   // Create inventory receipt
@@ -929,7 +913,8 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     part_name: part.part_name,
     qty_received,
     new_physical_stock: new_physical,
-    line_status
+    line_status,
+    rebalance_result: rebalanceResult.data
   };
 }
 
@@ -1083,13 +1068,10 @@ async function reverseInstall(ctx, commitment_ids, payload) {
   }
 
   const new_installed = current_installed - qty_to_reverse;
-  const current_reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
 
-  // Update commitment
+  // Update commitment - qty_installed decreases
   await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
     qty_installed: new_installed,
-    reserved_from_stock: affects_stock ? current_reserved + qty_to_reverse : current_reserved,
-    qty_reserved: affects_stock ? current_reserved + qty_to_reverse : current_reserved,
     commitment_status: 'allocated',
     commitment_version: (commitment.commitment_version ?? 0) + 1
   });
@@ -1101,6 +1083,16 @@ async function reverseInstall(ctx, commitment_ids, payload) {
       physical_stock: new_physical
     });
     ctx.mutations.push({ entity: 'Part', id: part.id, action: 'REVERSE_INSTALL' });
+    
+    // PHASE 9G: Call canonical rebalance for this part
+    const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+      part_id: part.id,
+      dry_run: false
+    });
+    
+    if (rebalanceResult.data?.error) {
+      throw new Error(rebalanceResult.data.error);
+    }
   }
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'REVERSE_INSTALL' });
@@ -1188,6 +1180,16 @@ async function cancelCommitment(ctx, commitment_ids, payload) {
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CANCEL' });
   
+  // PHASE 9G: Call canonical rebalance for this part (released stock may be allocated elsewhere)
+  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    part_id: commitment.part_id,
+    dry_run: false
+  });
+  
+  if (rebalanceResult.data?.error) {
+    throw new Error(rebalanceResult.data.error);
+  }
+  
   ctx.lifecycle_events.push({
     commitment_id: commitmentId,
     event_type: 'COMMITMENT_CANCELLED',
@@ -1203,7 +1205,8 @@ async function cancelCommitment(ctx, commitment_ids, payload) {
   return {
     commitment_id: commitmentId,
     cancellation_type,
-    stock_released: reserved
+    stock_released: reserved,
+    rebalance_result: rebalanceResult.data
   };
 }
 
@@ -1264,6 +1267,16 @@ async function addStock(ctx, payload) {
   });
 
   ctx.mutations.push({ entity: 'Part', id: part_id, action: 'ADD_STOCK' });
+
+  // PHASE 9G: Call canonical rebalance for this part
+  const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    part_id,
+    dry_run: false
+  });
+  
+  if (rebalanceResult.data?.error) {
+    throw new Error(rebalanceResult.data.error);
+  }
 
   // Create InventoryItem for location tracking (optional, backward compatibility)
   let inventoryItemId = null;
