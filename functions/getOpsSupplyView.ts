@@ -140,17 +140,32 @@ Deno.serve(async (req) => {
       // Source type mapping
       const source_type = mapSourceType(c.supply_source_type);
 
+      // PHASE 9K-B: Normalize billing flags to explicit booleans
+      const requires_prepay = c.requires_prepay === true;
+      const prepay_ok = c.prepay_ok === true || requires_prepay === false;
+      const has_vendor = !!vendor;
+
       // Determine next action and blocks
       const { next_action, block_reason_code } = computeNextAction(
-        { required_total, reserved_from_stock, covered_from_po, qty_installed, requires_prepay: c.requires_prepay, prepay_satisfied_at: c.prepay_satisfied_at },
-        !!vendor,
+        { required_total, reserved_from_stock, covered_from_po, qty_installed, requires_prepay, prepay_ok },
+        has_vendor,
         poolBalance,
         exposure_gap
       );
 
-      // Check if orderable
-      const is_orderable = to_order > 0 && !block_reason_code && source_type === 'SHOP_PURCHASED';
-      const is_funding_blocked = block_reason_code === 'INSUFFICIENT_FUNDS' || block_reason_code === 'PREPAY_REQUIRED';
+      // PHASE 9K-B: is_orderable = (to_order > 0) AND (requires_prepay === false OR prepay_ok === true) AND has_vendor
+      const is_orderable = 
+        to_order > 0 && 
+        has_vendor && 
+        (requires_prepay === false || prepay_ok === true);
+      
+      // PHASE 9K-B: Server-side assertion - detect invalid blocks
+      if (to_order > 0 && requires_prepay === false && has_vendor && !is_orderable) {
+        console.error(`[INVALID_ORDER_BLOCK] commitment=${c.id} to_order=${to_order} requires_prepay=${requires_prepay} prepay_ok=${prepay_ok} has_vendor=${has_vendor}`);
+        throw new Error(`INVALID_ORDER_BLOCK: commitment ${c.id} should be orderable`);
+      }
+      
+      const is_funding_blocked = block_reason_code === 'PREPAY_REQUIRED';
 
       // Inventory snapshot
       const physical_stock = part?.physical_stock ?? 0;
@@ -210,11 +225,12 @@ Deno.serve(async (req) => {
         pool_balance: poolBalance,
         billing_status: c.billing_status || 'billable',
 
-        // Ordering flags
+        // Ordering flags - PHASE 9K-B: EXPLICIT BOOLEANS ONLY
         is_orderable,
         is_funding_blocked,
-        requires_prepay: c.requires_prepay || false,
-        prepay_ok: !c.requires_prepay || !!c.prepay_satisfied_at,
+        has_vendor,
+        requires_prepay,
+        prepay_ok,
 
         // Inventory snapshot
         inventory_snapshot,
@@ -330,6 +346,15 @@ function mapSourceType(legacyType) {
   return mapping[legacyType] || 'SHOP_PURCHASED';
 }
 
+/**
+ * PHASE 9K-B: SIMPLIFIED ORDERING GATING
+ * 
+ * ORDERING MODE gating is ONLY:
+ * - NO_VENDOR: no vendor assigned
+ * - PREPAY_REQUIRED: requires_prepay === true AND prepay_ok !== true
+ * 
+ * NO OTHER BILLING CHECKS (no invoice, no pool, no exposure)
+ */
 function computeNextAction(commitment, partHasVendor, poolBalance, exposureGap) {
   const {
     required_total = 0,
@@ -337,21 +362,20 @@ function computeNextAction(commitment, partHasVendor, poolBalance, exposureGap) 
     covered_from_po = 0,
     qty_installed = 0,
     requires_prepay = false,
-    prepay_satisfied_at = null,
+    prepay_ok = false,
   } = commitment;
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
 
+  // PHASE 9K-B: ONLY vendor and prepay block ordering - NO invoice/pool checks
   if (to_order > 0 && !partHasVendor) {
     return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR' };
   }
-  if (to_order > 0 && requires_prepay && !prepay_satisfied_at) {
+  if (to_order > 0 && requires_prepay === true && prepay_ok !== true) {
     return { next_action: 'ALLOCATE_POOL', block_reason_code: 'PREPAY_REQUIRED' };
   }
-  if (to_order > 0 && exposureGap > 0 && exposureGap > poolBalance) {
-    return { next_action: 'ALLOCATE_POOL', block_reason_code: 'INSUFFICIENT_FUNDS' };
-  }
+  // REMOVED: exposure_gap / pool balance checks - these do NOT block ordering
   if (to_order > 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null };
   }

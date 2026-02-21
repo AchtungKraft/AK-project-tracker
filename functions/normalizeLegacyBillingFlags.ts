@@ -51,23 +51,29 @@ Deno.serve(async (req) => {
 
       const project = projectMap.get(commitment.project_id);
       const current_requires_prepay = commitment.requires_prepay;
+      const current_prepay_ok = commitment.prepay_ok;
 
-      // Check if normalization is needed
+      // PHASE 9K-B: Check ALL billing flags for normalization
       let needs_normalization = false;
       let new_requires_prepay = false; // Default to false (ORDER WITHOUT INVOICE)
+      let new_prepay_ok = true; // Default to true when requires_prepay is false
+      let normalization_reason = null;
 
       // Rule 1: If requires_prepay is null or undefined → set to false
       if (current_requires_prepay === null || current_requires_prepay === undefined) {
         needs_normalization = true;
         new_requires_prepay = false;
+        new_prepay_ok = true;
+        normalization_reason = 'REQUIRES_PREPAY_NULL';
       }
       // Rule 2: If project is not forward model → set to false
       else if (project && project.financial_model_version !== 'forward') {
         needs_normalization = true;
         new_requires_prepay = false;
+        new_prepay_ok = true;
+        normalization_reason = 'LEGACY_PROJECT';
       }
-      // Rule 3: If already explicitly boolean, check if it's a legacy commitment
-      // Legacy commitments (before forward migration) default to false
+      // Rule 3: If already explicitly boolean, check prepay_ok
       else if (typeof current_requires_prepay === 'boolean') {
         // Check if project was migrated and commitment predates migration
         if (project?.financial_model_migrated_at) {
@@ -77,10 +83,20 @@ Deno.serve(async (req) => {
             // Legacy commitment - should default to false
             needs_normalization = true;
             new_requires_prepay = false;
+            new_prepay_ok = true;
+            normalization_reason = 'LEGACY_COMMITMENT';
           }
         }
         
-        // If already boolean and doesn't need migration adjustment, it's normalized
+        // Rule 4: If requires_prepay is false but prepay_ok is not true → fix it
+        if (!needs_normalization && current_requires_prepay === false && current_prepay_ok !== true) {
+          needs_normalization = true;
+          new_requires_prepay = false;
+          new_prepay_ok = true;
+          normalization_reason = 'PREPAY_OK_MISSING';
+        }
+        
+        // If already fully normalized
         if (!needs_normalization) {
           already_normalized_count++;
           continue;
@@ -93,19 +109,17 @@ Deno.serve(async (req) => {
           project_id: commitment.project_id,
           part_id: commitment.part_id,
           old_requires_prepay: current_requires_prepay,
+          old_prepay_ok: current_prepay_ok,
           new_requires_prepay,
-          reason: current_requires_prepay === null || current_requires_prepay === undefined
-            ? 'NULL_OR_UNDEFINED'
-            : project?.financial_model_version !== 'forward'
-              ? 'LEGACY_PROJECT'
-              : 'LEGACY_COMMITMENT'
+          new_prepay_ok,
+          reason: normalization_reason
         });
 
         if (!dry_run) {
-          // PHASE 9K: Also set prepay_ok and billing_status defaults
+          // PHASE 9K-B: Set both requires_prepay AND prepay_ok
           await base44.asServiceRole.entities.PartCommitment.update(commitment.id, {
             requires_prepay: new_requires_prepay,
-            prepay_ok: new_requires_prepay === false ? true : (commitment.prepay_ok ?? false),
+            prepay_ok: new_prepay_ok,
             billing_status: commitment.billing_status ?? 'billable',
             billing_flag_normalized_at: timestamp,
             billing_flag_normalized_by: user.email

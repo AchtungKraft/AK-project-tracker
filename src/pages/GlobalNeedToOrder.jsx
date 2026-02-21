@@ -328,7 +328,7 @@ export default function GlobalNeedToOrder() {
             billingStatus={item.billing_status}
           />
 
-          {/* PHASE 9K: Status badge from backend only */}
+          {/* PHASE 9K-B: Status badge from backend canonical fields */}
           {isOrderable ? (
             <Badge className="bg-green-600 text-white">
               <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -339,7 +339,7 @@ export default function GlobalNeedToOrder() {
               <AlertTriangle className="w-3 h-3 mr-1" />
               No Vendor
             </Badge>
-          ) : item.block_reason === 'REQUIRES_PREPAY' ? (
+          ) : item.block_reason_code === 'PREPAY_REQUIRED' ? (
             <Badge variant="outline" className="border-yellow-600 text-yellow-400">
               <AlertTriangle className="w-3 h-3 mr-1" />
               Prepay Req
