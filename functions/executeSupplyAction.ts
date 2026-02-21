@@ -236,15 +236,24 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       if (ctx.dry_run) {
         isNewCommitment = true;
       } else {
-        // Create commitment with canonical fields
-        // PRICING FIX: Use truthy check, not just null check, and prioritize override > matrix > 0
+        // PHASE 15: HARD LOCK pricing snapshot at commitment creation
         const unit_cost = part.cost || 0;
-        const retail_effective = part.retail_override || part.retail_matrix_price || 0;
+        
+        // retail_effective MUST follow pricing_mode
+        let retail_effective = 0;
+        const pricing_mode = part.pricing_mode || 'matrix';
+        
+        if (pricing_mode === 'manual') {
+          retail_effective = part.retail_override || 0;
+        } else {
+          retail_effective = part.retail_matrix_price || 0;
+        }
         
         // Determine pricing integrity
         let pricing_integrity_status = 'ok';
         if (unit_cost <= 0) pricing_integrity_status = 'missing_cost';
         else if (retail_effective <= 0) pricing_integrity_status = 'missing_retail';
+        else if (retail_effective < unit_cost) pricing_integrity_status = 'margin_negative';
         
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
           project_id,
@@ -362,7 +371,11 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   }
 
   // =========== PERSIST CHANGES ===========
-  const retail_effective = part.retail_override ?? part.retail_matrix_price ?? part.default_retail ?? 0;
+  // PHASE 15: retail_effective MUST follow pricing_mode
+  const pricing_mode = part.pricing_mode || 'matrix';
+  const retail_effective = pricing_mode === 'manual' 
+    ? (part.retail_override || 0) 
+    : (part.retail_matrix_price || 0);
   
   // Update commitment with required_total and covered_from_po
   // reserved_from_stock and to_order will be set by rebalance
