@@ -299,7 +299,6 @@ export default function ReceiveInventoryModal({
                   value={formData.location_id}
                   onValueChange={(v) => {
                     setFormData(prev => ({ ...prev, location_id: v }));
-                    setShowLocationWarning(false);
                   }}
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-700 flex-1">

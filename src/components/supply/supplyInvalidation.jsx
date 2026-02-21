@@ -161,6 +161,14 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     }
   });
 
+  // partsInventoryView family - used by InventoryManagement
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && key[0] === 'partsInventoryView';
+    }
+  });
+
   // Log invalidation for debugging
   if (process.env.NODE_ENV === 'development') {
     console.log('[supplyInvalidation] Invalidated queries:', {
