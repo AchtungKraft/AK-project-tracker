@@ -136,22 +136,18 @@ Deno.serve(async (req) => {
         }
         
         // ============================================================================
-        // PHASE 9F: AUTO-RESERVE DRIFT DETECTION
-        // If there's available stock AND to_order > 0, this is a drift condition
-        // System should have auto-reserved all available stock
+        // PHASE 9G: HARD INVARIANT ENFORCEMENT - Read model does NOT mutate
         // ============================================================================
         const physical_stock = part?.physical_stock ?? 0;
         const partInvPrecompute = partInventoryMap.get(c.part_id) || {};
-        const part_available = Math.max(0, physical_stock - (partInvPrecompute.total_reserved || 0));
         
-        if (part_available > 0 && to_order > 0) {
-          console.warn(
-            `[READ_MODEL_RESERVATION_DRIFT] part=${c.part_id} commitment=${c.id} ` +
-            `physical=${physical_stock} available=${part_available} to_order=${to_order}. ` +
-            `Stock should have been auto-reserved. Run repairAutoReservationDrift.`
+        // Check SUM(reserved_from_stock) <= physical_stock at PART level
+        const total_reserved_for_part = partInvPrecompute.total_reserved || 0;
+        if (total_reserved_for_part > physical_stock + 0.001) {
+          throw new Error(
+            `OVER_ALLOCATION_VIOLATION: part=${c.part_id} physical=${physical_stock} ` +
+            `total_reserved=${total_reserved_for_part} excess=${total_reserved_for_part - physical_stock}`
           );
-          // NOTE: We log warning instead of throwing to allow UI to render and show repair button
-          // The integrity banner will surface this drift condition
         }
 
         // Calculate on-order and received from line items

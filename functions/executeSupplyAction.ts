@@ -977,30 +977,37 @@ async function install(ctx, commitment_ids, payload) {
   }
 
   const new_installed = current_installed + qty_to_install;
-  const new_reserved = affects_stock ? reserved - qty_to_install : reserved;
   
-  // Update commitment - reserved decreases as items are installed
+  // Update commitment - qty_installed increases
   await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
     qty_installed: new_installed,
-    reserved_from_stock: new_reserved,
-    qty_reserved: new_reserved,
     commitment_status: new_installed >= required ? 'installed' : commitment.commitment_status,
     commitment_version: (commitment.commitment_version ?? 0) + 1
   });
 
-  // PHASE 9C: Update part physical stock (INSTALL decrements physical)
+  // Update part physical stock (INSTALL decrements physical)
   if (affects_stock) {
     const new_physical = (part.physical_stock ?? 0) - qty_to_install;
     
-    // Double-check negative guard (should not happen due to earlier check)
+    // Double-check negative guard
     if (new_physical < 0) {
-      throw new Error(`INSTALL_NEGATIVE_STOCK_VIOLATION: Result would be ${new_physical}`);
+      throw new Error(`NEGATIVE_STOCK_ATTEMPT: Result would be ${new_physical}`);
     }
     
     await ctx.base44.asServiceRole.entities.Part.update(part.id, {
       physical_stock: new_physical
     });
     ctx.mutations.push({ entity: 'Part', id: part.id, action: 'INSTALL' });
+    
+    // PHASE 9G: Call canonical rebalance for this part
+    const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+      part_id: part.id,
+      dry_run: false
+    });
+    
+    if (rebalanceResult.data?.error) {
+      throw new Error(rebalanceResult.data.error);
+    }
   }
 
   // Create InstalledPart record

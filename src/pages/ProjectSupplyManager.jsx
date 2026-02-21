@@ -507,12 +507,17 @@ export default function ProjectSupplyManager() {
       return;
     }
     
-    // GUARD: Check if any selected items have to_order <= 0
+    // PHASE 9G: GUARD - Check if any selected items have to_order <= 0 OR have available stock
     const selectedWithZeroOrder = enrichedCommitments.filter(
-      c => selectedItems.has(c.id) && c.to_order <= 0
+      c => selectedItems.has(c.id) && (c.to_order <= 0 || (c.inventory_snapshot?.available ?? 0) > 0)
     );
     if (selectedWithZeroOrder.length > 0) {
-      toast.error(`${selectedWithZeroOrder.length} selected items have nothing to order`);
+      const withStock = selectedWithZeroOrder.filter(c => (c.inventory_snapshot?.available ?? 0) > 0);
+      if (withStock.length > 0) {
+        toast.error(`${withStock.length} item(s) have available stock - cannot create PO. System should auto-reserve first.`);
+      } else {
+        toast.error(`${selectedWithZeroOrder.length} selected items have nothing to order`);
+      }
       return;
     }
     
@@ -786,27 +791,40 @@ export default function ProjectSupplyManager() {
             {commitment.qty_installed}
           </span>
         </TableCell>
-        {/* Coverage - CANONICAL: coverage_status, coverage_percent */}
+        {/* Coverage - CANONICAL: coverage_status, coverage_percent from read model only */}
         <TableCell>
-          <div className="flex items-center gap-1">
-            <CoverageBadgeInline 
-              coverage={commitment.coverage}
-              onClick={() => setQtyManagerDrawer(commitment)}
-            />
-            <CoverageControlsPopover
-              commitment={{ 
-                id: commitment.id,
-                commitment_status: commitment.commitment_status,
-                required_total: commitment.required_total,
-                reserved_from_stock: commitment.reserved_from_stock,
-                covered_from_po: commitment.covered_from_po,
-              }}
-              coverage={commitment.coverage}
-              undoAvailable={false}
-              onActionComplete={() => invalidateSupply()}
-              disabled={!actionsEnabled}
-            />
-          </div>
+        <div className="flex items-center gap-1">
+        <CoverageBadgeInline 
+        coverage={{
+          required_total: commitment.required_total,
+          reserved_from_stock: commitment.reserved_from_stock,
+          covered_from_po: commitment.covered_from_po,
+          coverage_status: commitment.coverage_status,
+          coverage_percent: commitment.coverage_percent,
+          to_order: commitment.to_order
+        }}
+        onClick={() => setQtyManagerDrawer(commitment)}
+        />
+        <CoverageControlsPopover
+        commitment={{ 
+          id: commitment.id,
+          commitment_status: commitment.commitment_status,
+          required_total: commitment.required_total,
+          reserved_from_stock: commitment.reserved_from_stock,
+          covered_from_po: commitment.covered_from_po,
+        }}
+        coverage={{
+          required_total: commitment.required_total,
+          reserved_from_stock: commitment.reserved_from_stock,
+          covered_from_po: commitment.covered_from_po,
+          coverage_status: commitment.coverage_status,
+          to_order: commitment.to_order
+        }}
+        undoAvailable={false}
+        onActionComplete={() => invalidateSupply()}
+        disabled={!actionsEnabled}
+        />
+        </div>
         </TableCell>
         {/* Next Step - CANONICAL: next_action */}
         <TableCell>
