@@ -53,7 +53,12 @@ export default function PartDetailModal({ part, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(part.id, data),
     onSuccess: () => {
+      // PHASE 14E: Invalidate all supply-related queries for consistency
       queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['part', part.id] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
       toast.success('Part updated');
       setEditing(false);
     },
@@ -62,7 +67,11 @@ export default function PartDetailModal({ part, onClose }) {
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Part.delete(part.id),
     onSuccess: () => {
+      // PHASE 14E: Invalidate all supply-related queries for consistency
       queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
       toast.success('Part deleted');
       onClose();
     },
