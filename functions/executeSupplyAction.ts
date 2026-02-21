@@ -140,7 +140,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    // PHASE 9I: Include toast notification for auto-reservation
+    const rebalance_occurred = context.mutations.some(m => 
+      m.action === 'RECEIVE' || m.action === 'ADD_STOCK' || m.action === 'REVERSE_INSTALL'
+    );
+    const toast_notification = rebalance_occurred 
+      ? { message: 'Stock auto-allocated to project', type: 'success' }
+      : null;
+
     return Response.json({
+      toast_notification,
       success: true,
       action_type,
       dry_run,
