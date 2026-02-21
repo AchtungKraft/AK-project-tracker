@@ -23,6 +23,7 @@ import PartTypeSelector, { PartTypeBadge } from "./PartTypeSelector";
 import ArchivePartModal from "./ArchivePartModal";
 import { getPartTypeBehavior, getPartTypeFieldVisibility, canOrderPart, canReceiveInventory } from "./partTypeBehavior";
 import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import PricingModeEditor from "./PricingModeEditor";
 
 /**
  * EditPartDrawer - Part Detail Modal
@@ -42,6 +43,8 @@ export default function EditPartDrawer({ partId, onClose }) {
   const [showBuildModal, setShowBuildModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [deletabilityCheck, setDeletabilityCheck] = useState(null);
+  const [pricingData, setPricingData] = useState(null);
+  const [pricingSaving, setPricingSaving] = useState(false);
 
   const { data: part, isLoading } = useQuery({
     queryKey: ['part', partId],
@@ -126,9 +129,36 @@ export default function EditPartDrawer({ partId, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['part', partId] });
+      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', partId] });
       toast.success('Part updated');
       setEditing(false);
     },
+  });
+  
+  const pricingUpdateMutation = useMutation({
+    mutationFn: async (pricingData) => {
+      const response = await base44.functions.invoke('updatePartPricing', {
+        part_id: partId,
+        pricing_mode: pricingData.pricing_mode,
+        cost: pricingData.cost,
+        retail_override: pricingData.retail_override
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || response.data.error);
+      }
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      invalidateSupplyQueries(queryClient, { part_ids: [partId], invalidateAll: true });
+      toast.success(data.message || 'Pricing updated');
+      setPricingSaving(false);
+    },
+    onError: (error) => {
+      toast.error('Pricing update failed: ' + error.message);
+      setPricingSaving(false);
+    }
   });
 
   const unarchiveMutation = useMutation({
