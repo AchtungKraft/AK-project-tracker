@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign, Truck, AlertCircle } from "lucide-react";
 import { useSupplyAction } from "@/components/supply/useSupplyState";
+import { cn } from "@/lib/utils";
 
 /**
  * CreateBatchOrderModal - Create orders from selected parts grouped by vendor
