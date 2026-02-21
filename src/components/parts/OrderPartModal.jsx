@@ -1,15 +1,13 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, ShoppingCart, ExternalLink, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, AlertTriangle } from "lucide-react";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -68,81 +66,10 @@ export default function OrderPartModal({
     new_order_eta_date: '',
   });
 
-  // Track which requirements to link
-  const [linkedRequirements, setLinkedRequirements] = useState([]);
-
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
-  });
-
-  const { data: orders = [] } = useQuery({
-    queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list('-created_date'),
-  });
-
-  // Get pending/open orders (Draft, Pending, or Ordered status)
-  const openOrders = orders.filter(o => ['Draft', 'Pending', 'Ordered'].includes(o.status));
-
-  // Get project requirements for this part that still need ordering
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements', 'forPart', part?.id],
-    queryFn: async () => {
-      const all = await base44.entities.PartProjectRequirement.list();
-      return all.filter(r => 
-        r.part_id === part?.id && 
-        (r.qty_needed - (r.qty_allocated || 0) - (r.qty_ordered || 0)) > 0
-      );
-    },
-    enabled: !!part?.id,
-  });
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
-  });
-
-  const getProjectName = (projectId) => {
-    return projects.find(p => p.id === projectId)?.name || 'Unknown Project';
-  };
-
-  const getVendorName = (vendorId) => {
-    return vendors.find(v => v.id === vendorId)?.vendor_name || 'Unknown Vendor';
-  };
-
-  const toggleRequirementLink = (reqId) => {
-    setLinkedRequirements(prev => 
-      prev.includes(reqId) 
-        ? prev.filter(id => id !== reqId)
-        : [...prev, reqId]
-    );
-  };
-
-  // Helper to generate next PO number
-  const generatePONumber = async () => {
-    const currentYear = new Date().getFullYear();
-    
-    // Get or create the sequence record for this year
-    const sequences = await base44.entities.POSequence.list();
-    let yearSequence = sequences.find(s => s.year === currentYear);
-    
-    let nextSequence;
-    if (yearSequence) {
-      nextSequence = (yearSequence.last_sequence || 0) + 1;
-      await base44.entities.POSequence.update(yearSequence.id, {
-        last_sequence: nextSequence,
-      });
-    } else {
-      nextSequence = 1;
-      await base44.entities.POSequence.create({
-        year: currentYear,
-        last_sequence: nextSequence,
-      });
-    }
-    
-    // Format: PO-YYYY-NNNN (zero-padded to 4 digits)
-    return `PO-${currentYear}-${String(nextSequence).padStart(4, '0')}`;
-  };
+  // PHASE 10B: No queries needed - all data comes from read model via props
+  // Vendor name comes from part.vendor_name
+  // Cost comes from part.default_cost
+  // Qty comes from part.qty_to_order
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
@@ -213,7 +140,7 @@ export default function OrderPartModal({
     createOrderMutation.mutate();
   };
 
-  const activeVendors = vendors.filter(v => v.active);
+
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -262,168 +189,56 @@ export default function OrderPartModal({
             )}
           </div>
 
-          {/* Order Selection */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="createNew"
-                checked={isCreatingOrder}
-                onCheckedChange={setIsCreatingOrder}
-              />
-              <Label htmlFor="createNew" className="text-gray-300 cursor-pointer">
-                Create new order
-              </Label>
-            </div>
-
-            {isCreatingOrder ? (
-              <div className="space-y-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
-                <div>
-                  <Label className="text-gray-400 text-xs">Vendor *</Label>
-                  <Select
-                    value={formData.new_order_vendor_id}
-                    onValueChange={(v) => setFormData({ ...formData, new_order_vendor_id: v })}
-                  >
-                    <SelectTrigger className="bg-gray-800 border-gray-700">
-                      <SelectValue placeholder="Select vendor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeVendors.filter(v => !v.parent_id).map(parent => {
-                        const children = activeVendors.filter(v => v.parent_id === parent.id);
-                        return (
-                          <React.Fragment key={parent.id}>
-                            <SelectItem value={parent.id}>
-                              <span style={{ color: parent.color }}>{parent.vendor_name}</span>
-                            </SelectItem>
-                            {children.map(child => (
-                              <SelectItem key={child.id} value={child.id}>
-                                <span className="ml-4" style={{ color: child.color }}>→ {child.vendor_name}</span>
-                              </SelectItem>
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-gray-400 text-xs">PO Number</Label>
-                    <Input
-                      value={formData.new_order_po_number}
-                      onChange={(e) => setFormData({ ...formData, new_order_po_number: e.target.value })}
-                      placeholder="Auto-generated if empty"
-                      className="bg-gray-800 border-gray-700"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-400 text-xs">Order Date</Label>
-                    <Input
-                      type="date"
-                      value={formData.new_order_date || new Date().toISOString().split('T')[0]}
-                      onChange={(e) => setFormData({ ...formData, new_order_date: e.target.value })}
-                      className="bg-gray-800 border-gray-700"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-gray-400 text-xs">ETA Date</Label>
-                    <Input
-                      type="date"
-                      value={formData.new_order_eta_date}
-                      onChange={(e) => setFormData({ ...formData, new_order_eta_date: e.target.value })}
-                      className="bg-gray-800 border-gray-700"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-400 text-xs">Reference URL</Label>
-                    <Input
-                      type="url"
-                      value={formData.new_order_notes || ''}
-                      onChange={(e) => setFormData({ ...formData, new_order_notes: e.target.value })}
-                      placeholder="https://..."
-                      className="bg-gray-800 border-gray-700"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
+          {/* PHASE 10B: Simplified order form - always creates new PO */}
+          <div className="space-y-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-gray-400 text-xs">Add to Existing Order *</Label>
-                <Select
-                  value={formData.order_id}
-                  onValueChange={(v) => setFormData({ ...formData, order_id: v })}
-                >
-                  <SelectTrigger className="bg-gray-800 border-gray-700">
-                    <SelectValue placeholder="Select order..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {openOrders.length === 0 ? (
-                      <div className="p-2 text-sm text-gray-400 text-center">
-                        No open orders. Create a new one.
-                      </div>
-                    ) : (
-                      openOrders.map(order => (
-                        <SelectItem key={order.id} value={order.id}>
-                          {order.po_number || `Order ${order.id.slice(0, 8)}`} - {getVendorName(order.vendor_id)} ({order.status})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                <Label className="text-gray-400 text-xs">ETA Date</Label>
+                <Input
+                  type="date"
+                  value={formData.new_order_eta_date}
+                  onChange={(e) => setFormData({ ...formData, new_order_eta_date: e.target.value })}
+                  className="bg-gray-800 border-gray-700"
+                  disabled={isBlockedByProjectGuard}
+                />
               </div>
-            )}
+              <div>
+                <Label className="text-gray-400 text-xs">Order Date</Label>
+                <Input
+                  type="date"
+                  value={new Date().toISOString().split('T')[0]}
+                  disabled
+                  className="bg-gray-800 border-gray-700 opacity-60"
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Quantity and Price */}
+          {/* PHASE 10B: Quantity and Cost - pre-populated from read model */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-gray-400 text-xs">Quantity *</Label>
+              <Label className="text-gray-400 text-xs">Quantity to Order</Label>
               <Input
                 type="number"
                 min="1"
                 value={formData.qty_ordered}
                 onChange={(e) => setFormData({ ...formData, qty_ordered: e.target.value })}
                 className="bg-gray-800 border-gray-700"
+                disabled={isBlockedByProjectGuard}
               />
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Unit Price</Label>
+              <Label className="text-gray-400 text-xs">Unit Cost (from commitment)</Label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 value={formData.unit_price}
-                onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
-                placeholder={part?.default_cost ? `Default: $${part.default_cost}` : '0.00'}
-                className="bg-gray-800 border-gray-700"
+                disabled
+                className="bg-gray-800 border-gray-700 opacity-60"
               />
             </div>
           </div>
-
-          {/* Link to Project Requirements */}
-          {requirements.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-gray-400 text-xs">Link to Project Requirements (optional)</Label>
-              <div className="space-y-2 max-h-32 overflow-y-auto p-2 bg-gray-800/30 rounded border border-gray-700">
-                {requirements.map(req => {
-                  const stillNeeded = (req.qty_needed || 0) - (req.qty_allocated || 0) - (req.qty_ordered || 0);
-                  return (
-                    <div key={req.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={req.id}
-                        checked={linkedRequirements.includes(req.id)}
-                        onCheckedChange={() => toggleRequirementLink(req.id)}
-                      />
-                      <Label htmlFor={req.id} className="text-sm text-gray-300 cursor-pointer flex-1">
-                        {getProjectName(req.project_id)} - needs {stillNeeded}
-                      </Label>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Notes */}
           <div>
@@ -445,17 +260,17 @@ export default function OrderPartModal({
               <Button
                 type="submit"
                 className="bg-red-600 hover:bg-red-700"
-                disabled={createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder) || isBlockedByProjectGuard}
+                disabled={createOrderMutation.isPending || isBlockedByProjectGuard}
               >
                 {createOrderMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Adding...
+                    Creating PO...
                   </>
                 ) : (
                   <>
                     <Plus className="w-4 h-4 mr-2" />
-                    Add to Order
+                    Create PO
                   </>
                 )}
               </Button>
@@ -467,10 +282,10 @@ export default function OrderPartModal({
   const mobileFooter = (
     <MobilePrimaryActionStack
       primaryAction={{
-        label: isBlockedByProjectGuard ? 'Blocked' : (createOrderMutation.isPending ? 'Adding...' : 'Add to Order'),
+        label: isBlockedByProjectGuard ? 'Commitment Required' : (createOrderMutation.isPending ? 'Creating...' : 'Create PO'),
         onClick: handleSubmit,
         icon: Plus,
-        disabled: createOrderMutation.isPending || (!formData.order_id && !isCreatingOrder) || isBlockedByProjectGuard,
+        disabled: createOrderMutation.isPending || isBlockedByProjectGuard,
         loading: createOrderMutation.isPending,
       }}
       secondaryActions={[
