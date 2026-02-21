@@ -999,8 +999,8 @@ async function install(ctx, commitment_ids, payload) {
     });
     ctx.mutations.push({ entity: 'Part', id: part.id, action: 'INSTALL' });
     
-    // PHASE 9G: Call canonical rebalance for this part
-    const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    // PHASE 9G: Call canonical rebalance for this part (other commitments may now be reservable)
+    const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
       part_id: part.id,
       dry_run: false
     });
@@ -1091,8 +1091,8 @@ async function reverseInstall(ctx, commitment_ids, payload) {
     });
     ctx.mutations.push({ entity: 'Part', id: part.id, action: 'REVERSE_INSTALL' });
     
-    // PHASE 9G: Call canonical rebalance for this part
-    const rebalanceResult = await ctx.base44.functions.invoke('rebalancePartReservations', {
+    // PHASE 9G: Call canonical rebalance for this part (released stock reallocates)
+    const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
       part_id: part.id,
       dry_run: false
     });

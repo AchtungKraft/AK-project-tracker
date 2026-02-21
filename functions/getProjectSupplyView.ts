@@ -138,11 +138,22 @@ Deno.serve(async (req) => {
         // ============================================================================
         // PHASE 9G: HARD INVARIANT ENFORCEMENT - Read model does NOT mutate
         // ============================================================================
+        
+        // Check coverage invariant at commitment level
+        const sum = reserved_from_stock + covered_from_po + to_order;
+        if (Math.abs(sum - required_total) > 0.001) {
+          throw new Error(
+            `COVERAGE_INVARIANT_VIOLATION: commitment=${c.id} part=${c.part_id} ` +
+            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} ` +
+            `to_order=${to_order} sum=${sum} diff=${sum - required_total}`
+          );
+        }
+        
+        // Check over-allocation at part level
         const physical_stock = part?.physical_stock ?? 0;
         const partInvPrecompute = partInventoryMap.get(c.part_id) || {};
-        
-        // Check SUM(reserved_from_stock) <= physical_stock at PART level
         const total_reserved_for_part = partInvPrecompute.total_reserved || 0;
+        
         if (total_reserved_for_part > physical_stock + 0.001) {
           throw new Error(
             `OVER_ALLOCATION_VIOLATION: part=${c.part_id} physical=${physical_stock} ` +
