@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -46,11 +46,17 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
     queryFn: () => base44.entities.Part.list()
   });
 
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems', requirement?.part_id || passedCommitment?.part_id],
-    queryFn: () => base44.entities.InventoryItem.filter({ part_id: requirement?.part_id || passedCommitment?.part_id }),
-    enabled: !!(requirement?.part_id || passedCommitment?.part_id)
+  // PHASE 14E-VERIFY: Use main inventoryItems query key for consistent invalidation
+  const { data: allInventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: () => base44.entities.InventoryItem.list(),
   });
+  
+  const inventoryItems = useMemo(() => {
+    const targetPartId = requirement?.part_id || passedCommitment?.part_id;
+    if (!targetPartId) return [];
+    return allInventoryItems.filter(i => i.part_id === targetPartId);
+  }, [allInventoryItems, requirement?.part_id, passedCommitment?.part_id]);
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],

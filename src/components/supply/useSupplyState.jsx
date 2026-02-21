@@ -123,19 +123,21 @@ export function useSupplyAction(options = {}) {
       return response.data;
     },
     onSuccess: (data, variables) => {
-      // Invalidate all relevant queries after mutation
-      queryClient.invalidateQueries({ queryKey: ['commitmentState'] });
-      queryClient.invalidateQueries({ queryKey: ['commitmentStates'] });
-      queryClient.invalidateQueries({ queryKey: ['partInventoryState'] });
-      queryClient.invalidateQueries({ queryKey: ['partInventoryStates'] });
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
+      // PHASE 14E-VERIFY: Use unified invalidation helper for consistency
+      // Import must be dynamic to avoid circular dependency
+      import('@/components/supply/supplyInvalidation').then(({ invalidateSupplyQueries }) => {
+        invalidateSupplyQueries(queryClient, {
+          part_ids: data.part_id ? [data.part_id] : [],
+          project_ids: data.project_id ? [data.project_id] : [],
+          commitment_ids: data.commitment_id ? [data.commitment_id] : (variables.commitment_ids || []),
+          invalidateAll: true
+        });
+      });
+      
+      // Additional keys not covered by supplyInvalidation
       queryClient.invalidateQueries({ queryKey: ['projectPools'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['globalOrderQueue'] });
-      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
-      queryClient.invalidateQueries({ queryKey: ['portfolioSupplyState'] });
-      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
       queryClient.invalidateQueries({ queryKey: ['projectLineItems'] });
       
       if (!variables.dry_run && options.showSuccessToast !== false) {

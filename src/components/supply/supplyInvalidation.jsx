@@ -86,12 +86,20 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     // Specific part queries
     part_ids.forEach(partId => {
       queryClient.invalidateQueries({ queryKey: ['part', partId] });
-      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', partId] });
+      // partSupplyUsage already invalidated above
     });
   }
   
   // Always invalidate general parts list
   queryClient.invalidateQueries({ queryKey: ['parts'] });
+  
+  // Part inventory states - used by useSupplyState hooks
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && (key[0] === 'partInventoryState' || key[0] === 'partInventoryStates');
+    }
+  });
 
   // === ORDER-SPECIFIC INVALIDATION ===
   
@@ -117,16 +125,41 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
   // These are ALWAYS invalidated on inventory mutations to ensure UI consistency
   
   // InventoryItem is authoritative for location-based stock
-  queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+  // PHASE 14E-VERIFY: Must use predicate to catch ALL inventory item query key patterns
+  // Patterns in use: ['inventoryItems'], ['inventoryItems', partId], ['inventoryItems', 'forPart', partId]
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && key[0] === 'inventoryItems';
+    }
+  });
   
   // Locations - for totals display
   queryClient.invalidateQueries({ queryKey: ['locations'] });
   
-  if (invalidateAll) {
-    // Legacy entities - still used by some views
-    queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-    queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
+  // Part supply usage - used by EditPartDrawer
+  if (part_ids.length > 0) {
+    part_ids.forEach(partId => {
+      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', partId] });
+    });
   }
+  // Also invalidate all partSupplyUsage if invalidateAll
+  if (invalidateAll) {
+    queryClient.invalidateQueries({ 
+      predicate: (query) => {
+        const key = query.queryKey;
+        return Array.isArray(key) && key[0] === 'partSupplyUsage';
+      }
+    });
+  }
+  
+  // Commitment state - used by InstallPartModal
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && (key[0] === 'commitmentState' || key[0] === 'commitmentStates');
+    }
+  });
 
   // Log invalidation for debugging
   if (process.env.NODE_ENV === 'development') {

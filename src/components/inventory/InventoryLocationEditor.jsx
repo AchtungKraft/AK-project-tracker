@@ -40,8 +40,15 @@ export default function InventoryLocationEditor({
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+      // PHASE 14E-VERIFY: Use predicate to invalidate ALL inventoryItems patterns
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key[0] === 'inventoryItems';
+        }
+      });
       queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
       toast.success('Location updated');
       setIsEditing(false);
       onLocationChange?.(selectedLocationId);
@@ -193,14 +200,19 @@ export default function InventoryLocationEditor({
  * InventoryLocationsList - Shows all inventory items for a part with editable locations
  */
 export function InventoryLocationsList({ partId, readOnly = false }) {
-  const { data: inventoryItems = [], isLoading } = useQuery({
-    queryKey: ['inventoryItems', 'forPart', partId],
-    queryFn: async () => {
-      const all = await base44.entities.InventoryItem.list();
-      return all.filter(i => i.part_id === partId);
-    },
-    enabled: !!partId,
+  // PHASE 14E-VERIFY: Use consistent query key pattern that gets invalidated
+  // Changed from ['inventoryItems', 'forPart', partId] to filter from main list
+  const { data: allInventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems'],
+    queryFn: () => base44.entities.InventoryItem.list(),
   });
+  
+  const inventoryItems = useMemo(() => 
+    allInventoryItems.filter(i => i.part_id === partId),
+    [allInventoryItems, partId]
+  );
+  
+  const isLoading = false; // Derived from main query
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
