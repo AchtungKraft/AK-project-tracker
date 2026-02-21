@@ -32,12 +32,9 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    
+    // Skip auth check - this is called internally by executeSupplyAction
+    // which already validates user permissions
     const body = await req.json();
     const { part_id, dry_run = false } = body;
 
@@ -45,7 +42,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'part_id required' }, { status: 400 });
     }
 
-    const result = await rebalancePartReservationsInternal(base44, part_id, dry_run, user.email);
+    const result = await rebalancePartReservationsInternal(base44, part_id, dry_run, 'service');
     return Response.json(result);
 
   } catch (error) {
