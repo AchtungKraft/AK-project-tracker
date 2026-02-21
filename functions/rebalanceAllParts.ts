@@ -3,8 +3,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 /**
  * rebalanceAllParts - Admin function to rebalance all parts
  * 
- * Phase 9G: Iterates all parts and calls rebalancePartReservations.
- * Returns summary of parts processed and any violations found.
+ * Phase 9G: Iterates all parts and rebalances reservations.
+ * Direct implementation - does NOT call rebalancePartReservations HTTP endpoint.
  */
 
 Deno.serve(async (req) => {
@@ -28,21 +28,28 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const dry_run = body.dry_run !== false;
+    const timestamp = new Date().toISOString();
 
     // Fetch all parts
     const allParts = await base44.asServiceRole.entities.Part.list();
     
     // Fetch all commitments to find which parts have commitments
     const allCommitments = await base44.asServiceRole.entities.PartCommitment.list();
-    const partsWithCommitments = new Set(
-      allCommitments
-        .filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed')
-        .map(c => c.part_id)
-    );
+    
+    // Group commitments by part
+    const commitmentsByPart = {};
+    allCommitments.forEach(c => {
+      if (c.commitment_status === 'cancelled' || c.commitment_status === 'closed') return;
+      
+      if (!commitmentsByPart[c.part_id]) {
+        commitmentsByPart[c.part_id] = [];
+      }
+      commitmentsByPart[c.part_id].push(c);
+    });
 
     const results = {
       parts_scanned: allParts.length,
-      parts_with_commitments: partsWithCommitments.size,
+      parts_with_commitments: Object.keys(commitmentsByPart).length,
       parts_processed: 0,
       parts_updated: 0,
       commitments_updated: 0,
@@ -52,44 +59,119 @@ Deno.serve(async (req) => {
     };
 
     // Process each part that has commitments
-    for (const part of allParts) {
-      if (!partsWithCommitments.has(part.id)) {
+    for (const [partId, commitments] of Object.entries(commitmentsByPart)) {
+      const part = allParts.find(p => p.id === partId);
+      if (!part) {
+        results.errors.push({ part_id: partId, error: 'Part not found' });
+        results.violations_found++;
         continue;
       }
 
       results.parts_processed++;
 
-      try {
-        const rebalanceResult = await base44.asServiceRole.functions.invoke('rebalancePartReservations', {
-          part_id: part.id,
-          dry_run
-        });
+      const physical_stock = part.physical_stock ?? 0;
+      
+      // Sort by created_date ASC (FIFO)
+      commitments.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
-        const data = rebalanceResult.data;
+      let remaining_stock = physical_stock;
+      const part_updates = [];
+      const part_violations = [];
+
+      for (const c of commitments) {
+        const required_total = c.required_total ?? c.qty_committed ?? 0;
+        const covered_from_po = c.covered_from_po ?? 0;
+        const current_reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+        const current_to_order = c.qty_to_order ?? 0;
+
+        // How much do we need from stock?
+        const need_from_stock = Math.max(0, required_total - covered_from_po);
         
-        if (data.error) {
-          results.violations_found++;
-          results.errors.push({
-            part_id: part.id,
-            part_name: part.part_name,
-            error: data.error
-          });
-        } else if (data.commitments_updated > 0) {
-          results.parts_updated++;
-          results.commitments_updated += data.commitments_updated;
-          results.details.push({
-            part_id: part.id,
-            part_name: part.part_name,
-            commitments_updated: data.commitments_updated,
-            updates: data.updates
+        // Allocate from remaining stock
+        const new_reserved = Math.min(remaining_stock, need_from_stock);
+        
+        // Compute to_order
+        const new_to_order = Math.max(0, required_total - new_reserved - covered_from_po);
+
+        // Deduct from remaining
+        remaining_stock = Math.max(0, remaining_stock - new_reserved);
+
+        // Check if update needed
+        const needs_update = (new_reserved !== current_reserved) || (new_to_order !== current_to_order);
+
+        if (needs_update) {
+          part_updates.push({
+            commitment_id: c.id,
+            project_id: c.project_id,
+            required_total,
+            covered_from_po,
+            old_reserved: current_reserved,
+            new_reserved,
+            old_to_order: current_to_order,
+            new_to_order,
+            delta_reserved: new_reserved - current_reserved
           });
         }
-      } catch (error) {
+
+        // INVARIANT CHECK
+        const sum = new_reserved + covered_from_po + new_to_order;
+        if (Math.abs(sum - required_total) > 0.001) {
+          part_violations.push({
+            commitment_id: c.id,
+            violation: 'COVERAGE_MATH_VIOLATION',
+            required_total,
+            reserved: new_reserved,
+            covered: covered_from_po,
+            to_order: new_to_order,
+            sum,
+            diff: sum - required_total
+          });
+        }
+      }
+
+      // Check total reserved does not exceed physical
+      const total_reserved = commitments.reduce((sum, c) => {
+        const update = part_updates.find(u => u.commitment_id === c.id);
+        return sum + (update ? update.new_reserved : (c.reserved_from_stock ?? 0));
+      }, 0);
+
+      if (total_reserved > physical_stock + 0.001) {
+        part_violations.push({
+          violation: 'OVER_ALLOCATION',
+          physical_stock,
+          total_reserved,
+          excess: total_reserved - physical_stock
+        });
+      }
+
+      // If violations, record error
+      if (part_violations.length > 0) {
         results.violations_found++;
         results.errors.push({
-          part_id: part.id,
+          part_id: partId,
           part_name: part.part_name,
-          error: error.message
+          violations: part_violations
+        });
+        continue;
+      }
+
+      // Apply updates if not dry run
+      if (!dry_run && part_updates.length > 0) {
+        for (const u of part_updates) {
+          await base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, {
+            reserved_from_stock: u.new_reserved,
+            qty_reserved: u.new_reserved,
+            qty_to_order: u.new_to_order,
+            last_recomputed_at: timestamp
+          });
+        }
+        results.parts_updated++;
+        results.commitments_updated += part_updates.length;
+        results.details.push({
+          part_id: partId,
+          part_name: part.part_name,
+          commitments_updated: part_updates.length,
+          updates: part_updates
         });
       }
     }
@@ -97,7 +179,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: results.violations_found === 0,
       mode: dry_run ? 'DRY_RUN' : 'EXECUTED',
-      timestamp: new Date().toISOString(),
+      timestamp,
       executed_by: user.email,
       summary: {
         parts_scanned: results.parts_scanned,
