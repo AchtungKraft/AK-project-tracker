@@ -94,7 +94,8 @@ Deno.serve(async (req) => {
     }
 
     // ================================================================
-    // PHASE 13B: CHECK D - InventoryItem SUM vs Part.physical_stock
+    // PHASE 14: CHECK D - INVENTORY_LOCATION_MISMATCH
+    // InventoryItem is authoritative. Part.physical_stock MUST match sum.
     // ================================================================
     const locationSumViolations = [];
     
@@ -114,7 +115,23 @@ Deno.serve(async (req) => {
           part_name: part?.part_name || 'Unknown',
           physical_stock: physical,
           location_sum: locationSum,
-          diff: locationSum - physical
+          diff: locationSum - physical,
+          violation_code: 'INVENTORY_LOCATION_MISMATCH'
+        });
+      }
+    }
+    
+    // PHASE 14: Also check for null location_id in InventoryItem (disallowed)
+    const nullLocationItems = inventoryItems.filter(item => !item.location_id);
+    if (nullLocationItems.length > 0) {
+      for (const item of nullLocationItems.slice(0, 10)) {
+        const part = partMap.get(item.part_id);
+        locationSumViolations.push({
+          part_id: item.part_id,
+          part_name: part?.part_name || 'Unknown',
+          inventory_item_id: item.id,
+          violation_code: 'NULL_LOCATION_ID',
+          message: 'InventoryItem has null location_id - must assign to UNASSIGNED_SYSTEM or valid location'
         });
       }
     }
