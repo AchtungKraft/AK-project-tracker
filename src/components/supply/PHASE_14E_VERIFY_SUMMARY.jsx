@@ -1,89 +1,99 @@
-# PHASE 14E-VERIFY: Inventory UI Wiring Gap Closure
+# PHASE 14E-FINAL: Inventory UI Wiring Lockdown
 
-## Summary of Changes
+## VERIFIED QUERY KEY CONSOLIDATION
 
-### A) INVENTORY LOCATIONS MUST BE INVENTORYITEM-DRIVEN ✅
+### A) QUERY KEY PATTERNS - ALL CANONICAL ✅
 
-**InventoryLocations.jsx** uses these query keys:
-- `['inventoryItems']` - Main list query
-- `['locations']` - For location tree
-- `['partCommitments']` - For reserved stock (replaced legacy partProjectRequirements)
+| Component | Query Key | Purpose | Invalidated By |
+|-----------|-----------|---------|----------------|
+| InventoryLocations | `['inventoryItems']` | Stock by location | predicate |
+| InventoryLocations | `['locations']` | Location tree | direct |
+| InventoryLocations | `['partCommitments']` | Reserved display | direct |
+| InstallPartModal | `['inventoryItems']` | Available stock | predicate |
+| InstallPartModal | `['commitmentState', id]` | Commitment state | predicate |
+| EditPartDrawer | `['partSupplyUsage', id]` | Part stats | predicate |
+| InventoryLocationsList | `['inventoryItems']` | Part locations | predicate |
+| InventoryManagement | `['partsInventoryView']` | Global inventory | predicate |
 
-**Source of truth:**
-- `getInventoryStats()` computes from `InventoryItem.quantity_on_hand` exclusively
-- No `Part.physical_stock` per-location - only global
+### B) LEGACY PATTERNS ELIMINATED ✅
 
-### B) UNASSIGNED ROUTING IS DETERMINISTIC ✅
+**NO components use:**
+- ~~`['inventoryItems', partId]`~~ - REMOVED
+- ~~`['inventoryItems', 'forPart', partId]`~~ - REMOVED
+- ~~`['partProjectRequirements']`~~ - REMOVED from queries
+- ~~`['partBuildAssignments']`~~ - REMOVED from queries
 
-**Backend (executeSupplyAction.js):**
-- `addStock()` and `receiveSingleLine()` both route `null` location_id → UNASSIGNED_SYSTEM
-- Creates `UNASSIGNED_SYSTEM` Location if missing
-- InventoryItem always has non-null location_id
+### C) supplyInvalidation.js - COMPLETE PREDICATE COVERAGE ✅
 
-**Frontend (AddInventoryModal.jsx):**
-- Passes `location_id: data.location_id || null` to backend
-- Backend handles the default
+```javascript
+// ALWAYS invalidated via predicate:
+inventoryItems      → predicate (key[0] === 'inventoryItems')
+commitmentState     → predicate (key[0] === 'commitmentState' || 'commitmentStates')
+partSupplyUsage     → predicate (key[0] === 'partSupplyUsage')
+partInventoryState  → predicate (key[0] === 'partInventoryState' || 'partInventoryStates')
+partsInventoryView  → predicate (key[0] === 'partsInventoryView')
+locations           → direct key
+parts               → direct key
+partCommitments     → direct key
+```
 
-### C) CACHE INVALIDATION MATCHES CONSUMERS ✅
+### D) INSTALL MODAL CONSISTENCY ✅
 
-**Query keys by surface:**
+**InstallPartModal computes:**
+```javascript
+const reserved = commitmentState?.reserved_from_stock ?? passedCommitment?.reserved_from_stock ?? 0;
+const installed = commitmentState?.qty_installed ?? passedCommitment?.qty_installed ?? 0;
+const maxInstallable = Math.max(0, reserved - installed);
+```
 
-| Surface | Query Key(s) |
-|---------|-------------|
-| PartsTracker INVENTORY tab | `['partsInventoryView']` |
-| PartsTracker LOCATIONS tab | `['inventoryItems']`, `['locations']`, `['partCommitments']` |
-| PartDetailModal locations list | `['inventoryItems']` (via InventoryLocationsList) |
-| PartDetailModal stats | `['partSupplyUsage', partId]` |
-| Install modal | `['inventoryItems']`, `['commitmentState', commitmentId]` |
+**Does NOT read:**
+- ~~InventoryItem directly for install calculation~~
+- ~~part.allocated_stock~~
+- ~~requirement.qty_allocated (legacy)~~
 
-**supplyInvalidation.js now invalidates (ALWAYS):**
-- `['inventoryItems']` via predicate (catches all patterns)
-- `['locations']`
-- `['partSupplyUsage', partId]` for each affected part
-- `['commitmentState']` and `['commitmentStates']` via predicate
-- `['partInventoryState']` and `['partInventoryStates']` via predicate
-- `['partsInventoryView']`
-- `['parts']`
-- `['partCommitments']`
+### E) INVENTORY LOCATIONS SOURCE OF TRUTH ✅
 
-### D) INSTALL MODAL USES CANONICAL COMMITMENT STATE ✅
+**InventoryLocations.getInventoryStats():**
+```javascript
+const items = inventoryItems.filter(i => i.part_id === partId);
+const onHand = items.reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+const reserved = items.reduce((sum, i) => sum + (i.quantity_reserved || 0), 0);
+```
 
-**InstallPartModal.jsx:**
-- Uses `useCommitmentState(commitmentId)` hook from `useSupplyState.js`
-- Computes `maxInstallable = reserved_from_stock - qty_installed`
-- Falls back to `passedCommitment` props if resolver not loaded
-- Now uses main `['inventoryItems']` query (not per-part pattern)
+**Does NOT derive stock from:**
+- ~~commitments~~
+- ~~Part.physical_stock per location~~
 
-### Files Changed
+## FILES VERIFIED
 
-| File | Change |
+| File | Status |
 |------|--------|
-| `components/supply/supplyInvalidation.js` | Use predicate for inventoryItems; add partSupplyUsage, commitmentState, partInventoryState |
-| `components/supply/useSupplyState.js` | Use unified invalidation helper in onSuccess |
-| `components/inventory/InventoryLocationEditor.jsx` | Use predicate for inventoryItems; InventoryLocationsList uses main query |
-| `components/project/InstallPartModal.jsx` | Use main inventoryItems query; add useMemo import |
+| `components/inventory/InventoryLocations.jsx` | ✅ Uses `['inventoryItems']` only |
+| `components/project/InstallPartModal.jsx` | ✅ Uses `['inventoryItems']`, `['commitmentState']` |
+| `components/parts/EditPartDrawer.jsx` | ✅ Uses `['partSupplyUsage']` |
+| `components/inventory/InventoryLocationEditor.jsx` | ✅ Uses `['inventoryItems']`, predicate invalidation |
+| `components/inventory/InventoryManagement.jsx` | ✅ Uses `['partsInventoryView']` |
+| `components/receiving/ReceiveInventoryModal.jsx` | ✅ Uses unified invalidation |
+| `components/inventory/AddInventoryModal.jsx` | ✅ Uses unified invalidation |
+| `components/supply/supplyInvalidation.js` | ✅ Predicate for all families |
+| `components/supply/useSupplyState.js` | ✅ Calls unified invalidation |
 
-### Legacy Queries Status
+## MUTATION ROUTING VERIFIED
 
-| Query Key | Status |
-|-----------|--------|
-| `['partProjectRequirements']` | REMOVED from InventoryLocations |
-| `['partBuildAssignments']` | REMOVED from InventoryLocations |
+All supply mutations route through `executeSupplyAction`:
+- ADD_STOCK → `invalidateSupplyQueries()`
+- RECEIVE → `invalidateSupplyQueries()`
+- INSTALL → `useSupplyAction` → `invalidateSupplyQueries()`
+- REVERSE_INSTALL → `useSupplyAction` → `invalidateSupplyQueries()`
+- CREATE_PO → `invalidateSupplyQueries()`
+- ADJUST_REQUIRED → `invalidateSupplyQueries()`
+- CANCEL_COMMITMENT → `invalidateSupplyQueries()`
 
-These are still in supplyInvalidation.js `invalidateAll` block but no longer queried.
+## ARCHITECTURE LOCKED ✅
 
-### Verification Checklist
-
-1. **Add Inventory with no location selected:**
-   - ✅ Backend routes to UNASSIGNED_SYSTEM
-   - ✅ InventoryItem created with non-null location_id
-   - ✅ All surfaces invalidated via predicate
-
-2. **Add Inventory to existing location:**
-   - ✅ Backend upserts single InventoryItem (throws on duplicate)
-   - ✅ Quantity increments, no new record
-
-3. **Reserved part in project:**
-   - ✅ Row shows Reserved from commitment.reserved_from_stock
-   - ✅ Install modal uses useCommitmentState hook
-   - ✅ Installable = reserved_from_stock - qty_installed
+This configuration is now production-ready. Any new inventory surfaces must:
+1. Use `['inventoryItems']` (not per-part patterns)
+2. Use `['commitmentState', id]` for commitment data
+3. Use `['partSupplyUsage', id]` for part aggregates
+4. Route mutations through `executeSupplyAction`
+5. NOT add direct `queryClient.invalidateQueries` calls
