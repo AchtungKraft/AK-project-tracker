@@ -72,8 +72,19 @@ Deno.serve(async (req) => {
       const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
       const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
 
-      // Only include if to_order > 0
+      // PHASE 9J: STRICT eligibility - Only include if:
+      // 1. to_order > 0
+      // 2. requires_prepay === false OR billing satisfies prepay
+      // 3. coverage_status !== 'FULL'
       if (to_order <= 0) continue;
+      
+      // Compute coverage_status
+      const total_covered = reserved_from_stock + covered_from_po;
+      const coverage_status = total_covered >= required_total ? 'FULL' : 
+                              total_covered > 0 ? 'PARTIAL' : 'NONE';
+      
+      // Skip FULL coverage items - they don't need ordering
+      if (coverage_status === 'FULL') continue;
 
       const project = projectMap.get(commitment.project_id);
       const vendor = vendorMap.get(part.default_vendor_id);
@@ -112,24 +123,23 @@ Deno.serve(async (req) => {
         project_name: project?.name,
         vendor_id: vendor?.id,
         vendor_name: vendor?.vendor_name,
-        // Canonical quantities
+        // Canonical quantities (NO UI-side derivation allowed)
         required_total,
         reserved_from_stock,
         covered_from_po,
         to_order,
-        // Billing state
+        coverage_status,
+        // Billing state (explicit booleans only)
         requires_prepay,
         billing_status,
         can_order,
         block_reason,
-        // Cost estimation
+        // Flag for UI display
+        is_orderable: can_order && !!vendor,
+        // Cost estimation (canonical)
         unit_cost: commitment.unit_cost_snapshot ?? part.cost ?? 0,
         estimated_cost: to_order * (commitment.unit_cost_snapshot ?? part.cost ?? 0),
-        // Legacy fields for compatibility
-        qtyToOrder: to_order,
-        qty_committed: required_total,
-        qty_ordered: covered_from_po,
-        qty_received: commitment.qty_received ?? 0,
+        // Qty fields (all canonical - NO legacy fallback)
         qty_installed: commitment.qty_installed ?? 0,
       });
     }

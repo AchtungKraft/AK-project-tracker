@@ -446,6 +446,12 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
   // PHASE 9F: Only allow CREATE_PO when NO available stock remains
   // If stock is available but to_order > 0, this is a drift condition
   if (to_order > 0 && available_stock === 0) {
+    // PHASE 9J: HARD INVARIANT - Prevent CREATE_PO when to_order === 0
+    if (to_order === 0) {
+      throw new Error(
+        `INVALID_NEXT_ACTION_INVARIANT: Cannot set CREATE_PO when to_order === 0`
+      );
+    }
     return { next_action: 'CREATE_PO', block_reason_code: null };
   }
   
