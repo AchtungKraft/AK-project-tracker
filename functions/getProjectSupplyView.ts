@@ -210,7 +210,8 @@ Deno.serve(async (req) => {
         const { next_action, block_reason_code } = computeNextAction(
           { required_total, reserved_from_stock, covered_from_po, qty_installed },
           !!vendor,
-          partInventoryForAction
+          partInventoryForAction,
+          c // Pass raw commitment for billing flag access
         );
 
         // Part inventory snapshot from read model (using already-computed variables)
@@ -384,6 +385,8 @@ const BLOCK_MESSAGES = {
   NEGATIVE_AVAILABLE: 'Available stock is negative',
   INVARIANT_VIOLATION: 'Data integrity issue detected',
   ARCHIVED_PART: 'Part is archived',
+  REQUIRES_PREPAY: 'Requires invoice before ordering',
+  INVALID_BILLING_FLAG: 'Invalid billing flag state',
 };
 
 function mapSourceType(legacyType) {
@@ -397,8 +400,8 @@ function mapSourceType(legacyType) {
   return mapping[legacyType] || 'SHOP_PURCHASED';
 }
 
-// PHASE 9F: Mandatory auto-reserve enforcement - only show CREATE_PO when stock exhausted
-function computeNextAction(commitment, partHasVendor, partInventory = {}) {
+// PHASE 9H: Strict billing gating + auto-reserve enforcement
+function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}) {
   const {
     required_total = 0,
     reserved_from_stock = 0,
@@ -411,6 +414,29 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}) {
   
   // Get available stock from part inventory
   const available_stock = partInventory.available ?? 0;
+
+  // PHASE 9H Step 2: STRICT billing gating
+  // Normalize requires_prepay - treat null/undefined as false (legacy default)
+  let requires_prepay = rawCommitment.requires_prepay;
+  if (typeof requires_prepay !== 'boolean') {
+    requires_prepay = false; // Legacy default: order without invoice
+  }
+  
+  const billing_status = rawCommitment.billing_status || 'billable';
+
+  // Check if ordering is blocked by prepay requirement
+  if (to_order > 0) {
+    // STRICT: requires_prepay === true AND NOT invoiced/paid = BLOCKED
+    if (
+      requires_prepay === true &&
+      billing_status !== 'INVOICED' &&
+      billing_status !== 'invoiced' &&
+      billing_status !== 'PAID' &&
+      billing_status !== 'paid'
+    ) {
+      return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY' };
+    }
+  }
 
   // Only block: no vendor
   if (to_order > 0 && !partHasVendor) {
