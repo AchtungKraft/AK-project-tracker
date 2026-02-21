@@ -97,14 +97,14 @@ export default function InventoryLocations({ onPartClick }) {
     queryFn: () => base44.entities.PartPurchaseLineItem.list(),
   });
 
-  const { data: requirements = [] } = useQuery({
-    queryKey: ['partProjectRequirements'],
-    queryFn: () => base44.entities.PartProjectRequirement.list(),
-  });
-
-  const { data: buildAssignments = [] } = useQuery({
-    queryKey: ['partBuildAssignments'],
-    queryFn: () => base44.entities.PartBuildAssignment.list(),
+  // PHASE 14E: Removed partProjectRequirements and partBuildAssignments queries
+  // InventoryItem is the SOLE source of truth for stock totals
+  // Use commitments query instead for reserved stock display
+  const { data: commitments = [] } = useQuery({
+    queryKey: ['partCommitments'],
+    queryFn: () => base44.entities.PartCommitment.filter({ 
+      commitment_status: { $nin: ['cancelled', 'closed'] }
+    }),
   });
 
   const { data: projects = [] } = useQuery({
@@ -112,35 +112,13 @@ export default function InventoryLocations({ onPartClick }) {
     queryFn: () => base44.entities.Project.list(),
   });
 
-  // Get builds/projects that have allocated parts with reserved inventory
+  // PHASE 14E: Get builds/projects that have reserved inventory (from commitments only)
   const buildsWithAllocatedParts = useMemo(() => {
-    // Get all part IDs that have reserved inventory
-    const partsWithReservedInventory = new Set(
-      inventoryItems
-        .filter(i => (i.quantity_reserved || 0) > 0)
-        .map(i => i.part_id)
-    );
-
-    // Find builds that have assignments with qty_reserved > 0 for parts that have reserved inventory
+    // Find projects with active commitments that have reserved_from_stock > 0
     const buildIds = new Set();
-    buildAssignments.forEach(ba => {
-      if ((ba.qty_reserved || 0) > 0 && partsWithReservedInventory.has(ba.part_id)) {
-        buildIds.add(ba.project_id);
-      }
-    });
-
-    // Also check PartProjectRequirement for allocated parts
-    requirements.forEach(req => {
-      if ((req.qty_allocated || 0) > 0) {
-        const part = parts.find(p => p.id === req.part_id);
-        if (part) {
-          const hasInventory = inventoryItems.some(i => 
-            i.part_id === req.part_id && (i.quantity_on_hand || 0) > 0
-          );
-          if (hasInventory) {
-            buildIds.add(req.project_id);
-          }
-        }
+    commitments.forEach(c => {
+      if ((c.reserved_from_stock || 0) > 0) {
+        buildIds.add(c.project_id);
       }
     });
 
@@ -152,33 +130,26 @@ export default function InventoryLocations({ onPartClick }) {
         const dateB = new Date(b.updated_date || b.created_date || 0);
         return dateB - dateA;
       });
-  }, [buildAssignments, requirements, inventoryItems, projects, parts]);
+  }, [commitments, projects]);
 
-  // Get parts allocated to selected build
+  // PHASE 14E: Get parts allocated to selected build (from commitments only)
   const partsAllocatedToBuild = useMemo(() => {
     if (!selectedBuildId) return null;
 
     const allocatedPartIds = new Set();
     
-    // From PartBuildAssignment
-    buildAssignments.forEach(ba => {
-      if (ba.project_id === selectedBuildId && (ba.qty_reserved || 0) > 0) {
-        allocatedPartIds.add(ba.part_id);
-      }
-    });
-
-    // From PartProjectRequirement
-    requirements.forEach(req => {
-      if (req.project_id === selectedBuildId && (req.qty_allocated || 0) > 0) {
-        allocatedPartIds.add(req.part_id);
+    // From PartCommitment (canonical source)
+    commitments.forEach(c => {
+      if (c.project_id === selectedBuildId && (c.reserved_from_stock || 0) > 0) {
+        allocatedPartIds.add(c.part_id);
       }
     });
 
     return allocatedPartIds;
-  }, [selectedBuildId, buildAssignments, requirements]);
+  }, [selectedBuildId, commitments]);
 
-  // PHASE 13B: Calculate inventory stats ONLY from InventoryItem.quantity_on_hand
-  // NEVER use Part.physical_stock per location - it's global, not location-specific
+  // PHASE 14E: Calculate inventory stats ONLY from InventoryItem.quantity_on_hand
+  // InventoryItem is the SOLE source of truth for location-based stock
   const getInventoryStats = (partId, locationId = null) => {
     const items = locationId 
       ? inventoryItems.filter(i => i.part_id === partId && i.location_id === locationId)
@@ -192,10 +163,13 @@ export default function InventoryLocations({ onPartClick }) {
     const onOrder = partLineItems.reduce((sum, li) => 
       sum + Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0)), 0);
     
-    const partReqs = requirements.filter(r => r.part_id === partId);
-    const need = partReqs.reduce((sum, r) => {
-      const stillNeeded = (r.qty_needed || 0) - (r.qty_installed || 0) - (r.qty_allocated || 0);
-      return sum + Math.max(0, stillNeeded);
+    // PHASE 14E: Use commitments for need calculation (not legacy requirements)
+    const partCommitments = commitments.filter(c => c.part_id === partId);
+    const need = partCommitments.reduce((sum, c) => {
+      const required = c.required_total ?? 0;
+      const installed = c.qty_installed ?? 0;
+      const stillNeeded = Math.max(0, required - installed);
+      return sum + stillNeeded;
     }, 0);
     
     return { onHand, available: onHand - reserved, reserved, need, onOrder };
