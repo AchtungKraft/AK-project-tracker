@@ -18,15 +18,24 @@ import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
 import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 /**
- * ReceiveInventoryModal - PHASE 3 CANONICAL
+ * ReceiveInventoryModal - PHASE 12R CONTROLLED HYBRID
  * 
- * CANONICAL DISPATCHER:
- * - Routes through executeSupplyAction with action_type='RECEIVE'
- * - Updates Part.physical_stock via canonical path
- * - Updates commitment.covered_from_po or reserved_from_stock as appropriate
- * - Uses unified invalidation helper for cache consistency
+ * DUAL MODE (EXPLICIT):
  * 
- * NO DIRECT ENTITY WRITES for commitment-based receiving
+ * Mode 1: "Receive Against PO / Commitment" (default if commitment context exists)
+ *   - Routes through executeSupplyAction(RECEIVE)
+ *   - Requires commitment_id (or PO line → commitment)
+ *   - Updates covered_from_po → reserved_from_stock → physical_stock
+ *   - Triggers auto-rebalance of reservations
+ * 
+ * Mode 2: "Add General Stock" (fallback for non-PO inventory)
+ *   - Routes through executeSupplyAction(ADD_STOCK)
+ *   - Requires part_id + qty + location_id
+ *   - Directly increases physical_stock
+ *   - Triggers auto-rebalance to allocate to open needs
+ * 
+ * CANONICAL: Both modes route through executeSupplyAction
+ * NO direct Part.update allowed
  */
 export default function ReceiveInventoryModal({ 
   open, 
@@ -93,42 +102,43 @@ export default function ReceiveInventoryModal({
     }
   });
 
-  // Legacy mutation for non-commitment receiving (general inventory)
-  // Also updates Part.physical_stock for canonical consistency
-  const legacyReceiveMutation = useMutation({
+  // Mode 2: ADD_STOCK for general inventory (non-PO)
+  // Phase 12R: Routes through executeSupplyAction(ADD_STOCK)
+  const addStockMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await base44.functions.invoke('mutateInventory', {
-        mutation_type: 'receive',
-        part_id: part.id,
-        qty: data.quantity,
-        to_location_id: data.location_id || null,
-        unit_cost: data.purchase_cost,
-        order_id: orderId || null,
-        line_item_id: null,
-        lot_number: data.lot_number || null,
-        notes: data.notes || null,
-        source_type: data.source_type,
-        requires_inspection: data.requires_inspection,
+      if (!part?.id) throw new Error('Part ID required');
+      
+      const qty = Number(data.quantity) || 0;
+      if (qty <= 0) throw new Error('Quantity must be positive');
+      
+      // CANONICAL: Route through dispatcher - triggers rebalance
+      const response = await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'ADD_STOCK',
+        commitment_ids: [],
+        payload: {
+          part_id: part.id,
+          qty,
+          location_id: data.location_id || null,
+          note: data.notes || null,
+          purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null
+        },
+        dry_run: false
       });
       
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to add stock');
       }
       
-      // CANONICAL: mutateInventory backend handles Part.physical_stock update
-      // No direct Part entity writes allowed from UI
-      
-      return { ...response.data, part_id: part.id };
+      return response.data;
     },
     onSuccess: (result) => {
-      // CANONICAL: Use unified invalidation helper
-      invalidateSupplyQueries(queryClient, {
-        part_ids: [result.part_id || part.id],
-        order_ids: orderId ? [orderId] : [],
-        invalidateAll: true, // Ensure all views update
+      // CANONICAL: Use unified invalidation helper with context from dispatcher
+      invalidateSupplyQueries(queryClient, result.invalidation_context || {
+        part_ids: [result.part_id],
+        invalidateAll: true
       });
       
-      toast.success(`${formData.quantity} units added to inventory`);
+      toast.success(`${formData.quantity} units added to inventory (auto-allocated to open needs)`);
       setShowConfirmModal(false);
       
       if (onSuccess) onSuccess(result);
@@ -139,7 +149,7 @@ export default function ReceiveInventoryModal({
     }
   });
   
-  const isReceiving = supplyAction.isPending || legacyReceiveMutation.isPending;
+  const isReceiving = supplyAction.isPending || addStockMutation.isPending;
 
   const handleSubmit = () => {
     // Check if part is archived
@@ -168,7 +178,9 @@ export default function ReceiveInventoryModal({
   };
   
   const handleConfirmedReceive = () => {
-    // Route through canonical dispatcher for commitment-based receiving
+    // Phase 12R: EXPLICIT MODE ROUTING
+    
+    // Mode 1: Receive Against PO/Commitment (commitment context exists)
     if (commitment && commitment.order_line_item_ids?.[0]) {
       supplyAction.mutate({
         action_type: 'RECEIVE',
@@ -180,9 +192,10 @@ export default function ReceiveInventoryModal({
         },
         dry_run: false
       });
-    } else {
-      // Legacy path for non-commitment receiving
-      legacyReceiveMutation.mutate(formData);
+    } 
+    // Mode 2: Add General Stock (no commitment context)
+    else {
+      addStockMutation.mutate(formData);
     }
   };
 
@@ -194,8 +207,18 @@ export default function ReceiveInventoryModal({
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Package className="w-5 h-5 text-green-500" />
-            Receive Inventory
+            {commitment ? 'Receive Against PO' : 'Add General Stock'}
           </DialogTitle>
+          {commitment && (
+            <p className="text-xs text-gray-400 mt-1">
+              Mode: Receiving from purchase order (will auto-allocate to open needs)
+            </p>
+          )}
+          {!commitment && (
+            <p className="text-xs text-yellow-400 mt-1">
+              Mode: General stock intake (will auto-allocate to open commitments by priority)
+            </p>
+          )}
         </DialogHeader>
 
         {/* Archived Warning */}
