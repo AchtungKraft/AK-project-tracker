@@ -118,7 +118,7 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
         </DialogHeader>
         
         <div className="space-y-4">
-          {/* Part Info */}
+          {/* Part Info - PHASE 14E: Use commitment fields ONLY, no legacy requirement fields */}
           <Card className="bg-gray-800/50 border-gray-700">
             <CardContent className="p-3">
               <p className="text-white font-medium">{part.part_name}</p>
@@ -126,9 +126,9 @@ export default function InstallPartModal({ requirement, commitment: passedCommit
                 <p className="text-xs text-gray-400 font-mono">{part.vendor_part_number}</p>
               )}
               <div className="flex gap-4 mt-2 text-sm">
-                <span className="text-gray-400">Needed: <span className="text-white">{requirement.qty_needed}</span></span>
-                <span className="text-gray-400">Allocated: <span className="text-blue-400">{requirement.qty_allocated || 0}</span></span>
-                <span className="text-gray-400">Installed: <span className="text-green-400">{requirement.qty_installed || 0}</span></span>
+                <span className="text-gray-400">Needed: <span className="text-white">{commitmentState?.required_total ?? passedCommitment?.required_total ?? 0}</span></span>
+                <span className="text-gray-400">Reserved: <span className="text-blue-400">{reserved}</span></span>
+                <span className="text-gray-400">Installed: <span className="text-green-400">{installed}</span></span>
               </div>
             </CardContent>
           </Card>

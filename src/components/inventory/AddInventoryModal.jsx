@@ -67,13 +67,14 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
       if (!partId) throw new Error('Part is required');
       if (qty <= 0) throw new Error('Quantity must be positive');
 
-      // CANONICAL: Route through dispatcher - no direct Part writes
+      // PHASE 14E: location_id is NEVER null - backend enforces UNASSIGNED_SYSTEM
+      // Frontend passes location_id: data.location_id || null, backend handles default
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'ADD_STOCK',
         payload: {
           part_id: partId,
           qty,
-          location_id: data.location_id || null,
+          location_id: data.location_id || null, // Backend will default to UNASSIGNED_SYSTEM
           note: data.notes || null,
           purchase_cost: data.purchase_cost ? Number(data.purchase_cost) : null
         }

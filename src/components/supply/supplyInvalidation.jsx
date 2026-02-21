@@ -113,10 +113,17 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     queryClient.invalidateQueries({ queryKey: ['commitmentDetails'] });
   }
 
-  // === LEGACY ENTITY INVALIDATION (for backward compatibility) ===
+  // === CORE ENTITY INVALIDATION ===
+  // These are ALWAYS invalidated on inventory mutations to ensure UI consistency
+  
+  // InventoryItem is authoritative for location-based stock
+  queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+  
+  // Locations - for totals display
+  queryClient.invalidateQueries({ queryKey: ['locations'] });
   
   if (invalidateAll) {
-    queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
+    // Legacy entities - still used by some views
     queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
     queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
   }

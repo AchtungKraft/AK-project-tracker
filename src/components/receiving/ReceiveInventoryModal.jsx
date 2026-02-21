@@ -67,7 +67,7 @@ export default function ReceiveInventoryModal({
     source_type: orderId ? "vendor_order" : "manual_entry",
     requires_inspection: false,
   });
-  const [showLocationWarning, setShowLocationWarning] = useState(false);
+  // PHASE 14E: showLocationWarning removed - backend handles UNASSIGNED_SYSTEM default
   const [showCreateLocation, setShowCreateLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -164,16 +164,8 @@ export default function ReceiveInventoryModal({
       return;
     }
     
-    if (!formData.location_id && !showLocationWarning) {
-      setShowLocationWarning(true);
-      return;
-    }
-    
-    // Show confirmation modal
-    setShowConfirmModal(true);
-  };
-
-  const handleConfirmWithoutLocation = () => {
+    // PHASE 14E: No location warning needed - backend routes to UNASSIGNED_SYSTEM
+    // Show confirmation modal directly
     setShowConfirmModal(true);
   };
   
@@ -255,34 +247,8 @@ export default function ReceiveInventoryModal({
           </div>
         )}
 
-        {/* Location Warning */}
-        {showLocationWarning && !formData.location_id && (
-          <Alert className="bg-yellow-900/30 border-yellow-600">
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            <AlertDescription className="text-yellow-200">
-              <strong>No location selected!</strong> Inventory without a location is harder to find and track. 
-              Are you sure you want to continue?
-              <div className="flex gap-2 mt-3">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => setShowLocationWarning(false)}
-                  className="border-gray-600"
-                >
-                  Go Back
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleConfirmWithoutLocation}
-                  className="bg-yellow-600 hover:bg-yellow-700"
-                  disabled={createInventoryMutation.isPending}
-                >
-                  Continue Without Location
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* PHASE 14E: Location warning removed - backend auto-routes to UNASSIGNED_SYSTEM */}
+        {/* No need to warn users - inventory is always tracked */}
 
         <div className="space-y-4">
           {/* Quantity */}
@@ -358,8 +324,8 @@ export default function ReceiveInventoryModal({
                 </Button>
               </div>
             )}
-            <p className="text-xs text-yellow-500 mt-1">
-              Assigning a location is strongly recommended for tracking
+            <p className="text-xs text-gray-500 mt-1">
+              If no location is selected, inventory will be assigned to "Unassigned" automatically.
             </p>
           </div>
 
