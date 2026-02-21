@@ -59,8 +59,23 @@ Deno.serve(async (req) => {
       c.commitment_status !== 'closed'
     );
 
-    // 3. Order by created_date ASC (FIFO)
-    openCommitments.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+    // 3. Order by priority DESC, created_date ASC (highest priority first, then FIFO)
+    // Phase 12R: Deterministic allocation policy
+    const priorityOrder = { 'Critical': 4, 'High': 3, 'Normal': 2, 'Low': 1 };
+    openCommitments.sort((a, b) => {
+      // Priority descending (higher priority first)
+      const aPriority = priorityOrder[a.priority] || 2;
+      const bPriority = priorityOrder[b.priority] || 2;
+      if (bPriority !== aPriority) return bPriority - aPriority;
+      
+      // Created date ascending (older first)
+      const aDate = new Date(a.created_date);
+      const bDate = new Date(b.created_date);
+      if (aDate.getTime() !== bDate.getTime()) return aDate - bDate;
+      
+      // ID ascending (deterministic tie-breaker)
+      return (a.id || '').localeCompare(b.id || '');
+    });
 
     // 4. Greedy allocate stock
     let remaining_stock = physical_stock;
