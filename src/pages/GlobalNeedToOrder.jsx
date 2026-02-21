@@ -37,6 +37,7 @@ import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/com
 import InventoryChip from "@/components/supply/InventoryChip";
 import SourceTypeBadge from "@/components/supply/SourceTypeBadge";
 import NextActionBadge from "@/components/supply/NextActionBadge";
+import { PrepayStatusBadge } from "@/components/supply/InventoryStateBadge";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 
 /**
@@ -321,11 +322,11 @@ export default function GlobalNeedToOrder() {
             compact
           />
 
-          {item.requires_prepay && (
-            <Badge variant="outline" className={item.prepay_ok ? 'border-green-600 text-green-400' : 'border-red-600 text-red-400'}>
-              {item.prepay_ok ? '✓ Prepaid' : '⚠ Prepay Req'}
-            </Badge>
-          )}
+          {/* PHASE 9I: Prepay status badge */}
+          <PrepayStatusBadge 
+            requiresPrepay={item.requires_prepay}
+            billingStatus={item.billing_status}
+          />
 
           {isOrderable ? (
             <Badge className="bg-green-600 text-white">

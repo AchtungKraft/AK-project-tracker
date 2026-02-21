@@ -61,6 +61,7 @@ import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
 import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
+import { InventoryStateBadge, StockAvailableHelper, CoverageDriftBadge } from "@/components/supply/InventoryStateBadge";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
@@ -791,40 +792,49 @@ export default function ProjectSupplyManager() {
             {commitment.qty_installed}
           </span>
         </TableCell>
-        {/* Coverage - CANONICAL: coverage_status, coverage_percent from read model only */}
+        {/* Coverage - PHASE 9I: CANONICAL inventory state badge */}
         <TableCell>
-        <div className="flex items-center gap-1">
-        <CoverageBadgeInline 
-        coverage={{
-          required_total: commitment.required_total,
-          reserved_from_stock: commitment.reserved_from_stock,
-          covered_from_po: commitment.covered_from_po,
-          coverage_status: commitment.coverage_status,
-          coverage_percent: commitment.coverage_percent,
-          to_order: commitment.to_order
-        }}
-        onClick={() => setQtyManagerDrawer(commitment)}
-        />
-        <CoverageControlsPopover
-        commitment={{ 
-          id: commitment.id,
-          commitment_status: commitment.commitment_status,
-          required_total: commitment.required_total,
-          reserved_from_stock: commitment.reserved_from_stock,
-          covered_from_po: commitment.covered_from_po,
-        }}
-        coverage={{
-          required_total: commitment.required_total,
-          reserved_from_stock: commitment.reserved_from_stock,
-          covered_from_po: commitment.covered_from_po,
-          coverage_status: commitment.coverage_status,
-          to_order: commitment.to_order
-        }}
-        undoAvailable={false}
-        onActionComplete={() => invalidateSupply()}
-        disabled={!actionsEnabled}
-        />
-        </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              {/* Primary state badge - ONE badge only */}
+              <InventoryStateBadge 
+                commitment={{
+                  required_total: commitment.required_total,
+                  reserved_from_stock: commitment.reserved_from_stock,
+                  covered_from_po: commitment.covered_from_po,
+                  to_order: commitment.to_order,
+                  available_to_install: commitment.available_to_install,
+                  qty_installed: commitment.qty_installed,
+                }}
+              />
+              <CoverageControlsPopover
+                commitment={{ 
+                  id: commitment.id,
+                  commitment_status: commitment.commitment_status,
+                  required_total: commitment.required_total,
+                  reserved_from_stock: commitment.reserved_from_stock,
+                  covered_from_po: commitment.covered_from_po,
+                }}
+                coverage={{
+                  required_total: commitment.required_total,
+                  reserved_from_stock: commitment.reserved_from_stock,
+                  covered_from_po: commitment.covered_from_po,
+                  coverage_status: commitment.coverage_status,
+                  to_order: commitment.to_order
+                }}
+                undoAvailable={false}
+                onActionComplete={() => invalidateSupply()}
+                disabled={!actionsEnabled}
+              />
+            </div>
+            {/* Stock available helper - optional secondary text */}
+            <StockAvailableHelper 
+              commitment={commitment}
+              inventorySnapshot={commitment.inventory_snapshot}
+            />
+            {/* Coverage drift error - should never appear if backend is correct */}
+            <CoverageDriftBadge commitment={commitment} />
+          </div>
         </TableCell>
         {/* Next Step - CANONICAL: next_action */}
         <TableCell>
