@@ -419,7 +419,7 @@ export default function SupplyQueueSimplified() {
                               <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
                                 <th className="text-left py-2 px-2">Part</th>
                                 <th className="text-center py-2 px-2">Stock</th>
-                                <th className="text-center py-2 px-2">Rsv</th>
+                                <th className="text-center py-2 px-2" title="Global | This Project">Rsv (G|P)</th>
                                 <th className="text-center py-2 px-2">Need</th>
                                 <th className="text-right py-2 px-2">Cost</th>
                                 <th className="text-right py-2 px-2">Retail</th>
