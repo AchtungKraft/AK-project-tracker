@@ -190,19 +190,30 @@ Deno.serve(async (req) => {
           );
         }
         
-        // Check over-allocation at part level
-        const physical_stock = part?.physical_stock ?? 0;
-        const partInvPrecompute = partInventoryMap.get(c.part_id) || {};
-        const total_reserved_for_part = partInvPrecompute.total_reserved || 0;
+        // ============================================================================
+        // PHASE 2: CANONICAL INVENTORY SNAPSHOT
+        // Use pre-computed global inventory map (includes ALL commitments, not just this project)
+        // ============================================================================
+        const partInv = partInventoryMap.get(c.part_id) || {
+          physical_stock: 0,
+          reserved_global: 0,
+          on_order_global: 0,
+          to_order_global: 0,
+          available: 0,
+        };
         
-        if (total_reserved_for_part > physical_stock + 0.001) {
+        const physical_stock = partInv.physical_stock;
+        const reserved_global = partInv.reserved_global;
+        
+        // Check over-allocation at part level (using GLOBAL reserved)
+        if (reserved_global > physical_stock + 0.001) {
           throw new Error(
             `OVER_ALLOCATION_VIOLATION: part=${c.part_id} physical=${physical_stock} ` +
-            `total_reserved=${total_reserved_for_part} excess=${total_reserved_for_part - physical_stock}`
+            `reserved_global=${reserved_global} excess=${reserved_global - physical_stock}`
           );
         }
 
-        // Calculate on-order and received from line items
+        // Calculate on-order and received from line items (commitment-scoped)
         const on_order_qty = commitmentLineItems.reduce((sum, li) => {
           const order = orderMap.get(li.order_id);
           if (order && ['Ordered', 'Partial'].includes(order.status)) {
@@ -213,7 +224,7 @@ Deno.serve(async (req) => {
 
         const received_qty = commitmentLineItems.reduce((sum, li) => sum + (li.qty_received || 0), 0);
 
-        // Coverage status
+        // Coverage status (commitment-scoped)
         const total_covered = reserved_from_stock + covered_from_po;
         let coverage_status;
         if (total_covered >= required_total && required_total > 0) {
@@ -238,14 +249,12 @@ Deno.serve(async (req) => {
         // Source type mapping
         const source_type = mapSourceType(c.supply_source_type);
 
-        // Determine next action and block status (FORWARD MODEL - no pool gating)
-        // PHASE 9F: Pass part inventory to check available stock before allowing CREATE_PO
-        const partInv = partInventoryMap.get(c.part_id) || {};
-        const physical_stock_for_action = part?.physical_stock ?? 0;
+        // Determine next action and block status
+        // PHASE 2: Use canonical global inventory for action determination
         const partInventoryForAction = {
-          physical_stock: physical_stock_for_action,
-          reserved_total: partInv.total_reserved || 0,
-          available: Math.max(0, physical_stock_for_action - (partInv.total_reserved || 0)),
+          physical_stock: partInv.physical_stock,
+          reserved_total: partInv.reserved_global,
+          available: partInv.available,
         };
         
         const { next_action, block_reason_code } = computeNextAction(
@@ -255,13 +264,31 @@ Deno.serve(async (req) => {
           c // Pass raw commitment for billing flag access
         );
 
-        // Part inventory snapshot from read model (using already-computed variables)
+        // ============================================================================
+        // PHASE 2: CANONICAL INVENTORY SNAPSHOT
+        // All UI views MUST use these values - NO local calculations allowed
+        // "physical" = Part.physical_stock
+        // "reserved" = GLOBAL reserved across ALL commitments (not just this project)
+        // "available" = physical - reserved_global
+        // ============================================================================
         const inventory_snapshot = {
-          physical_stock: physical_stock_for_action,
-          reserved_total: partInv.total_reserved || 0,
-          available: partInventoryForAction.available,
-          on_order_total: part?.on_order ?? 0,
-          to_order_total: partInv.total_to_order || 0,
+          // CANONICAL: Part-level physical stock
+          physical: partInv.physical_stock,
+          physical_stock: partInv.physical_stock,
+          
+          // CANONICAL: GLOBAL reserved across ALL active commitments
+          reserved: partInv.reserved_global,
+          reserved_total: partInv.reserved_global,
+          
+          // CANONICAL: Available = physical - global reserved
+          available: partInv.available,
+          
+          // CANONICAL: Global aggregates
+          on_order_total: partInv.on_order_global,
+          to_order_total: partInv.to_order_global,
+          
+          // CANONICAL: "Needed" for this commitment = required - installed
+          needed: Math.max(0, required_total - qty_installed),
         };
 
         return {
