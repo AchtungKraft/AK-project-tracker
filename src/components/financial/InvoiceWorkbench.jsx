@@ -51,66 +51,50 @@ import { toast } from "sonner";
 // ============================================
 
 /**
- * LIFECYCLE_TABS - Workflow stages for invoicing
+ * CANONICAL_INVOICE_TABS - Financial-only billing states
  * 
- * FORWARD MODEL:
- * - Invoice status derived from: Uninvoiced / Invoiced / Paid (InvoiceBatch linkage)
- * - Does NOT use: billing_status, exposure_gap, covered_retail_total, ordering_safety
+ * FORWARD MODEL ONLY - Uses canonical billing status:
+ * - UNBILLED (Ready to Bill) - Gray
+ * - INVOICED (Awaiting Payment) - Purple  
+ * - PAID - Green
  * 
- * LEGACY MODEL:
- * - Uses ORDERING_SAFETY_CONFIG (RED/YELLOW/GREEN) for pool-based billing safety
- * - Uses client_billing_status badge
+ * NO LIFECYCLE LEAKAGE:
+ * - Does NOT use: commitment_status, coverage_status, inventory, to_order
+ * - Does NOT use: Ready to Order, In Progress, Installed Bill (supply lifecycle)
  */
-const LIFECYCLE_TABS = {
-  ASSIGNED_NEEDS_BILLING: {
-    key: 'assigned_needs_billing',
-    label: 'Needs Billing',
-    shortLabel: 'Billing',
+const CANONICAL_INVOICE_TABS = {
+  UNBILLED: {
+    key: 'unbilled',
+    label: 'Ready to Bill',
+    shortLabel: 'Unbilled',
     icon: DollarSign,
-    color: 'text-yellow-400',
-    bgColor: 'bg-yellow-600',
+    color: 'text-gray-400',
+    bgColor: 'bg-gray-600',
     allowSelection: true,
     selectionAction: 'invoice',
   },
-  BILLED_NOT_PAID: {
-    key: 'billed_not_paid',
+  INVOICED: {
+    key: 'invoiced',
     label: 'Awaiting Payment',
-    shortLabel: 'Payment',
+    shortLabel: 'Invoiced',
     icon: Clock,
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-600',
-    allowSelection: false,
-  },
-  PAID_READY_TO_ORDER: {
-    key: 'paid_ready_to_order',
-    label: 'Ready To Order',
-    shortLabel: 'Order',
-    icon: ShoppingCart,
-    color: 'text-green-400',
-    bgColor: 'bg-green-600',
-    allowSelection: true,
-    selectionAction: 'purchase',
-  },
-  ORDERED_WAITING_RECEIPT: {
-    key: 'ordered_waiting_receipt',
-    label: 'Orders In Progress',
-    shortLabel: 'In Progress',
-    icon: Truck,
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-600',
-    allowSelection: false,
-  },
-  INSTALLED_READY_TO_BILL: {
-    key: 'installed_ready_to_bill',
-    label: 'Installed Billing',
-    shortLabel: 'Installed',
-    icon: Wrench,
     color: 'text-purple-400',
     bgColor: 'bg-purple-600',
-    allowSelection: true,
-    selectionAction: 'invoice',
+    allowSelection: false,
+  },
+  PAID: {
+    key: 'paid',
+    label: 'Paid',
+    shortLabel: 'Paid',
+    icon: CheckCircle2,
+    color: 'text-green-400',
+    bgColor: 'bg-green-600',
+    allowSelection: false,
   },
 };
+
+// DEPRECATED: Legacy lifecycle tabs - kept for reference only
+const LIFECYCLE_TABS = CANONICAL_INVOICE_TABS;
 
 const BATCH_MODES = {
   MANUAL: { label: 'Manual', icon: ListChecks, description: 'Single batch' },
