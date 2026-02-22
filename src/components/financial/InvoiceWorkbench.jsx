@@ -397,7 +397,7 @@ function BatchBuilderPanel({
               </Badge>
               <span className="text-white font-medium">Items Selected</span>
               <span className={cn("font-bold text-lg", isInvoiceAction ? "text-green-400" : "text-blue-400")}>
-                ${totalAmount.toFixed(2)}
+                {formatCurrencyUSD(totalAmount)}
               </span>
               
               {/* Readiness indicator */}
@@ -438,7 +438,7 @@ function BatchBuilderPanel({
                         <SelectItem value="new">➕ Create New Invoice</SelectItem>
                         {draftBatches.map(batch => (
                           <SelectItem key={batch.id} value={batch.id}>
-                            📄 {batch.invoice_number || batch.batch_name} (${batch.total_amount?.toFixed(0) || 0})
+                            📄 {batch.invoice_number || batch.batch_name} ({formatCurrencyUSD(batch.total_amount || 0)})
                           </SelectItem>
                         ))}
                       </SelectContent>
