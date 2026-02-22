@@ -1278,6 +1278,8 @@ export default function ProjectSupplyManager() {
                         onSortChange={setSortBy}
                         onShowClosedChange={setShowClosedCancelled}
                         showProjectOption={false}
+                        projectId={projectId}
+                        tabId="plan"
                         className="flex-1"
                       />
                     </div>
@@ -1375,6 +1377,8 @@ export default function ProjectSupplyManager() {
                         onSortChange={setSortBy}
                         onShowClosedChange={setShowClosedCancelled}
                         showProjectOption={false}
+                        projectId={projectId}
+                        tabId="buy"
                         className="flex-1"
                       />
                     </div>
@@ -1446,6 +1450,8 @@ export default function ProjectSupplyManager() {
                         onSortChange={setSortBy}
                         onShowClosedChange={setShowClosedCancelled}
                         showProjectOption={false}
+                        projectId={projectId}
+                        tabId="receive"
                         className="flex-1"
                       />
                     </div>
@@ -1517,6 +1523,8 @@ export default function ProjectSupplyManager() {
                         onSortChange={setSortBy}
                         onShowClosedChange={setShowClosedCancelled}
                         showProjectOption={false}
+                        projectId={projectId}
+                        tabId="install"
                         className="flex-1"
                       />
                     </div>
