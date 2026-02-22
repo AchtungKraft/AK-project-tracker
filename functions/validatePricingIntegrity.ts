@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
       const retail_override = part.retail_override;
       const retail_matrix = part.retail_matrix_price;
       const markup_pct = part.applied_markup_pct;
+      const affects_margin = part.affects_margin !== false; // Default true
 
       // Matrix mode checks
       if (pricing_mode === 'matrix') {
@@ -82,6 +83,18 @@ Deno.serve(async (req) => {
             severity: 'ERROR'
           });
         }
+
+        // PHASE 15V: Matrix retail must be rounded to nearest $1
+        if (retail_matrix && retail_matrix !== Math.round(retail_matrix)) {
+          violations.push({
+            entity_type: 'Part',
+            entity_id: part.id,
+            part_name: part.part_name,
+            code: 'MATRIX_NOT_ROUNDED',
+            message: `Matrix retail ${retail_matrix} has cents, must be whole dollar`,
+            severity: 'ERROR'
+          });
+        }
       }
 
       // Manual mode checks
@@ -109,16 +122,16 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Negative margin check
+      // Negative margin check - only if affects_margin
       const retail_eff = pricing_mode === 'manual' ? retail_override : retail_matrix;
-      if (cost > 0 && retail_eff > 0 && retail_eff < cost) {
+      if (affects_margin && cost > 0 && retail_eff > 0 && retail_eff < cost) {
         violations.push({
           entity_type: 'Part',
           entity_id: part.id,
           part_name: part.part_name,
           code: 'NEGATIVE_MARGIN',
-          message: `Retail ${retail_eff} < cost ${cost}`,
-          severity: 'WARNING',
+          message: `Retail ${retail_eff} < cost ${cost} (affects_margin=true)`,
+          severity: 'ERROR', // Now ERROR not WARNING per Phase 15V
           margin_pct: ((retail_eff - cost) / retail_eff) * 100
         });
       }

@@ -84,11 +84,14 @@ Deno.serve(async (req) => {
 
     // Compute retail
     const markup_pct = matchedTier.markup_pct ?? 0;
-    const retail_matrix_price = costNum * (1 + markup_pct);
+    const retail_raw = costNum * (1 + markup_pct);
+    
+    // PHASE 15V: Matrix retail MUST round to nearest $1 (no cents)
+    const retail_matrix_price = Math.round(retail_raw);
 
     return Response.json({
       success: true,
-      retail_matrix_price: Math.round(retail_matrix_price * 100) / 100, // Round to 2 decimals
+      retail_matrix_price, // Rounded to nearest whole dollar
       applied_markup_pct: markup_pct,
       tier_label: matchedTier.label || `${Math.round(markup_pct * 100)}% markup`,
       tier_id: matchedTier.id,
