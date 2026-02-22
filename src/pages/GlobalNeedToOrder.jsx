@@ -291,132 +291,162 @@ export default function GlobalNeedToOrder() {
   const renderItem = (item) => {
     // PHASE 9K: Use ONLY backend is_orderable - NO local gating logic
     const isOrderable = item.is_orderable === true;
+    
+    // CANONICAL: Inventory stats from read model only
+    const snap = item.inventory_snapshot || {};
+    const inStock = snap.physical_stock_global ?? 0;
+    const reservedGlobal = snap.reserved_global_active ?? 0;
+    const reservedProject = snap.reserved_this_project ?? 0;
+    const needed = (item.required_total ?? 0) - (item.qty_installed ?? 0);
+    const toOrder = item.to_order ?? 0;
+
+    // Resolve vendor/category names - NEVER display IDs
+    const vendorDisplay = resolveVendorDisplay(item.vendor_id, item.vendor_name);
+    const categoryDisplay = resolveCategoryDisplay(item.category_id, item.category_name);
 
     return (
       <div 
         key={item.commitment_id}
-        className={`p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0 ${
-          !isOrderable ? 'opacity-60' : ''
-        }`}
+        className={cn(
+          "p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
+          !isOrderable && "opacity-60"
+        )}
       >
+        {/* Checkbox */}
         <Checkbox
           checked={selectedItems.has(item.commitment_id)}
           onCheckedChange={() => toggleItemSelection(item.commitment_id)}
           disabled={!isOrderable}
         />
 
-        {item.featured_photo && (
-          <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-            <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
-            {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
-            {groupMode !== 'vendor' && item.vendor_name && <span>· {item.vendor_name}</span>}
+        {/* Part Info */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {item.featured_photo && (
+            <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
+              <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
+              {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="text-center w-16">
-            <p className="text-xs text-gray-500">Order</p>
-            {/* CANONICAL: to_order from read model ONLY - no legacy fallback */}
-            <p className="text-white font-bold">×{item.to_order}</p>
-          </div>
+        {/* Category */}
+        <div className="text-center w-20 hidden lg:block">
+          <p className="text-xs text-gray-500">Category</p>
+          <p className="text-gray-300 text-xs truncate">{categoryDisplay.name}</p>
+        </div>
 
-          {/* Canonical quantity display */}
-          <div className="text-center w-20">
-            <p className="text-xs text-gray-500">Exposure</p>
-            <p className={(item.exposure_gap ?? 0) > 0 ? 'text-red-400 font-medium' : 'text-green-400'}>
-              ${(item.exposure_gap ?? 0).toFixed(0)}
-            </p>
-          </div>
+        {/* In Stock (canonical: physical_stock_global) */}
+        <div className="text-center w-14">
+          <p className="text-xs text-gray-500">Stock</p>
+          <p className={cn("font-medium", inStock > 0 ? "text-green-400" : "text-gray-500")}>{inStock}</p>
+        </div>
 
-          <div className="text-center w-20">
-            <p className="text-xs text-gray-500">Pool</p>
-            <p className={(item.pool_balance ?? 0) >= (item.exposure_gap ?? 0) ? 'text-green-400' : 'text-yellow-400'}>
-              ${(item.pool_balance ?? 0).toFixed(0)}
-            </p>
-          </div>
+        {/* Reserved (G|P format like PSM) */}
+        <div className="text-center w-16 hidden md:block">
+          <p className="text-xs text-gray-500">Rsrvd</p>
+          <p className="text-amber-400 text-xs font-mono">{reservedGlobal}|{reservedProject}</p>
+        </div>
 
-          {/* Next action badge from resolver */}
-          <NextActionBadge 
-            nextAction={item.next_action} 
-            blockReason={item.block_reason_code}
-            compact
-          />
+        {/* Needed */}
+        <div className="text-center w-14">
+          <p className="text-xs text-gray-500">Need</p>
+          <p className={cn("font-medium", needed > 0 ? "text-cyan-400" : "text-gray-500")}>{needed}</p>
+        </div>
 
-          {/* PHASE 9I: Prepay status badge */}
+        {/* To Order (canonical: to_order from read model) */}
+        <div className="text-center w-14">
+          <p className="text-xs text-gray-500">Order</p>
+          <p className={cn("font-bold", toOrder > 0 ? "text-red-400" : "text-gray-500")}>{toOrder}</p>
+        </div>
+
+        {/* Cost (canonical: unit_cost) */}
+        <div className="text-center w-20 hidden lg:block">
+          <p className="text-xs text-gray-500">Cost</p>
+          <p className="text-gray-300 font-mono text-xs">{formatCurrencyUSD(item.unit_cost ?? 0)}</p>
+        </div>
+
+        {/* Retail (canonical: unit_retail) */}
+        <div className="text-center w-20 hidden lg:block">
+          <p className="text-xs text-gray-500">Retail</p>
+          <p className="text-gray-300 font-mono text-xs">{formatCurrencyUSD(item.unit_retail ?? 0)}</p>
+        </div>
+
+        {/* Vendor (resolved name, not ID) */}
+        <div className="text-center w-24 hidden xl:block">
+          <p className="text-xs text-gray-500">Vendor</p>
+          <p className="text-gray-300 text-xs truncate">{vendorDisplay.name}</p>
+        </div>
+
+        {/* Payment/Prepay Status */}
+        <div className="w-20">
           <PrepayStatusBadge 
             requiresPrepay={item.requires_prepay}
             billingStatus={item.billing_status}
           />
-
-          {/* PHASE 9K-B: Status badge from backend canonical fields */}
-          {isOrderable ? (
-            <Badge className="bg-green-600 text-white">
-              <CheckCircle2 className="w-3 h-3 mr-1" />
-              Ready
-            </Badge>
-          ) : !item.has_vendor ? (
-            <Badge variant="outline" className="border-yellow-600 text-yellow-400">
-              <AlertTriangle className="w-3 h-3 mr-1" />
-              No Vendor
-            </Badge>
-          ) : item.block_reason_code === 'PREPAY_REQUIRED' ? (
-            <Badge variant="outline" className="border-yellow-600 text-yellow-400">
-              <AlertTriangle className="w-3 h-3 mr-1" />
-              Prepay Req
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-red-600 text-red-400">
-              <XCircle className="w-3 h-3 mr-1" />
-              Blocked
-            </Badge>
-          )}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-              {isOrderable && (
-                <DropdownMenuItem onClick={() => setOrderModalPart({
-                  commitment_id: item.commitment_id,
-                  part_id: item.part_id,
-                  part_name: item.part_name,
-                  vendor_id: item.vendor_id,
-                  vendor_name: item.vendor_name,
-                  qty_to_order: item.to_order,
-                  estimated_cost: item.estimated_cost,
-                  default_cost: item.unit_cost,
-                  default_retail: item.unit_retail
-                })} className="text-green-400">
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Create PO
-                </DropdownMenuItem>
-              )}
-              {item.covered_from_po > 0 && (
-                <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Additional Order
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem 
-                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
-              >
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Go to Project
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-gray-700" />
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
+
+        {/* Coverage Badge (canonical: coverage_status) */}
+        <div className="w-20">
+          <CoverageBadgeInline coverageStatus={item.coverage_status} />
+        </div>
+
+        {/* Pricing Integrity */}
+        <div className="w-24 hidden xl:block">
+          <PricingIntegrityBadge status={item.pricing_integrity_status} />
+        </div>
+
+        {/* Next Action */}
+        <NextActionBadge 
+          nextAction={item.next_action} 
+          blockReason={item.block_reason_code}
+          compact
+        />
+
+        {/* Actions Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+            {isOrderable && (
+              <DropdownMenuItem onClick={() => setOrderModalPart({
+                commitment_id: item.commitment_id,
+                part_id: item.part_id,
+                part_name: item.part_name,
+                vendor_id: item.vendor_id,
+                vendor_name: vendorDisplay.name,
+                qty_to_order: toOrder,
+                estimated_cost: item.estimated_cost,
+                default_cost: item.unit_cost,
+                default_retail: item.unit_retail
+              })} className="text-green-400">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Create PO
+              </DropdownMenuItem>
+            )}
+            {item.covered_from_po > 0 && (
+              <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
+                <Plus className="w-4 h-4 mr-2" />
+                Additional Order
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem 
+              onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
+            >
+              <ArrowRight className="w-4 h-4 mr-2" />
+              Go to Project
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-gray-700" />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   };
