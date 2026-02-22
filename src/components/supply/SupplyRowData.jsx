@@ -124,6 +124,13 @@ export function DesktopSupplyRow({
         </div>
       </td>
       
+      {/* Category - RESOLVED NAME, never ID */}
+      <td className="px-2 py-2">
+        <span className="text-xs text-gray-400 truncate max-w-[100px] block">
+          {resolvedCategory.name}
+        </span>
+      </td>
+      
       {/* In Stock */}
       <td className="px-2 py-2 text-center">
         <span className="text-sm font-mono text-gray-300">{inStock}</span>
@@ -139,7 +146,7 @@ export function DesktopSupplyRow({
         </span>
       </td>
       
-      {/* Needed */}
+      {/* Needed - STATIC, no inline editing */}
       <td className="px-2 py-2 text-center">
         <span className="text-sm font-mono text-white">{needed}</span>
       </td>
@@ -168,10 +175,10 @@ export function DesktopSupplyRow({
         </span>
       </td>
       
-      {/* Vendor */}
+      {/* Vendor - RESOLVED NAME, never ID */}
       <td className="px-2 py-2">
         <span className="text-xs text-gray-400 truncate max-w-[100px] block">
-          {vendorName}
+          {resolvedVendor.name}
         </span>
       </td>
       
@@ -185,7 +192,7 @@ export function DesktopSupplyRow({
         </span>
       </td>
       
-      {/* Inventory Coverage */}
+      {/* Coverage Indicator */}
       <td className="px-2 py-2">
         <InventoryCoverageIndicator available={available} needed={needed} />
       </td>
