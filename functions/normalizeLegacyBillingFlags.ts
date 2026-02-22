@@ -1,11 +1,43 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * normalizeLegacyBillingFlags - Phase 9H Step 1
+ * normalizeLegacyBillingFlags - Phase 9H Step 1 + Phase 10 Canonical Billing
  * 
  * Normalizes all legacy billing flags to ensure requires_prepay is an explicit boolean.
  * Legacy parts default to ORDER WITHOUT INVOICE (requires_prepay = false).
+ * 
+ * PHASE 10: Also normalizes billing_status to canonical values:
+ * - 'unbilled' (was: null, '', 'billable', 'not_billable', 'not_invoiced')
+ * - 'invoiced' (was: 'awaiting_pay', 'awaiting_payment', 'sent')
+ * - 'paid' (unchanged)
  */
+
+/**
+ * Normalize legacy billing_status to canonical values
+ */
+function normalizeToCanonicalBillingStatus(rawStatus) {
+  if (!rawStatus) return 'unbilled';
+  
+  const status = rawStatus.toLowerCase().trim();
+  
+  // Already canonical
+  if (['unbilled', 'invoiced', 'paid'].includes(status)) {
+    return status;
+  }
+  
+  // PAID states
+  if (['client_paid'].includes(status)) {
+    return 'paid';
+  }
+  
+  // INVOICED states
+  if (['awaiting_pay', 'awaiting_payment', 'sent', 'client_invoiced'].includes(status)) {
+    return 'invoiced';
+  }
+  
+  // UNBILLED states (default) - includes 'billable', 'not_billable', 'not_invoiced'
+  return 'unbilled';
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -117,10 +149,12 @@ Deno.serve(async (req) => {
 
         if (!dry_run) {
           // PHASE 9K-B: Set both requires_prepay AND prepay_ok
+          // PHASE 10: Use CANONICAL billing_status 'unbilled' instead of legacy 'billable'
+          const canonicalBillingStatus = normalizeToCanonicalBillingStatus(commitment.billing_status);
           await base44.asServiceRole.entities.PartCommitment.update(commitment.id, {
             requires_prepay: new_requires_prepay,
             prepay_ok: new_prepay_ok,
-            billing_status: commitment.billing_status ?? 'billable',
+            billing_status: canonicalBillingStatus,
             billing_flag_normalized_at: timestamp,
             billing_flag_normalized_by: user.email
           });
