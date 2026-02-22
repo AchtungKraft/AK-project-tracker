@@ -274,6 +274,13 @@ export function MobileSupplyCard({
   const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
   const available = commitment?.inventory_snapshot?.available ?? 0;
   
+  // PHASE 7: DEV GUARD - Validate inventory consistency
+  if (process.env.NODE_ENV === 'development') {
+    const displayed = { in_stock: inStock, reserved, available };
+    const canonical = { physical_stock: inStock, reserved_global: reserved, available_global: available };
+    validateInventoryConsistency('MobileSupplyCard', commitment?.part_id, displayed, canonical);
+  }
+  
   // RESOLVE NAMES - Never display IDs
   const resolvedVendor = resolveVendorDisplay(
     commitment?.vendor_id || vendor?.id,
