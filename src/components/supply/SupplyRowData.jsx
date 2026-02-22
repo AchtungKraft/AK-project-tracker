@@ -56,6 +56,8 @@ function InventoryCoverageIndicator({ available, needed }) {
 /**
  * Desktop Row - Single line format
  * In Stock: X | Reserved: Y | Needed: Z | Cost: 12,500.00 | Retail: 18,900.00
+ * 
+ * MANDATORY DATA CONTRACT - Nothing may be hidden.
  */
 export function DesktopSupplyRow({
   commitment,
@@ -68,15 +70,15 @@ export function DesktopSupplyRow({
   const displayStatus = getDisplayStatus(commitment?.commitment_status);
   const statusColor = getDisplayStatusColor(displayStatus);
   
-  // Extract values with fallbacks
+  // MANDATORY VALUES - Extract with fallbacks
   const inStock = commitment?.inventory_snapshot?.physical ?? part?.physical_stock ?? 0;
   const reserved = commitment?.reserved_from_stock ?? 0;
   const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
-  const cost = commitment?.unit_cost_snapshot ?? part?.cost ?? 0;
-  const retail = commitment?.unit_retail_snapshot ?? 0;
+  const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
+  const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
   const vendorName = vendor?.vendor_name ?? commitment?.vendor_name ?? '—';
-  const paymentStatus = commitment?.payment_status ?? 'unpaid';
-  const available = commitment?.inventory_snapshot?.available ?? (inStock - reserved);
+  const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
+  const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
   
   return (
     <tr className={cn("hover:bg-gray-800/30 border-b border-gray-800/50", className)}>
@@ -158,7 +160,7 @@ export function DesktopSupplyRow({
       <td className="px-2 py-2">
         <span className={cn(
           "text-[10px] font-mono uppercase",
-          paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
+          paymentStatus === 'invoiced' || paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
         )}>
           {paymentStatus}
         </span>
