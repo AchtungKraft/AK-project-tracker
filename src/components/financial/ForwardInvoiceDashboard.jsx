@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -28,8 +27,6 @@ import {
   Plus,
   Download,
   CheckCircle2,
-  Clock,
-  AlertTriangle,
   DollarSign,
   RefreshCw,
   Loader2,
@@ -38,53 +35,61 @@ import {
   Unlock,
   Send,
   CreditCard,
-  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import InvoiceWorkbench from "./InvoiceWorkbench";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { 
+  useProjectInvoiceView, 
+  CANONICAL_BILLING_STATUS,
+  getBillingStatusConfig 
+} from "./useProjectInvoiceView";
 
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
  * 
- * FORWARD MODEL ONLY - Does NOT use:
- * - BillingPool, PoolAllocation, PoolCharge
- * - exposure_gap, covered_retail_total, billing_status
- * - VendorInvoice flows
+ * PHASE 6 REFACTOR: Uses canonical financial read model
  * 
- * USES:
- * - InvoiceBatch as single source of client billing truth
- * - InvoiceBatchLine for line items
- * - Payment recorded on InvoiceBatch (paid_date, payment_method, payment_reference, amount_paid)
+ * CANONICAL INVOICE STATES ONLY:
+ * - UNBILLED (Ready to Bill) - Gray
+ * - INVOICED (Awaiting Payment) - Purple
+ * - PAID - Green
+ * 
+ * NO LIFECYCLE LEAKAGE:
+ * - Does NOT inspect commitment_status
+ * - Does NOT inspect coverage_status
+ * - Does NOT inspect inventory
+ * - Does NOT inspect to_order / install progress
+ * 
+ * Uses InvoiceBatch as single source of client billing truth
  */
 export default function ForwardInvoiceDashboard({ projectId }) {
   const queryClient = useQueryClient();
   const audit = useWiringAudit('ForwardInvoiceDashboard');
-  const [selectedBatch, setSelectedBatch] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentBatch, setPaymentBatch] = useState(null);
   const [showInvoiceWorkbench, setShowInvoiceWorkbench] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Fetch invoice batches for this project
-  const { data: invoiceBatches = [], isLoading, refetch } = useQuery({
-    queryKey: ['invoiceBatches', projectId],
-    queryFn: async () => {
-      const filter = { project_id: projectId };
-      return base44.entities.InvoiceBatch.filter(filter, '-created_date');
-    },
-    enabled: !!projectId,
-  });
+  // PHASE 6: Use canonical read model
+  const { 
+    commitments,
+    summary, 
+    invoiceBatches, 
+    isLoading, 
+    refetch 
+  } = useProjectInvoiceView(projectId);
 
-  // Compute KPIs
-  const kpis = useMemo(() => {
+  // Compute InvoiceBatch-level KPIs (separate from commitment summary)
+  const batchKpis = useMemo(() => {
     const nonVoided = invoiceBatches.filter(b => b.status !== 'voided');
     const drafts = nonVoided.filter(b => b.status === 'draft');
     const sent = nonVoided.filter(b => ['sent', 'invoiced'].includes(b.status));
     const paid = nonVoided.filter(b => b.status === 'paid');
     const needsExport = nonVoided.filter(b => !b.qb_exported && b.status !== 'draft');
-    const exportFailed = nonVoided.filter(b => b.qb_sync_status === 'failed');
 
     const totalInvoiced = nonVoided.reduce((sum, b) => sum + (b.total_amount || 0), 0);
     const totalPaid = paid.reduce((sum, b) => sum + (b.amount_paid || b.total_amount || 0), 0);
@@ -93,7 +98,6 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     // Aging buckets
     const today = new Date();
     let totalOverdue = 0;
-    let oldestOverdueDays = 0;
     const aging = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
 
     for (const batch of sent) {
@@ -105,7 +109,6 @@ export default function ForwardInvoiceDashboard({ projectId }) {
           aging.current += amount;
         } else {
           totalOverdue += amount;
-          oldestOverdueDays = Math.max(oldestOverdueDays, daysOverdue);
           if (daysOverdue <= 30) aging['1-30'] += amount;
           else if (daysOverdue <= 60) aging['31-60'] += amount;
           else if (daysOverdue <= 90) aging['61-90'] += amount;
@@ -121,65 +124,65 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       totalPaid,
       totalOutstanding,
       totalOverdue,
-      oldestOverdueDays,
       aging,
       draftCount: drafts.length,
       sentCount: sent.length,
       paidCount: paid.length,
       needsExportCount: needsExport.length,
-      exportFailedCount: exportFailed.length,
     };
   }, [invoiceBatches]);
 
-  // Export to QB mutation
-  const exportMutation = useMutation({
-    mutationFn: async ({ batchId, action }) => {
+  // Export to QB handler
+  const handleExport = async (batchId, action) => {
+    setIsExporting(true);
+    try {
       audit.trackClick('qb_export', { batchId, action });
       const response = await base44.functions.invoke('exportInvoiceBatchToQuickBooks', {
         batch_id: batchId,
-        action: action, // 'csv' or 'mark_exported'
+        action: action,
       });
-      return response.data;
-    },
-    onSuccess: (data, variables) => {
-      audit.trackSuccess('qb_export', { action: variables.action });
-      if (variables.action === 'csv' && data.csv_url) {
-        // Trigger download
+      
+      if (action === 'csv' && response.data?.csv_url) {
         const link = document.createElement('a');
-        link.href = data.csv_url;
-        link.download = `invoice_${variables.batchId}.csv`;
+        link.href = response.data.csv_url;
+        link.download = `invoice_${batchId}.csv`;
         document.body.appendChild(link);
         link.click();
         link.remove();
         toast.success('CSV downloaded');
-      } else if (variables.action === 'mark_exported') {
+      } else if (action === 'mark_exported') {
         toast.success('Marked as exported');
-        queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
+        queryClient.invalidateQueries({ queryKey: ['projectInvoiceBatches', projectId] });
       }
-    },
-    onError: (error) => {
+      audit.trackSuccess('qb_export', { action });
+    } catch (error) {
       audit.trackError('qb_export', error);
       toast.error(error.message || 'Export failed');
-    },
-  });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
-  // Update status mutation
-  const statusMutation = useMutation({
-    mutationFn: async ({ batchId, status }) => {
+  // Update status handler
+  const handleStatusUpdate = async (batchId, status) => {
+    try {
       await base44.entities.InvoiceBatch.update(batchId, { status });
-    },
-    onSuccess: () => {
       toast.success('Status updated');
-      queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
-    },
-    onError: (error) => {
+      refetch();
+    } catch (error) {
       toast.error(error.message || 'Update failed');
-    },
-  });
+    }
+  };
 
-  // Record payment mutation
-  const paymentMutation = useMutation({
-    mutationFn: async (paymentData) => {
+  // Record payment handler
+  const handleRecordPayment = (batch) => {
+    audit.trackClick('open_payment_modal', { batchId: batch.id });
+    setPaymentBatch(batch);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSubmit = async (paymentData) => {
+    try {
       audit.trackClick('record_payment', { batchId: paymentData.batchId });
       const { batchId, ...data } = paymentData;
       await base44.entities.InvoiceBatch.update(batchId, {
@@ -188,38 +191,17 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         payment_method: data.payment_method,
         payment_reference: data.payment_reference,
         amount_paid: data.amount_paid,
-        is_locked: true, // Lock on payment
+        is_locked: true,
       });
-    },
-    onSuccess: (_, variables) => {
-      audit.trackSuccess('record_payment', { batchId: variables.batchId });
+      audit.trackSuccess('record_payment', { batchId });
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
-      queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
-    },
-    onError: (error) => {
+      refetch();
+    } catch (error) {
       audit.trackError('record_payment', error);
       toast.error(error.message || 'Failed to record payment');
-    },
-  });
-
-  const getStatusBadge = (batch) => {
-    const statusConfig = {
-      draft: { color: 'bg-gray-600', label: 'Draft' },
-      sent: { color: 'bg-purple-600', label: 'Sent' },
-      invoiced: { color: 'bg-purple-600', label: 'Invoiced' },
-      paid: { color: 'bg-green-600', label: 'Paid' },
-      voided: { color: 'bg-red-600', label: 'Voided' },
-    };
-    const config = statusConfig[batch.status] || statusConfig.draft;
-    return <Badge className={cn(config.color, "text-white text-xs")}>{config.label}</Badge>;
-  };
-
-  const handleRecordPayment = (batch) => {
-    audit.trackClick('open_payment_modal', { batchId: batch.id });
-    setPaymentBatch(batch);
-    setShowPaymentModal(true);
+    }
   };
 
   const handleCreateInvoice = () => {
@@ -227,54 +209,87 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     setShowInvoiceWorkbench(true);
   };
 
+  // PHASE 5: Status badge with canonical colors
+  const getStatusBadge = (batch) => {
+    // Map batch.status to canonical billing status colors
+    if (batch.status === 'paid') {
+      return <Badge className="bg-green-600 text-white text-xs">Paid</Badge>;
+    }
+    if (['sent', 'invoiced'].includes(batch.status)) {
+      return <Badge className="bg-purple-600 text-white text-xs">Invoiced</Badge>;
+    }
+    if (batch.status === 'voided') {
+      return <Badge className="bg-red-600 text-white text-xs">Voided</Badge>;
+    }
+    // Draft = unbilled
+    return <Badge className="bg-gray-600 text-white text-xs">Unbilled</Badge>;
+  };
+
   return (
     <div className="space-y-4">
-      {/* KPI Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="bg-blue-900/20 border-blue-800/50">
+      {/* KPI Summary - PHASE 5: Canonical colors */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Unbilled - Gray */}
+        <Card className="bg-gray-900/40 border-gray-700">
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-gray-500">Total Invoiced</p>
-            <p className="text-xl font-bold text-blue-400">${kpis.totalInvoiced.toFixed(0)}</p>
+            <p className="text-xs text-gray-500">Unbilled</p>
+            <p className="text-xl font-bold text-gray-400">
+              {formatCurrencyUSD(summary.unbilled_total)}
+            </p>
+            <p className="text-xs text-gray-600">{summary.unbilled_count} items</p>
           </CardContent>
         </Card>
+        
+        {/* Invoiced - Purple */}
+        <Card className="bg-purple-900/20 border-purple-800/50">
+          <CardContent className="p-3 text-center">
+            <p className="text-xs text-gray-500">Awaiting Payment</p>
+            <p className="text-xl font-bold text-purple-400">
+              {formatCurrencyUSD(batchKpis.totalOutstanding)}
+            </p>
+            <p className="text-xs text-gray-600">{batchKpis.sentCount} invoices</p>
+          </CardContent>
+        </Card>
+        
+        {/* Paid - Green */}
         <Card className="bg-green-900/20 border-green-800/50">
           <CardContent className="p-3 text-center">
             <p className="text-xs text-gray-500">Collected</p>
-            <p className="text-xl font-bold text-green-400">${kpis.totalPaid.toFixed(0)}</p>
+            <p className="text-xl font-bold text-green-400">
+              {formatCurrencyUSD(batchKpis.totalPaid)}
+            </p>
+            <p className="text-xs text-gray-600">{batchKpis.paidCount} paid</p>
           </CardContent>
         </Card>
-        <Card className="bg-yellow-900/20 border-yellow-800/50">
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-gray-500">Outstanding</p>
-            <p className="text-xl font-bold text-yellow-400">${kpis.totalOutstanding.toFixed(0)}</p>
-          </CardContent>
-        </Card>
-        <Card className={cn("border-gray-800", kpis.totalOverdue > 0 && "bg-red-900/20 border-red-800/50")}>
+        
+        {/* Outstanding/Overdue - Amber */}
+        <Card className={cn(
+          "border-gray-800",
+          batchKpis.totalOverdue > 0 && "bg-amber-900/20 border-amber-800/50"
+        )}>
           <CardContent className="p-3 text-center">
             <p className="text-xs text-gray-500">Overdue</p>
-            <p className={cn("text-xl font-bold", kpis.totalOverdue > 0 ? "text-red-400" : "text-gray-400")}>
-              ${kpis.totalOverdue.toFixed(0)}
+            <p className={cn(
+              "text-xl font-bold",
+              batchKpis.totalOverdue > 0 ? "text-amber-400" : "text-gray-500"
+            )}>
+              {formatCurrencyUSD(batchKpis.totalOverdue)}
             </p>
-          </CardContent>
-        </Card>
-        <Card className={cn("border-gray-800", kpis.needsExportCount > 0 && "bg-orange-900/20 border-orange-800/50")}>
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-gray-500">Needs QB Export</p>
-            <p className={cn("text-xl font-bold", kpis.needsExportCount > 0 ? "text-orange-400" : "text-gray-400")}>
-              {kpis.needsExportCount}
+            <p className="text-xs text-gray-600">
+              {batchKpis.needsExportCount > 0 && `${batchKpis.needsExportCount} needs QB`}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Aging Buckets */}
-      {kpis.totalOutstanding > 0 && (
+      {/* Aging Buckets - Only show if outstanding */}
+      {batchKpis.totalOutstanding > 0 && (
         <div className="grid grid-cols-5 gap-2">
-          <AgingBucket label="Current" amount={kpis.aging.current} color="green" />
-          <AgingBucket label="1-30 Days" amount={kpis.aging['1-30']} color="yellow" />
-          <AgingBucket label="31-60 Days" amount={kpis.aging['31-60']} color="orange" />
-          <AgingBucket label="61-90 Days" amount={kpis.aging['61-90']} color="red" />
-          <AgingBucket label="90+ Days" amount={kpis.aging['90+']} color="red" severe />
+          <AgingBucket label="Current" amount={batchKpis.aging.current} status="current" />
+          <AgingBucket label="1-30 Days" amount={batchKpis.aging['1-30']} status="warning" />
+          <AgingBucket label="31-60 Days" amount={batchKpis.aging['31-60']} status="late" />
+          <AgingBucket label="61-90 Days" amount={batchKpis.aging['61-90']} status="severe" />
+          <AgingBucket label="90+ Days" amount={batchKpis.aging['90+']} status="critical" />
         </div>
       )}
 
@@ -351,8 +366,14 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                     <TableCell className="text-gray-400 text-sm">
                       {batch.due_date || '-'}
                     </TableCell>
-                    <TableCell className="text-right text-green-400 font-medium">
-                      ${(batch.total_amount || 0).toFixed(2)}
+                    {/* PHASE 5: Use formatCurrencyUSD, color by status */}
+                    <TableCell className={cn(
+                      "text-right font-medium",
+                      batch.status === 'paid' ? "text-green-400" :
+                      ['sent', 'invoiced'].includes(batch.status) ? "text-purple-400" :
+                      "text-gray-400"
+                    )}>
+                      {formatCurrencyUSD(batch.total_amount || 0)}
                     </TableCell>
                     <TableCell>{getStatusBadge(batch)}</TableCell>
                     <TableCell>
@@ -379,7 +400,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                         <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
                           {batch.status === 'draft' && (
                             <DropdownMenuItem
-                              onClick={() => statusMutation.mutate({ batchId: batch.id, status: 'sent' })}
+                              onClick={() => handleStatusUpdate(batch.id, 'sent')}
                               className="text-purple-400"
                             >
                               <Send className="w-4 h-4 mr-2" />
@@ -397,7 +418,8 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                           )}
                           <DropdownMenuSeparator className="bg-gray-700" />
                           <DropdownMenuItem
-                            onClick={() => exportMutation.mutate({ batchId: batch.id, action: 'csv' })}
+                            onClick={() => handleExport(batch.id, 'csv')}
+                            disabled={isExporting}
                             className="text-blue-400"
                           >
                             <Download className="w-4 h-4 mr-2" />
@@ -405,8 +427,9 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                           </DropdownMenuItem>
                           {!batch.qb_exported && batch.status !== 'draft' && (
                             <DropdownMenuItem
-                              onClick={() => exportMutation.mutate({ batchId: batch.id, action: 'mark_exported' })}
-                              className="text-orange-400"
+                              onClick={() => handleExport(batch.id, 'mark_exported')}
+                              disabled={isExporting}
+                              className="text-amber-400"
                             >
                               <CheckCircle2 className="w-4 h-4 mr-2" />
                               Mark Exported
@@ -416,10 +439,10 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                             <>
                               <DropdownMenuSeparator className="bg-gray-700" />
                               <DropdownMenuItem
-                                onClick={() => {
+                                onClick={async () => {
                                   if (confirm('Unlock this invoice? This allows edits.')) {
-                                    base44.entities.InvoiceBatch.update(batch.id, { is_locked: false });
-                                    queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
+                                    await base44.entities.InvoiceBatch.update(batch.id, { is_locked: false });
+                                    refetch();
                                   }
                                 }}
                                 className="text-red-400"
@@ -440,6 +463,39 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         </CardContent>
       </Card>
 
+      {/* Commitment Summary by Status - PHASE 7: Only financial states */}
+      <Card className="bg-black/40 border-gray-800">
+        <CardContent className="p-4">
+          <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Commitment Billing Summary
+          </h4>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-1">Ready to Bill</p>
+              <p className="text-lg font-bold text-gray-400">
+                {formatCurrencyUSD(summary.unbilled_total)}
+              </p>
+              <p className="text-xs text-gray-600">{summary.unbilled_count} commitments</p>
+            </div>
+            <div className="p-3 rounded-lg bg-purple-900/30 border border-purple-800/50">
+              <p className="text-xs text-gray-500 mb-1">Awaiting Payment</p>
+              <p className="text-lg font-bold text-purple-400">
+                {formatCurrencyUSD(summary.invoiced_total)}
+              </p>
+              <p className="text-xs text-gray-600">{summary.invoiced_count} commitments</p>
+            </div>
+            <div className="p-3 rounded-lg bg-green-900/30 border border-green-800/50">
+              <p className="text-xs text-gray-500 mb-1">Paid</p>
+              <p className="text-lg font-bold text-green-400">
+                {formatCurrencyUSD(summary.paid_total)}
+              </p>
+              <p className="text-xs text-gray-600">{summary.paid_count} commitments</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Record Payment Modal */}
       <RecordPaymentModal
         isOpen={showPaymentModal}
@@ -448,8 +504,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
           setPaymentBatch(null);
         }}
         batch={paymentBatch}
-        onSubmit={(data) => paymentMutation.mutate(data)}
-        isLoading={paymentMutation.isPending}
+        onSubmit={handlePaymentSubmit}
       />
 
       {/* Invoice Workbench Modal */}
@@ -459,7 +514,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
           onClose={() => setShowInvoiceWorkbench(false)}
           onSuccess={() => {
             setShowInvoiceWorkbench(false);
-            queryClient.invalidateQueries({ queryKey: ['invoiceBatches', projectId] });
+            refetch();
             queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
           }}
         />
@@ -468,34 +523,43 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   );
 }
 
-function AgingBucket({ label, amount, color, severe = false }) {
-  const colorClasses = {
-    green: 'bg-green-900/30 border-green-700/50 text-green-400',
-    yellow: 'bg-yellow-900/30 border-yellow-700/50 text-yellow-400',
-    orange: 'bg-orange-900/30 border-orange-700/50 text-orange-400',
-    red: severe 
-      ? 'bg-red-900/50 border-red-600/50 text-red-400' 
-      : 'bg-red-900/30 border-red-700/50 text-red-400',
+// ============================================
+// AGING BUCKET COMPONENT
+// ============================================
+
+function AgingBucket({ label, amount, status }) {
+  // PHASE 5: Canonical colors for aging
+  const statusStyles = {
+    current: 'bg-green-900/30 border-green-700/50 text-green-400',
+    warning: 'bg-amber-900/30 border-amber-700/50 text-amber-400',
+    late: 'bg-orange-900/30 border-orange-700/50 text-orange-400',
+    severe: 'bg-red-900/30 border-red-700/50 text-red-400',
+    critical: 'bg-red-900/50 border-red-600/50 text-red-400',
   };
   
   return (
     <div className={cn(
       "p-2 rounded-lg border text-center",
-      colorClasses[color]
+      statusStyles[status]
     )}>
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className={cn("text-sm font-medium", amount > 0 ? '' : 'text-gray-500')}>
-        ${amount.toLocaleString()}
+        {formatCurrencyUSD(amount)}
       </p>
     </div>
   );
 }
 
-function RecordPaymentModal({ isOpen, onClose, batch, onSubmit, isLoading }) {
+// ============================================
+// RECORD PAYMENT MODAL
+// ============================================
+
+function RecordPaymentModal({ isOpen, onClose, batch, onSubmit }) {
   const [paidDate, setPaidDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
     if (batch) {
@@ -505,14 +569,19 @@ function RecordPaymentModal({ isOpen, onClose, batch, onSubmit, isLoading }) {
 
   if (!batch) return null;
 
-  const handleSubmit = () => {
-    onSubmit({
-      batchId: batch.id,
-      paid_date: paidDate,
-      payment_method: paymentMethod,
-      payment_reference: paymentReference,
-      amount_paid: parseFloat(amountPaid) || batch.total_amount,
-    });
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        batchId: batch.id,
+        paid_date: paidDate,
+        payment_method: paymentMethod,
+        payment_reference: paymentReference,
+        amount_paid: parseFloat(amountPaid) || batch.total_amount,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -529,7 +598,7 @@ function RecordPaymentModal({ isOpen, onClose, batch, onSubmit, isLoading }) {
           <div className="p-3 bg-gray-800/50 rounded-lg">
             <p className="text-sm text-gray-400">Invoice</p>
             <p className="text-white font-medium">{batch.invoice_number || batch.batch_name}</p>
-            <p className="text-green-400 font-bold">${(batch.total_amount || 0).toFixed(2)}</p>
+            <p className="text-green-400 font-bold">{formatCurrencyUSD(batch.total_amount || 0)}</p>
           </div>
 
           <div className="space-y-3">
@@ -589,10 +658,14 @@ function RecordPaymentModal({ isOpen, onClose, batch, onSubmit, isLoading }) {
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isLoading || !paidDate}
+            disabled={isSubmitting || !paidDate}
             className="bg-green-600 hover:bg-green-700"
           >
-            {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+            )}
             Record Payment
           </Button>
         </DialogFooter>
