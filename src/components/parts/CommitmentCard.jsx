@@ -80,19 +80,19 @@ export default function CommitmentCard({
   }
 
   return (
-    <Card className="bg-gray-900/50 border-gray-700">
+    <Card className="bg-gray-900/50 border-gray-800">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            {/* Header */}
+            {/* Header - AK Industrial: simplified status display */}
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <CommitmentStatusBadge status={commitment.commitment_status} />
-              <CommitmentSourceBadge source={commitment.allocation_source} />
-            </div>
-            
-            {/* Financial Status */}
-            <div className="mb-2">
-              <FinancialStatusBadge financialStatus={financialStatus} displayMode="full" />
+              <span className={cn(
+                "text-[10px] font-mono uppercase px-2 py-0.5 border-l-2 bg-gray-900/50",
+                statusColor
+              )}>
+                {displayStatus}
+              </span>
+              <PricingIntegrityBadge commitment={commitment} />
             </div>
 
             {/* Part Info */}
@@ -114,23 +114,33 @@ export default function CommitmentCard({
               </div>
             )}
 
-            {/* Quantity Grid */}
+            {/* Cost + Retail Row */}
+            <div className="flex items-center gap-4 mb-2 text-xs">
+              <span className="text-gray-500">
+                C: <span className="text-gray-300 font-mono">{formatCurrency(commitment.unit_cost_snapshot || part?.cost || 0)}</span>
+              </span>
+              <span className="text-gray-500">
+                R: <span className="text-gray-300 font-mono">{formatCurrency(commitment.unit_retail_snapshot || 0)}</span>
+              </span>
+            </div>
+
+            {/* Quantity Grid - AK Industrial: monochrome */}
             <div className="grid grid-cols-4 gap-2 text-center mt-3">
-              <div className="p-1.5 bg-gray-800/50 rounded">
-                <p className="text-xs text-gray-500">Committed</p>
-                <p className="text-sm font-bold text-white">{commitment.qty_committed || 0}</p>
+              <div className="p-1.5 bg-gray-800/40 rounded">
+                <p className="text-[10px] text-gray-500 uppercase">Committed</p>
+                <p className="text-sm font-mono text-white">{commitment.qty_committed || 0}</p>
               </div>
-              <div className="p-1.5 bg-gray-800/50 rounded">
-                <p className="text-xs text-gray-500">Ordered</p>
-                <p className="text-sm font-bold text-purple-400">{commitment.qty_ordered || 0}</p>
+              <div className="p-1.5 bg-gray-800/40 rounded">
+                <p className="text-[10px] text-gray-500 uppercase">Ordered</p>
+                <p className="text-sm font-mono text-gray-300">{commitment.qty_ordered || 0}</p>
               </div>
-              <div className="p-1.5 bg-gray-800/50 rounded">
-                <p className="text-xs text-gray-500">Allocated</p>
-                <p className="text-sm font-bold text-blue-400">{commitment.qty_allocated || 0}</p>
+              <div className="p-1.5 bg-gray-800/40 rounded">
+                <p className="text-[10px] text-gray-500 uppercase">Received</p>
+                <p className="text-sm font-mono text-gray-300">{commitment.qty_received || 0}</p>
               </div>
-              <div className="p-1.5 bg-gray-800/50 rounded">
-                <p className="text-xs text-gray-500">Installed</p>
-                <p className="text-sm font-bold text-green-400">{commitment.qty_installed || 0}</p>
+              <div className="p-1.5 bg-gray-800/40 rounded">
+                <p className="text-[10px] text-gray-500 uppercase">Installed</p>
+                <p className="text-sm font-mono text-gray-300">{commitment.qty_installed || 0}</p>
               </div>
             </div>
 
@@ -138,8 +148,8 @@ export default function CommitmentCard({
             {(commitment.order_line_item_ids || []).length > 0 && (
               <div className="mt-3 flex items-center gap-2">
                 <FileText className="w-3 h-3 text-gray-500" />
-                <span className="text-xs text-gray-400">
-                  {(commitment.order_line_item_ids || []).length} linked PO line(s)
+                <span className="text-xs text-gray-400 font-mono">
+                  {(commitment.order_line_item_ids || []).length} PO line(s)
                 </span>
               </div>
             )}
