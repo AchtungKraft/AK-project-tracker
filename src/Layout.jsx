@@ -72,6 +72,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Layers,
       },
       {
+        title: "Project Invoices",
+        url: createPageUrl("ProjectInvoices"),
+        icon: Receipt,
+      },
+      {
         title: "Order Queue",
         url: createPageUrl("GlobalNeedToOrder"),
         icon: Truck,
@@ -85,11 +90,6 @@ const getNavigationItems = (isAchtungKraft) => {
         title: "Work Queues",
         url: createPageUrl("SupplyQueues"),
         icon: ListChecks,
-      },
-      {
-        title: "Project Invoices",
-        url: createPageUrl("ProjectInvoices"),
-        icon: Receipt,
       },
       { divider: true },
       {
