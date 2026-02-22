@@ -424,12 +424,14 @@ export function MobileSupplyCard({
 
 /**
  * Table Header Row for Desktop
+ * Column order: Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Pricing | Actions
  */
 export function SupplyTableHeader({ showCheckbox = false, showActions = true }) {
   return (
     <tr className="border-b border-gray-800 bg-gray-900/50">
       {showCheckbox && <th className="px-3 py-2 w-10"></th>}
       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part</th>
+      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
       <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">In Stock</th>
       <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
       <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Needed</th>
