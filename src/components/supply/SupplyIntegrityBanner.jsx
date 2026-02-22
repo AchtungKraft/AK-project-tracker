@@ -75,19 +75,9 @@ export default function SupplyIntegrityBanner({
     );
   }
 
-  // Gate passed - show success badge if not compact
+  // Gate passed - NO success badge (AK Industrial Mode: no green success badges)
   if (gateResult?.execution_surface_ready) {
-    if (compact) return null;
-    
-    return (
-      <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-3 flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-400" />
-        <span className="text-sm text-green-400">Supply integrity validated</span>
-        <Badge variant="outline" className="border-green-600 text-green-400">
-          {gateResult.summary?.passing_gates || 0}/{gateResult.summary?.total_gates || 0} gates passing
-        </Badge>
-      </div>
-    );
+    return null;
   }
 
   // Gate failed - show warning banner
