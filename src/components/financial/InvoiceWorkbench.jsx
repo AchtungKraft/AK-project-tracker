@@ -179,20 +179,31 @@ function LifecycleKPIHeader({ kpis }) {
 // ============================================
 
 /**
- * Derive forward-model invoice status from item data
- * Returns: "Uninvoiced" | "Invoiced" | "Paid"
+ * PHASE 6: Canonical billing status derivation
+ * Returns: "unbilled" | "invoiced" | "paid"
  */
-function getForwardInvoiceStatus(item) {
-  if (item.batch_status === 'paid' || item.invoice_status === 'paid') return 'Paid';
-  if (item.batch_id || item.invoice_batch_id || item.batch_status === 'invoiced' || item.batch_status === 'sent') return 'Invoiced';
-  return 'Uninvoiced';
+function getCanonicalBillingStatus(item) {
+  // Check batch status first (most authoritative)
+  if (item.batch_status === 'paid' || item.invoice_status === 'paid' || item.billing_status === 'paid') {
+    return 'paid';
+  }
+  if (item.batch_id || item.invoice_batch_id || item.batch_status === 'invoiced' || item.batch_status === 'sent' || item.billing_status === 'invoiced') {
+    return 'invoiced';
+  }
+  return 'unbilled';
 }
 
-/**
- * Check if an item is from a forward-model project
- */
+// DEPRECATED: Legacy forward model check - all projects are forward model now
 function isItemForwardModel(item) {
-  return item.financial_model_version === 'forward' || item.project_financial_model === 'forward';
+  return true; // All projects use forward model
+}
+
+// DEPRECATED: Legacy function kept for compatibility
+function getForwardInvoiceStatus(item) {
+  const status = getCanonicalBillingStatus(item);
+  // Map to old display format for any legacy code
+  return status === 'unbilled' ? 'Uninvoiced' : 
+         status === 'invoiced' ? 'Invoiced' : 'Paid';
 }
 
 function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRowClick }) {
