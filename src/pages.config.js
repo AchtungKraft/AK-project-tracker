@@ -54,6 +54,7 @@ import ClientPortalAdmin from './pages/ClientPortalAdmin';
 import ClientPortalHub from './pages/ClientPortalHub';
 import ClientProjectPortal from './pages/ClientProjectPortal';
 import ClientProjects from './pages/ClientProjects';
+import CreditLedger from './pages/CreditLedger';
 import Dashboard from './pages/Dashboard';
 import FinancialExceptionDashboard from './pages/FinancialExceptionDashboard';
 import GlobalNeedToOrder from './pages/GlobalNeedToOrder';
@@ -87,7 +88,6 @@ import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import TestDataCleanup from './pages/TestDataCleanup';
 import WiringAuditDashboard from './pages/WiringAuditDashboard';
-import CreditLedger from './pages/CreditLedger';
 import __Layout from './Layout.jsx';
 
 
@@ -99,6 +99,7 @@ export const PAGES = {
     "ClientPortalHub": ClientPortalHub,
     "ClientProjectPortal": ClientProjectPortal,
     "ClientProjects": ClientProjects,
+    "CreditLedger": CreditLedger,
     "Dashboard": Dashboard,
     "FinancialExceptionDashboard": FinancialExceptionDashboard,
     "GlobalNeedToOrder": GlobalNeedToOrder,
@@ -132,7 +133,6 @@ export const PAGES = {
     "TechSpecs": TechSpecs,
     "TestDataCleanup": TestDataCleanup,
     "WiringAuditDashboard": WiringAuditDashboard,
-    "CreditLedger": CreditLedger,
 }
 
 export const pagesConfig = {
