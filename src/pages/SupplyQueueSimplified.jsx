@@ -86,6 +86,44 @@ export default function SupplyQueueSimplified() {
   const vendorsMap = useMemo(() => new Map(vendors.map(v => [v.id, v])), [vendors]);
   const categoriesMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
+  // ============================================================================
+  // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP
+  // Computes GLOBAL reserved/on_order across ALL active commitments for each part
+  // "Reserved" = SUM(reserved_from_stock) across ALL commitments (not just one)
+  // ============================================================================
+  const partInventoryMap = useMemo(() => {
+    const map = new Map();
+    
+    // Initialize from parts
+    for (const part of parts) {
+      map.set(part.id, {
+        physical_stock: part.physical_stock ?? 0,
+        reserved_global: 0,
+        on_order_global: 0,
+        available: part.physical_stock ?? 0,
+      });
+    }
+    
+    // Aggregate from ALL active commitments
+    for (const c of commitments) {
+      if (c.commitment_status === 'cancelled' || c.commitment_status === 'closed') {
+        continue;
+      }
+      const inv = map.get(c.part_id);
+      if (!inv) continue;
+      
+      inv.reserved_global += c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      inv.on_order_global += c.covered_from_po ?? c.qty_ordered ?? 0;
+    }
+    
+    // Calculate available after aggregation
+    for (const [partId, inv] of map.entries()) {
+      inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+    }
+    
+    return map;
+  }, [parts, commitments]);
+
   // Filter and section commitments
   const { needsToOrder, awaitingPayment, counts } = useMemo(() => {
     let filtered = filterActiveCommitments(commitments, showClosedCancelled);
