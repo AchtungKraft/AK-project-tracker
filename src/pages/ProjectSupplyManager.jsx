@@ -1391,59 +1391,69 @@ export default function ProjectSupplyManager() {
             <TabsContent value="receive" className="mt-4">
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3">
                     <CardTitle className="text-white">Receiving Queue</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Select value={groupBy} onValueChange={setGroupBy}>
-                        <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
-                          <SelectValue placeholder="Group By" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 border-gray-700">
-                          <SelectItem value="none">No Grouping</SelectItem>
-                          <SelectItem value="category">Category</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <div className="relative w-64">
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="relative flex-1 max-w-xs">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                         <Input
-                          placeholder="Search..."
+                          placeholder="Search parts..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
                         />
                       </div>
+                      <SupplyGroupingControls
+                        onGroupChange={setGroupConfig}
+                        onSortChange={setSortBy}
+                        onShowClosedChange={setShowClosedCancelled}
+                        showProjectOption={false}
+                        className="flex-1"
+                      />
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-gray-800 hover:bg-transparent">
-                        <TableHead className="w-10"></TableHead>
-                        <TableHead className="text-gray-400">Part</TableHead>
-                        <TableHead className="text-gray-400 text-center">Needed</TableHead>
-                        <TableHead className="text-gray-400 text-center">Reserved</TableHead>
-                        <TableHead className="text-gray-400 text-center">To Order</TableHead>
-                        <TableHead className="text-gray-400 text-center">Ordered</TableHead>
-                        <TableHead className="text-gray-400 text-center">Received</TableHead>
-                        <TableHead className="text-gray-400 text-center">Installed</TableHead>
-                        <TableHead className="text-gray-400">Coverage</TableHead>
-                        <TableHead className="text-gray-400">Next Step</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  {isMobile ? (
+                    <div className="p-3">
                       {getFilteredCommitments('receive').length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                            No items on order
-                          </TableCell>
-                        </TableRow>
+                        <p className="text-center py-8 text-gray-500">No items on order</p>
                       ) : (
-                        renderGroupedCommitments('receive')
+                        renderMobileGroupedCommitments('receive')
                       )}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-800 hover:bg-transparent">
+                          <TableHead className="w-10"></TableHead>
+                          <TableHead className="text-gray-400">Part</TableHead>
+                          <TableHead className="text-gray-400 text-center">In Stock</TableHead>
+                          <TableHead className="text-gray-400 text-center">Reserved</TableHead>
+                          <TableHead className="text-gray-400 text-center">Needed</TableHead>
+                          <TableHead className="text-gray-400 text-right">Cost</TableHead>
+                          <TableHead className="text-gray-400 text-right">Retail</TableHead>
+                          <TableHead className="text-gray-400">Status</TableHead>
+                          <TableHead className="text-gray-400">Vendor</TableHead>
+                          <TableHead className="text-gray-400">Payment</TableHead>
+                          <TableHead className="text-gray-400">Coverage</TableHead>
+                          <TableHead className="text-gray-400">Pricing</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getFilteredCommitments('receive').length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={13} className="text-center py-8 text-gray-500">
+                              No items on order
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          renderGroupedCommitments('receive')
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1451,53 +1461,62 @@ export default function ProjectSupplyManager() {
             <TabsContent value="install" className="mt-4">
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3">
                     <CardTitle className="text-white">Installation Queue</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Select value={groupBy} onValueChange={setGroupBy}>
-                        <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9">
-                          <SelectValue placeholder="Group By" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 border-gray-700">
-                          <SelectItem value="none">No Grouping</SelectItem>
-                          <SelectItem value="category">Category</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <div className="relative w-64">
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="relative flex-1 max-w-xs">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                         <Input
-                          placeholder="Search..."
+                          placeholder="Search parts..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
+                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
                         />
                       </div>
+                      <SupplyGroupingControls
+                        onGroupChange={setGroupConfig}
+                        onSortChange={setSortBy}
+                        onShowClosedChange={setShowClosedCancelled}
+                        showProjectOption={false}
+                        className="flex-1"
+                      />
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-gray-800 hover:bg-transparent">
-                        <TableHead className="w-10"></TableHead>
-                        <TableHead className="text-gray-400">Part</TableHead>
-                        <TableHead className="text-gray-400 text-center">Needed</TableHead>
-                        <TableHead className="text-gray-400 text-center">Reserved</TableHead>
-                        <TableHead className="text-gray-400 text-center">To Order</TableHead>
-                        <TableHead className="text-gray-400 text-center">Ordered</TableHead>
-                        <TableHead className="text-gray-400 text-center">Received</TableHead>
-                        <TableHead className="text-gray-400 text-center">Installed</TableHead>
-                        <TableHead className="text-gray-400">Coverage</TableHead>
-                        <TableHead className="text-gray-400">Next Step</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  {isMobile ? (
+                    <div className="p-3">
                       {getFilteredCommitments('install').length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                            No items ready to install
-                          </TableCell>
+                        <p className="text-center py-8 text-gray-500">No items ready to install</p>
+                      ) : (
+                        renderMobileGroupedCommitments('install')
+                      )}
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-800 hover:bg-transparent">
+                          <TableHead className="w-10"></TableHead>
+                          <TableHead className="text-gray-400">Part</TableHead>
+                          <TableHead className="text-gray-400 text-center">In Stock</TableHead>
+                          <TableHead className="text-gray-400 text-center">Reserved</TableHead>
+                          <TableHead className="text-gray-400 text-center">Needed</TableHead>
+                          <TableHead className="text-gray-400 text-right">Cost</TableHead>
+                          <TableHead className="text-gray-400 text-right">Retail</TableHead>
+                          <TableHead className="text-gray-400">Status</TableHead>
+                          <TableHead className="text-gray-400">Vendor</TableHead>
+                          <TableHead className="text-gray-400">Payment</TableHead>
+                          <TableHead className="text-gray-400">Coverage</TableHead>
+                          <TableHead className="text-gray-400">Pricing</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getFilteredCommitments('install').length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={13} className="text-center py-8 text-gray-500">
+                              No items ready to install
+                            </TableCell>
                         </TableRow>
                       ) : (
                         renderGroupedCommitments('install')
