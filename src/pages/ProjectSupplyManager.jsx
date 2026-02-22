@@ -1323,8 +1323,8 @@ export default function ProjectSupplyManager() {
                       )}
                     </div>
                   ) : (
-                    {/* Desktop Table - Column Order: Part | Category | In Stock | Reserved (G|P) | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning */}
                     <Table>
+                      {/* Desktop Table - Column Order: Part | Category | In Stock | Reserved (G|P) | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning */}
                       <TableHeader>
                         <TableRow className="border-gray-800 hover:bg-transparent">
                           <TableHead className="w-10"></TableHead>
