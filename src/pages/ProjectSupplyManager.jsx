@@ -497,7 +497,7 @@ export default function ProjectSupplyManager() {
       <React.Fragment key={group.key}>
         {groupConfig.primary !== 'none' && (
           <TableRow className="bg-gray-900/70 border-l-4" style={{ borderLeftColor: '#6B7280' }}>
-            <TableCell colSpan={14} className="py-2">
+            <TableCell colSpan={DESKTOP_COL_COUNT} className="py-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-300">
@@ -518,7 +518,7 @@ export default function ProjectSupplyManager() {
           group.subGroups.map(subGroup => (
             <React.Fragment key={`${group.key}-${subGroup.key}`}>
               <TableRow className="bg-gray-900/50">
-                <TableCell colSpan={14} className="py-1 pl-8">
+                <TableCell colSpan={DESKTOP_COL_COUNT} className="py-1 pl-8">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-400">
                       ↳ {subGroup.name} ({subGroup.items?.length || 0})
@@ -841,7 +841,7 @@ export default function ProjectSupplyManager() {
   // Render commitment row - CANONICAL fields only with MANDATORY data contract
   // Column order: Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning
   const renderCommitmentRow = (commitment, showActions = true) => {
-    const { part, vendor, allowed, categoryName } = commitment;
+    const { part, vendor, allowed, categoryObj } = commitment;
     const displayStatus = getDisplayStatus(commitment.commitment_status);
     const statusColor = getDisplayStatusColor(displayStatus);
     
@@ -854,9 +854,19 @@ export default function ProjectSupplyManager() {
     const paymentStatus = commitment.billing_status ?? 'billable';
     const available = commitment.inventory_snapshot?.available ?? (inStock - reserved);
     
-    // RESOLVE NAMES - Never display IDs
-    const vendorDisplay = vendor?.vendor_name || commitment.vendor_name || 'Unknown Vendor';
-    const categoryDisplay = categoryName || 'Uncategorized';
+    // RESOLVE NAMES via supplyResolvers - Never display IDs
+    const resolvedVendor = resolveVendorDisplay(
+      commitment.vendor?.id || vendor?.id,
+      vendor || commitment.vendor_name,
+      vendorsMap
+    );
+    const resolvedCategory = resolveCategoryDisplay(
+      commitment.categoryId,
+      categoryObj || commitment.categoryName,
+      categoriesMap
+    );
+    const vendorDisplay = resolvedVendor.name;
+    const categoryDisplay = resolvedCategory.name;
 
     return (
       <TableRow key={commitment.id} className="hover:bg-gray-800/30">
