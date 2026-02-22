@@ -473,8 +473,16 @@ export default function SupplyQueueSimplified() {
                                     <td className="py-2 px-2 text-center font-mono text-gray-300">
                                       {inStock}
                                     </td>
-                                    <td className="py-2 px-2 text-center font-mono text-cyan-400">
-                                      {reservedGlobal}
+                                    <td className="py-2 px-2 text-center">
+                                      <div className="flex items-center justify-center gap-1 font-mono">
+                                        <span className={cn("text-sm", reservedGlobal > 0 ? "text-cyan-400" : "text-gray-500")}>
+                                          {reservedGlobal}
+                                        </span>
+                                        <span className="text-gray-600">|</span>
+                                        <span className={cn("text-sm", reservedThisProject > 0 ? "text-cyan-300" : "text-gray-600")}>
+                                          {reservedThisProject}
+                                        </span>
+                                      </div>
                                     </td>
                                     <td className="py-2 px-2 text-center font-mono text-white">
                                       {needed}
