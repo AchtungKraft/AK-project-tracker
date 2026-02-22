@@ -183,6 +183,29 @@ export default function GlobalNeedToOrder() {
   const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
   const blockedCount = filteredItems.filter(i => !i.is_orderable).length;
 
+  // DEV GUARD: Validate canonical inventory consistency
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && filteredItems.length > 0) {
+      filteredItems.forEach(item => {
+        const snap = item.inventory_snapshot;
+        if (snap) {
+          // Reserved global should >= reserved this project
+          if ((snap.reserved_global_active ?? 0) < (snap.reserved_this_project ?? 0)) {
+            console.error('[CANONICAL VIOLATION] reserved_global_active < reserved_this_project', item.commitment_id);
+          }
+        }
+        // to_order must be >= 0
+        if ((item.to_order ?? 0) < 0) {
+          console.error('[CANONICAL VIOLATION] to_order < 0', item.commitment_id, item.to_order);
+        }
+        // coverage_status should align with to_order
+        if (item.coverage_status === 'FULL' && (item.to_order ?? 0) > 0) {
+          console.error('[CANONICAL VIOLATION] FULL coverage but to_order > 0', item.commitment_id);
+        }
+      });
+    }
+  }, [filteredItems]);
+
   // Batch PO creation handler using dispatcher
   const handleBatchCreatePO = async () => {
     audit.trackClick('batch_create_po', { selected_count: selectedItems.size });
