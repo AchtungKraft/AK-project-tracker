@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Package, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
 import PricingIntegrityBadge, { hasPricingWarning } from "./PricingIntegrityBadge";
-import { formatCurrency } from "./pricingHelpers";
+import { formatCurrencyUSD } from "./pricingHelpers";
 
 /**
  * MobileCommitmentCard - Industrial Expandable Card
@@ -100,10 +99,10 @@ export default function MobileCommitmentCard({
           {/* Row 2: Cost, Retail, Vendor, Payment, Warning */}
           <div className="flex items-center gap-3 mt-2 text-xs">
             <span className="text-gray-500">
-              C: <span className="text-gray-300 font-mono">{formatCurrency(cost)}</span>
+              C: <span className="text-gray-300 font-mono">{formatCurrencyUSD(cost)}</span>
             </span>
             <span className="text-gray-500">
-              R: <span className="text-gray-300 font-mono">{formatCurrency(retail)}</span>
+              R: <span className="text-gray-300 font-mono">{formatCurrencyUSD(retail)}</span>
             </span>
             <span className="text-gray-500 truncate max-w-[80px]">
               {vendorName}
@@ -157,11 +156,11 @@ export default function MobileCommitmentCard({
             <div className="bg-gray-800/30 rounded p-2 space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-gray-500">Unit Cost</span>
-                <span className="text-gray-300 font-mono">{formatCurrency(cost)}</span>
+                <span className="text-gray-300 font-mono">{formatCurrencyUSD(cost)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-gray-500">Unit Retail</span>
-                <span className="text-gray-300 font-mono">{formatCurrency(retail)}</span>
+                <span className="text-gray-300 font-mono">{formatCurrencyUSD(retail)}</span>
               </div>
               {retail > 0 && cost > 0 && (
                 <div className="flex justify-between text-xs">
