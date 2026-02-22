@@ -453,47 +453,107 @@ export default function ProjectSupplyManager() {
     return [{ key: 'all', name: 'All', color: null, items: filtered, isChild: false }];
   };
 
-  // Render grouped commitment rows
+  // Render grouped commitment rows - DESKTOP
   const renderGroupedCommitments = (tabFilter, showActions = true) => {
-    const filtered = getFilteredCommitments(tabFilter);
-    const groups = groupCommitments(filtered);
+    let filtered = getFilteredCommitments(tabFilter);
+    
+    // Apply show/hide closed/cancelled filter
+    filtered = filterActiveCommitments(filtered, showClosedCancelled);
+    
+    // Apply sorting
+    filtered = applySorting(filtered, sortBy);
+    
+    // Build lookups for grouping
+    const lookups = {
+      categories: categoriesMap,
+      vendors: {},
+      projects: {},
+    };
+    
+    // Apply grouping
+    const groups = applyGrouping(filtered, groupConfig.primary, groupConfig.sub, lookups);
 
     return groups.map((group) => (
       <React.Fragment key={group.key}>
-        {groupBy !== 'none' && (
-          <TableRow className="bg-gray-900/70 border-l-4" style={{ borderLeftColor: group.color || '#6B7280' }}>
-            <TableCell colSpan={11} className="py-2">
-              <div className={`flex items-center gap-2 ${group.isChild ? 'pl-6' : ''}`}>
-                {group.color && (
-                  <div 
-                    className="w-3 h-3 rounded-full flex-shrink-0" 
-                    style={{ backgroundColor: group.color }}
-                  />
-                )}
-                <span className="text-sm font-semibold" style={{ color: group.color || '#D1D5DB' }}>
-                  {group.isChild ? '↳ ' : ''}{group.categoryObj?.name || group.name}
+        {groupConfig.primary !== 'none' && (
+          <TableRow className="bg-gray-900/70 border-l-4" style={{ borderLeftColor: '#6B7280' }}>
+            <TableCell colSpan={14} className="py-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-300">
+                    {group.name}
+                  </span>
+                  <span className="text-xs text-gray-500">({group.items?.length || 0})</span>
+                </div>
+                <span className="text-xs text-gray-500 font-mono">
+                  {formatCurrencyUSD((group.items || []).reduce((sum, c) => sum + (c.planned_retail_total || 0), 0))}
                 </span>
-                <span className="text-xs text-gray-500">({group.items.length})</span>
               </div>
             </TableCell>
           </TableRow>
         )}
 
-        {group.items.map(c => renderCommitmentRow(c, showActions))}
-
-        {groupBy !== 'none' && (
-          <TableRow className="bg-gray-900/40 border-t border-gray-800">
-            <TableCell colSpan={7} />
-            <TableCell className="text-right text-sm" style={{ color: group.color || '#9CA3AF' }}>
-              ${group.items
-                .reduce((sum, c) => sum + (c.planned_retail_total || 0), 0)
-                .toFixed(0)}
-            </TableCell>
-            <TableCell colSpan={3} />
-          </TableRow>
+        {/* Render sub-groups or items */}
+        {group.subGroups ? (
+          group.subGroups.map(subGroup => (
+            <React.Fragment key={`${group.key}-${subGroup.key}`}>
+              <TableRow className="bg-gray-900/50">
+                <TableCell colSpan={14} className="py-1 pl-8">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-400">
+                      ↳ {subGroup.name} ({subGroup.items?.length || 0})
+                    </span>
+                    <span className="text-xs text-gray-500 font-mono">
+                      {formatCurrencyUSD((subGroup.items || []).reduce((sum, c) => sum + (c.planned_retail_total || 0), 0))}
+                    </span>
+                  </div>
+                </TableCell>
+              </TableRow>
+              {(subGroup.items || []).map(c => renderCommitmentRow(c, showActions))}
+            </React.Fragment>
+          ))
+        ) : (
+          (group.items || []).map(c => renderCommitmentRow(c, showActions))
         )}
       </React.Fragment>
     ));
+  };
+  
+  // Render mobile cards grouped
+  const renderMobileGroupedCommitments = (tabFilter) => {
+    let filtered = getFilteredCommitments(tabFilter);
+    filtered = filterActiveCommitments(filtered, showClosedCancelled);
+    filtered = applySorting(filtered, sortBy);
+    
+    const lookups = { categories: categoriesMap, vendors: {}, projects: {} };
+    const groups = applyGrouping(filtered, groupConfig.primary, groupConfig.sub, lookups);
+    
+    return (
+      <div className="space-y-3">
+        {groups.map(group => (
+          <div key={group.key} className="space-y-2">
+            {groupConfig.primary !== 'none' && (
+              <div className="flex items-center justify-between px-2 py-1 bg-gray-900/50 rounded">
+                <span className="text-sm font-medium text-gray-300">{group.name}</span>
+                <span className="text-xs text-gray-500">
+                  {group.items?.length || 0} • {formatCurrencyUSD((group.items || []).reduce((sum, c) => sum + (c.planned_retail_total || 0), 0))}
+                </span>
+              </div>
+            )}
+            {group.subGroups ? (
+              group.subGroups.map(subGroup => (
+                <div key={`${group.key}-${subGroup.key}`} className="pl-3 space-y-2">
+                  <div className="text-xs text-gray-400 pl-2">↳ {subGroup.name}</div>
+                  {(subGroup.items || []).map(c => renderMobileCard(c))}
+                </div>
+              ))
+            ) : (
+              (group.items || []).map(c => renderMobileCard(c))
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const handleRefresh = async () => {
