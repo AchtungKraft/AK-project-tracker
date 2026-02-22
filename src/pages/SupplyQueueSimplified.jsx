@@ -25,6 +25,7 @@ import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { getDisplayStatus, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -430,6 +431,13 @@ export default function SupplyQueueSimplified() {
                                 const inStock = partInv.physical_stock;
                                 const reservedGlobal = partInv.reserved_global;
                                 const needed = Math.max(0, (commitment.required_total ?? 0) - (commitment.qty_installed ?? 0));
+                                
+                                // PHASE 7: DEV GUARD - Validate inventory consistency
+                                if (process.env.NODE_ENV === 'development') {
+                                  const displayed = { in_stock: inStock, reserved: reservedGlobal, available: partInv.available ?? 0 };
+                                  const canonical = { physical_stock: inStock, reserved_global: reservedGlobal, available_global: partInv.available ?? 0 };
+                                  validateInventoryConsistency('SupplyQueueSimplified', part?.id, displayed, canonical);
+                                }
                                 
                                 return (
                                   <tr 

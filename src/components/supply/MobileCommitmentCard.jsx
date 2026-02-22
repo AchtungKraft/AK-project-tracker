@@ -6,6 +6,7 @@ import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
 import PricingIntegrityBadge, { hasPricingWarning } from "./PricingIntegrityBadge";
 import { formatCurrencyUSD } from "./pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "./supplyResolvers";
+import { validateInventoryConsistency } from "./inventoryResolver";
 
 /**
  * MobileCommitmentCard - Industrial Expandable Card
@@ -85,6 +86,13 @@ export default function MobileCommitmentCard({
   const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
   const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
   const available = commitment?.inventory_snapshot?.available ?? 0;
+  
+  // PHASE 7: DEV GUARD - Validate inventory consistency
+  if (process.env.NODE_ENV === 'development') {
+    const displayed = { in_stock: inStock, reserved, available };
+    const canonical = { physical_stock: inStock, reserved_global: reserved, available_global: available };
+    validateInventoryConsistency('MobileCommitmentCard', commitment?.part_id, displayed, canonical);
+  }
   
   // RESOLVE NAMES - Never display IDs
   const resolvedVendor = resolveVendorDisplay(
