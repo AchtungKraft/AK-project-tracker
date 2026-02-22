@@ -850,19 +850,23 @@ export default function ProjectSupplyManager() {
     const statusColor = getDisplayStatusColor(displayStatus);
     
     // ============================================================================
-    // PHASE 2: CANONICAL INVENTORY VALUES
+    // PHASE 2B: CANONICAL INVENTORY VALUES - GLOBAL + PROJECT RESERVED
     // Use inventory_snapshot from read model - NO local calculations
-    // "In Stock" = physical_stock (part level)
-    // "Reserved" = GLOBAL reserved across ALL commitments (not just this project)
-    // "Needed" = required_total - qty_installed (what remains to fulfill)
+    // 
+    // DISPLAY CONTRACT (AK Industrial Mode):
+    //   "In Stock" column: physical_stock_global
+    //   "Reserved" column: "GlobalReserved | ThisProject" (e.g. "4 | 2")
+    //   "Needed" column: required_total - qty_installed
     // ============================================================================
-    const inStock = commitment.inventory_snapshot?.physical ?? 0;
-    const reserved = commitment.inventory_snapshot?.reserved ?? commitment.inventory_snapshot?.reserved_total ?? 0;
-    const needed = commitment.inventory_snapshot?.needed ?? Math.max(0, commitment.required_total - (commitment.qty_installed ?? 0));
+    const inv = commitment.inventory_snapshot || {};
+    const inStock = inv.physical_stock_global ?? inv.physical ?? 0;
+    const reservedGlobal = inv.reserved_global_active ?? inv.reserved ?? inv.reserved_total ?? 0;
+    const reservedThisProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
+    const needed = inv.needed ?? Math.max(0, commitment.required_total - (commitment.qty_installed ?? 0));
     const cost = commitment.unit_cost ?? 0;
     const retail = commitment.unit_retail ?? 0;
     const paymentStatus = commitment.billing_status ?? 'billable';
-    const available = commitment.inventory_snapshot?.available ?? 0;
+    const available = inv.available_global_active ?? inv.available ?? 0;
     
     // RESOLVE NAMES via supplyResolvers - Never display IDs
     const resolvedVendor = resolveVendorDisplay(
