@@ -663,48 +663,50 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </SidebarHeader>
           
-          <SidebarContent className="p-2">
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-1">
-                Navigation
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                    {navigationItems.map((item, index) => (
-                      item.divider ? (
-                        <div key={`divider-${index}`} className="my-2 border-t border-gray-700/50" />
-                      ) : (
-                        <SidebarMenuItem key={item.title}>
-<SidebarMenuButton
-  asChild
-  className={cn(
-    "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
-    !item.external && location.pathname === item.url && "bg-red-600 text-white"
-  )}
->
-  {item.external ? (
-    <a
-      href={item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 px-2 py-1.5"
-    >
-      <item.icon className="w-4 h-4" />
-      <span className="font-medium text-sm">{item.title}</span>
-    </a>
-  ) : (
-    <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
-      <item.icon className="w-4 h-4" />
-      <span className="font-medium text-sm">{item.title}</span>
-    </Link>
-  )}
-</SidebarMenuButton>
-                        </SidebarMenuItem>
-                      )
+          <SidebarContent className="p-2 overflow-y-auto">
+            {isAchtungKraft ? (
+              // Sectioned navigation for Achtung Kraft members
+              <div className="space-y-1">
+                {getNavigationSections().map((section, idx) => (
+                  <React.Fragment key={section.title}>
+                    {idx > 0 && <div className="my-3 border-t border-gray-700/30" />}
+                    <NavSection
+                      title={section.title}
+                      colorKey={section.colorKey}
+                      items={section.items}
+                      currentPath={location.pathname}
+                    />
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : (
+              // Simple navigation for external users
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-1">
+                  Navigation
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {navigationItems.map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          className={cn(
+                            "hover:bg-red-950/30 hover:text-red-400 transition-colors duration-200 rounded-lg mb-0.5",
+                            location.pathname === item.url && "bg-red-600 text-white"
+                          )}
+                        >
+                          <Link to={item.url} className="flex items-center gap-2 px-2 py-1.5">
+                            <item.icon className="w-4 h-4" />
+                            <span className="font-medium text-sm">{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     ))}
                   </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </SidebarContent>
 
           <SidebarFooter className="border-t border-red-900/30 p-3 space-y-3">
