@@ -71,6 +71,15 @@ import { Receipt } from "lucide-react";
 import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
+import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
+
+/**
+ * DESKTOP TABLE COLUMN COUNT
+ * Shared constant for colSpan calculations.
+ * Column order: [Checkbox] Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Pricing | [Actions]
+ * Total: 14 columns (13 data + 1 checkbox/action)
+ */
+const DESKTOP_COL_COUNT = 14;
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import SupplyGroupingControls, { applyGrouping, applySorting } from "@/components/supply/SupplyGroupingControls";
 import { MobileSupplyCard } from "@/components/supply/SupplyRowData";
@@ -165,6 +174,17 @@ export default function ProjectSupplyManager() {
     }
     return map;
   }, [categories]);
+
+  // Build vendor lookup from supply items (vendors embedded in read model)
+  const vendorsMap = useMemo(() => {
+    const map = new Map();
+    for (const item of supplyItems) {
+      if (item.vendor_id && item.vendor_name) {
+        map.set(item.vendor_id, { id: item.vendor_id, vendor_name: item.vendor_name });
+      }
+    }
+    return map;
+  }, [supplyItems]);
 
   // Get category display name with parent hierarchy
   const getCategoryDisplayName = (categoryObj) => {
