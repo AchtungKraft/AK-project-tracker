@@ -290,7 +290,7 @@ export function MobileSupplyCard({
           <span className="text-gray-400 truncate max-w-[80px]">{vendorName}</span>
           <span className={cn(
             "font-mono uppercase text-[10px]",
-            paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
+            paymentStatus === 'invoiced' || paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
           )}>
             {paymentStatus}
           </span>
