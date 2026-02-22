@@ -1517,12 +1517,13 @@ export default function ProjectSupplyManager() {
                             <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                               No items ready to install
                             </TableCell>
-                        </TableRow>
-                      ) : (
-                        renderGroupedCommitments('install')
-                      )}
-                    </TableBody>
-                  </Table>
+                          </TableRow>
+                        ) : (
+                          renderGroupedCommitments('install')
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
