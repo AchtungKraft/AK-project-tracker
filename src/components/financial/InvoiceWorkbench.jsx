@@ -37,6 +37,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { isInvoiceReady, getEffectiveRetailPrice } from "./invoiceReadinessHelper";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import {
   Dialog,
   DialogContent,
