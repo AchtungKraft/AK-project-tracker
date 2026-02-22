@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
   Dialog,
@@ -46,7 +46,6 @@ export default function CreateProjectInvoiceModal({
   projects,
   creditBalances,
 }) {
-  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [invoiceType, setInvoiceType] = useState("progress");
@@ -242,12 +241,8 @@ export default function CreateProjectInvoiceModal({
         console.log("Invoice created with ID:", response.data.invoice_id);
         toast.success("Invoice draft created");
         
-        // Invalidate ALL invoice-related queries to ensure refresh
-        await queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
-        await queryClient.invalidateQueries({ queryKey: ["projectInvoices"] });
-        
+        // Parent controls invalidation via onSuccess callback
         onSuccess?.();
-        onClose?.();
       } else {
         console.error("Invoice creation failed:", response.data?.error);
         toast.error(response.data?.error || "Failed to create invoice");

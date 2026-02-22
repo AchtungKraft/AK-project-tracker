@@ -84,7 +84,6 @@ export default function ProjectInvoices() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
-    refetch();
   };
 
   const handleInvoiceCreated = () => {

@@ -70,6 +70,7 @@ import PortalStatsEmbed from './pages/PortalStatsEmbed';
 import PriorityDashboard from './pages/PriorityDashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import ProjectFinancialReport from './pages/ProjectFinancialReport';
+import ProjectInvoices from './pages/ProjectInvoices';
 import ProjectSupplyManager from './pages/ProjectSupplyManager';
 import Projects from './pages/Projects';
 import Reports from './pages/Reports';
@@ -86,7 +87,6 @@ import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import TestDataCleanup from './pages/TestDataCleanup';
 import WiringAuditDashboard from './pages/WiringAuditDashboard';
-import ProjectInvoices from './pages/ProjectInvoices';
 import __Layout from './Layout.jsx';
 
 
@@ -114,6 +114,7 @@ export const PAGES = {
     "PriorityDashboard": PriorityDashboard,
     "ProjectDetail": ProjectDetail,
     "ProjectFinancialReport": ProjectFinancialReport,
+    "ProjectInvoices": ProjectInvoices,
     "ProjectSupplyManager": ProjectSupplyManager,
     "Projects": Projects,
     "Reports": Reports,
@@ -130,7 +131,6 @@ export const PAGES = {
     "TechSpecs": TechSpecs,
     "TestDataCleanup": TestDataCleanup,
     "WiringAuditDashboard": WiringAuditDashboard,
-    "ProjectInvoices": ProjectInvoices,
 }
 
 export const pagesConfig = {
