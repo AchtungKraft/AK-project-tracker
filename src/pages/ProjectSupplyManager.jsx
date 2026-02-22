@@ -1764,6 +1764,15 @@ export default function ProjectSupplyManager() {
           onResolveInvariant={resolveInvariant}
         />
       )}
+      
+      {/* Edit Part Drawer - Opens when part name clicked */}
+      {selectedPartId && (
+        <EditPartDrawer
+          partId={selectedPartId}
+          open={!!selectedPartId}
+          onClose={() => setSelectedPartId(null)}
+        />
+      )}
     </MobileSafeAreaContainer>
   );
 }
