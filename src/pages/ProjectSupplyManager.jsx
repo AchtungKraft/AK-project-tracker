@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
@@ -67,6 +68,14 @@ import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { Receipt } from "lucide-react";
+import EditPartDrawer from "@/components/parts/EditPartDrawer";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
+import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
+import SupplyGroupingControls, { applyGrouping, applySorting } from "@/components/supply/SupplyGroupingControls";
+import { MobileSupplyCard } from "@/components/supply/SupplyRowData";
+import MutationButton from "@/components/supply/MutationButton";
+import { cn } from "@/lib/utils";
 
 /**
  * ProjectSupplyManager - Per-Project Execution (Screen 2)
