@@ -118,60 +118,60 @@ const FINANCIAL_ROLE_LABELS = {
 // KPI HEADER
 // ============================================
 
-function LifecycleKPIHeader({ kpis }) {
+/**
+ * CanonicalKPIHeader - Financial-only KPIs (no lifecycle)
+ * 
+ * PHASE 7: Shows only canonical billing states:
+ * - Unbilled (Gray)
+ * - Invoiced/Awaiting Payment (Purple)
+ * - Paid (Green)
+ */
+function CanonicalKPIHeader({ kpis }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <Card className="bg-yellow-900/20 border-yellow-800/50">
+    <div className="grid grid-cols-3 gap-3">
+      {/* Unbilled - Gray */}
+      <Card className="bg-gray-900/40 border-gray-700">
         <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-1">
-            <DollarSign className="w-4 h-4 text-yellow-400" />
-            <span className="text-xs text-gray-400 uppercase">Needs Billing</span>
+            <DollarSign className="w-4 h-4 text-gray-400" />
+            <span className="text-xs text-gray-400 uppercase">Ready to Bill</span>
           </div>
-          <p className="text-xl font-bold text-yellow-400">{kpis.needs_billing_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.needs_billing_revenue || 0).toFixed(0)}</p>
+          <p className="text-xl font-bold text-gray-400">{kpis.unbilled_count || 0}</p>
+          <p className="text-xs text-gray-500">${(kpis.unbilled_total || 0).toFixed(0)}</p>
         </CardContent>
       </Card>
-      <Card className="bg-orange-900/20 border-orange-800/50">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-orange-400" />
-            <span className="text-xs text-gray-400 uppercase">Awaiting Pay</span>
-          </div>
-          <p className="text-xl font-bold text-orange-400">{kpis.awaiting_payment_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.awaiting_payment_revenue || 0).toFixed(0)}</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-green-900/20 border-green-800/50">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <ShoppingCart className="w-4 h-4 text-green-400" />
-            <span className="text-xs text-gray-400 uppercase">Ready to Order</span>
-          </div>
-          <p className="text-xl font-bold text-green-400">{kpis.ready_to_order_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.ready_to_order_cost || 0).toFixed(0)} cost</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-blue-900/20 border-blue-800/50">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Truck className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-gray-400 uppercase">In Progress</span>
-          </div>
-          <p className="text-xl font-bold text-blue-400">{kpis.orders_in_progress_count || 0}</p>
-        </CardContent>
-      </Card>
+      
+      {/* Invoiced - Purple */}
       <Card className="bg-purple-900/20 border-purple-800/50">
         <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-1">
-            <Wrench className="w-4 h-4 text-purple-400" />
-            <span className="text-xs text-gray-400 uppercase">Installed Bill</span>
+            <Clock className="w-4 h-4 text-purple-400" />
+            <span className="text-xs text-gray-400 uppercase">Awaiting Payment</span>
           </div>
-          <p className="text-xl font-bold text-purple-400">{kpis.installed_billing_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.installed_billing_revenue || 0).toFixed(0)}</p>
+          <p className="text-xl font-bold text-purple-400">{kpis.invoiced_count || 0}</p>
+          <p className="text-xs text-gray-500">${(kpis.invoiced_total || 0).toFixed(0)}</p>
+        </CardContent>
+      </Card>
+      
+      {/* Paid - Green */}
+      <Card className="bg-green-900/20 border-green-800/50">
+        <CardContent className="p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-4 h-4 text-green-400" />
+            <span className="text-xs text-gray-400 uppercase">Paid</span>
+          </div>
+          <p className="text-xl font-bold text-green-400">{kpis.paid_count || 0}</p>
+          <p className="text-xs text-gray-500">${(kpis.paid_total || 0).toFixed(0)}</p>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+// DEPRECATED: Legacy KPI header - kept for reference
+function LifecycleKPIHeader({ kpis }) {
+  // Forward to canonical header
+  return <CanonicalKPIHeader kpis={kpis} />;
 }
 
 // ============================================
