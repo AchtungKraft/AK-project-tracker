@@ -219,21 +219,34 @@ export default function CreateProjectInvoiceModal({
         });
       }
 
-      const response = await base44.functions.invoke("createProjectInvoiceDraft", {
+      const payload = {
         project_id: selectedProjectId,
         invoice_type: invoiceType,
         apply_credit: applyCredit,
         lines,
         notes,
-      });
+      };
+
+      console.log("Creating invoice draft with payload:", payload);
+
+      const response = await base44.functions.invoke("createProjectInvoiceDraft", payload);
+
+      console.log("Invoice creation response:", response);
+
+      if (!response?.data) {
+        throw new Error("No response data from server");
+      }
 
       if (response.data?.success) {
+        console.log("Invoice created with ID:", response.data.invoice_id);
         toast.success("Invoice draft created");
         onSuccess();
       } else {
+        console.error("Invoice creation failed:", response.data?.error);
         toast.error(response.data?.error || "Failed to create invoice");
       }
     } catch (error) {
+      console.error("Invoice creation error:", error);
       toast.error(error.message || "Failed to create invoice");
     } finally {
       setIsSubmitting(false);
