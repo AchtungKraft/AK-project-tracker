@@ -1,17 +1,107 @@
-# AK Industrial Mode - Supply & Commitment UI Simplification
+# AK Industrial Mode - Supply & Commitment UI Contract
 
 ## Overview
 
-This document defines the minimal industrial UX rules for the AK supply chain interface.
+This document defines the complete enforced UI contract for ProjectSupplyManager and all supply list views.
 
 ---
 
-## 1. Lifecycle Display Rules
+## 1. Mandatory Row Data (Visible in All Lists)
 
-### Display Status Mapping
+Every row MUST display ALL of the following - **NOTHING may be conditionally hidden**:
 
-| `commitment_status` | `display_status` |
-|---------------------|------------------|
+| Field | Format | Notes |
+|-------|--------|-------|
+| Part Name | Clickable text | Opens Edit Part Drawer |
+| In Stock | Integer | Physical inventory count |
+| Reserved | Integer | Reserved from stock (cyan if > 0) |
+| Needed | Integer | Required total |
+| Cost | USD formatted | $X,XXX.XX |
+| Retail | USD formatted | $X,XXX.XX |
+| Display Lifecycle | Status badge | Mapped from commitment_status |
+| Vendor | Text | Vendor name |
+| Payment Status | Badge | billable/invoiced/paid |
+| Coverage Indicator | Badge | COVERED/OUT OF STOCK/INSUFFICIENT |
+| Pricing Warning | Badge | Only if NOT ok |
+
+---
+
+## 2. Currency Formatting (Hard Rule)
+
+```js
+import { formatCurrencyUSD } from '@/components/supply/pricingHelpers';
+
+// Examples:
+formatCurrencyUSD(1250)    // → "$1,250.00"
+formatCurrencyUSD(1250000) // → "$1,250,000.00"
+formatCurrencyUSD(0)       // → "$0.00"
+```
+
+ALL cost and retail values MUST use `formatCurrencyUSD`.
+
+---
+
+## 3. Inventory Display Format
+
+### Desktop (single-line columns)
+```
+In Stock: X | Reserved: Y | Needed: Z
+Cost: $12,500.00 | Retail: $18,900.00
+```
+
+### Mobile (stacked compact)
+```
+Stock X
+Reserved Y
+Need Z
+Cost $12,500.00
+Retail $18,900.00
+```
+
+**Inventory must NEVER be hidden.**
+
+---
+
+## 4. Inventory Coverage Indicators
+
+| Condition | Label | Style |
+|-----------|-------|-------|
+| `available >= needed` | COVERED BY STOCK | Neutral gray |
+| `available = 0` | OUT OF STOCK | Amber accent |
+| `available < needed` | INSUFFICIENT STOCK | Amber accent |
+
+- No bright colors
+- No green success states
+- Subtle industrial accent only
+
+---
+
+## 5. Part Name Click Behavior
+
+Part name MUST:
+- Be primary row text
+- Be clickable
+- Open Edit Part Drawer (modal)
+- **NEVER navigate**
+- **NEVER trigger row expand**
+
+Modal MUST display:
+- Exact `commitment_status`
+- Pricing integrity status
+- RetailAdjustmentRequest (if exists)
+- Vendor
+- Full pricing breakdown
+- Inventory breakdown
+- Quantity ordered/received/installed
+
+**No inline editing in list.**
+
+---
+
+## 6. Lifecycle Display Mapping
+
+| `commitment_status` | Display Label |
+|---------------------|---------------|
 | `planned` | NEEDS TO ORDER |
 | `ordered` | ORDERED |
 | `partially_received` | IN PROGRESS |
@@ -21,125 +111,92 @@ This document defines the minimal industrial UX rules for the AK supply chain in
 | `cancelled` | CANCELLED (hidden by default) |
 | `closed` | CLOSED (hidden by default) |
 
-### Show/Hide Toggle
-
-- **Default**: OFF (hide Closed/Cancelled)
-- **Toggle**: "Show Closed / Cancelled"
-- Only active commitments render by default
-
-### Implementation
-
-```js
-import { getDisplayStatus, filterActiveCommitments, isHiddenByDefault } from '@/components/supply/lifecycleDisplay';
-
-const displayStatus = getDisplayStatus(commitment.commitment_status);
-const activeCommitments = filterActiveCommitments(commitments, showClosedCancelled);
-```
+Toggle: "Show Closed / Cancelled" (default OFF)
 
 ---
 
-## 2. Supply Queue Structure
+## 7. Pricing Integrity Display
 
-### Section A: Needs to Order
-- **Condition**: `commitment_status = 'planned'`
+| Condition | Render |
+|-----------|--------|
+| `status = 'ok'` | **NOTHING** |
+| `status != 'ok'` | Compact monochrome badge |
 
-### Section B: Awaiting Payment
-- **Condition**: `commitment_status = 'ordered' AND payment_status = 'unpaid'`
+### Allowed Labels
+- MISSING COST
+- MISSING RETAIL
+- NEGATIVE MARGIN
+- ESTIMATED COST
+- RETAIL OVERRIDDEN
+- COST/RETAIL MISMATCH
 
-### Grouping
-- **Max depth**: 2 levels
-- **Options**: Project > Vendor OR Project > Category
-- **NO** triple nesting
-- **NO** pricing integrity filtering
-
----
-
-## 3. Pricing Integrity Display
-
-### Core Rule
-- If `pricing_integrity_status = 'ok'` → **Render NOTHING**
-- If `pricing_integrity_status != 'ok'` → Render compact badge
-
-### Badge Style
-- Small
-- Uppercase
-- Monochrome (no bright colors)
-- Left border accent only (subtle red or amber)
-
-### Badge Labels
-
-| Status | Label |
-|--------|-------|
-| `missing_cost` | MISSING COST |
-| `missing_retail` | MISSING RETAIL |
-| `margin_negative` | NEGATIVE MARGIN |
-| `estimated_cost` | ESTIMATED COST |
-| `overridden_retail` | RETAIL OVERRIDDEN |
-| `cost_retail_mismatch` | COST/RETAIL MISMATCH |
-
-### Implementation
-
-```jsx
-import PricingIntegrityBadge from '@/components/supply/PricingIntegrityBadge';
-
-// Only renders if status != 'ok'
-<PricingIntegrityBadge commitment={commitment} />
-```
+**No green badges. No success indicators.**
 
 ---
 
-## 4. Mobile Commitment Card
+## 8. Grouping System (Hard Limit)
 
-### Collapsed View
-- Part Name (clickable → opens Edit Part Drawer)
-- Inventory Status
-- Cost
-- Retail
-- Display Status
+### Primary Group Options
+- Project
+- Vendor
+- Category
+- Lifecycle Status
+- None
+
+### Sub-Group Options
+- Vendor
+- Category
+- Status
+
+**Maximum 2 grouping levels only.**
+**NEVER triple nesting.**
+
+### Sorting (persisted per user)
+- Most Recent
+- In Stock Asc/Desc
+- Cost Asc/Desc
+- Retail Asc/Desc
+- Status
+
+---
+
+## 9. Mobile Layout Contract
+
+Replace tables with expandable industrial cards.
+
+### Collapsed Card Shows
+- Part Name (clickable)
+- Stock / Reserved / Need
+- Cost (formatted)
+- Retail (formatted)
+- Lifecycle display
 - Vendor
 - Payment Status
-- Pricing Warning Badge (if exists)
+- Coverage Indicator
+- Pricing warning (if exists)
 
-### Expanded View (tap to expand)
-- Exact `commitment_status`
-- Quantity Ordered
-- Quantity Received
-- Quantity Installed
+### Expanded Section Shows
+- Exact lifecycle state
+- Quantity breakdown
 - Pricing details
-- Margin calculation
+- Notes
+- Actions
 
-### Implementation
-
-```jsx
-import MobileCommitmentCard from '@/components/supply/MobileCommitmentCard';
-
-<MobileCommitmentCard
-  commitment={commitment}
-  part={part}
-  vendor={vendor}
-  onPartClick={handlePartClick}
-/>
-```
+**No horizontal scroll tables on mobile.**
 
 ---
 
-## 5. Mutation Button Contract
+## 10. Interaction Stability (Button Contract)
 
-### Interaction Stability Rules
+All mutation buttons MUST:
+1. Disable immediately on click
+2. Show inline loading state
+3. Prevent double execution
+4. Await backend confirmation
+5. Show inline error if failed
+6. **Never silently fail**
 
-All mutation buttons must:
-1. **Disable immediately** on click
-2. **Show loading indicator** inline
-3. **Prevent double execution**
-4. **Re-enable only** on success/error
-5. **NO optimistic transitions**
-6. **Always await** backend confirmation
-
-### Error Handling
-- Show **inline error banner** inside row
-- Do **not** silently fail
-
-### Implementation
+**No optimistic lifecycle transitions.**
 
 ```jsx
 import MutationButton from '@/components/supply/MutationButton';
@@ -147,7 +204,6 @@ import MutationButton from '@/components/supply/MutationButton';
 <MutationButton
   onClick={handleAction}
   onSuccess={() => refetch()}
-  onError={(err) => console.error(err)}
   loadingText="Processing..."
 >
   Confirm
@@ -156,49 +212,18 @@ import MutationButton from '@/components/supply/MutationButton';
 
 ---
 
-## 6. Modal Behavior
+## 11. Supply Queue Logic
 
-### Part Name Click
-- **Always** opens Edit Part Drawer
-- **Never** triggers navigation
+Supply Queue contains only:
 
-### Drawer Must Display
-- Full lifecycle state
-- Full pricing integrity status
-- RetailAdjustmentRequest indicator (if exists)
+### Section A: Needs to Order
+- Condition: `commitment_status = 'planned'`
 
----
+### Section B: Awaiting Payment
+- Condition: `commitment_status = 'ordered' AND billing_status = 'billable'`
 
-## 7. Visual Design Constraints
-
-### DO
-- Minimal industrial aesthetic
-- Tight spacing
-- Neutral palette (grays, subtle accents)
-- Clear hierarchy
-- Monospace fonts for data
-- Functional over decorative
-
-### DO NOT
-- Bright UI colors
-- Emoji icons
-- Celebratory states
-- Green success badges
-- Multiple pricing badges
-- Lifecycle duplication
-
----
-
-## 8. Anti-Patterns Removed
-
-| Anti-Pattern | Replacement |
-|--------------|-------------|
-| Deep nested grouping | Max 2-level grouping |
-| Multiple pricing badges | Single warning badge |
-| Green OK indicators | No badge when OK |
-| Lifecycle in list AND badge | Single display_status only |
-| Overloaded supply logic | Two-section queue |
-| Implicit mutation triggers | Explicit MutationButton |
+**No pricing-based filtering.**
+**No deep grouping.**
 
 ---
 
@@ -207,16 +232,22 @@ import MutationButton from '@/components/supply/MutationButton';
 | Component | Purpose |
 |-----------|---------|
 | `lifecycleDisplay.js` | Status mapping utilities |
+| `pricingHelpers.js` | `formatCurrencyUSD` function |
 | `PricingIntegrityBadge.jsx` | Warning-only pricing badge |
 | `MobileCommitmentCard.jsx` | Mobile expandable card |
 | `MutationButton.jsx` | Interaction stability layer |
-| `SupplyQueueSimplified.jsx` | Two-section queue page |
+| `SupplyRowData.jsx` | Desktop row + mobile card |
+| `SupplyGroupingControls.jsx` | 2-level grouping + sorting |
 
 ---
 
 ## Files Modified
 
-- `components/parts/PricingBadge.jsx` - Removed OK/MATRIX badges
-- `components/parts/PartsListView.jsx` - Simplified pricing columns
+- `pages/ProjectSupplyManager.jsx` - Full contract implementation
+- `pages/SupplyQueueSimplified.jsx` - Two-section queue
+- `components/supply/MobileCommitmentCard.jsx` - Mobile card
+- `components/supply/SupplyRowData.jsx` - Desktop/Mobile data row
+- `components/supply/SupplyGroupingControls.jsx` - Grouping controls
+- `components/supply/PricingIntegrityBadge.jsx` - Warning-only badge
+- `components/supply/pricingHelpers.js` - formatCurrencyUSD
 - `components/parts/CommitmentCard.jsx` - Industrial display status
-- `components/supply/SupplyIntegrityBanner.jsx` - Removed success badge
