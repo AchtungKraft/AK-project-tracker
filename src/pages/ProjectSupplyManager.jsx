@@ -119,12 +119,18 @@ export default function ProjectSupplyManager() {
   const remappedTab = rawTab === 'fund' ? 'invoice' : rawTab;
   const initialTab = ALLOWED_TABS.includes(remappedTab) ? remappedTab : 'plan';
 
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [groupBy, setGroupBy] = useState('category'); // values: 'none' | 'category'
+  const [groupConfig, setGroupConfig] = useState({ primary: 'category', sub: 'none' });
+  const [sortBy, setSortBy] = useState('recent');
+  const [showClosedCancelled, setShowClosedCancelled] = useState(false);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Edit Part Drawer state
+  const [selectedPartId, setSelectedPartId] = useState(null);
   
   // Modal states (FORWARD MODEL - no pool modals)
   const [orderModalPart, setOrderModalPart] = useState(null);
