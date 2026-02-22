@@ -408,6 +408,11 @@ export default function SupplyQueueSimplified() {
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
                                     {formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}
                                   </td>
+                                  <td className="py-2 px-2">
+                                    <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-gray-600 pl-2">
+                                      {getDisplayStatus(commitment.commitment_status)}
+                                    </span>
+                                  </td>
                                   <td className="py-2 px-2 text-gray-400 truncate max-w-[100px]">
                                     {vendor?.vendor_name || '—'}
                                   </td>
