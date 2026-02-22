@@ -363,15 +363,17 @@ export default function SupplyQueueSimplified() {
                             />
                           ))
                         ) : (
-                          // Desktop: Compact Table
+                          // Desktop: Compact Table with MANDATORY columns
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
                                 <th className="text-left py-2 px-2">Part</th>
-                                <th className="text-left py-2 px-2">Status</th>
-                                <th className="text-right py-2 px-2">Qty</th>
+                                <th className="text-center py-2 px-2">Stock</th>
+                                <th className="text-center py-2 px-2">Rsv</th>
+                                <th className="text-center py-2 px-2">Need</th>
                                 <th className="text-right py-2 px-2">Cost</th>
                                 <th className="text-right py-2 px-2">Retail</th>
+                                <th className="text-left py-2 px-2">Status</th>
                                 <th className="text-left py-2 px-2">Vendor</th>
                                 <th className="text-left py-2 px-2">Payment</th>
                                 <th className="text-left py-2 px-2"></th>
@@ -391,10 +393,14 @@ export default function SupplyQueueSimplified() {
                                       {part?.part_name || 'Unknown'}
                                     </button>
                                   </td>
-                                  <td className="py-2 px-2">
-                                    <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-gray-600 pl-2">
-                                      {getDisplayStatus(commitment.commitment_status)}
-                                    </span>
+                                  <td className="py-2 px-2 text-center font-mono text-gray-300">
+                                    {part?.physical_stock ?? 0}
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-mono text-cyan-400">
+                                    {commitment.reserved_from_stock ?? 0}
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-mono text-white">
+                                    {commitment.required_total || commitment.qty_committed || 0}
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
                                     {commitment.required_total || commitment.qty_committed || 0}
