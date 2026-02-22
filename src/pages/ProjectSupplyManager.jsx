@@ -1320,7 +1320,7 @@ export default function ProjectSupplyManager() {
                       <TableBody>
                         {getFilteredCommitments('plan').length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
                               No planned items. All requirements are in progress or completed.
                             </TableCell>
                           </TableRow>
@@ -1411,7 +1411,7 @@ export default function ProjectSupplyManager() {
                       <TableBody>
                         {getFilteredCommitments('buy').length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
                               No items need ordering
                             </TableCell>
                           </TableRow>
@@ -1482,7 +1482,7 @@ export default function ProjectSupplyManager() {
                       <TableBody>
                         {getFilteredCommitments('receive').length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
                               No items on order
                             </TableCell>
                           </TableRow>
@@ -1553,7 +1553,7 @@ export default function ProjectSupplyManager() {
                       <TableBody>
                         {getFilteredCommitments('install').length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
                               No items ready to install
                             </TableCell>
                           </TableRow>
