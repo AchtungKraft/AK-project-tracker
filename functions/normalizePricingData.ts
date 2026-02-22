@@ -205,6 +205,84 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === PHASE 15V.2: COMMITMENT SNAPSHOT BACKFILL ===
+    // Backfill missing unit_retail_snapshot on existing commitments
+    let commitments_backfilled = 0;
+    const commitmentIssues = [];
+    
+    // Only run commitment backfill if not limited to specific parts
+    if (!part_ids || part_ids.length === 0) {
+      const commitments = await base44.entities.PartCommitment.filter({
+        commitment_status: { $nin: ['cancelled', 'closed'] }
+      });
+      
+      for (const commitment of commitments) {
+        const updates = {};
+        const issues = [];
+        
+        // Backfill missing retail snapshot
+        if (commitment.unit_retail_snapshot === null || commitment.unit_retail_snapshot === undefined) {
+          // Find the part to get current effective retail
+          const part = parts.find(p => p.id === commitment.part_id);
+          if (part) {
+            const pricing_mode = part.pricing_mode || 'matrix';
+            let retail_effective = 0;
+            
+            if (pricing_mode === 'manual') {
+              retail_effective = part.retail_override || 0;
+            } else {
+              retail_effective = Math.round(part.retail_matrix_price || 0);
+            }
+            
+            if (retail_effective > 0) {
+              updates.unit_retail_snapshot = retail_effective;
+              updates.planned_retail_total = retail_effective * (commitment.required_total || 0);
+              issues.push({
+                code: 'BACKFILLED_RETAIL_SNAPSHOT',
+                message: `Set unit_retail_snapshot=${retail_effective}`
+              });
+            } else {
+              updates.pricing_integrity_status = 'missing_retail';
+              issues.push({
+                code: 'MISSING_RETAIL_SOURCE',
+                message: 'Part has no effective retail to snapshot',
+                severity: 'ERROR'
+              });
+            }
+          }
+        }
+        
+        // Backfill missing cost snapshot
+        if (commitment.unit_cost_snapshot === null || commitment.unit_cost_snapshot === undefined) {
+          const part = parts.find(p => p.id === commitment.part_id);
+          if (part && part.cost > 0) {
+            updates.unit_cost_snapshot = part.cost;
+            updates.planned_cost_total = part.cost * (commitment.required_total || 0);
+            issues.push({
+              code: 'BACKFILLED_COST_SNAPSHOT',
+              message: `Set unit_cost_snapshot=${part.cost}`
+            });
+          }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          commitments_backfilled++;
+          
+          if (!dry_run) {
+            await base44.asServiceRole.entities.PartCommitment.update(commitment.id, updates);
+          }
+          
+          commitmentIssues.push({
+            commitment_id: commitment.id,
+            project_id: commitment.project_id,
+            part_id: commitment.part_id,
+            updates,
+            issues
+          });
+        }
+      }
+    }
+
     // Sort issues by severity
     const sortedIssues = issues.sort((a, b) => {
       const aHasError = a.issues.some(i => i.severity === 'ERROR');
@@ -220,6 +298,8 @@ Deno.serve(async (req) => {
       total_parts_scanned: parts.length,
       parts_corrected,
       violations_found: issues.length,
+      commitments_backfilled,
+      commitment_issues: commitmentIssues.slice(0, 50),
       corrections: corrections.slice(0, 50),
       top_50_issues: sortedIssues.slice(0, 50),
       matrix_tiers: activeTiers.map(t => ({
