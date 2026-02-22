@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Truck,
   Layers,
+  Receipt,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
