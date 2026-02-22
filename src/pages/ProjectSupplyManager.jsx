@@ -58,7 +58,6 @@ import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
-import { InlineQtyStepper } from "@/components/parts/CommitmentQuantityManager";
 import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
