@@ -1323,7 +1323,7 @@ export default function ProjectSupplyManager() {
                       )}
                     </div>
                   ) : (
-                    /* Desktop Table - Column Order: Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning */
+                    {/* Desktop Table - Column Order: Part | Category | In Stock | Reserved (G|P) | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning */}
                     <Table>
                       <TableHeader>
                         <TableRow className="border-gray-800 hover:bg-transparent">
@@ -1331,7 +1331,7 @@ export default function ProjectSupplyManager() {
                           <TableHead className="text-gray-400">Part</TableHead>
                           <TableHead className="text-gray-400">Category</TableHead>
                           <TableHead className="text-gray-400 text-center">In Stock</TableHead>
-                          <TableHead className="text-gray-400 text-center">Reserved</TableHead>
+                          <TableHead className="text-gray-400 text-center" title="Global | This Project">Reserved (G|P)</TableHead>
                           <TableHead className="text-gray-400 text-center">Needed</TableHead>
                           <TableHead className="text-gray-400 text-right">Cost</TableHead>
                           <TableHead className="text-gray-400 text-right">Retail</TableHead>
