@@ -71,6 +71,7 @@ import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
+import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 
 /**
  * DESKTOP TABLE COLUMN COUNT
