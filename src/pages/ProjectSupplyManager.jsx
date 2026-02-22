@@ -1287,13 +1287,13 @@ export default function ProjectSupplyManager() {
                           <TableRow>
                             <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                               No planned items. All requirements are in progress or completed.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        renderGroupedCommitments('plan')
-                      )}
-                    </TableBody>
-                  </Table>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          renderGroupedCommitments('plan')
+                        )}
+                      </TableBody>
+                    </Table>
                   )}
                 </CardContent>
               </Card>
