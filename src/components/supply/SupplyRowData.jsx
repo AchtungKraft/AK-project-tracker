@@ -4,23 +4,27 @@ import { ChevronDown, ChevronUp, Package } from "lucide-react";
 import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
 import PricingIntegrityBadge from "./PricingIntegrityBadge";
 import { formatCurrencyUSD } from "./pricingHelpers";
+import { resolveVendorDisplay, resolveCategoryDisplay } from "./supplyResolvers";
 
 /**
  * SUPPLY ROW DATA CONTRACT
  * 
  * Every row MUST display:
  * 1. Part Name (clickable)
- * 2. In Stock
- * 3. Reserved
- * 4. Needed
- * 5. Cost (USD formatted)
- * 6. Retail (USD formatted)
- * 7. Display Lifecycle
- * 8. Vendor
- * 9. Payment Status
- * 10. Pricing Warning Badge (only if not OK)
+ * 2. Category (resolved name - NEVER ID)
+ * 3. In Stock
+ * 4. Reserved
+ * 5. Needed (static, not editable)
+ * 6. Cost (USD formatted)
+ * 7. Retail (USD formatted)
+ * 8. Display Lifecycle
+ * 9. Vendor (resolved name - NEVER ID)
+ * 10. Payment Status
+ * 11. Coverage Indicator
+ * 12. Pricing Warning Badge (only if not OK)
  * 
  * NOTHING may be conditionally hidden.
+ * VENDOR/CATEGORY must NEVER display IDs.
  */
 
 /**
@@ -55,14 +59,18 @@ function InventoryCoverageIndicator({ available, needed }) {
 
 /**
  * Desktop Row - Single line format
- * In Stock: X | Reserved: Y | Needed: Z | Cost: 12,500.00 | Retail: 18,900.00
+ * Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning
  * 
  * MANDATORY DATA CONTRACT - Nothing may be hidden.
+ * VENDOR/CATEGORY MUST show resolved names, NEVER IDs.
  */
 export function DesktopSupplyRow({
   commitment,
   part,
   vendor,
+  category,
+  categoryLookup,
+  vendorLookup,
   onPartClick,
   children, // For action buttons
   className,
@@ -76,9 +84,20 @@ export function DesktopSupplyRow({
   const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
   const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
   const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
-  const vendorName = vendor?.vendor_name ?? commitment?.vendor_name ?? '—';
   const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
   const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
+  
+  // RESOLVE NAMES - Never display IDs
+  const resolvedVendor = resolveVendorDisplay(
+    commitment?.vendor_id || vendor?.id,
+    vendor || commitment?.vendor_name,
+    vendorLookup
+  );
+  const resolvedCategory = resolveCategoryDisplay(
+    commitment?.category_id || part?.part_category_id,
+    category || commitment?.category_name,
+    categoryLookup
+  );
   
   return (
     <tr className={cn("hover:bg-gray-800/30 border-b border-gray-800/50", className)}>
