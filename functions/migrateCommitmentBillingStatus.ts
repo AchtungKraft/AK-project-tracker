@@ -1,6 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
+ * migrateCommitmentBillingStatus
+ * 
  * PHASE 3: Legacy Billing Status Migration
  * 
  * Migrates all PartCommitment.billing_status values to canonical states:
