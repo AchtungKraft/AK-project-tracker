@@ -265,22 +265,41 @@ Deno.serve(async (req) => {
         );
 
         // ============================================================================
-        // PHASE 2: CANONICAL INVENTORY SNAPSHOT
+        // PHASE 2B: CANONICAL INVENTORY SNAPSHOT
         // All UI views MUST use these values - NO local calculations allowed
-        // "physical" = Part.physical_stock
-        // "reserved" = GLOBAL reserved across ALL commitments (not just this project)
-        // "available" = physical - reserved_global
+        // UI must display BOTH global reserved AND this-project reserved
+        // 
+        // GLOBAL CONTEXT (Part-level):
+        //   - physical_stock_global: Part.physical_stock
+        //   - reserved_global_active: SUM(reserved_from_stock) across ALL active commitments
+        //   - available_global_active: physical_stock_global - reserved_global_active
+        //
+        // PROJECT CONTEXT (Commitment-level):
+        //   - reserved_this_project: reserved_from_stock for THIS commitment
+        //
+        // UI DISPLAY CONTRACT:
+        //   "In Stock" column: physical_stock_global
+        //   "Reserved" column: "X | Y" format (X=global, Y=this project)
         // ============================================================================
         const inventory_snapshot = {
-          // CANONICAL: Part-level physical stock
+          // CANONICAL: Part-level physical stock (GLOBAL)
+          physical_stock_global: partInv.physical_stock,
+          // Deprecated aliases for backward compatibility:
           physical: partInv.physical_stock,
           physical_stock: partInv.physical_stock,
           
           // CANONICAL: GLOBAL reserved across ALL active commitments
+          reserved_global_active: partInv.reserved_global,
+          // Deprecated aliases:
           reserved: partInv.reserved_global,
           reserved_total: partInv.reserved_global,
           
-          // CANONICAL: Available = physical - global reserved
+          // CANONICAL: THIS PROJECT's reserved allocation
+          reserved_this_project: reserved_from_stock,
+          
+          // CANONICAL: Available = physical - global reserved (can allocate more from available)
+          available_global_active: partInv.available,
+          // Deprecated alias:
           available: partInv.available,
           
           // CANONICAL: Global aggregates

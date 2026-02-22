@@ -88,9 +88,13 @@ export default function SupplyQueueSimplified() {
   const categoriesMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   // ============================================================================
-  // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP
+  // PHASE 2B: CANONICAL PART-LEVEL INVENTORY MAP
   // Computes GLOBAL reserved/on_order across ALL active commitments for each part
-  // "Reserved" = SUM(reserved_from_stock) across ALL commitments (not just one)
+  // UI must display BOTH global reserved AND this-project reserved
+  // 
+  // "physical_stock_global" = Part.physical_stock
+  // "reserved_global_active" = SUM(reserved_from_stock) across ALL active commitments
+  // "available_global_active" = physical_stock_global - reserved_global_active
   // ============================================================================
   const partInventoryMap = useMemo(() => {
     const map = new Map();
@@ -98,9 +102,13 @@ export default function SupplyQueueSimplified() {
     // Initialize from parts
     for (const part of parts) {
       map.set(part.id, {
+        physical_stock_global: part.physical_stock ?? 0,
+        reserved_global_active: 0,
+        on_order_global: 0,
+        available_global_active: part.physical_stock ?? 0,
+        // Deprecated aliases for backward compatibility
         physical_stock: part.physical_stock ?? 0,
         reserved_global: 0,
-        on_order_global: 0,
         available: part.physical_stock ?? 0,
       });
     }
@@ -113,13 +121,16 @@ export default function SupplyQueueSimplified() {
       const inv = map.get(c.part_id);
       if (!inv) continue;
       
-      inv.reserved_global += c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const reservedQty = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      inv.reserved_global_active += reservedQty;
+      inv.reserved_global += reservedQty; // Deprecated alias
       inv.on_order_global += c.covered_from_po ?? c.qty_ordered ?? 0;
     }
     
     // Calculate available after aggregation
     for (const [partId, inv] of map.entries()) {
-      inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+      inv.available_global_active = Math.max(0, inv.physical_stock_global - inv.reserved_global_active);
+      inv.available = inv.available_global_active; // Deprecated alias
     }
     
     return map;
