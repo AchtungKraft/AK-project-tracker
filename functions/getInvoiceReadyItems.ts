@@ -66,6 +66,41 @@ function isInvoiceReady(item, part, commitment, order, existingBatchLines) {
     return { ready: false, reason: 'Already queued in batch' };
   }
   
+  // PHASE 15V.2: Check for open RetailAdjustmentRequest or invoice block
+  if (commitment?.retail_adjustment_request_id && !commitment?.invoice_override_approved) {
+    return { 
+      ready: false, 
+      reason: 'Open Retail Adjustment Request', 
+      blockedByAdjustment: true,
+      adjustmentRequestId: commitment.retail_adjustment_request_id
+    };
+  }
+  
+  // PHASE 15V.2: Check invoice_blocked_reason unless override approved
+  if (commitment?.invoice_blocked_reason && !commitment?.invoice_override_approved) {
+    const blockReasons = {
+      'OPEN_ADJUSTMENT_REQUEST': 'Open Retail Adjustment Request',
+      'MARGIN_NEGATIVE': 'Negative Margin',
+      'MISSING_RETAIL': 'Missing Retail Price',
+      'MISSING_COST': 'Missing Cost'
+    };
+    return { 
+      ready: false, 
+      reason: blockReasons[commitment.invoice_blocked_reason] || commitment.invoice_blocked_reason,
+      invoiceBlocked: true,
+      blockReason: commitment.invoice_blocked_reason
+    };
+  }
+  
+  // PHASE 15V.2: Check pricing_integrity_status for negative margin
+  if (commitment?.pricing_integrity_status === 'margin_negative' && !commitment?.invoice_override_approved) {
+    return { 
+      ready: false, 
+      reason: 'Negative Margin - requires approval',
+      negativeMargin: true
+    };
+  }
+  
   // Check billing status
   let clientBillingStatus = 'NOT_INVOICED';
   

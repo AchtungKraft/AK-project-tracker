@@ -193,16 +193,44 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Negative margin
+      // Negative margin - now ERROR per Phase 15V.2
       if (unit_cost > 0 && unit_retail > 0 && unit_retail < unit_cost) {
         violations.push({
           entity_type: 'PartCommitment',
           entity_id: commitment.id,
           code: 'NEGATIVE_MARGIN',
           message: `unit_retail=${unit_retail} < unit_cost=${unit_cost}`,
-          severity: 'WARNING',
+          severity: 'ERROR',
           margin_pct: ((unit_retail - unit_cost) / unit_retail) * 100
         });
+      }
+      
+      // PHASE 15V.2: Check actual_unit_cost vs retail snapshot
+      const actualCost = commitment.actual_unit_cost;
+      if (actualCost && actualCost > 0 && unit_retail > 0 && actualCost > unit_retail) {
+        violations.push({
+          entity_type: 'PartCommitment',
+          entity_id: commitment.id,
+          code: 'ACTUAL_COST_EXCEEDS_RETAIL',
+          message: `actual_unit_cost=${actualCost} > unit_retail_snapshot=${unit_retail}`,
+          severity: 'ERROR',
+          margin_pct: ((unit_retail - actualCost) / unit_retail) * 100
+        });
+      }
+      
+      // PHASE 15V.2: Verify frozen retail hasn't drifted
+      // (retail snapshot should not change after creation unless explicit override)
+      if (commitment.pricing_integrity_status !== 'overridden_retail') {
+        // We can't check drift without part data here, but flag if status seems wrong
+        if (commitment.invoice_blocked_reason === 'MARGIN_NEGATIVE' && !commitment.retail_adjustment_request_id) {
+          violations.push({
+            entity_type: 'PartCommitment',
+            entity_id: commitment.id,
+            code: 'MISSING_ADJUSTMENT_REQUEST',
+            message: 'Margin negative but no RetailAdjustmentRequest linked',
+            severity: 'WARNING'
+          });
+        }
       }
     };
 
