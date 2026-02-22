@@ -65,7 +65,18 @@ Deno.serve(async (req) => {
     }
 
     // === FETCH COMMITMENT & PART ===
-    const [commitment] = await base44.entities.PartCommitment.filter({ id: commitment_id });
+    let commitment;
+    try {
+      const commitments = await base44.entities.PartCommitment.filter({ id: commitment_id });
+      commitment = commitments[0];
+    } catch (e) {
+      return Response.json({ 
+        error: 'COMMITMENT_NOT_FOUND',
+        commitment_id,
+        message: e.message
+      }, { status: 404 });
+    }
+    
     if (!commitment) {
       return Response.json({ 
         error: 'COMMITMENT_NOT_FOUND',

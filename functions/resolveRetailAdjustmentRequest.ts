@@ -52,9 +52,19 @@ Deno.serve(async (req) => {
     }
 
     // Fetch the request
-    const [adjustmentRequest] = await base44.entities.RetailAdjustmentRequest.filter({ 
-      id: request_id 
-    });
+    let adjustmentRequest;
+    try {
+      const requests = await base44.entities.RetailAdjustmentRequest.filter({ 
+        id: request_id 
+      });
+      adjustmentRequest = requests[0];
+    } catch (e) {
+      return Response.json({ 
+        error: 'REQUEST_NOT_FOUND',
+        request_id,
+        message: e.message
+      }, { status: 404 });
+    }
     
     if (!adjustmentRequest) {
       return Response.json({ 
