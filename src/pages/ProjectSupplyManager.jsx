@@ -1294,6 +1294,7 @@ export default function ProjectSupplyManager() {
                       )}
                     </TableBody>
                   </Table>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
