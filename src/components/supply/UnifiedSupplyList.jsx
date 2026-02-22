@@ -242,6 +242,9 @@ export default function UnifiedSupplyList({
                           commitment={item}
                           part={parts[item.part_id] || item.part || item}
                           vendor={vendors[item.vendor_id] || item.vendor}
+                          category={categories[item.category_id] || item.categoryObj}
+                          categoryLookup={categories}
+                          vendorLookup={vendors}
                           onPartClick={handlePartClick}
                         >
                           {renderActions?.(item, parts[item.part_id] || item.part, vendors[item.vendor_id] || item.vendor)}
@@ -257,6 +260,9 @@ export default function UnifiedSupplyList({
                     commitment={item}
                     part={parts[item.part_id] || item.part || item}
                     vendor={vendors[item.vendor_id] || item.vendor}
+                    category={categories[item.category_id] || item.categoryObj}
+                    categoryLookup={categories}
+                    vendorLookup={vendors}
                     onPartClick={handlePartClick}
                   >
                     {renderActions?.(item, parts[item.part_id] || item.part, vendors[item.vendor_id] || item.vendor)}
