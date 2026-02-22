@@ -73,6 +73,7 @@ import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx";
+import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
 
 /**
  * DESKTOP TABLE COLUMN COUNT
@@ -1247,6 +1248,9 @@ export default function ProjectSupplyManager() {
               </div>
             </CardContent>
           </Card>
+
+          {/* PHASE 7 - Financial Bar: Parts Exposure | Invoiced | Paid | Remaining | Credit */}
+          <ProjectFinancialBar projectId={projectId} />
 
           {/* Billing Summary Strip - PHASE 10 */}
           <BillingSummaryStrip projectId={projectId} commitments={supplyItems} />
