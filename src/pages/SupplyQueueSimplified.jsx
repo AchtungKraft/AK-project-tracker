@@ -343,8 +343,8 @@ export default function SupplyQueueSimplified() {
                         </span>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
-                        <span>C: {formatCurrency(group.totalCost)}</span>
-                        <span>R: {formatCurrency(group.totalRetail)}</span>
+                        <span>C: {formatCurrencyUSD(group.totalCost)}</span>
+                        <span>R: {formatCurrencyUSD(group.totalRetail)}</span>
                       </div>
                     </button>
 
