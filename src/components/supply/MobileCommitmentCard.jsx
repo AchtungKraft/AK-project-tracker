@@ -158,10 +158,13 @@ export default function MobileCommitmentCard({
             </span>
           </div>
           
-          {/* Row 4: Vendor | Payment | Coverage | Warning */}
+          {/* Row 4: Category | Vendor | Payment | Coverage | Warning */}
           <div className="flex items-center flex-wrap gap-2 text-xs">
-            <span className="text-gray-400 truncate max-w-[100px]">
-              {vendorName}
+            <span className="text-gray-400 truncate max-w-[80px]">
+              {resolvedCategory.name}
+            </span>
+            <span className="text-gray-400 truncate max-w-[80px]">
+              {resolvedVendor.name}
             </span>
             <span className={cn(
               "font-mono uppercase text-[10px]",
