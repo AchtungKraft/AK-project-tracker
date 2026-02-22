@@ -244,20 +244,19 @@ export default function ProjectSupplyManager() {
         console.error(`[CANONICAL VIOLATION] Missing coverage_status for commitment ${item.commitment_id}`);
       }
       
-      // CANONICAL VERIFICATION LOG - Use inventory_snapshot from read model
+      // PHASE 7: DEV GUARD - Validate inventory consistency
       if (process.env.NODE_ENV === 'development') {
-        console.log('[ProjectSupplyManager CANONICAL]', {
-          part_id: item.part_id,
-          commitment_id: item.commitment_id,
-          // Part-level (global) from inventory_snapshot
+        const displayed = {
           in_stock: item.inventory_snapshot?.physical ?? 0,
+          reserved: item.inventory_snapshot?.reserved ?? 0,
+          available: item.inventory_snapshot?.available ?? 0,
+        };
+        const canonical = {
+          physical_stock: item.inventory_snapshot?.physical ?? 0,
           reserved_global: item.inventory_snapshot?.reserved ?? 0,
           available_global: item.inventory_snapshot?.available ?? 0,
-          // Commitment-scoped
-          reserved_this: item.reserved_from_stock,
-          needed: item.inventory_snapshot?.needed ?? item.required_total,
-          to_order: item.to_order,
-        });
+        };
+        validateInventoryConsistency('ProjectSupplyManager', item.part_id, displayed, canonical);
       }
 
       // Build category object from read model data
