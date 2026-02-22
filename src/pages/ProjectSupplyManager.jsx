@@ -1247,6 +1247,9 @@ export default function ProjectSupplyManager() {
             </CardContent>
           </Card>
 
+          {/* Billing Summary Strip - PHASE 10 */}
+          <BillingSummaryStrip projectId={projectId} commitments={supplyItems} />
+
           {/* Tabs - FORWARD MODEL ONLY */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="bg-black/40 border border-gray-800 w-full justify-start overflow-x-auto">
