@@ -1008,7 +1008,7 @@ export default function ProjectSupplyManager() {
   
   // Render mobile card - uses MobileSupplyCard component
   const renderMobileCard = (commitment) => {
-    const { part, vendor, allowed } = commitment;
+    const { part, vendor, allowed, categoryObj } = commitment;
     
     return (
       <MobileSupplyCard
@@ -1016,6 +1016,8 @@ export default function ProjectSupplyManager() {
         commitment={commitment}
         part={part}
         vendor={vendor}
+        category={categoryObj}
+        categoryLookup={categoriesMap}
         onPartClick={handlePartClick}
       >
         {/* Actions inside expanded view */}
