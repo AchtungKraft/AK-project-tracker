@@ -103,7 +103,7 @@ const NavSection = ({ title, colorKey, items, currentPath }) => {
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
                     colors.hoverBg,
-                    "text-gray-300 hover:text-white"
+                    "text-white hover:text-white"
                   )}
                 >
                   <Icon className={cn("w-4 h-4", colors.iconMuted)} />
@@ -116,7 +116,7 @@ const NavSection = ({ title, colorKey, items, currentPath }) => {
                     "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
                     isActive 
                       ? cn(colors.activeBg, "text-white border-l-2", colors.border)
-                      : cn(colors.hoverBg, "text-gray-300 hover:text-white")
+                      : cn(colors.hoverBg, "text-white hover:text-white")
                   )}
                 >
                   <Icon className={cn("w-4 h-4", isActive ? "text-white" : colors.iconMuted)} />
