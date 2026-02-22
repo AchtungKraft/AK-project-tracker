@@ -4,17 +4,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * createProjectInvoiceDraft - PHASE 10 Forward Invoice System
  * 
  * Creates a draft ProjectInvoice with lines.
- * Does NOT mutate billing_status in PartCommitment.
- * Credit application is optional.
+ * 
+ * CRITICAL RULE: Draft creation does NOT mutate ProjectCreditLedger.
+ * Credit is only PREVIEWED, not applied. Actual application happens in markInvoicePaid.
  * 
  * Inputs:
  * - project_id (required)
  * - invoice_type: deposit|progress|final (required)
- * - apply_credit: boolean (default true)
+ * - preview_credit: boolean (default true) - whether to calculate credit_preview
  * - lines: array of { type, part_commitment_id?, description, qty?, unit_price }
  * 
  * Returns:
- * - invoice_id, totals, applied_credit_detail, warnings[]
+ * - invoice_id, totals, credit_preview_detail (NOT applied), warnings[]
  */
 
 Deno.serve(async (req) => {
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     const { 
       project_id, 
       invoice_type, 
-      apply_credit = true, 
+      preview_credit = true, 
       lines = [],
       notes 
     } = payload;
@@ -139,11 +140,11 @@ Deno.serve(async (req) => {
     // Compute subtotal
     const subtotal = lineResults.reduce((sum, l) => sum + (l.line_total || 0), 0);
 
-    // Apply credit if requested
-    let creditApplied = 0;
-    const appliedCredits = [];
+    // PREVIEW credit (DO NOT MUTATE LEDGER)
+    let creditPreview = 0;
+    const creditPreviewDetail = [];
 
-    if (apply_credit && subtotal > 0) {
+    if (preview_credit && subtotal > 0) {
       const credits = await base44.entities.ProjectCreditLedger.filter({
         project_id,
       });
@@ -152,36 +153,38 @@ Deno.serve(async (req) => {
         .filter(c => (c.remaining_amount ?? 0) > 0)
         .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
-      let remainingToApply = subtotal;
+      let remainingToPreview = subtotal;
 
       for (const credit of availableCredits) {
-        if (remainingToApply <= 0) break;
+        if (remainingToPreview <= 0) break;
 
         const available = credit.remaining_amount ?? 0;
-        const toApply = Math.min(available, remainingToApply);
+        const toPreview = Math.min(available, remainingToPreview);
 
-        creditApplied += toApply;
-        remainingToApply -= toApply;
+        creditPreview += toPreview;
+        remainingToPreview -= toPreview;
 
-        appliedCredits.push({
+        creditPreviewDetail.push({
           credit_id: credit.id,
           source_invoice_id: credit.source_invoice_id,
-          amount_applied: toApply,
-          remaining_after: available - toApply,
+          amount_available: available,
+          amount_preview: toPreview,
         });
       }
     }
 
     const total = subtotal;
-    const balanceDue = Math.max(0, subtotal - creditApplied);
+    // balance_due is subtotal minus PREVIEW (actual credit applied at payment)
+    const balanceDue = Math.max(0, subtotal - creditPreview);
 
-    // Create invoice
+    // Create invoice - NO credit_applied yet (only preview)
     const invoice = await base44.asServiceRole.entities.ProjectInvoice.create({
       project_id,
       invoice_type,
       status: 'draft',
       subtotal,
-      credit_applied: creditApplied,
+      credit_preview: creditPreview,  // PREVIEW ONLY - not deducted from ledger
+      credit_applied: 0,              // ALWAYS 0 for drafts
       total,
       balance_due: balanceDue,
       notes: notes || null,
@@ -212,12 +215,14 @@ Deno.serve(async (req) => {
         invoice_type,
         status: 'draft',
         subtotal,
-        credit_applied: creditApplied,
+        credit_preview: creditPreview,  // Preview only
+        credit_applied: 0,              // Not applied yet
         total,
         balance_due: balanceDue,
       },
       lines: createdLines.length,
-      applied_credit_detail: appliedCredits.length > 0 ? appliedCredits : null,
+      credit_preview_detail: creditPreviewDetail.length > 0 ? creditPreviewDetail : null,
+      ledger_mutated: false,  // Explicit confirmation
       warnings,
     });
 
