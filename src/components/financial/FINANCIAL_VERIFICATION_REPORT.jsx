@@ -140,18 +140,29 @@ Need to add warning in useProjectInvoiceView.
 
 ## ACTION ITEMS
 
-1. **Update PartCommitment schema** - Change enum to `["unbilled", "invoiced", "paid"]`, default `"unbilled"`
-2. **Fix executeSupplyAction.js L279** - Change `billing_status: 'billable'` to `billing_status: 'unbilled'`
-3. **Fix normalizeLegacyBillingFlags.js L123** - Change fallback from `'billable'` to `'unbilled'`
-4. **Create billingStatusTransitions.js** - Centralized billing mutation helper
-5. **Add dev warning** - Console warn for non-canonical billing_status values
+1. ✅ **Update PartCommitment schema** - Changed enum to `["unbilled", "invoiced", "paid"]`, default `"unbilled"`
+2. ✅ **Fix executeSupplyAction.js L279** - Changed `billing_status: 'billable'` to `billing_status: 'unbilled'`
+3. ✅ **Fix normalizeLegacyBillingFlags.js** - Added `normalizeToCanonicalBillingStatus()` function
+4. ✅ **Create billingStatusTransitions.js** - Centralized billing mutation helper with `setUnbilled`, `setInvoiced`, `setPaid`
+5. ✅ **Add dev warning** - Added console warn in `useProjectInvoiceView.js` for non-canonical values
 
 ---
 
 ## VERIFICATION CHECKLIST
 
-- [ ] Schema enum enforced: `["unbilled", "invoiced", "paid"]`
-- [ ] All new commitments created with `billing_status: 'unbilled'`
-- [ ] No legacy values remain in database
-- [ ] Only invoice workflows can change billing_status
-- [ ] UI shows only 3 buckets: Unbilled / Invoiced / Paid
+- [x] Schema enum enforced: `["unbilled", "invoiced", "paid"]`
+- [x] All new commitments created with `billing_status: 'unbilled'`
+- [ ] No legacy values remain in database (run migration to confirm)
+- [x] Only invoice workflows can change billing_status (centralized in billingStatusTransitions.js)
+- [x] UI shows only 3 buckets: Unbilled / Invoiced / Paid
+
+---
+
+## PHASE 2 CHANGES COMPLETED
+
+### Files Modified:
+1. `entities/PartCommitment.json` - Schema hardened with canonical enum
+2. `functions/executeSupplyAction.js` - New commitments use 'unbilled' 
+3. `functions/normalizeLegacyBillingFlags.js` - Canonical normalization added
+4. `components/financial/useProjectInvoiceView.js` - Dev drift warning added
+5. `components/financial/billingStatusTransitions.js` - NEW centralized helper
