@@ -400,20 +400,20 @@ export default function SupplyQueueSimplified() {
                                     {commitment.required_total || commitment.qty_committed || 0}
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
-                                    {formatCurrency(commitment.unit_cost_snapshot || part?.cost || 0)}
+                                    {formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
-                                    {formatCurrency(commitment.unit_retail_snapshot || 0)}
+                                    {formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}
                                   </td>
                                   <td className="py-2 px-2 text-gray-400 truncate max-w-[100px]">
-                                    {vendor?.vendor_name || '-'}
+                                    {vendor?.vendor_name || '—'}
                                   </td>
                                   <td className="py-2 px-2">
                                     <span className={cn(
                                       "text-[10px] font-mono uppercase",
-                                      commitment.payment_status === 'paid' ? 'text-gray-500' : 'text-amber-500'
+                                      commitment.billing_status === 'invoiced' || commitment.billing_status === 'paid' ? 'text-gray-500' : 'text-amber-500'
                                     )}>
-                                      {commitment.payment_status || 'unpaid'}
+                                      {commitment.billing_status || 'billable'}
                                     </span>
                                   </td>
                                   <td className="py-2 px-2">
