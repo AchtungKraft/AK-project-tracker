@@ -86,6 +86,11 @@ const getNavigationItems = (isAchtungKraft) => {
         url: createPageUrl("SupplyQueues"),
         icon: ListChecks,
       },
+      {
+        title: "Project Invoices",
+        url: createPageUrl("ProjectInvoices"),
+        icon: Receipt,
+      },
       { divider: true },
       {
         title: "Parts Tracker",
