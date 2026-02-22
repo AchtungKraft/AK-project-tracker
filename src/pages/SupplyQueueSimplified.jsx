@@ -403,9 +403,6 @@ export default function SupplyQueueSimplified() {
                                     {commitment.required_total || commitment.qty_committed || 0}
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
-                                    {commitment.required_total || commitment.qty_committed || 0}
-                                  </td>
-                                  <td className="py-2 px-2 text-right font-mono text-gray-300">
                                     {formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}
                                   </td>
                                   <td className="py-2 px-2 text-right font-mono text-gray-300">
