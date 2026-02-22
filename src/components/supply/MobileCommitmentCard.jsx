@@ -5,22 +5,26 @@ import { cn } from "@/lib/utils";
 import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
 import PricingIntegrityBadge, { hasPricingWarning } from "./PricingIntegrityBadge";
 import { formatCurrencyUSD } from "./pricingHelpers";
+import { resolveVendorDisplay, resolveCategoryDisplay } from "./supplyResolvers";
 
 /**
  * MobileCommitmentCard - Industrial Expandable Card
  * 
  * MANDATORY DATA CONTRACT - Nothing may be hidden:
  * 1. Part Name (clickable)
- * 2. In Stock
- * 3. Reserved
- * 4. Needed
- * 5. Cost (USD formatted)
- * 6. Retail (USD formatted)
- * 7. Display Lifecycle
- * 8. Vendor
- * 9. Payment Status
- * 10. Coverage Indicator
- * 11. Pricing Warning Badge (only if not OK)
+ * 2. Category (resolved name)
+ * 3. In Stock
+ * 4. Reserved
+ * 5. Needed
+ * 6. Cost (USD formatted)
+ * 7. Retail (USD formatted)
+ * 8. Display Lifecycle
+ * 9. Vendor (resolved name)
+ * 10. Payment Status
+ * 11. Coverage Indicator
+ * 12. Pricing Warning Badge (only if not OK)
+ * 
+ * VENDOR/CATEGORY must NEVER display IDs.
  */
 
 /**
@@ -52,6 +56,9 @@ export default function MobileCommitmentCard({
   commitment,
   part,
   vendor,
+  category,
+  categoryLookup,
+  vendorLookup,
   onPartClick,
   onAction,
   isLoading = false,
@@ -70,9 +77,20 @@ export default function MobileCommitmentCard({
   const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
   const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
   const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
-  const vendorName = vendor?.vendor_name ?? commitment?.vendor_name ?? '—';
   const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
   const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
+  
+  // RESOLVE NAMES - Never display IDs
+  const resolvedVendor = resolveVendorDisplay(
+    commitment?.vendor_id || vendor?.id,
+    vendor || commitment?.vendor_name,
+    vendorLookup
+  );
+  const resolvedCategory = resolveCategoryDisplay(
+    commitment?.category_id || part?.part_category_id,
+    category || commitment?.category_name,
+    categoryLookup
+  );
   
   // Extended fields for expanded view
   const ordered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? commitment?.on_order_qty ?? 0;
