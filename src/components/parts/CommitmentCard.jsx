@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, MoreHorizontal, FileText, ShoppingCart, RotateCcw, Plus, Loader2 } from "lucide-react";
+import { Package, MoreHorizontal, FileText, ShoppingCart, RotateCcw, Plus, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +14,7 @@ import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/
 import DeltaOrderModal from "./DeltaOrderModal";
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
-import { formatCurrency } from "@/components/supply/pricingHelpers";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { cn } from "@/lib/utils";
 
 /**
@@ -117,10 +117,10 @@ export default function CommitmentCard({
             {/* Cost + Retail Row */}
             <div className="flex items-center gap-4 mb-2 text-xs">
               <span className="text-gray-500">
-                C: <span className="text-gray-300 font-mono">{formatCurrency(commitment.unit_cost_snapshot || part?.cost || 0)}</span>
+                C: <span className="text-gray-300 font-mono">{formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}</span>
               </span>
               <span className="text-gray-500">
-                R: <span className="text-gray-300 font-mono">{formatCurrency(commitment.unit_retail_snapshot || 0)}</span>
+                R: <span className="text-gray-300 font-mono">{formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}</span>
               </span>
             </div>
 
