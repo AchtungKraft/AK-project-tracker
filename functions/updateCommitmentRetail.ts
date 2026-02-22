@@ -62,16 +62,36 @@ Deno.serve(async (req) => {
       }, { status: 404 });
     }
 
-    // HARD LOCK CHECK
+    // PHASE 15V HARD LOCK CHECK
     const billing_status = commitment.billing_status || 'billable';
     
-    if (billing_status === 'invoiced' || billing_status === 'paid') {
+    if (billing_status === 'invoiced') {
       return Response.json({
         error: 'RETAIL_LOCKED_AFTER_INVOICE',
-        message: `Cannot edit retail for ${billing_status} commitment`,
+        message: 'Cannot edit retail after commitment has been invoiced',
         commitment_id,
         billing_status,
         current_retail: commitment.unit_retail_snapshot
+      }, { status: 403 });
+    }
+    
+    if (billing_status === 'paid') {
+      return Response.json({
+        error: 'RETAIL_LOCKED_AFTER_PAYMENT',
+        message: 'Cannot edit retail after commitment has been paid',
+        commitment_id,
+        billing_status,
+        current_retail: commitment.unit_retail_snapshot
+      }, { status: 403 });
+    }
+    
+    // PHASE 15V: Also block if commitment has invoice_batch_line_id
+    if (commitment.invoice_batch_line_id) {
+      return Response.json({
+        error: 'RETAIL_LOCKED_ON_INVOICE_BATCH',
+        message: 'Cannot edit retail after commitment is linked to an invoice batch',
+        commitment_id,
+        invoice_batch_line_id: commitment.invoice_batch_line_id
       }, { status: 403 });
     }
 
