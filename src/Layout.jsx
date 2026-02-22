@@ -68,11 +68,11 @@ const SECTION_COLORS = {
     border: 'border-l-orange-500',
   },
   admin: {
-    header: 'text-gray-400',
-    activeBg: 'bg-gray-800/40',
-    hoverBg: 'hover:bg-gray-800/30',
-    iconMuted: 'text-gray-400/70',
-    border: 'border-l-gray-500',
+    header: 'text-gray-300',
+    activeBg: 'bg-gray-900/60',
+    hoverBg: 'hover:bg-gray-900/40',
+    iconMuted: 'text-gray-400',
+    border: 'border-l-gray-400',
   },
 };
 
