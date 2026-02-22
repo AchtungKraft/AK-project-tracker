@@ -849,14 +849,20 @@ export default function ProjectSupplyManager() {
     const displayStatus = getDisplayStatus(commitment.commitment_status);
     const statusColor = getDisplayStatusColor(displayStatus);
     
-    // Extract mandatory values
+    // ============================================================================
+    // PHASE 2: CANONICAL INVENTORY VALUES
+    // Use inventory_snapshot from read model - NO local calculations
+    // "In Stock" = physical_stock (part level)
+    // "Reserved" = GLOBAL reserved across ALL commitments (not just this project)
+    // "Needed" = required_total - qty_installed (what remains to fulfill)
+    // ============================================================================
     const inStock = commitment.inventory_snapshot?.physical ?? 0;
-    const reserved = commitment.reserved_from_stock ?? 0;
-    const needed = commitment.required_total ?? 0;
+    const reserved = commitment.inventory_snapshot?.reserved ?? commitment.inventory_snapshot?.reserved_total ?? 0;
+    const needed = commitment.inventory_snapshot?.needed ?? Math.max(0, commitment.required_total - (commitment.qty_installed ?? 0));
     const cost = commitment.unit_cost ?? 0;
     const retail = commitment.unit_retail ?? 0;
     const paymentStatus = commitment.billing_status ?? 'billable';
-    const available = commitment.inventory_snapshot?.available ?? (inStock - reserved);
+    const available = commitment.inventory_snapshot?.available ?? 0;
     
     // RESOLVE NAMES via supplyResolvers - Never display IDs
     const resolvedVendor = resolveVendorDisplay(
