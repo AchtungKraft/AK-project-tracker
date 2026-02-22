@@ -196,6 +196,9 @@ export default function SupplyGroupingControls({
 
 /**
  * Apply grouping to items
+ * 
+ * IMPORTANT: All group names MUST be resolved display names, NEVER IDs.
+ * Use resolvers to ensure human-readable labels.
  */
 export function applyGrouping(items, primary, sub, lookups = {}) {
   if (primary === 'none') {
@@ -217,14 +220,44 @@ export function applyGrouping(items, primary, sub, lookups = {}) {
     }
   };
 
-  const getGroupName = (key, groupBy) => {
+  // CRITICAL: Resolve display names - NEVER show IDs
+  const getGroupName = (key, groupBy, itemsInGroup = []) => {
     switch (groupBy) {
-      case 'project':
-        return lookups.projects?.[key]?.name || key;
-      case 'vendor':
-        return lookups.vendors?.[key]?.vendor_name || (key === 'no-vendor' ? 'No Vendor' : key);
-      case 'category':
-        return lookups.categories?.[key]?.name || (key === 'uncategorized' ? 'Uncategorized' : key);
+      case 'project': {
+        // Try lookup first
+        const project = lookups.projects instanceof Map 
+          ? lookups.projects.get(key) 
+          : lookups.projects?.[key];
+        if (project?.name) return project.name;
+        // Try from items
+        const sample = itemsInGroup[0];
+        if (sample?.project_name) return sample.project_name;
+        return key === 'no-project' ? 'No Project' : 'Unknown Project';
+      }
+      case 'vendor': {
+        // Try lookup first
+        const vendor = lookups.vendors instanceof Map 
+          ? lookups.vendors.get(key) 
+          : lookups.vendors?.[key];
+        if (vendor?.vendor_name) return vendor.vendor_name;
+        // Try from items - use vendor_name, not ID
+        const sample = itemsInGroup[0];
+        if (sample?.vendor?.vendor_name) return sample.vendor.vendor_name;
+        if (sample?.vendor_name) return sample.vendor_name;
+        return key === 'no-vendor' ? 'No Vendor' : 'Unknown Vendor';
+      }
+      case 'category': {
+        // Try lookup first
+        const category = lookups.categories instanceof Map 
+          ? lookups.categories.get(key) 
+          : lookups.categories?.[key];
+        if (category?.name) return category.name;
+        // Try from items - use categoryName, not ID
+        const sample = itemsInGroup[0];
+        if (sample?.categoryName) return sample.categoryName;
+        if (sample?.category_name) return sample.category_name;
+        return key === 'uncategorized' ? 'Uncategorized' : 'Unknown Category';
+      }
       case 'status':
         return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
       default:
@@ -239,12 +272,16 @@ export function applyGrouping(items, primary, sub, lookups = {}) {
     if (!primaryGroups[key]) {
       primaryGroups[key] = {
         key,
-        name: getGroupName(key, primary),
         items: [],
         subGroups: null,
       };
     }
     primaryGroups[key].items.push(item);
+  }
+
+  // Resolve names AFTER grouping (so we have items to sample from)
+  for (const group of Object.values(primaryGroups)) {
+    group.name = getGroupName(group.key, primary, group.items);
   }
 
   // Apply sub-grouping if needed
@@ -256,11 +293,14 @@ export function applyGrouping(items, primary, sub, lookups = {}) {
         if (!subGroups[subKey]) {
           subGroups[subKey] = {
             key: subKey,
-            name: getGroupName(subKey, sub),
             items: [],
           };
         }
         subGroups[subKey].items.push(item);
+      }
+      // Resolve sub-group names
+      for (const subGroup of Object.values(subGroups)) {
+        subGroup.name = getGroupName(subGroup.key, sub, subGroup.items);
       }
       group.subGroups = Object.values(subGroups);
     }
