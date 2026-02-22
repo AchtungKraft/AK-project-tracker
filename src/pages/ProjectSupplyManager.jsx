@@ -819,8 +819,9 @@ export default function ProjectSupplyManager() {
   };
 
   // Render commitment row - CANONICAL fields only with MANDATORY data contract
+  // Column order: Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning
   const renderCommitmentRow = (commitment, showActions = true) => {
-    const { part, vendor, allowed } = commitment;
+    const { part, vendor, allowed, categoryName } = commitment;
     const displayStatus = getDisplayStatus(commitment.commitment_status);
     const statusColor = getDisplayStatusColor(displayStatus);
     
@@ -830,9 +831,12 @@ export default function ProjectSupplyManager() {
     const needed = commitment.required_total ?? 0;
     const cost = commitment.unit_cost ?? 0;
     const retail = commitment.unit_retail ?? 0;
-    const vendorName = vendor?.vendor_name ?? '—';
     const paymentStatus = commitment.billing_status ?? 'billable';
     const available = commitment.inventory_snapshot?.available ?? (inStock - reserved);
+    
+    // RESOLVE NAMES - Never display IDs
+    const vendorDisplay = vendor?.vendor_name || commitment.vendor_name || 'Unknown Vendor';
+    const categoryDisplay = categoryName || 'Uncategorized';
 
     return (
       <TableRow key={commitment.id} className="hover:bg-gray-800/30">
@@ -868,6 +872,12 @@ export default function ProjectSupplyManager() {
             </button>
           </div>
         </TableCell>
+        {/* Category - MANDATORY, resolved name only */}
+        <TableCell>
+          <span className="text-xs text-gray-400 truncate max-w-[100px] block">
+            {categoryDisplay}
+          </span>
+        </TableCell>
         {/* In Stock - MANDATORY */}
         <TableCell className="text-center">
           <span className="text-sm font-mono text-gray-300">{inStock}</span>
@@ -881,17 +891,9 @@ export default function ProjectSupplyManager() {
             {reserved}
           </span>
         </TableCell>
-        {/* Needed - MANDATORY */}
+        {/* Needed - MANDATORY, STATIC (no inline editing) */}
         <TableCell className="text-center">
-          <InlineQtyStepper 
-            commitment={{ 
-              id: commitment.id, 
-              required_total: needed,
-              commitment_status: commitment.commitment_status,
-            }} 
-            onMutationSuccess={() => invalidateSupply()}
-            disabled={!actionsEnabled}
-          />
+          <span className="text-sm font-mono text-white">{needed}</span>
         </TableCell>
         {/* Cost - MANDATORY, USD formatted */}
         <TableCell className="text-right">
@@ -914,10 +916,10 @@ export default function ProjectSupplyManager() {
             {displayStatus}
           </span>
         </TableCell>
-        {/* Vendor - MANDATORY */}
+        {/* Vendor - MANDATORY, resolved name only */}
         <TableCell>
           <span className="text-xs text-gray-400 truncate max-w-[100px] block">
-            {vendorName}
+            {vendorDisplay}
           </span>
         </TableCell>
         {/* Payment Status - MANDATORY */}
