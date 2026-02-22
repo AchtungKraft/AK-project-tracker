@@ -1140,27 +1140,27 @@ export default function ProjectSupplyManager() {
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Planned Retail</p>
-                <p className="text-xl font-bold text-white">${metrics.totalPlannedRetail.toFixed(0)}</p>
+                <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Invoiced</p>
-                <p className="text-xl font-bold text-blue-400">${metrics.totalInvoiced.toFixed(0)}</p>
+                <p className="text-xl font-bold text-gray-300 font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
               </CardContent>
             </Card>
-            <Card className={`bg-black/40 ${metrics.invoiceOutstanding > 0 ? 'border-yellow-600' : 'border-gray-800'}`}>
+            <Card className={`bg-black/40 ${metrics.invoiceOutstanding > 0 ? 'border-amber-700' : 'border-gray-800'}`}>
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Outstanding</p>
-                <p className={`text-xl font-bold ${metrics.invoiceOutstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
-                  ${metrics.invoiceOutstanding.toFixed(0)}
+                <p className={`text-xl font-bold font-mono ${metrics.invoiceOutstanding > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                  {formatCurrencyUSD(metrics.invoiceOutstanding)}
                 </p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Installed</p>
-                <p className="text-xl font-bold text-green-400">{metrics.installPct}%</p>
+                <p className="text-xl font-bold text-gray-300">{metrics.installPct}%</p>
               </CardContent>
             </Card>
           </div>
