@@ -49,12 +49,17 @@ export default function ProjectInvoices() {
     staleTime: 30000,
   });
 
-  // Fetch projects for filter
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list(),
-    staleTime: 60000,
+  // Fetch financial projects view for filter (only shows projects with parts)
+  const { data: financialData } = useQuery({
+    queryKey: ["financialProjectsView"],
+    queryFn: async () => {
+      const response = await base44.functions.invoke("getFinancialProjectsView", {});
+      return response.data;
+    },
+    staleTime: 30000,
   });
+
+  const financialProjects = financialData?.projects || [];
 
   const invoices = invoicesData?.invoices || [];
   const creditBalances = invoicesData?.credit_balances || {};
@@ -184,14 +189,14 @@ export default function ProjectInvoices() {
           />
         </div>
         <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger className="w-[200px] bg-gray-900/50 border-gray-700">
+          <SelectTrigger className="w-[250px] bg-gray-900/50 border-gray-700">
             <SelectValue placeholder="All Projects" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Projects</SelectItem>
-            {projects.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
+            {financialProjects.map((p) => (
+              <SelectItem key={p.project_id} value={p.project_id}>
+                {p.project_name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -318,8 +323,6 @@ export default function ProjectInvoices() {
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
           onSuccess={handleInvoiceCreated}
-          projects={projects}
-          creditBalances={creditBalances}
         />
       )}
 
