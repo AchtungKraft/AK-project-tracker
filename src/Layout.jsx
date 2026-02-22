@@ -36,6 +36,100 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+
+// Section color configuration
+const SECTION_COLORS = {
+  projects: {
+    header: 'text-blue-400',
+    activeBg: 'bg-blue-900/40',
+    hoverBg: 'hover:bg-blue-950/30',
+    iconMuted: 'text-blue-400/70',
+    border: 'border-l-blue-500',
+  },
+  supply: {
+    header: 'text-red-400',
+    activeBg: 'bg-red-900/40',
+    hoverBg: 'hover:bg-red-950/30',
+    iconMuted: 'text-red-400/70',
+    border: 'border-l-red-500',
+  },
+  financial: {
+    header: 'text-emerald-400',
+    activeBg: 'bg-emerald-900/40',
+    hoverBg: 'hover:bg-emerald-950/30',
+    iconMuted: 'text-emerald-400/70',
+    border: 'border-l-emerald-500',
+  },
+  inventory: {
+    header: 'text-orange-400',
+    activeBg: 'bg-orange-900/40',
+    hoverBg: 'hover:bg-orange-950/30',
+    iconMuted: 'text-orange-400/70',
+    border: 'border-l-orange-500',
+  },
+  admin: {
+    header: 'text-gray-400',
+    activeBg: 'bg-gray-800/40',
+    hoverBg: 'hover:bg-gray-800/30',
+    iconMuted: 'text-gray-400/70',
+    border: 'border-l-gray-500',
+  },
+};
+
+// NavSection component for grouped navigation
+const NavSection = ({ title, colorKey, items, currentPath }) => {
+  const colors = SECTION_COLORS[colorKey] || SECTION_COLORS.admin;
+  
+  return (
+    <div className="mb-4">
+      <div className={cn(
+        "px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest",
+        colors.header
+      )}>
+        {title}
+      </div>
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const isActive = !item.external && currentPath === item.url;
+          
+          return (
+            <div key={item.title}>
+              {item.external ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
+                    colors.hoverBg,
+                    "text-gray-300 hover:text-white"
+                  )}
+                >
+                  <Icon className={cn("w-4 h-4", colors.iconMuted)} />
+                  <span>{item.title}</span>
+                </a>
+              ) : (
+                <Link
+                  to={item.url}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
+                    isActive 
+                      ? cn(colors.activeBg, "text-white border-l-2", colors.border)
+                      : cn(colors.hoverBg, "text-gray-300 hover:text-white")
+                  )}
+                >
+                  <Icon className={cn("w-4 h-4", isActive ? "text-white" : colors.iconMuted)} />
+                  <span>{item.title}</span>
+                </Link>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 import {
   Select,
   SelectContent,
