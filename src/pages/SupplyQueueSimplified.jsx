@@ -418,55 +418,69 @@ export default function SupplyQueueSimplified() {
                               </tr>
                             </thead>
                             <tbody>
-                              {group.items.map(({ commitment, part, vendor }) => (
-                                <tr 
-                                  key={commitment.id}
-                                  className="border-b border-gray-800/50 hover:bg-gray-800/20"
-                                >
-                                  <td className="py-2 px-2">
-                                    <button
-                                      onClick={() => handlePartClick(part)}
-                                      className="text-left text-gray-200 hover:text-white truncate max-w-[200px] block"
-                                    >
-                                      {part?.part_name || 'Unknown'}
-                                    </button>
-                                  </td>
-                                  <td className="py-2 px-2 text-center font-mono text-gray-300">
-                                    {part?.physical_stock ?? 0}
-                                  </td>
-                                  <td className="py-2 px-2 text-center font-mono text-cyan-400">
-                                    {commitment.reserved_from_stock ?? 0}
-                                  </td>
-                                  <td className="py-2 px-2 text-center font-mono text-white">
-                                    {commitment.required_total || commitment.qty_committed || 0}
-                                  </td>
-                                  <td className="py-2 px-2 text-right font-mono text-gray-300">
-                                    {formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}
-                                  </td>
-                                  <td className="py-2 px-2 text-right font-mono text-gray-300">
-                                    {formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-gray-600 pl-2">
-                                      {getDisplayStatus(commitment.commitment_status)}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 px-2 text-gray-400 truncate max-w-[100px]">
-                                    {vendor?.vendor_name || '—'}
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <span className={cn(
-                                      "text-[10px] font-mono uppercase",
-                                      commitment.billing_status === 'invoiced' || commitment.billing_status === 'paid' ? 'text-gray-500' : 'text-amber-500'
-                                    )}>
-                                      {commitment.billing_status || 'billable'}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <PricingIntegrityBadge commitment={commitment} />
-                                  </td>
-                                </tr>
-                              ))}
+                              {group.items.map(({ commitment, part, vendor }) => {
+                                // ============================================================================
+                                // PHASE 2: CANONICAL INVENTORY VALUES
+                                // Use partInventoryMap for GLOBAL reserved (not commitment.reserved_from_stock)
+                                // "In Stock" = part physical_stock
+                                // "Reserved" = GLOBAL reserved across ALL commitments
+                                // "Needed" = required_total - qty_installed
+                                // ============================================================================
+                                const partInv = partInventoryMap.get(part?.id) || { physical_stock: 0, reserved_global: 0 };
+                                const inStock = partInv.physical_stock;
+                                const reservedGlobal = partInv.reserved_global;
+                                const needed = Math.max(0, (commitment.required_total ?? 0) - (commitment.qty_installed ?? 0));
+                                
+                                return (
+                                  <tr 
+                                    key={commitment.id}
+                                    className="border-b border-gray-800/50 hover:bg-gray-800/20"
+                                  >
+                                    <td className="py-2 px-2">
+                                      <button
+                                        onClick={() => handlePartClick(part)}
+                                        className="text-left text-gray-200 hover:text-white truncate max-w-[200px] block"
+                                      >
+                                        {part?.part_name || 'Unknown'}
+                                      </button>
+                                    </td>
+                                    <td className="py-2 px-2 text-center font-mono text-gray-300">
+                                      {inStock}
+                                    </td>
+                                    <td className="py-2 px-2 text-center font-mono text-cyan-400">
+                                      {reservedGlobal}
+                                    </td>
+                                    <td className="py-2 px-2 text-center font-mono text-white">
+                                      {needed}
+                                    </td>
+                                    <td className="py-2 px-2 text-right font-mono text-gray-300">
+                                      {formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}
+                                    </td>
+                                    <td className="py-2 px-2 text-right font-mono text-gray-300">
+                                      {formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-gray-600 pl-2">
+                                        {getDisplayStatus(commitment.commitment_status)}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2 text-gray-400 truncate max-w-[100px]">
+                                      {vendor?.vendor_name || '—'}
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={cn(
+                                        "text-[10px] font-mono uppercase",
+                                        commitment.billing_status === 'invoiced' || commitment.billing_status === 'paid' ? 'text-gray-500' : 'text-amber-500'
+                                      )}>
+                                        {commitment.billing_status || 'billable'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <PricingIntegrityBadge commitment={commitment} />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         )}
