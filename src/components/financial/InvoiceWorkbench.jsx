@@ -138,7 +138,7 @@ function CanonicalKPIHeader({ kpis }) {
             <span className="text-xs text-gray-400 uppercase">Ready to Bill</span>
           </div>
           <p className="text-xl font-bold text-gray-400">{kpis.unbilled_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.unbilled_total || 0).toFixed(0)}</p>
+          <p className="text-xs text-gray-500">{formatCurrencyUSD(kpis.unbilled_total || 0)}</p>
         </CardContent>
       </Card>
       
@@ -150,7 +150,7 @@ function CanonicalKPIHeader({ kpis }) {
             <span className="text-xs text-gray-400 uppercase">Awaiting Payment</span>
           </div>
           <p className="text-xl font-bold text-purple-400">{kpis.invoiced_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.invoiced_total || 0).toFixed(0)}</p>
+          <p className="text-xs text-gray-500">{formatCurrencyUSD(kpis.invoiced_total || 0)}</p>
         </CardContent>
       </Card>
       
@@ -162,7 +162,7 @@ function CanonicalKPIHeader({ kpis }) {
             <span className="text-xs text-gray-400 uppercase">Paid</span>
           </div>
           <p className="text-xl font-bold text-green-400">{kpis.paid_count || 0}</p>
-          <p className="text-xs text-gray-500">${(kpis.paid_total || 0).toFixed(0)}</p>
+          <p className="text-xs text-gray-500">{formatCurrencyUSD(kpis.paid_total || 0)}</p>
         </CardContent>
       </Card>
     </div>
