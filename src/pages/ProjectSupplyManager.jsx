@@ -1551,11 +1551,11 @@ export default function ProjectSupplyManager() {
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Planned Retail</p>
-                        <p className="text-xl font-bold text-white">${metrics.totalPlannedRetail.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Invoiced</p>
-                        <p className="text-xl font-bold text-blue-400">${metrics.totalInvoiced.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-blue-400 font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Unbilled</p>
