@@ -313,12 +313,12 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
 
             <TableCell className="text-right text-gray-300">{item.required_total || 0}</TableCell>
             <TableCell className="text-right text-gray-300">
-              {item.unit_retail > 0 ? `$${item.unit_retail.toFixed(2)}` : (
+              {item.unit_retail > 0 ? formatCurrencyUSD(item.unit_retail) : (
                 <Badge className="bg-red-600/30 text-red-400 text-xs">Missing</Badge>
               )}
             </TableCell>
             <TableCell className="text-right text-green-400 font-medium">
-              ${(item.line_total || 0).toFixed(2)}
+              {formatCurrencyUSD(item.line_total || 0)}
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
