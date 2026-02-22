@@ -1559,8 +1559,8 @@ export default function ProjectSupplyManager() {
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Unbilled</p>
-                        <p className={`text-xl font-bold ${metrics.unbilledRetail > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
-                          ${metrics.unbilledRetail.toFixed(2)}
+                        <p className={`text-xl font-bold font-mono ${metrics.unbilledRetail > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                          {formatCurrencyUSD(metrics.unbilledRetail)}
                         </p>
                       </div>
                     </div>
@@ -1573,16 +1573,16 @@ export default function ProjectSupplyManager() {
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         <div>
                           <p className="text-xs text-gray-500">Total Invoiced</p>
-                          <p className="text-lg font-bold text-white">${metrics.totalInvoiced.toFixed(2)}</p>
+                          <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Total Paid</p>
-                          <p className="text-lg font-bold text-green-400">${metrics.totalPaid.toFixed(2)}</p>
+                          <p className="text-lg font-bold text-gray-300 font-mono">{formatCurrencyUSD(metrics.totalPaid)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Outstanding</p>
-                          <p className={`text-lg font-bold ${metrics.invoiceOutstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
-                            ${metrics.invoiceOutstanding.toFixed(2)}
+                          <p className={`text-lg font-bold font-mono ${metrics.invoiceOutstanding > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                            {formatCurrencyUSD(metrics.invoiceOutstanding)}
                           </p>
                         </div>
                       </div>
