@@ -46,6 +46,7 @@ export default function CreateProjectInvoiceModal({
   projects,
   creditBalances,
 }) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [invoiceType, setInvoiceType] = useState("progress");
