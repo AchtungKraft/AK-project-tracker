@@ -30,7 +30,21 @@ import { Label } from "@/components/ui/label";
  * Never allow triple nesting.
  */
 
-const STORAGE_KEY = 'supply_grouping_prefs';
+/**
+ * Build storage key scoped to project/tab context.
+ * Falls back to global key if no context provided.
+ */
+function getStorageKey(projectId, tabId) {
+  if (projectId && tabId) {
+    return `psm_grouping_${projectId}_${tabId}`;
+  }
+  if (projectId) {
+    return `psm_grouping_${projectId}`;
+  }
+  return 'supply_grouping_prefs';
+}
+
+const DEFAULT_STORAGE_KEY = 'supply_grouping_prefs';
 
 const PRIMARY_OPTIONS = [
   { value: 'none', label: 'No Grouping' },
@@ -60,10 +74,11 @@ const SORT_OPTIONS = [
 
 /**
  * Load persisted grouping preferences from localStorage
+ * @param {string} storageKey - Key for localStorage
  */
-function loadPreferences() {
+function loadPreferences(storageKey) {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -80,10 +95,12 @@ function loadPreferences() {
 
 /**
  * Save preferences to localStorage
+ * @param {string} storageKey - Key for localStorage
+ * @param {Object} prefs - Preferences to save
  */
-function savePreferences(prefs) {
+function savePreferences(storageKey, prefs) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    localStorage.setItem(storageKey, JSON.stringify(prefs));
   } catch (e) {
     console.warn('Failed to save grouping preferences:', e);
   }
@@ -94,17 +111,21 @@ export default function SupplyGroupingControls({
   onSortChange,
   onShowClosedChange,
   showProjectOption = true,
+  projectId = null,
+  tabId = null,
   className,
 }) {
-  const [prefs, setPrefs] = useState(loadPreferences);
+  // Build scoped storage key
+  const storageKey = getStorageKey(projectId, tabId);
+  const [prefs, setPrefs] = useState(() => loadPreferences(storageKey));
 
   // Persist changes
   useEffect(() => {
-    savePreferences(prefs);
+    savePreferences(storageKey, prefs);
     onGroupChange?.({ primary: prefs.primaryGroup, sub: prefs.subGroup });
     onSortChange?.(prefs.sortBy);
     onShowClosedChange?.(prefs.showClosedCancelled);
-  }, [prefs, onGroupChange, onSortChange, onShowClosedChange]);
+  }, [prefs, storageKey, onGroupChange, onSortChange, onShowClosedChange]);
 
   const updatePref = (key, value) => {
     setPrefs(prev => ({ ...prev, [key]: value }));
