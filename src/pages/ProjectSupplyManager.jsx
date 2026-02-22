@@ -726,10 +726,53 @@ export default function ProjectSupplyManager() {
     toast.info('Review commitment coverage in the Plan tab');
   };
 
-  // Render commitment row - CANONICAL fields only
+  // Handle part click - opens Edit Part Drawer
+  const handlePartClick = useCallback((part, commitment) => {
+    if (part?.id) {
+      setSelectedPartId(part.id);
+    } else if (commitment?.part_id) {
+      setSelectedPartId(commitment.part_id);
+    }
+  }, []);
+
+  // Inventory Coverage Indicator
+  const InventoryCoverageIndicator = ({ available, needed }) => {
+    if (available >= needed && needed > 0) {
+      return (
+        <span className="text-[10px] font-mono uppercase text-gray-500 bg-gray-800/50 px-1.5 py-0.5 rounded">
+          COVERED BY STOCK
+        </span>
+      );
+    }
+    if (available === 0) {
+      return (
+        <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-amber-700 bg-gray-900/60 px-1.5 py-0.5">
+          OUT OF STOCK
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-amber-600 bg-gray-900/60 px-1.5 py-0.5">
+        INSUFFICIENT STOCK
+      </span>
+    );
+  };
+
+  // Render commitment row - CANONICAL fields only with MANDATORY data contract
   const renderCommitmentRow = (commitment, showActions = true) => {
     const { part, vendor, allowed } = commitment;
-    const nextStep = getNextStepLabel(commitment);
+    const displayStatus = getDisplayStatus(commitment.commitment_status);
+    const statusColor = getDisplayStatusColor(displayStatus);
+    
+    // Extract mandatory values
+    const inStock = commitment.inventory_snapshot?.physical ?? 0;
+    const reserved = commitment.reserved_from_stock ?? 0;
+    const needed = commitment.required_total ?? 0;
+    const cost = commitment.unit_cost ?? 0;
+    const retail = commitment.unit_retail ?? 0;
+    const vendorName = vendor?.vendor_name ?? '—';
+    const paymentStatus = commitment.billing_status ?? 'billable';
+    const available = commitment.inventory_snapshot?.available ?? (inStock - reserved);
 
     return (
       <TableRow key={commitment.id} className="hover:bg-gray-800/30">
@@ -748,6 +791,7 @@ export default function ProjectSupplyManager() {
             />
           </TableCell>
         )}
+        {/* Part Name - CLICKABLE, opens drawer */}
         <TableCell>
           <div className="flex items-center gap-2">
             {part?.featured_photo && (
@@ -755,124 +799,83 @@ export default function ProjectSupplyManager() {
                 <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
               </div>
             )}
-            <div>
+            <button
+              onClick={() => handlePartClick(part, commitment)}
+              className="text-left hover:text-gray-300 transition-colors"
+            >
               <p className="text-white text-sm font-medium">{part?.part_name || 'Unknown Part'}</p>
               <p className="text-xs text-gray-500">{part?.vendor_part_number}</p>
-            </div>
+            </button>
           </div>
         </TableCell>
-        {/* Needed (editable stepper) - CANONICAL: required_total */}
+        {/* In Stock - MANDATORY */}
+        <TableCell className="text-center">
+          <span className="text-sm font-mono text-gray-300">{inStock}</span>
+        </TableCell>
+        {/* Reserved - MANDATORY */}
+        <TableCell className="text-center">
+          <span className={cn(
+            "text-sm font-mono",
+            reserved > 0 ? "text-cyan-400" : "text-gray-500"
+          )}>
+            {reserved}
+          </span>
+        </TableCell>
+        {/* Needed - MANDATORY */}
         <TableCell className="text-center">
           <InlineQtyStepper 
             commitment={{ 
               id: commitment.id, 
-              required_total: commitment.required_total,
+              required_total: needed,
               commitment_status: commitment.commitment_status,
             }} 
             onMutationSuccess={() => invalidateSupply()}
             disabled={!actionsEnabled}
           />
         </TableCell>
-        {/* Reserved (read-only) - CANONICAL: reserved_from_stock */}
-        <TableCell className="text-center">
-          <span className={commitment.reserved_from_stock > 0 ? 'text-cyan-400' : 'text-gray-500'}>
-            {commitment.reserved_from_stock}
+        {/* Cost - MANDATORY, USD formatted */}
+        <TableCell className="text-right">
+          <span className="text-sm font-mono text-gray-300">
+            {formatCurrencyUSD(cost)}
           </span>
         </TableCell>
-        {/* To Order (read-only) - CANONICAL: to_order */}
-        <TableCell className="text-center">
-          {commitment.to_order > 0 ? (
-            <Badge variant="outline" className="border-purple-600 text-purple-400">
-              {commitment.to_order}
-            </Badge>
-          ) : (
-            <span className="text-gray-500">0</span>
-          )}
-        </TableCell>
-        {/* On Order - CANONICAL: on_order_qty (from line items) */}
-        <TableCell className="text-center">
-          <span className={commitment.on_order_qty > 0 ? 'text-purple-400' : 'text-gray-500'}>
-            {commitment.on_order_qty}
+        {/* Retail - MANDATORY, USD formatted */}
+        <TableCell className="text-right">
+          <span className="text-sm font-mono text-gray-300">
+            {formatCurrencyUSD(retail)}
           </span>
         </TableCell>
-        {/* Received - CANONICAL: received_qty */}
-        <TableCell className="text-center">
-          <span className={commitment.received_qty > 0 ? 'text-blue-400' : 'text-gray-500'}>
-            {commitment.received_qty}
-          </span>
-        </TableCell>
-        {/* Installed - CANONICAL: qty_installed */}
-        <TableCell className="text-center">
-          <span className={commitment.qty_installed > 0 ? 'text-green-400' : 'text-gray-500'}>
-            {commitment.qty_installed}
-          </span>
-        </TableCell>
-        {/* Coverage - PHASE 9I: CANONICAL inventory state badge */}
+        {/* Display Lifecycle - MANDATORY */}
         <TableCell>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              {/* Primary state badge - ONE badge only */}
-              <InventoryStateBadge 
-                commitment={{
-                  required_total: commitment.required_total,
-                  reserved_from_stock: commitment.reserved_from_stock,
-                  covered_from_po: commitment.covered_from_po,
-                  to_order: commitment.to_order,
-                  available_to_install: commitment.available_to_install,
-                  qty_installed: commitment.qty_installed,
-                }}
-              />
-              <CoverageControlsPopover
-                commitment={{ 
-                  id: commitment.id,
-                  commitment_status: commitment.commitment_status,
-                  required_total: commitment.required_total,
-                  reserved_from_stock: commitment.reserved_from_stock,
-                  covered_from_po: commitment.covered_from_po,
-                }}
-                coverage={{
-                  required_total: commitment.required_total,
-                  reserved_from_stock: commitment.reserved_from_stock,
-                  covered_from_po: commitment.covered_from_po,
-                  coverage_status: commitment.coverage_status,
-                  to_order: commitment.to_order
-                }}
-                undoAvailable={false}
-                onActionComplete={() => invalidateSupply()}
-                disabled={!actionsEnabled}
-              />
-            </div>
-            {/* Stock available helper - optional secondary text */}
-            <StockAvailableHelper 
-              commitment={commitment}
-              inventorySnapshot={commitment.inventory_snapshot}
-            />
-            {/* Coverage drift error - should never appear if backend is correct */}
-            <CoverageDriftBadge commitment={commitment} />
-          </div>
+          <span className={cn(
+            "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
+            statusColor
+          )}>
+            {displayStatus}
+          </span>
         </TableCell>
-        {/* Next Step - CANONICAL: next_action */}
+        {/* Vendor - MANDATORY */}
         <TableCell>
-          <Badge 
-            variant="outline" 
-            className="text-xs"
-            style={{ 
-              borderColor: nextStep.color === 'green' ? '#16a34a' : 
-                           nextStep.color === 'yellow' ? '#ca8a04' :
-                           nextStep.color === 'red' ? '#dc2626' :
-                           nextStep.color === 'blue' ? '#2563eb' :
-                           nextStep.color === 'cyan' ? '#0891b2' :
-                           nextStep.color === 'purple' ? '#9333ea' : '#6b7280',
-              color: nextStep.color === 'green' ? '#4ade80' : 
-                     nextStep.color === 'yellow' ? '#facc15' :
-                     nextStep.color === 'red' ? '#f87171' :
-                     nextStep.color === 'blue' ? '#60a5fa' :
-                     nextStep.color === 'cyan' ? '#22d3ee' :
-                     nextStep.color === 'purple' ? '#c084fc' : '#9ca3af'
-            }}
-          >
-            {nextStep.label}
-          </Badge>
+          <span className="text-xs text-gray-400 truncate max-w-[100px] block">
+            {vendorName}
+          </span>
+        </TableCell>
+        {/* Payment Status - MANDATORY */}
+        <TableCell>
+          <span className={cn(
+            "text-[10px] font-mono uppercase",
+            paymentStatus === 'invoiced' || paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
+          )}>
+            {paymentStatus}
+          </span>
+        </TableCell>
+        {/* Coverage Indicator - MANDATORY */}
+        <TableCell>
+          <InventoryCoverageIndicator available={available} needed={needed} />
+        </TableCell>
+        {/* Pricing Warning Badge - only if not OK */}
+        <TableCell>
+          <PricingIntegrityBadge commitment={commitment} />
         </TableCell>
         {showActions && (
           <TableCell>
@@ -938,6 +941,53 @@ export default function ProjectSupplyManager() {
           </TableCell>
         )}
       </TableRow>
+    );
+  };
+  
+  // Render mobile card - uses MobileSupplyCard component
+  const renderMobileCard = (commitment) => {
+    const { part, vendor, allowed } = commitment;
+    
+    return (
+      <MobileSupplyCard
+        key={commitment.id}
+        commitment={commitment}
+        part={part}
+        vendor={vendor}
+        onPartClick={handlePartClick}
+      >
+        {/* Actions inside expanded view */}
+        <div className="flex flex-wrap gap-2">
+          {allowed.canCreatePO && commitment.to_order > 0 && (
+            <MutationButton
+              variant="outline"
+              size="sm"
+              onClick={() => handleSinglePOCreate(commitment)}
+              loadingText="Creating..."
+              className="text-xs"
+            >
+              <ShoppingCart className="w-3 h-3 mr-1" />
+              Create PO
+            </MutationButton>
+          )}
+          {allowed.canReceive && (
+            <Button variant="outline" size="sm" onClick={() => setReceiveModal(commitment)} className="text-xs">
+              <Package className="w-3 h-3 mr-1" />
+              Receive
+            </Button>
+          )}
+          {allowed.canInstall && (
+            <Button variant="outline" size="sm" onClick={() => setInstallModal(commitment)} className="text-xs">
+              <Wrench className="w-3 h-3 mr-1" />
+              Install
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setQtyManagerDrawer(commitment)} className="text-xs">
+            <Edit className="w-3 h-3 mr-1" />
+            Manage
+          </Button>
+        </div>
+      </MobileSupplyCard>
     );
   };
 
