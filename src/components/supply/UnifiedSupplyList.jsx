@@ -158,7 +158,7 @@ export default function UnifiedSupplyList({
               {/* Primary group header */}
               {groupConfig.primary !== 'none' && (
                 <tr>
-                  <td colSpan={13} className="p-0">
+                  <td colSpan={14} className="p-0">
                     {renderGroupHeader(group, 0)}
                   </td>
                 </tr>
@@ -172,7 +172,7 @@ export default function UnifiedSupplyList({
                     group.subGroups.map(subGroup => (
                       <React.Fragment key={`${group.key}-${subGroup.key}`}>
                         <tr>
-                          <td colSpan={13} className="p-0">
+                          <td colSpan={14} className="p-0">
                             {renderGroupHeader(subGroup, 1)}
                           </td>
                         </tr>
@@ -183,6 +183,9 @@ export default function UnifiedSupplyList({
                               commitment={item}
                               part={parts[item.part_id] || item.part || item}
                               vendor={vendors[item.vendor_id] || item.vendor}
+                              category={categories[item.category_id] || item.categoryObj}
+                              categoryLookup={categories}
+                              vendorLookup={vendors}
                               onPartClick={handlePartClick}
                             >
                               {renderActions?.(item, parts[item.part_id] || item.part, vendors[item.vendor_id] || item.vendor)}
@@ -199,6 +202,9 @@ export default function UnifiedSupplyList({
                         commitment={item}
                         part={parts[item.part_id] || item.part || item}
                         vendor={vendors[item.vendor_id] || item.vendor}
+                        category={categories[item.category_id] || item.categoryObj}
+                        categoryLookup={categories}
+                        vendorLookup={vendors}
                         onPartClick={handlePartClick}
                       >
                         {renderActions?.(item, parts[item.part_id] || item.part, vendors[item.vendor_id] || item.vendor)}
