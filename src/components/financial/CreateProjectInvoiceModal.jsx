@@ -241,7 +241,13 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         console.log("Invoice created with ID:", response.data.invoice_id);
         toast.success("Invoice draft created");
-        onSuccess();
+        
+        // Invalidate ALL invoice-related queries to ensure refresh
+        await queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
+        await queryClient.invalidateQueries({ queryKey: ["projectInvoices"] });
+        
+        onSuccess?.();
+        onClose?.();
       } else {
         console.error("Invoice creation failed:", response.data?.error);
         toast.error(response.data?.error || "Failed to create invoice");
