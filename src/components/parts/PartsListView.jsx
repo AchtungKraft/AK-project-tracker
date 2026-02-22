@@ -1,16 +1,13 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Badge } from "@/components/ui/badge";
-import { Package, MapPin, Box, ChevronDown, ChevronRight, AlertTriangle, DollarSign, Archive } from "lucide-react";
+import { Package, MapPin, Box, ChevronDown, ChevronRight, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
-import FinancialStatusBadge from "../financial/FinancialStatusBadge";
-import { useFinancialStatusBatch } from "../financial/useFinancialStatus";
 import PricingBadge from "./PricingBadge";
-import { getPartRetailEffectiveSafe } from "@/components/supply/pricingHelpers";
+import { getPartRetailEffectiveSafe, formatCurrency } from "@/components/supply/pricingHelpers";
 
 /**
  * PartsListView - CANONICAL: Displays parts in a list format
