@@ -141,104 +141,70 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Building2 } from "lucide-react";
 
+// Sectioned navigation structure for Achtung Kraft members
+const getNavigationSections = () => {
+  return [
+    {
+      title: "Projects",
+      colorKey: "projects",
+      items: [
+        { title: "Projects", url: createPageUrl("Dashboard"), icon: FolderKanban },
+        { title: "Team Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
+        { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
+        { title: "Portal Stats", url: createPageUrl("PortalStatsEmbed"), icon: BarChart3 },
+      ],
+    },
+    {
+      title: "Supply",
+      colorKey: "supply",
+      items: [
+        { title: "Supply Dashboard", url: createPageUrl("SupplyLanding"), icon: Layers },
+        { title: "Order Queue", url: createPageUrl("GlobalNeedToOrder"), icon: Truck },
+        { title: "PO Receiving", url: createPageUrl("POReceiving"), icon: Package },
+        { title: "Action Workbench", url: createPageUrl("PartsActionWorkbench"), icon: Flame },
+      ],
+    },
+    {
+      title: "Financial",
+      colorKey: "financial",
+      items: [
+        { title: "Project Invoices", url: createPageUrl("ProjectInvoices"), icon: Receipt },
+        { title: "Credit Ledger", url: createPageUrl("CreditLedger"), icon: Receipt },
+        { title: "Financial Exceptions", url: createPageUrl("FinancialExceptionDashboard"), icon: AlertTriangle },
+      ],
+    },
+    {
+      title: "Inventory",
+      colorKey: "inventory",
+      items: [
+        { title: "Parts Tracker", url: createPageUrl("PartsTracker"), icon: Package },
+        { title: "Stock Reorder", url: createPageUrl("StockReorder"), icon: Package },
+      ],
+    },
+    {
+      title: "Admin",
+      colorKey: "admin",
+      adminOnly: true,
+      items: [
+        { title: "Admin Config", url: createPageUrl("AdminConfig"), icon: Settings },
+        { title: "Tech Specs", url: createPageUrl("TechSpecs"), icon: Settings },
+        { title: "Wiring Audit", url: createPageUrl("WiringAuditDashboard"), icon: Settings },
+        { title: "Data Normalization", url: createPageUrl("SupplyNormalization"), icon: Settings },
+      ],
+    },
+  ];
+};
+
+// Flat navigation items for backwards compatibility (mobile, off-canvas menu)
 const getNavigationItems = (isAchtungKraft) => {
   if (isAchtungKraft) {
-    return [
-      {
-        title: "Projects",
-        url: createPageUrl("Dashboard"),
-        icon: FolderKanban,
-      },
-      {
-        title: "Team Priorities",
-        url: createPageUrl("PriorityDashboard"),
-        icon: Flame,
-      },
-      {
-        title: "Client Portal",
-        url: createPageUrl("ClientPortalHub"),
-        icon: Building2,
-      },
-      { divider: true },
-      {
-        title: "Project Invoices",
-        url: createPageUrl("ProjectInvoices"),
-        icon: Receipt,
-      },
-      {
-        title: "Credit Ledger",
-        url: createPageUrl("CreditLedger"),
-        icon: Receipt,
-      },
-      { divider: true },
-      {
-        title: "Supply Dashboard",
-        url: createPageUrl("SupplyLanding"),
-        icon: Layers,
-      },
-      {
-        title: "Order Queue",
-        url: createPageUrl("GlobalNeedToOrder"),
-        icon: Truck,
-      },
-      {
-        title: "PO Receiving",
-        url: createPageUrl("POReceiving"),
-        icon: Package,
-      },
-      {
-        title: "Work Queues",
-        url: createPageUrl("SupplyQueues"),
-        icon: ListChecks,
-      },
-      { divider: true },
-      {
-        title: "Parts Tracker",
-        url: createPageUrl("PartsTracker"),
-        icon: Package,
-      },
-      {
-        title: "Action Workbench",
-        url: createPageUrl("PartsActionWorkbench"),
-        icon: Flame,
-      },
-      {
-        title: "Stock Reorder",
-        url: createPageUrl("StockReorder"),
-        icon: Package,
-      },
-      {
-        title: "Financial Exceptions",
-        url: createPageUrl("FinancialExceptionDashboard"),
-        icon: AlertTriangle,
-      },
-      { divider: true },
-      {
-        title: "Admin Config",
-        url: createPageUrl("AdminConfig"),
-        icon: Settings,
-      },
-      {
-        title: "Tech Specs",
-        url: createPageUrl("TechSpecs"),
-        icon: Settings,
-      },
-      {
-        title: "Wiring Audit",
-        url: createPageUrl("WiringAuditDashboard"),
-        icon: Settings,
-      },
-      {
-        title: "Data Normalization",
-        url: createPageUrl("SupplyNormalization"),
-        icon: Settings,
-      },
-      {
-        title: "Portal Stats",
-        url: createPageUrl("PortalStatsEmbed"),
-        icon: BarChart3,
-      },
-    ];
+    const sections = getNavigationSections();
+    const items = [];
+    sections.forEach((section, idx) => {
+      if (idx > 0) items.push({ divider: true });
+      section.items.forEach(item => items.push(item));
+    });
+    return items;
   } else {
     return [
       {
