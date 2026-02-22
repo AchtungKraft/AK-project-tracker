@@ -926,14 +926,23 @@ export default function ProjectSupplyManager() {
         <TableCell className="text-center">
           <span className="text-sm font-mono text-gray-300">{inStock}</span>
         </TableCell>
-        {/* Reserved - MANDATORY */}
+        {/* Reserved - MANDATORY: Show "Global | ThisProject" format */}
         <TableCell className="text-center">
-          <span className={cn(
-            "text-sm font-mono",
-            reserved > 0 ? "text-cyan-400" : "text-gray-500"
-          )}>
-            {reserved}
-          </span>
+          <div className="flex items-center justify-center gap-1">
+            <span className={cn(
+              "text-sm font-mono",
+              reservedGlobal > 0 ? "text-cyan-400" : "text-gray-500"
+            )}>
+              {reservedGlobal}
+            </span>
+            <span className="text-gray-600">|</span>
+            <span className={cn(
+              "text-sm font-mono",
+              reservedThisProject > 0 ? "text-cyan-300" : "text-gray-600"
+            )}>
+              {reservedThisProject}
+            </span>
+          </div>
         </TableCell>
         {/* Needed - MANDATORY, STATIC (no inline editing) */}
         <TableCell className="text-center">
