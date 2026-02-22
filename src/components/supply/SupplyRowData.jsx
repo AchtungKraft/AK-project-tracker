@@ -251,14 +251,20 @@ export function MobileSupplyCard({
   const displayStatus = getDisplayStatus(commitment?.commitment_status);
   const statusColor = getDisplayStatusColor(displayStatus);
   
-  // MANDATORY VALUES - Extract with fallbacks
-  const inStock = commitment?.inventory_snapshot?.physical ?? part?.physical_stock ?? 0;
-  const reserved = commitment?.reserved_from_stock ?? 0;
-  const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+  // ============================================================================
+  // PHASE 2: CANONICAL INVENTORY VALUES (Mobile Card)
+  // Use inventory_snapshot from read model - NO local calculations
+  // "In Stock" = physical_stock (part level)
+  // "Reserved" = GLOBAL reserved across ALL commitments (from read model)
+  // "Needed" = required_total - qty_installed (what remains to fulfill)
+  // ============================================================================
+  const inStock = commitment?.inventory_snapshot?.physical ?? commitment?.inventory_snapshot?.physical_stock ?? part?.physical_stock ?? 0;
+  const reserved = commitment?.inventory_snapshot?.reserved ?? commitment?.inventory_snapshot?.reserved_total ?? 0;
+  const needed = commitment?.inventory_snapshot?.needed ?? Math.max(0, (commitment?.required_total ?? 0) - (commitment?.qty_installed ?? 0));
   const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
   const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
   const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
-  const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
+  const available = commitment?.inventory_snapshot?.available ?? 0;
   
   // RESOLVE NAMES - Never display IDs
   const resolvedVendor = resolveVendorDisplay(
