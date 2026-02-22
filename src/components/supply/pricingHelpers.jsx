@@ -199,3 +199,25 @@ export function formatCurrencyWhole(value) {
   if (value === null || value === undefined || isNaN(value)) return '$0';
   return `$${Math.round(value)}`;
 }
+
+/**
+ * formatCurrencyUSD - Format with US locale (thousands separator, 2 decimals)
+ * 
+ * Hard Rule: All cost and retail values must use this format.
+ * Examples:
+ * - 1250 → $1,250.00
+ * - 1250000 → $1,250,000.00
+ * - 0 → $0.00
+ * 
+ * @param {number} value 
+ * @returns {string}
+ */
+export function formatCurrencyUSD(value) {
+  if (value === null || value === undefined || isNaN(value)) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+}
