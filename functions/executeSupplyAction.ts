@@ -259,6 +259,8 @@ async function adjustRequired(ctx, commitment_ids, payload) {
         else if (retail_effective <= 0) pricing_integrity_status = 'missing_retail';
         else if (retail_effective < unit_cost) pricing_integrity_status = 'margin_negative';
         
+        // PHASE 10: Create commitment with CANONICAL billing_status
+        // billing_status MUST be 'unbilled' - supply flows never set invoiced/paid
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
           project_id,
           part_id,
@@ -276,7 +278,9 @@ async function adjustRequired(ctx, commitment_ids, payload) {
           commitment_status: 'planned',
           coverage_status: 'NOT_COVERED',
           source_type: 'manual_attachment',
-          billing_status: 'billable',
+          // CANONICAL: All new commitments start unbilled
+          // Billing status is financial-only; supply lifecycle must not change it
+          billing_status: 'unbilled',
           requires_prepay: payload.requires_prepay || false, // FIX C: Support prepay flag
           unit_cost_snapshot: unit_cost,
           unit_retail_snapshot: retail_effective,

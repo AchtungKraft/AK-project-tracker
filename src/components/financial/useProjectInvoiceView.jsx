@@ -245,6 +245,19 @@ export function useProjectInvoiceView(projectId) {
     }
   }
 
+  // PHASE 10: Dev mode drift warning for non-canonical billing_status
+  if (process.env.NODE_ENV === 'development' && rawCommitments.length > 0) {
+    const nonCanonical = rawCommitments.filter(c => 
+      c.billing_status && !['unbilled', 'invoiced', 'paid'].includes(c.billing_status.toLowerCase())
+    );
+    if (nonCanonical.length > 0) {
+      console.warn(
+        `[BILLING_DRIFT_WARNING] ${nonCanonical.length} commitments have non-canonical billing_status:`,
+        nonCanonical.map(c => ({ id: c.id, status: c.billing_status }))
+      );
+    }
+  }
+
   // Transform commitments to view models
   const commitments = rawCommitments
     .filter(c => !c.cancellation_type && c.cancellation_type !== 'full_cancel')
