@@ -73,6 +73,7 @@ import ProjectFinancialReport from './pages/ProjectFinancialReport';
 import ProjectSupplyManager from './pages/ProjectSupplyManager';
 import Projects from './pages/Projects';
 import Reports from './pages/Reports';
+import StockReorder from './pages/StockReorder';
 import SupplyDashboard from './pages/SupplyDashboard';
 import SupplyInstalled from './pages/SupplyInstalled';
 import SupplyLanding from './pages/SupplyLanding';
@@ -84,7 +85,7 @@ import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import TestDataCleanup from './pages/TestDataCleanup';
 import WiringAuditDashboard from './pages/WiringAuditDashboard';
-import StockReorder from './pages/StockReorder';
+import SupplyQueueSimplified from './pages/SupplyQueueSimplified';
 import __Layout from './Layout.jsx';
 
 
@@ -115,6 +116,7 @@ export const PAGES = {
     "ProjectSupplyManager": ProjectSupplyManager,
     "Projects": Projects,
     "Reports": Reports,
+    "StockReorder": StockReorder,
     "SupplyDashboard": SupplyDashboard,
     "SupplyInstalled": SupplyInstalled,
     "SupplyLanding": SupplyLanding,
@@ -126,7 +128,7 @@ export const PAGES = {
     "TechSpecs": TechSpecs,
     "TestDataCleanup": TestDataCleanup,
     "WiringAuditDashboard": WiringAuditDashboard,
-    "StockReorder": StockReorder,
+    "SupplyQueueSimplified": SupplyQueueSimplified,
 }
 
 export const pagesConfig = {
