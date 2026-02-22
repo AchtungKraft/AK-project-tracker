@@ -1,13 +1,7 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  CommitmentStatusBadge, 
-  CommitmentBillingBadge, 
-  CommitmentSourceBadge 
-} from "./CommitmentStatusBadge";
-import { Package, MoreHorizontal, FileText, Trash2, ShoppingCart, RotateCcw, Plus } from "lucide-react";
+import { Package, MoreHorizontal, FileText, ShoppingCart, RotateCcw, Plus, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +10,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import FinancialStatusBadge from "../financial/FinancialStatusBadge";
 import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "./DeltaOrderModal";
+import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
+import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
+import { formatCurrency } from "@/components/supply/pricingHelpers";
+import { cn } from "@/lib/utils";
 
 /**
  * CommitmentCard - Displays a single PartCommitment record
@@ -53,22 +50,30 @@ export default function CommitmentCard({
   // Use centralized lifecycle gating
   const allowedActions = getAllowedCommitmentActions(commitment);
 
+  const displayStatus = getDisplayStatus(commitment.commitment_status);
+  const statusColor = getDisplayStatusColor(displayStatus);
+
   if (compact) {
     return (
       <div className="flex items-center justify-between p-2 bg-gray-800/30 rounded-lg border border-gray-700/50">
         <div className="flex items-center gap-2">
-          <CommitmentStatusBadge status={commitment.commitment_status} size="sm" />
-          <span className="text-sm text-gray-300">
+          <span className={cn(
+            "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50",
+            statusColor
+          )}>
+            {displayStatus}
+          </span>
+          <span className="text-sm text-gray-300 font-mono">
             {commitment.qty_installed || 0}/{commitment.qty_committed || 0}
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs">
           {commitment.qty_ordered > 0 && (
-            <span className="text-purple-400">
+            <span className="text-gray-400 font-mono">
               {commitment.qty_received || 0}/{commitment.qty_ordered} recv
             </span>
           )}
-          <FinancialStatusBadge financialStatus={financialStatus} displayMode="compact" />
+          <PricingIntegrityBadge commitment={commitment} />
         </div>
       </div>
     );
