@@ -87,21 +87,62 @@ Deno.serve(async (req) => {
       }
     });
 
-    // Calculate part-level inventory totals
-    const partInventoryMap = new Map();
-    commitments.forEach(c => {
-      const partId = c.part_id;
-      if (!partInventoryMap.has(partId)) {
-        partInventoryMap.set(partId, {
-          total_reserved: 0,
-          total_covered: 0,
-          total_to_order: 0,
-        });
-      }
-      const inv = partInventoryMap.get(partId);
-      inv.total_reserved += c.reserved_from_stock ?? c.qty_reserved ?? 0;
-      inv.total_covered += c.covered_from_po ?? c.qty_ordered ?? 0;
+    // ============================================================================
+    // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP
+    // This computes GLOBAL reserved/on_order across ALL active commitments for each part
+    // "Reserved" = SUM(reserved_from_stock) across ALL commitments (not just this project)
+    // ============================================================================
+    
+    // First, fetch ALL commitments for parts in this project (to get global reservations)
+    const partIdsInProject = [...new Set(commitments.map(c => c.part_id))];
+    const allCommitmentsForParts = await base44.entities.PartCommitment.filter({
+      part_id: { $in: partIdsInProject },
+      commitment_status: { $nin: ['cancelled', 'closed'] }
     });
+    
+    // Build canonical part inventory map with GLOBAL totals
+    const partInventoryMap = new Map();
+    
+    // Initialize from Part entities
+    for (const partId of partIdsInProject) {
+      const part = partMap.get(partId);
+      partInventoryMap.set(partId, {
+        physical_stock: part?.physical_stock ?? 0,
+        reserved_global: 0,  // Will be summed from ALL commitments
+        on_order_global: 0,
+        to_order_global: 0,
+        available: 0,  // Computed after aggregation
+      });
+    }
+    
+    // Aggregate from ALL commitments (global, not just this project)
+    for (const c of allCommitmentsForParts) {
+      const inv = partInventoryMap.get(c.part_id);
+      if (!inv) continue;
+      
+      const reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const covered = c.covered_from_po ?? c.qty_ordered ?? 0;
+      const required = c.required_total ?? c.qty_committed ?? 0;
+      
+      inv.reserved_global += reserved;
+      inv.on_order_global += covered;
+      inv.to_order_global += Math.max(0, required - reserved - covered);
+    }
+    
+    // Calculate available after aggregation
+    for (const [partId, inv] of partInventoryMap.entries()) {
+      inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+    }
+    
+    // Legacy alias for backward compatibility
+    const getPartInv = (partId) => {
+      const inv = partInventoryMap.get(partId);
+      return {
+        total_reserved: inv?.reserved_global ?? 0,
+        total_covered: inv?.on_order_global ?? 0,
+        total_to_order: inv?.to_order_global ?? 0,
+      };
+    };
 
     // Build SupplyCommitmentViewModel for each commitment
     const viewModels = commitments
