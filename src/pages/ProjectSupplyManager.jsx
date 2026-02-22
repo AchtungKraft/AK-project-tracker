@@ -1048,6 +1048,7 @@ export default function ProjectSupplyManager() {
         vendor={vendor}
         category={categoryObj}
         categoryLookup={categoriesMap}
+        vendorLookup={vendorsMap}
         onPartClick={handlePartClick}
       >
         {/* Actions inside expanded view */}
