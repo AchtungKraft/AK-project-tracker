@@ -330,9 +330,10 @@ export function MobileSupplyCard({
           </span>
         </div>
         
-        {/* Row 4: Vendor / Payment / Coverage / Warning */}
+        {/* Row 4: Category / Vendor / Payment / Coverage / Warning */}
         <div className="flex items-center gap-3 flex-wrap text-xs">
-          <span className="text-gray-400 truncate max-w-[80px]">{vendorName}</span>
+          <span className="text-gray-400 truncate max-w-[80px]">{resolvedCategory.name}</span>
+          <span className="text-gray-400 truncate max-w-[80px]">{resolvedVendor.name}</span>
           <span className={cn(
             "font-mono uppercase text-[10px]",
             paymentStatus === 'invoiced' || paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
