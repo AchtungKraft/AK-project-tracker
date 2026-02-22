@@ -72,7 +72,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
-import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip";
+import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx";
 
 /**
  * DESKTOP TABLE COLUMN COUNT
