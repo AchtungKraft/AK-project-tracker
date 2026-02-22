@@ -67,14 +67,20 @@ const getNavigationItems = (isAchtungKraft) => {
       },
       { divider: true },
       {
-        title: "Supply Dashboard",
-        url: createPageUrl("SupplyLanding"),
-        icon: Layers,
-      },
-      {
         title: "Project Invoices",
         url: createPageUrl("ProjectInvoices"),
         icon: Receipt,
+      },
+      {
+        title: "Credit Ledger",
+        url: createPageUrl("CreditLedger"),
+        icon: Receipt,
+      },
+      { divider: true },
+      {
+        title: "Supply Dashboard",
+        url: createPageUrl("SupplyLanding"),
+        icon: Layers,
       },
       {
         title: "Order Queue",
