@@ -345,23 +345,16 @@ export default function PartsListView({
           </div>
         </div>
 
-        {/* PHASE 15V: Cost + Retail + Pricing Badge + Inventory Stats */}
+        {/* AK Industrial Mode: Cost + Retail + Warning Badge (if any) + Inventory Stats */}
         <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
           {/* Cost */}
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Cost</div>
             <div className={cn(
-              "font-semibold flex items-center justify-center gap-0.5",
-              (!part.cost || part.cost <= 0) ? "text-red-400" : "text-white"
+              "font-mono",
+              (!part.cost || part.cost <= 0) ? "text-gray-500" : "text-gray-300"
             )}>
-              {(!part.cost || part.cost <= 0) ? (
-                <>
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>$0</span>
-                </>
-              ) : (
-                <>${(part.cost).toFixed(2)}</>
-              )}
+              {formatCurrency(part.cost || 0)}
             </div>
           </div>
           
@@ -369,22 +362,18 @@ export default function PartsListView({
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Retail</div>
             {(() => {
-              const { value: retail, error } = getPartRetailEffectiveSafe(part);
+              const { value: retail } = getPartRetailEffectiveSafe(part);
               return (
-                <div className={cn(
-                  "font-semibold",
-                  error ? "text-red-400" : "text-green-400"
-                )}>
-                  ${retail.toFixed(0)}
+                <div className="font-mono text-gray-300">
+                  {formatCurrency(retail)}
                 </div>
               );
             })()}
           </div>
           
-          {/* Pricing Badge - PHASE 15V */}
-          <div className="text-center min-w-[60px]">
-            <div className="text-gray-500 mb-0.5">Pricing</div>
-            <PricingBadge part={part} size="xs" showLabel={true} />
+          {/* Pricing Warning Badge - only shows if NOT ok (AK Industrial Mode) */}
+          <div className="text-center min-w-[80px]">
+            <PricingBadge part={part} showLabel={true} />
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Stock</div>
