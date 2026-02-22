@@ -23,7 +23,7 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
 import MobileCommitmentCard from "@/components/supply/MobileCommitmentCard";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { getDisplayStatus, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
-import { formatCurrency } from "@/components/supply/pricingHelpers";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { toast } from "sonner";
