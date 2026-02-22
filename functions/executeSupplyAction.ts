@@ -236,17 +236,21 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       if (ctx.dry_run) {
         isNewCommitment = true;
       } else {
-        // PHASE 15: HARD LOCK pricing snapshot at commitment creation
+        // PHASE 15V: HARD LOCK pricing snapshot at commitment creation
         const unit_cost = part.cost || 0;
         
-        // retail_effective MUST follow pricing_mode
+        // retail_effective MUST follow pricing_mode - CANONICAL SELECTOR
         let retail_effective = 0;
         const pricing_mode = part.pricing_mode || 'matrix';
         
         if (pricing_mode === 'manual') {
-          retail_effective = part.retail_override || 0;
+          if (!part.retail_override || part.retail_override <= 0) {
+            throw new Error(`PRICING_MODE_INVALID: Part ${part.part_name} has manual mode but no retail_override`);
+          }
+          retail_effective = part.retail_override;
         } else {
-          retail_effective = part.retail_matrix_price || 0;
+          // Matrix mode - retail_matrix_price must be whole dollar
+          retail_effective = Math.round(part.retail_matrix_price || 0);
         }
         
         // Determine pricing integrity
@@ -371,11 +375,15 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   }
 
   // =========== PERSIST CHANGES ===========
-  // PHASE 15: retail_effective MUST follow pricing_mode
+  // PHASE 15V: retail_effective MUST follow pricing_mode - CANONICAL SELECTOR
   const pricing_mode = part.pricing_mode || 'matrix';
-  const retail_effective = pricing_mode === 'manual' 
-    ? (part.retail_override || 0) 
-    : (part.retail_matrix_price || 0);
+  let retail_effective;
+  if (pricing_mode === 'manual') {
+    retail_effective = part.retail_override || 0;
+  } else {
+    // Matrix mode - ensure whole dollar
+    retail_effective = Math.round(part.retail_matrix_price || 0);
+  }
   
   // Update commitment with required_total and covered_from_po
   // reserved_from_stock and to_order will be set by rebalance

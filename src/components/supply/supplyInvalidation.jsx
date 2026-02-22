@@ -169,11 +169,19 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     }
   });
   
-  // PHASE 15: Pricing-related queries
+  // PHASE 15V: Pricing-related queries
   queryClient.invalidateQueries({ 
     predicate: (query) => {
       const key = query.queryKey;
       return Array.isArray(key) && key[0] === 'pricingAudit';
+    }
+  });
+  
+  // PHASE 15V: Pricing integrity queries
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && key[0] === 'pricingIntegrity';
     }
   });
 

@@ -97,6 +97,11 @@ const getNavigationItems = (isAchtungKraft) => {
         icon: Flame,
       },
       {
+        title: "Stock Reorder",
+        url: createPageUrl("StockReorder"),
+        icon: Package,
+      },
+      {
         title: "Financial Exceptions",
         url: createPageUrl("FinancialExceptionDashboard"),
         icon: AlertTriangle,

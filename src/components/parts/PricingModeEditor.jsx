@@ -36,13 +36,18 @@ export default function PricingModeEditor({ part, onPricingChange }) {
   const [matrixResult, setMatrixResult] = useState(null);
 
   // Fetch matrix result when cost changes in matrix mode
+  // PHASE 15V: Matrix retail rounds to nearest $1
   useEffect(() => {
     if (pricingMode === 'matrix' && cost > 0) {
       setComputing(true);
       base44.functions.invoke('computeRetailFromMatrix', { cost })
         .then(res => {
           if (res.data.success) {
-            setMatrixResult(res.data);
+            // Ensure retail is rounded to whole dollar
+            setMatrixResult({
+              ...res.data,
+              retail_matrix_price: Math.round(res.data.retail_matrix_price)
+            });
           } else {
             setMatrixResult({ error: res.data.error || res.data.message });
           }
@@ -187,8 +192,9 @@ export default function PricingModeEditor({ part, onPricingChange }) {
                 <div>
                   <p className="text-xs text-gray-400">Computed Retail</p>
                   <p className="text-xl text-blue-400 font-bold">
-                    ${matrixResult.retail_matrix_price?.toFixed(2) || '0.00'}
+                    ${Math.round(matrixResult.retail_matrix_price || 0)}
                   </p>
+                  <p className="text-xs text-gray-500">(rounded to $1)</p>
                 </div>
               </div>
               {margin !== null && (
