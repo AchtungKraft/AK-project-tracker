@@ -185,8 +185,18 @@ export function DesktopSupplyRow({
 /**
  * Mobile Supply Card - Expandable
  * 
- * Collapsed: Part Name, Stock, Reserved, Needed, Cost, Retail, Lifecycle, Vendor, Payment, Warning
- * Expanded: Exact lifecycle, quantity breakdown, pricing details, notes
+ * MANDATORY DATA CONTRACT - Nothing may be hidden:
+ * 1. Part Name (clickable)
+ * 2. In Stock
+ * 3. Reserved
+ * 4. Needed
+ * 5. Cost (USD formatted)
+ * 6. Retail (USD formatted)
+ * 7. Display Lifecycle
+ * 8. Vendor
+ * 9. Payment Status
+ * 10. Coverage Indicator
+ * 11. Pricing Warning Badge (only if not OK)
  */
 export function MobileSupplyCard({
   commitment,
@@ -201,18 +211,18 @@ export function MobileSupplyCard({
   const displayStatus = getDisplayStatus(commitment?.commitment_status);
   const statusColor = getDisplayStatusColor(displayStatus);
   
-  // Extract values
+  // MANDATORY VALUES - Extract with fallbacks
   const inStock = commitment?.inventory_snapshot?.physical ?? part?.physical_stock ?? 0;
   const reserved = commitment?.reserved_from_stock ?? 0;
   const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
-  const cost = commitment?.unit_cost_snapshot ?? part?.cost ?? 0;
-  const retail = commitment?.unit_retail_snapshot ?? 0;
+  const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
+  const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
   const vendorName = vendor?.vendor_name ?? commitment?.vendor_name ?? '—';
-  const paymentStatus = commitment?.payment_status ?? 'unpaid';
-  const available = commitment?.inventory_snapshot?.available ?? (inStock - reserved);
+  const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
+  const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
   
   // Extended fields for expanded view
-  const ordered = commitment?.qty_ordered ?? commitment?.on_order_qty ?? 0;
+  const ordered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? commitment?.on_order_qty ?? 0;
   const received = commitment?.qty_received ?? commitment?.received_qty ?? 0;
   const installed = commitment?.qty_installed ?? 0;
   
@@ -221,7 +231,7 @@ export function MobileSupplyCard({
       "bg-gray-900/60 border border-gray-800 rounded-lg overflow-hidden",
       className
     )}>
-      {/* Collapsed View - Always Visible */}
+      {/* Collapsed View - MANDATORY DATA */}
       <div 
         className="p-3 cursor-pointer select-none"
         onClick={() => setExpanded(!expanded)}

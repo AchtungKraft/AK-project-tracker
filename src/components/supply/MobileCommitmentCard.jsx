@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, Package, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
 import PricingIntegrityBadge, { hasPricingWarning } from "./PricingIntegrityBadge";
@@ -9,10 +9,45 @@ import { formatCurrencyUSD } from "./pricingHelpers";
 /**
  * MobileCommitmentCard - Industrial Expandable Card
  * 
- * Mobile-first design. No horizontal scroll tables.
- * Collapsed: Part Name, Status, Cost, Retail, Vendor, Payment, Warning
- * Expanded: Full quantities, pricing details
+ * MANDATORY DATA CONTRACT - Nothing may be hidden:
+ * 1. Part Name (clickable)
+ * 2. In Stock
+ * 3. Reserved
+ * 4. Needed
+ * 5. Cost (USD formatted)
+ * 6. Retail (USD formatted)
+ * 7. Display Lifecycle
+ * 8. Vendor
+ * 9. Payment Status
+ * 10. Coverage Indicator
+ * 11. Pricing Warning Badge (only if not OK)
  */
+
+/**
+ * Inventory Coverage Indicator
+ */
+function InventoryCoverageIndicator({ available, needed }) {
+  if (available >= needed && needed > 0) {
+    return (
+      <span className="text-[10px] font-mono uppercase text-gray-500 bg-gray-800/50 px-1.5 py-0.5 rounded">
+        COVERED
+      </span>
+    );
+  }
+  if (available === 0) {
+    return (
+      <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-amber-700 bg-gray-900/60 px-1.5 py-0.5">
+        OUT OF STOCK
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] font-mono uppercase text-gray-400 border-l-2 border-l-amber-600 bg-gray-900/60 px-1.5 py-0.5">
+      INSUFFICIENT
+    </span>
+  );
+}
+
 export default function MobileCommitmentCard({
   commitment,
   part,
@@ -20,7 +55,8 @@ export default function MobileCommitmentCard({
   onPartClick,
   onAction,
   isLoading = false,
-  className
+  className,
+  children,
 }) {
   const [expanded, setExpanded] = useState(false);
   
@@ -28,25 +64,20 @@ export default function MobileCommitmentCard({
   const statusColor = getDisplayStatusColor(displayStatus);
   const hasWarning = hasPricingWarning(commitment);
   
-  // Computed values
-  const cost = commitment?.unit_cost_snapshot || part?.cost || 0;
-  const retail = commitment?.unit_retail_snapshot || 0;
-  const paymentStatus = commitment?.payment_status || 'unpaid';
-  const vendorName = vendor?.vendor_name || 'Unknown';
+  // MANDATORY VALUES - Extract with fallbacks
+  const inStock = commitment?.inventory_snapshot?.physical ?? part?.physical_stock ?? 0;
+  const reserved = commitment?.reserved_from_stock ?? 0;
+  const needed = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+  const cost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? part?.cost ?? 0;
+  const retail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
+  const vendorName = vendor?.vendor_name ?? commitment?.vendor_name ?? '—';
+  const paymentStatus = commitment?.billing_status ?? commitment?.payment_status ?? 'billable';
+  const available = commitment?.inventory_snapshot?.available ?? Math.max(0, inStock - reserved);
   
-  // Inventory status summary
-  const qtyCommitted = commitment?.qty_committed || commitment?.required_total || 0;
-  const qtyOrdered = commitment?.qty_ordered || 0;
-  const qtyReceived = commitment?.qty_received || 0;
-  const qtyInstalled = commitment?.qty_installed || 0;
-  
-  const inventoryStatus = qtyInstalled > 0 
-    ? `${qtyInstalled}/${qtyCommitted} installed`
-    : qtyReceived > 0
-      ? `${qtyReceived}/${qtyOrdered} received`
-      : qtyOrdered > 0
-        ? `${qtyOrdered} ordered`
-        : `${qtyCommitted} needed`;
+  // Extended fields for expanded view
+  const ordered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? commitment?.on_order_qty ?? 0;
+  const received = commitment?.received_qty ?? commitment?.qty_received ?? 0;
+  const installed = commitment?.qty_installed ?? 0;
 
   return (
     <Card className={cn(
@@ -55,32 +86,22 @@ export default function MobileCommitmentCard({
       className
     )}>
       <CardContent className="p-0">
-        {/* Collapsed View - Always Visible */}
+        {/* Collapsed View - MANDATORY DATA */}
         <div 
           className="p-3 cursor-pointer select-none"
           onClick={() => setExpanded(!expanded)}
         >
-          <div className="flex items-start justify-between gap-2">
-            {/* Left: Part info */}
-            <div className="flex-1 min-w-0">
-              {/* Part Name - clickable */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPartClick?.(part);
-                }}
-                className="text-left text-sm font-medium text-white hover:text-gray-300 truncate block w-full"
-              >
-                {part?.part_name || 'Unknown Part'}
-              </button>
-              
-              {/* Inventory Status */}
-              <p className="text-xs text-gray-500 mt-0.5 font-mono">
-                {inventoryStatus}
-              </p>
-            </div>
-            
-            {/* Right: Status + Expand */}
+          {/* Row 1: Part Name + Status + Expand */}
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPartClick?.(part, commitment);
+              }}
+              className="text-left text-sm font-medium text-white hover:text-gray-300 truncate flex-1"
+            >
+              {part?.part_name || commitment?.part_name || 'Unknown Part'}
+            </button>
             <div className="flex items-center gap-2 shrink-0">
               <span className={cn(
                 "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-800/50",
@@ -96,27 +117,43 @@ export default function MobileCommitmentCard({
             </div>
           </div>
           
-          {/* Row 2: Cost, Retail, Vendor, Payment, Warning */}
-          <div className="flex items-center gap-3 mt-2 text-xs">
+          {/* Row 2: Inventory - Stock | Reserved | Need */}
+          <div className="flex items-center gap-4 text-xs mb-2">
             <span className="text-gray-500">
-              C: <span className="text-gray-300 font-mono">{formatCurrencyUSD(cost)}</span>
+              Stock <span className="text-gray-300 font-mono">{inStock}</span>
             </span>
             <span className="text-gray-500">
-              R: <span className="text-gray-300 font-mono">{formatCurrencyUSD(retail)}</span>
+              Reserved <span className={cn("font-mono", reserved > 0 ? "text-cyan-400" : "text-gray-500")}>{reserved}</span>
             </span>
-            <span className="text-gray-500 truncate max-w-[80px]">
+            <span className="text-gray-500">
+              Need <span className="text-white font-mono">{needed}</span>
+            </span>
+          </div>
+          
+          {/* Row 3: Cost | Retail */}
+          <div className="flex items-center gap-4 text-xs mb-2">
+            <span className="text-gray-500">
+              Cost <span className="text-gray-300 font-mono">{formatCurrencyUSD(cost)}</span>
+            </span>
+            <span className="text-gray-500">
+              Retail <span className="text-gray-300 font-mono">{formatCurrencyUSD(retail)}</span>
+            </span>
+          </div>
+          
+          {/* Row 4: Vendor | Payment | Coverage | Warning */}
+          <div className="flex items-center flex-wrap gap-2 text-xs">
+            <span className="text-gray-400 truncate max-w-[100px]">
               {vendorName}
             </span>
             <span className={cn(
               "font-mono uppercase text-[10px]",
-              paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
+              paymentStatus === 'invoiced' || paymentStatus === 'paid' ? 'text-gray-500' : 'text-amber-500'
             )}>
               {paymentStatus}
             </span>
-            
-            {/* Pricing Warning */}
+            <InventoryCoverageIndicator available={available} needed={needed} />
             {hasWarning && (
-              <PricingIntegrityBadge commitment={commitment} className="ml-auto" />
+              <PricingIntegrityBadge commitment={commitment} />
             )}
           </div>
         </div>
@@ -135,20 +172,20 @@ export default function MobileCommitmentCard({
             {/* Quantity Grid */}
             <div className="grid grid-cols-4 gap-2 text-center">
               <div className="bg-gray-800/40 rounded p-2">
-                <p className="text-[10px] text-gray-500 uppercase">Committed</p>
-                <p className="text-sm font-mono text-white">{qtyCommitted}</p>
+                <p className="text-[10px] text-gray-500 uppercase">Need</p>
+                <p className="text-sm font-mono text-white">{needed}</p>
               </div>
               <div className="bg-gray-800/40 rounded p-2">
                 <p className="text-[10px] text-gray-500 uppercase">Ordered</p>
-                <p className="text-sm font-mono text-gray-300">{qtyOrdered}</p>
+                <p className="text-sm font-mono text-gray-300">{ordered}</p>
               </div>
               <div className="bg-gray-800/40 rounded p-2">
                 <p className="text-[10px] text-gray-500 uppercase">Received</p>
-                <p className="text-sm font-mono text-gray-300">{qtyReceived}</p>
+                <p className="text-sm font-mono text-gray-300">{received}</p>
               </div>
               <div className="bg-gray-800/40 rounded p-2">
                 <p className="text-[10px] text-gray-500 uppercase">Installed</p>
-                <p className="text-sm font-mono text-gray-300">{qtyInstalled}</p>
+                <p className="text-sm font-mono text-gray-300">{installed}</p>
               </div>
             </div>
             
@@ -180,6 +217,13 @@ export default function MobileCommitmentCard({
                 </div>
               )}
             </div>
+            
+            {/* Actions (children) */}
+            {children && (
+              <div className="pt-2 border-t border-gray-800/50">
+                {children}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
