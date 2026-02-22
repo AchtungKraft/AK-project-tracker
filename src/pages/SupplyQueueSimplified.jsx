@@ -432,21 +432,28 @@ export default function SupplyQueueSimplified() {
                             <tbody>
                               {group.items.map(({ commitment, part, vendor }) => {
                                 // ============================================================================
-                                // PHASE 2: CANONICAL INVENTORY VALUES
-                                // Use partInventoryMap for GLOBAL reserved (not commitment.reserved_from_stock)
-                                // "In Stock" = part physical_stock
-                                // "Reserved" = GLOBAL reserved across ALL commitments
-                                // "Needed" = required_total - qty_installed
+                                // PHASE 2B: CANONICAL INVENTORY VALUES - GLOBAL + PROJECT RESERVED
+                                // Use partInventoryMap for GLOBAL reserved (not just this project)
+                                // 
+                                // DISPLAY CONTRACT (AK Industrial Mode):
+                                //   "In Stock" column: physical_stock_global
+                                //   "Reserved" column: "GlobalReserved | ThisProject" (e.g. "4 | 2")
+                                //   "Needed" column: required_total - qty_installed
                                 // ============================================================================
-                                const partInv = partInventoryMap.get(part?.id) || { physical_stock: 0, reserved_global: 0 };
-                                const inStock = partInv.physical_stock;
-                                const reservedGlobal = partInv.reserved_global;
+                                const partInv = partInventoryMap.get(part?.id) || { 
+                                  physical_stock_global: 0, 
+                                  reserved_global_active: 0, 
+                                  available_global_active: 0 
+                                };
+                                const inStock = partInv.physical_stock_global ?? partInv.physical_stock ?? 0;
+                                const reservedGlobal = partInv.reserved_global_active ?? partInv.reserved_global ?? 0;
+                                const reservedThisProject = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
                                 const needed = Math.max(0, (commitment.required_total ?? 0) - (commitment.qty_installed ?? 0));
                                 
                                 // PHASE 7: DEV GUARD - Validate inventory consistency
                                 if (process.env.NODE_ENV === 'development') {
-                                  const displayed = { in_stock: inStock, reserved: reservedGlobal, available: partInv.available ?? 0 };
-                                  const canonical = { physical_stock: inStock, reserved_global: reservedGlobal, available_global: partInv.available ?? 0 };
+                                  const displayed = { in_stock: inStock, reserved: reservedGlobal, available: partInv.available_global_active ?? 0 };
+                                  const canonical = { physical_stock: inStock, reserved_global: reservedGlobal, available_global: partInv.available_global_active ?? 0 };
                                   validateInventoryConsistency('SupplyQueueSimplified', part?.id, displayed, canonical);
                                 }
                                 
