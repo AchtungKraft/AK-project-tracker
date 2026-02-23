@@ -62,12 +62,15 @@ export default function ProjectInvoices() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
-  // DETERMINISTIC: Normalize projectId once
-  const normalizedProjectId = projectFilter === "all" ? "" : String(projectFilter ?? "");
+  // DETERMINISTIC: Normalize projectId once - null for global, string for scoped
+  const normalizedProjectId = 
+    projectFilter !== undefined && projectFilter !== null && projectFilter !== "all" && projectFilter !== ""
+      ? String(projectFilter)
+      : null;
 
   // PHASE 1 UNIFIED: Scoped query key with staleTime=0 for immediate updates
   const invoiceQueryKey = ["projectInvoicesView", normalizedProjectId];
-  const { data: invoicesData, isLoading, refetch, dataUpdatedAt: invoiceDataUpdatedAt } = useQuery({
+  const { data: invoicesData, isLoading, isFetching, refetch, dataUpdatedAt: invoiceDataUpdatedAt } = useQuery({
     queryKey: invoiceQueryKey,
     queryFn: async () => {
       const payload = normalizedProjectId ? { project_id: normalizedProjectId } : {};
@@ -75,6 +78,8 @@ export default function ProjectInvoices() {
       return response.data;
     },
     staleTime: 0, // Always fresh for invoice page
+    // Global view (normalizedProjectId=null) is always enabled
+    // Scoped view requires valid projectId
   });
 
   // Fetch financial projects view for filter (only shows projects with parts)
@@ -89,7 +94,7 @@ export default function ProjectInvoices() {
   
   // PHASE 2: Fetch canonical exposure/credit data when project is selected
   const billingQueryKey = ["billingProcurementStates", normalizedProjectId];
-  const { data: billingData, dataUpdatedAt: billingDataUpdatedAt } = useQuery({
+  const { data: billingData, isFetching: billingFetching, dataUpdatedAt: billingDataUpdatedAt } = useQuery({
     queryKey: billingQueryKey,
     queryFn: async () => {
       if (!normalizedProjectId) return null;
@@ -105,9 +110,13 @@ export default function ProjectInvoices() {
   // DEV diagnostic logging
   if (process.env.NODE_ENV === "development") {
     console.log("[ProjectInvoices] Query State:", {
-      projectId: normalizedProjectId,
+      normalizedProjectId,
       invoiceQueryKey,
       billingQueryKey,
+      invoicesData: invoicesData ? `${invoicesData.invoices?.length || 0} invoices` : "null",
+      isLoading,
+      isFetching,
+      billingFetching,
       invoiceDataUpdatedAt: invoiceDataUpdatedAt ? new Date(invoiceDataUpdatedAt).toISOString() : null,
       billingDataUpdatedAt: billingDataUpdatedAt ? new Date(billingDataUpdatedAt).toISOString() : null,
       netExposure: billingData?.totals?.net_exposure ?? "N/A",
