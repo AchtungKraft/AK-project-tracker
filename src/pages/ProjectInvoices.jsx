@@ -143,6 +143,17 @@ export default function ProjectInvoices() {
         </div>
       </div>
 
+      {/* PHASE 6: Credit Summary (read-only) */}
+      {(totalCreditAvailable > 0 || totalCreditApplied > 0) && (
+        <CreditSummaryStrip
+          grossExposure={summary.total_balance_due || 0}
+          creditAvailable={totalCreditAvailable}
+          creditApplied={totalCreditApplied}
+          netExposure={Math.max(0, (summary.total_balance_due || 0) - totalCreditApplied)}
+          isLoading={isLoading}
+        />
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-gray-900/50 border-gray-700">
