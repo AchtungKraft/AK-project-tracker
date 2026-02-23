@@ -140,6 +140,7 @@ export function useProjectSupplyView(projectId, filters = {}) {
     tabCounts: query.data?.tab_counts || {},
     project: query.data?.project || null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,
