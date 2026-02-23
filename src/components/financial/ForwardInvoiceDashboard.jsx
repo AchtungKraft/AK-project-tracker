@@ -58,6 +58,7 @@ import {
   getBillingStatusConfig 
 } from "./useProjectInvoiceView";
 import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
+import { billingKeys, invoiceKeys, creditKeys } from "./queryKeyFactories";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
