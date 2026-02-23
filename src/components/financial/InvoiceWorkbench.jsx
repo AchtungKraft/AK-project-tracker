@@ -585,7 +585,7 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            {batch.batch_name}
+            {batch.qb_invoice_number || `Invoice #${batch.id?.slice(0,6)}`}
           </DialogTitle>
         </DialogHeader>
         
@@ -597,11 +597,11 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
             </div>
             <div>
               <p className="text-xs text-gray-400">Total</p>
-              <p className="text-white font-bold">${(batch.total_amount || 0).toFixed(2)}</p>
+              <p className="text-white font-bold">${(batch.total || batch.subtotal || 0).toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">QB Export ID</p>
-              <p className="text-white text-sm">{batch.qb_export_id || '-'}</p>
+              <p className="text-xs text-gray-400">Type</p>
+              <p className="text-white text-sm">{batch.invoice_type || 'progress'}</p>
             </div>
           </div>
           
