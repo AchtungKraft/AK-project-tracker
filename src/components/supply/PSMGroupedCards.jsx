@@ -362,10 +362,7 @@ export function PSMGroupCard({
         <Checkbox
           checked={allSelected}
           indeterminate={someSelected && !allSelected}
-          onCheckedChange={(e) => {
-            e.stopPropagation();
-            onSelectAll?.(items);
-          }}
+          onCheckedChange={() => onSelectAll?.(items)}
           onClick={(e) => e.stopPropagation()}
           disabled={orderableIds.length === 0}
         />
