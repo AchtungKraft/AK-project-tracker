@@ -71,21 +71,11 @@ import { Checkbox } from "@/components/ui/checkbox";
  * PHASE 1 UNIFIED: Uses SAME modal and data sources as ProjectInvoices page.
  * 
  * DATA SOURCES:
- * - useProjectInvoiceView: Invoice history (ProjectInvoice entities)
+ * - useProjectInvoiceView: Invoice history (ProjectInvoice entities) - SINGLE SOURCE
  * - useBillingAndProcurementStates: Canonical exposure/credit calculations
  * 
- * CANONICAL INVOICE STATES ONLY:
- * - UNBILLED (Ready to Bill) - Gray
- * - INVOICED (Awaiting Payment) - Purple
- * - PAID - Green
- * 
- * NO LIFECYCLE LEAKAGE:
- * - Does NOT inspect commitment_status
- * - Does NOT inspect coverage_status
- * - Does NOT inspect inventory
- * - Does NOT inspect to_order / install progress
- * 
- * Uses ProjectInvoice as single source of client billing truth.
+ * HARD-LOCKED: invoices comes ONLY from useProjectInvoiceView.
+ * NO duplicate queries. NO base44.entities.ProjectInvoice calls. NO inline query keys.
  */
 export default function ForwardInvoiceDashboard({ projectId }) {
   const queryClient = useQueryClient();
@@ -106,25 +96,28 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       ? String(projectId)
       : null;
 
-  // CANONICAL: Invoice history from useProjectInvoiceView (NOT billingProcurementStates)
+  // GUARD: Check for project drift
+  if (!normalizedProjectId) {
+    console.error("[ForwardInvoiceDashboard] Invoice tab mounted without projectId");
+  }
+
+  // CANONICAL: Invoice history from useProjectInvoiceView - SINGLE SOURCE
+  // NO duplicate queries allowed. NO base44.entities.ProjectInvoice. NO inline query keys.
   const { 
-    invoices: canonicalInvoices,
-    invoiceBatches, 
-    commitments,
+    invoices,
     summary, 
     isLoading: invoiceLoading, 
     isFetching: invoiceFetching,
     refetch,
-    creditSummary: invoiceCreditSummary,
   } = useProjectInvoiceView(normalizedProjectId);
   
-  // DEBUG: Log invoices array
+  // HARD ASSERTION: Log invoice data for debugging
   React.useEffect(() => {
-    console.log("[ForwardInvoiceDashboard] invoices:", canonicalInvoices);
-  }, [canonicalInvoices]);
+    console.log("INVOICE PROJECT ID:", normalizedProjectId);
+    console.log("INVOICE LIST:", invoices);
+  }, [normalizedProjectId, invoices]);
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
-  // This ensures ForwardInvoiceDashboard matches BillablePartsSelector exactly
   const { data: billingData, isLoading: billingLoading, isFetching: billingFetching, dataUpdatedAt } = useBillingAndProcurementStates(normalizedProjectId);
   
   // Merge loading states
@@ -145,14 +138,14 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     console.log("[ForwardInvoiceDashboard] Query State:", {
       normalizedProjectId,
       queryKey: billingKeys.states(normalizedProjectId),
-      invoiceCount: canonicalInvoices?.length ?? 0,
+      invoiceCount: invoices?.length ?? 0,
       billingData: billingData ? "loaded" : "null",
       isLoading,
       billingFetching,
       dataUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null,
       netExposure: canonicalTotals.net_exposure ?? "N/A",
     });
-  }, [normalizedProjectId, canonicalInvoices, billingData, isLoading, billingFetching, dataUpdatedAt, canonicalTotals.net_exposure]);
+  }, [normalizedProjectId, invoices, billingData, isLoading, billingFetching, dataUpdatedAt, canonicalTotals.net_exposure]);
 
   // Toggle commitment selection
   const toggleCommitmentSelection = (commitmentId, checked) => {
