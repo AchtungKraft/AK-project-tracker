@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 const ACTION_TYPES = {
   INCREASE_QTY: 'INCREASE_QTY',
@@ -474,12 +475,15 @@ export default function CommitmentQuantityManager({
       });
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.success) {
         toast.success(`Requirement updated to ${data.required_total}`);
-        queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-        queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
-        queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
+        // PHASE 17: Deterministic refresh
+        await forceAppRefresh(queryClient, {
+          partIds: commitment?.part_id ? [commitment.part_id] : [],
+          projectIds: commitment?.project_id ? [commitment.project_id] : [],
+          commitmentIds: [commitment.id],
+        });
         onSuccess?.();
         onClose?.();
       } else {
