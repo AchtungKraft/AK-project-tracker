@@ -41,23 +41,34 @@ import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
  *   }
  */
 
-// Contract drift detection
+// Contract drift detection - PHASE 3 CANONICAL
 function validateItemContract(item, index) {
   const required = ['id', 'part_id', 'part_name'];
   const groupingFields = ['vendor_id', 'vendor_name', 'category_id', 'category_name'];
+  const financialFields = ['gross_exposure', 'net_exposure', 'unit_retail'];
   const missing = [];
   
   for (const field of required) {
     if (!item[field]) missing.push(field);
   }
   
-  // Warn about missing grouping fields in dev
+  // Warn about missing fields in dev
   if (process.env.NODE_ENV === 'development') {
     const missingGrouping = groupingFields.filter(f => !item[f]);
+    const missingFinancial = financialFields.filter(f => item[f] === undefined);
+    
     if (missingGrouping.length > 0) {
+      console.error(
+        `[BillablePartsSelector] GROUPING CONTRACT VIOLATION - Item ${item.id || index} missing:`,
+        missingGrouping,
+        'Item data:', { id: item.id, part_name: item.part_name, vendor_id: item.vendor_id, category_id: item.category_id }
+      );
+    }
+    
+    if (missingFinancial.length > 0) {
       console.warn(
-        `[BillablePartsSelector] Item ${item.id || index} missing grouping fields:`,
-        missingGrouping
+        `[BillablePartsSelector] Item ${item.id || index} missing financial fields:`,
+        missingFinancial
       );
     }
   }
