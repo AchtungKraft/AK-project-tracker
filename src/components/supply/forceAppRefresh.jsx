@@ -166,11 +166,13 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['projectSupplyView'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 4: Deterministic refetch for billing & invoice queries
+    // PHASE 2 CANONICAL: billingProcurementStates is THE source of truth for exposure
+    // Must refetch FIRST before any invoice/credit views
     queryClient.refetchQueries({ 
       queryKey: ['billingProcurementStates'],
       type: refetchActive ? 'active' : 'all'
     }),
+    // PHASE 4: Deterministic refetch for billing & invoice queries
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
       type: refetchActive ? 'active' : 'all'
@@ -185,6 +187,11 @@ export async function forceAppRefresh(queryClient, options = {}) {
     }),
     queryClient.refetchQueries({ 
       queryKey: ['billablePartsView'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    // PHASE 2: Credit allocations for exposure net calculation
+    queryClient.refetchQueries({ 
+      queryKey: ['creditAllocations'],
       type: refetchActive ? 'active' : 'all'
     }),
   );
