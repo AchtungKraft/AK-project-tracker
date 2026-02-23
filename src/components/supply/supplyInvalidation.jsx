@@ -117,9 +117,18 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
   // === COMMITMENT-SPECIFIC INVALIDATION ===
   
   if (commitment_ids.length > 0 || invalidateAll) {
-    queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+    // All commitment query patterns
+    queryClient.invalidateQueries({ 
+      predicate: (query) => {
+        const key = query.queryKey;
+        return Array.isArray(key) && key[0] === 'partCommitments';
+      }
+    });
     queryClient.invalidateQueries({ queryKey: ['commitmentDetails'] });
   }
+  
+  // Always invalidate partCommitments for safety (used by AddToBuildModal)
+  queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
 
   // === CORE ENTITY INVALIDATION ===
   // These are ALWAYS invalidated on inventory mutations to ensure UI consistency
