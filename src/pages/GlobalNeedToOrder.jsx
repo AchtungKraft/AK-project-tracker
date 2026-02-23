@@ -27,15 +27,12 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { getAllowedCommitmentActions } from "@/components/lifecycle/getAllowedCommitmentActions";
 import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/components/supply/useProjectSupplyView";
-import InventoryChip from "@/components/supply/InventoryChip";
-import SourceTypeBadge from "@/components/supply/SourceTypeBadge";
 import NextActionBadge from "@/components/supply/NextActionBadge";
 import { PrepayStatusBadge } from "@/components/supply/InventoryStateBadge";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
