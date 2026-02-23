@@ -5,6 +5,14 @@ import { validateSupplyModelDrift } from "./ExecutionDataBlock";
 import { diagnoseSupplyItems, storePSMDiagnostics, storeGNODiagnostics } from "./supplyDiagnostics";
 
 /**
+ * Normalize projectId to string format
+ */
+const normalizeProjectId = (id) => {
+  if (id === null || id === undefined || id === 'all') return '';
+  return String(id);
+};
+
+/**
  * useProjectSupplyView - Hook for consuming project supply read model
  * 
  * This is the ONLY way project components should access supply state.
@@ -14,23 +22,25 @@ import { diagnoseSupplyItems, storePSMDiagnostics, storeGNODiagnostics } from ".
  */
 export function useProjectSupplyView(projectId, filters = {}) {
   const queryClient = useQueryClient();
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedId = normalizeProjectId(projectId);
 
   const query = useQuery({
-    queryKey: ['projectSupplyView', projectId, filters],
+    queryKey: ['projectSupplyView', normalizedId, filters],
     queryFn: async () => {
       const response = await base44.functions.invoke('getProjectSupplyView', {
-        project_id: projectId,
+        project_id: normalizedId,
         filters,
       });
       return response.data;
     },
-    enabled: !!projectId,
+    enabled: Boolean(normalizedId),
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true,
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['projectSupplyView', normalizedId] });
   };
 
   const rawItems = query.data?.items || [];
