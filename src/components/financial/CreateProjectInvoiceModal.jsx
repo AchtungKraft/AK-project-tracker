@@ -31,6 +31,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
 import BillablePartsSelector from "./BillablePartsSelector";
 import { useFinancialProjectsView } from "./useFinancialProjectsView";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 const STEPS = ["project", "type", "lines", "review"];
 
@@ -204,10 +205,11 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
 
       if (response.data?.success) {
         toast.success("Invoice draft created");
-        // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
-        queryClient.invalidateQueries({ queryKey: ["financialProjectsView"] });
-        queryClient.invalidateQueries({ queryKey: ["billablePartsView"] });
+        // PHASE 17: Deterministic refresh
+        await forceAppRefresh(queryClient, {
+          projectIds: [selectedProjectId],
+          commitmentIds: selectedParts.map(p => p.part_commitment_id).filter(Boolean),
+        });
         onSuccess?.();
       } else {
         toast.error(response.data?.error || "Failed to create invoice");
