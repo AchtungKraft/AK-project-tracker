@@ -106,10 +106,17 @@ export default function GlobalNeedToOrder() {
   const supplyAction = useSupplyAction();
   const actionPreview = useSupplyActionPreview();
 
-  // Apply local filters (search already applied in API, but coverage/prepay are local)
-  // Note: needToOrderItems is guaranteed to be an array by the hook
+  // PHASE 6: GNO is a FILTERED view of supply data
+  // MUST exclude: coverage_status === 'FULL' OR to_order === 0
+  // Uses canonical inventory_snapshot fields from read model
   const filteredItems = useMemo(() => {
     return needToOrderItems.filter(item => {
+      // PHASE 6 CORE RULE: Exclude fully covered items
+      if (item.coverage_status === 'FULL') return false;
+      
+      // PHASE 6 CORE RULE: Exclude items with nothing to order
+      if ((item.to_order ?? 0) === 0) return false;
+      
       // Coverage filter using canonical coverage_status
       if (coverageFilter !== 'all') {
         const coverageState = item.coverage_status === 'FULL' ? 'covered' :
