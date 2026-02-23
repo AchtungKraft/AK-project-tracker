@@ -982,29 +982,20 @@ export default function PartModal({ part, partId, onClose }) {
               <DialogTitle className="text-white">{formData.part_name}</DialogTitle>
             </div>
             <div className="flex gap-2">
-              {!editing && (
-                <>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setEditing(true)}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm('Delete this part?')) {
-                        deleteMutation.mutate();
-                      }
-                    }}
-                    className="text-gray-400 hover:text-red-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </>
+              {editing && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm('Delete this part? This cannot be undone.')) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  className="text-gray-400 hover:text-red-400"
+                  title="Delete Part"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               )}
             </div>
           </DialogHeader>
