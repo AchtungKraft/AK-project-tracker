@@ -630,7 +630,12 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         creditSummary={creditSummary}
         onSuccess={async () => {
           setSelectedCommitmentIds(new Set());
-          await forceAppRefresh(queryClient, { projectIds: [projectId] });
+          // DETERMINISTIC: Invalidate specific keys only using factories
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+            queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+            queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
+          ]);
           refetch();
         }}
       />
