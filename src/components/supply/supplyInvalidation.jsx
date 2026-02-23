@@ -170,11 +170,20 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     }
   });
 
-  // partsInventoryView family - used by InventoryManagement
+  // partsInventoryView family - used by InventoryManagement AND PartModal
+  // PHASE 16: Must invalidate both global and part-scoped queries
   queryClient.invalidateQueries({ 
     predicate: (query) => {
       const key = query.queryKey;
       return Array.isArray(key) && key[0] === 'partsInventoryView';
+    }
+  });
+  
+  // inventoryLocations - used by PartModal location breakdown
+  queryClient.invalidateQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && key[0] === 'inventoryLocations';
     }
   });
   
