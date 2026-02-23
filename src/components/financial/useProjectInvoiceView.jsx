@@ -351,11 +351,44 @@ export function useProjectInvoiceView(projectId) {
   // Outstanding = invoiced but not paid
   summary.outstanding_total = summary.invoiced_total;
 
+  // PHASE 4: Calculate credit summary
+  const creditAvailable = creditLedgers.reduce((sum, l) => sum + (l.remaining_amount || 0), 0);
+  const creditApplied = creditAllocations.reduce((sum, a) => sum + (a.amount_applied || 0), 0);
+  const grossExposure = summary.unbilled_total + summary.invoiced_total;
+  const netExposure = Math.max(0, grossExposure - creditApplied);
+
+  // Build credit allocation map by commitment
+  const creditByCommitment = {};
+  for (const alloc of creditAllocations) {
+    if (alloc.commitment_id) {
+      if (!creditByCommitment[alloc.commitment_id]) {
+        creditByCommitment[alloc.commitment_id] = 0;
+      }
+      creditByCommitment[alloc.commitment_id] += alloc.amount_applied || 0;
+    }
+  }
+
+  // Enrich commitments with credit info
+  const enrichedCommitments = commitments.map(c => ({
+    ...c,
+    credit_applied_line: creditByCommitment[c.id] || 0,
+    gross_line_total: c.extended_retail,
+    net_line_total: Math.max(0, c.extended_retail - (creditByCommitment[c.id] || 0)),
+  }));
+
+  const creditSummary = {
+    credit_available: creditAvailable,
+    credit_applied: creditApplied,
+    gross_exposure: grossExposure,
+    net_exposure: netExposure,
+  };
+
   return {
-    commitments,
+    commitments: enrichedCommitments,
     summary,
+    creditSummary,
     invoiceBatches: invoiceBatches.filter(b => b.status !== 'voided'),
-    isLoading: loadingCommitments || loadingParts || loadingBatches || loadingLines,
+    isLoading: loadingCommitments || loadingParts || loadingBatches || loadingLines || loadingCredits || loadingAllocations,
     refetch: () => {
       refetchCommitments();
       refetchBatches();
