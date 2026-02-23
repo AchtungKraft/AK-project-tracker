@@ -56,6 +56,13 @@ export default function CreditLedger() {
     queryFn: () => base44.entities.ProjectInvoice.list(),
     staleTime: 30000,
   });
+  
+  // PHASE 6: Fetch credit allocations
+  const { data: allocations = [] } = useQuery({
+    queryKey: ["creditAllocations"],
+    queryFn: () => base44.entities.CreditAllocation.filter({ is_reversed: false }),
+    staleTime: 30000,
+  });
 
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p]));
   const invoiceMap = Object.fromEntries(invoices.map((i) => [i.id, i]));
