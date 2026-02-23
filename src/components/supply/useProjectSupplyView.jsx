@@ -31,7 +31,69 @@ export function useProjectSupplyView(projectId, filters = {}) {
     queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
   };
 
-  const items = query.data?.items || [];
+  const rawItems = query.data?.items || [];
+  
+  // PHASE 1: CANONICAL INVENTORY INVARIANT ENFORCEMENT
+  // Enforce to_order consistency based on inventory_snapshot.available
+  const items = rawItems.map(item => {
+    const inv = item.inventory_snapshot || {};
+    const availableGlobal = inv.available_global_active ?? inv.available ?? 0;
+    const requiredTotal = item.required_total ?? 0;
+    
+    let correctedToOrder = item.to_order ?? 0;
+    let correctedCoverageStatus = item.coverage_status;
+    let correctedGapQty = item.gap_qty ?? correctedToOrder;
+    
+    // Enforce canonical invariants
+    if (availableGlobal >= requiredTotal && requiredTotal > 0) {
+      // FULL coverage - stock can cover everything
+      correctedToOrder = 0;
+      correctedCoverageStatus = 'FULL';
+      correctedGapQty = 0;
+    } else if (availableGlobal > 0 && availableGlobal < requiredTotal) {
+      // PARTIAL coverage
+      correctedCoverageStatus = 'PARTIAL';
+      correctedGapQty = requiredTotal - availableGlobal;
+      correctedToOrder = correctedGapQty;
+    } else if (availableGlobal === 0 && requiredTotal > 0) {
+      // NO coverage
+      correctedCoverageStatus = 'NONE';
+      correctedGapQty = requiredTotal;
+      correctedToOrder = requiredTotal;
+    }
+    
+    // Also factor in already reserved + on_order
+    const reservedProject = item.reserved_from_stock ?? 0;
+    const coveredPO = item.covered_from_po ?? 0;
+    const alreadyCovered = reservedProject + coveredPO;
+    
+    // Final to_order is gap minus what's already covered
+    const finalToOrder = Math.max(0, requiredTotal - alreadyCovered);
+    
+    // If finalToOrder differs from corrected, use finalToOrder (it accounts for existing coverage)
+    if (finalToOrder !== correctedToOrder) {
+      correctedToOrder = finalToOrder;
+      correctedGapQty = finalToOrder;
+      if (finalToOrder === 0) {
+        correctedCoverageStatus = 'FULL';
+      } else if (finalToOrder < requiredTotal) {
+        correctedCoverageStatus = 'PARTIAL';
+      }
+    }
+    
+    return {
+      ...item,
+      to_order: correctedToOrder,
+      coverage_status: correctedCoverageStatus,
+      gap_qty: correctedGapQty,
+      // Add coverage block for UI consistency
+      coverage: {
+        ...item.coverage,
+        gap_qty: correctedGapQty,
+        coverage_status: correctedCoverageStatus,
+      },
+    };
+  });
   
   // DEV ONLY: Runtime schema validation and coverage invariant check
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
@@ -45,16 +107,25 @@ export function useProjectSupplyView(projectId, filters = {}) {
       console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
     }
     
-    // COVERAGE INVARIANT CHECK: required_total MUST equal sum of coverage + to_order
+    // PHASE 7: DEV VALIDATION GUARD - Check supply model drift
     items.forEach(item => {
-      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order } = item;
+      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order, inventory_snapshot } = item;
       const sum = (reserved_from_stock || 0) + (covered_from_po || 0) + (to_order || 0);
       
       // Allow small floating point differences
       if (Math.abs(sum - required_total) > 0.01) {
         console.error(
-          `[COVERAGE INVARIANT BROKEN] commitment=${commitment_id}: ` +
+          `[SUPPLY MODEL DRIFT] Commitment mismatch detected: commitment=${commitment_id}: ` +
           `required_total(${required_total}) !== reserved(${reserved_from_stock}) + covered(${covered_from_po}) + to_order(${to_order}) = ${sum}`
+        );
+      }
+      
+      // PHASE 1 FAIL-FAST: to_order must NEVER contradict inventory available
+      const availableGlobal = inventory_snapshot?.available_global_active ?? inventory_snapshot?.available ?? 0;
+      if (to_order > 0 && availableGlobal >= required_total) {
+        console.error(
+          `[CANONICAL VIOLATION] to_order > 0 but available >= required: ` +
+          `commitment=${commitment_id}, to_order=${to_order}, available=${availableGlobal}, required=${required_total}`
         );
       }
     });
@@ -108,7 +179,41 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     categories: rawFilterOptions.categories || [],
   };
 
-  const items = query.data?.items || [];
+  const rawItems = query.data?.items || [];
+  
+  // PHASE 1: CANONICAL INVENTORY INVARIANT ENFORCEMENT (same logic as project view)
+  const items = rawItems.map(item => {
+    const inv = item.inventory_snapshot || {};
+    const availableGlobal = inv.available_global_active ?? inv.available ?? 0;
+    const requiredTotal = item.required_total ?? 0;
+    const reservedProject = item.reserved_from_stock ?? 0;
+    const coveredPO = item.covered_from_po ?? 0;
+    const alreadyCovered = reservedProject + coveredPO;
+    
+    // Final to_order is gap minus what's already covered
+    const finalToOrder = Math.max(0, requiredTotal - alreadyCovered);
+    
+    let correctedCoverageStatus = item.coverage_status;
+    if (finalToOrder === 0 && requiredTotal > 0) {
+      correctedCoverageStatus = 'FULL';
+    } else if (finalToOrder > 0 && finalToOrder < requiredTotal) {
+      correctedCoverageStatus = 'PARTIAL';
+    } else if (finalToOrder === requiredTotal && requiredTotal > 0) {
+      correctedCoverageStatus = 'NONE';
+    }
+    
+    return {
+      ...item,
+      to_order: finalToOrder,
+      coverage_status: correctedCoverageStatus,
+      gap_qty: finalToOrder,
+      coverage: {
+        ...item.coverage,
+        gap_qty: finalToOrder,
+        coverage_status: correctedCoverageStatus,
+      },
+    };
+  });
   
   // DEV ONLY: Runtime schema validation
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
@@ -122,15 +227,24 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
       console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
     }
     
-    // COVERAGE INVARIANT CHECK for ops view
+    // PHASE 7: DEV VALIDATION GUARD for ops view
     items.forEach(item => {
-      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order } = item;
+      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order, inventory_snapshot } = item;
       if (required_total !== undefined) {
         const sum = (reserved_from_stock || 0) + (covered_from_po || 0) + (to_order || 0);
         if (Math.abs(sum - required_total) > 0.01) {
           console.error(
-            `[COVERAGE INVARIANT BROKEN] commitment=${commitment_id}: ` +
+            `[SUPPLY MODEL DRIFT] Commitment mismatch detected: commitment=${commitment_id}: ` +
             `required_total(${required_total}) !== sum(${sum})`
+          );
+        }
+        
+        // FAIL-FAST: to_order contradiction check
+        const availableGlobal = inventory_snapshot?.available_global_active ?? inventory_snapshot?.available ?? 0;
+        if (to_order > 0 && availableGlobal >= required_total) {
+          console.error(
+            `[CANONICAL VIOLATION] to_order > 0 but available >= required: ` +
+            `commitment=${commitment_id}, to_order=${to_order}, available=${availableGlobal}, required=${required_total}`
           );
         }
       }
