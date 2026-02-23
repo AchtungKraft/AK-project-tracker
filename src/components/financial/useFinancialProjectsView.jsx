@@ -20,8 +20,35 @@ export function useFinancialProjectsView(options = {}) {
 }
 
 /**
+ * PHASE 1 CANONICAL: Hook for Billing & Procurement States
+ * 
+ * This is the SINGLE SOURCE OF TRUTH for:
+ * - Invoiceable commitments
+ * - Exposure calculations (gross, credit applied, net)
+ * - Credit availability
+ * 
+ * Uses getBillingAndProcurementStates backend function.
+ */
+export function useBillingAndProcurementStates(projectId, options = {}) {
+  return useQuery({
+    queryKey: ["billingProcurementStates", projectId],
+    queryFn: async () => {
+      const filters = projectId ? { project_id: projectId } : {};
+      const response = await base44.functions.invoke("getBillingAndProcurementStates", {
+        filters,
+      });
+      return response.data;
+    },
+    enabled: options.enabled !== false,
+    staleTime: 0, // PHASE 6: Always fresh for invoice modal
+    ...options,
+  });
+}
+
+/**
  * Hook for Canonical Billable Parts View
  * 
+ * DEPRECATED: Use useBillingAndProcurementStates instead.
  * Returns grouped billable parts for a specific project.
  * Uses getBillablePartsView backend function.
  */
