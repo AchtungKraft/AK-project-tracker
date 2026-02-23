@@ -159,6 +159,7 @@ export default function PartModal({ part, partId, onClose }) {
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Part.delete(activePart.id),
     onSuccess: () => {
+      invalidateSupplyQueries(queryClient, { full_invalidate: true });
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
@@ -167,6 +168,24 @@ export default function PartModal({ part, partId, onClose }) {
       onClose();
     },
   });
+
+  // Get canonical inventory metrics from read model
+  const inventoryView = partsInventoryView.find(p => p.part_id === activePart?.id);
+  const inventoryMetrics = {
+    physical_stock: inventoryView?.physical_stock ?? activePart?.physical_stock ?? 0,
+    reserved_global: inventoryView?.allocated_total ?? activePart?.allocated_stock ?? 0,
+    on_order: inventoryView?.on_order ?? activePart?.on_order ?? 0,
+    available_to_allocate: Math.max(0, (inventoryView?.physical_stock ?? activePart?.physical_stock ?? 0) - (inventoryView?.allocated_total ?? activePart?.allocated_stock ?? 0)),
+  };
+
+  // Build location summary from inventory items
+  const locationSummary = inventoryItems.reduce((acc, item) => {
+    const locId = item.location_id || 'unassigned';
+    if (!acc[locId]) acc[locId] = { qty: 0, reserved: 0 };
+    acc[locId].qty += item.quantity_on_hand || 0;
+    acc[locId].reserved += item.quantity_reserved || 0;
+    return acc;
+  }, {});
 
   // Photo handlers
   const handlePhotoUpload = async (e) => {
