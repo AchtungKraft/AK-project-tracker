@@ -65,7 +65,7 @@ export default function FinancialProjectSelector({
   };
 
   return (
-    <Select value={value || ""} onValueChange={handleValueChange}>
+    <Select value={value ?? undefined} onValueChange={handleValueChange}>
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder}>
           {selectedProject && (
