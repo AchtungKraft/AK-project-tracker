@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,6 +143,9 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
       <DialogContent className="bg-gray-900 text-white max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Client Access</DialogTitle>
+          <DialogDescription>
+            Add or remove client access to this project's portal.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">

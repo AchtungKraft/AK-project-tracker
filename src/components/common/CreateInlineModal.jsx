@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -455,6 +456,9 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       >
         <DialogHeader>
           <DialogTitle className="text-white">{getTitle()}</DialogTitle>
+          <DialogDescription>
+            Fill in the details to create a new item.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
