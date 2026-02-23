@@ -80,9 +80,9 @@ export default function ProjectInvoiceDetailDrawer({
     enabled: Boolean(normalizedInvoiceId),
   });
 
-  // Fetch invoice lines - uses factory key
+  // Fetch invoice lines - uses invoice-specific key (not factory's project-based lines key)
   const { data: lines = [], isLoading: loadingLines } = useQuery({
-    queryKey: invoiceKeys.lines(normalizedInvoiceId),
+    queryKey: ['invoiceLines', normalizedInvoiceId],
     queryFn: async () => {
       return base44.entities.ProjectInvoiceLine.filter({ invoice_id: normalizedInvoiceId });
     },
