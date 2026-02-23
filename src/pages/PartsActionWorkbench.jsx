@@ -696,24 +696,6 @@ export default function PartsActionWorkbench() {
     toast.success('Invoice created successfully');
   };
   
-  const handleFixItem = (item) => {
-    setSelectedItem(item);
-    setTimelineOpen(true);
-  };
-  
-  const handleExportToQB = () => {
-    if (!lastBatchResult?.batch_id) return;
-    // Navigate to batch export or trigger export
-    toast.info('QuickBooks export functionality coming soon');
-  };
-  
-  const handleViewBatch = () => {
-    if (!lastBatchResult?.batch_id) return;
-    // Navigate to batch detail view
-    toast.info('Batch detail view coming soon');
-    setSuccessDrawerOpen(false);
-  };
-
   const handleExecuteAction = async (item, actionType) => {
     const commitmentId = item.commitment_id;
     
