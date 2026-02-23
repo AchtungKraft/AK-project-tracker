@@ -178,8 +178,8 @@ export async function forceAppRefresh(queryClient, options = {}) {
     }),
   );
   
-  // PHASE 5: Deterministic refetch for billing & invoice queries
-  // These are the CANONICAL query keys for invoice flow
+  // PHASE 1 UNIFIED: Deterministic refetch for billing & invoice queries
+  // These are the CANONICAL query keys for forward invoice flow
   refetches.push(
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
@@ -197,19 +197,19 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['billablePartsView'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 5: Credit allocations for exposure net calculation
+    // Credit allocations for exposure net calculation
     queryClient.refetchQueries({ 
       queryKey: ['creditAllocations'],
-      type: refetchActive ? 'active' : 'all'
+      type: 'all' // Always refetch all credit data
     }),
-    // PHASE 5: Invoice view internal keys used by ForwardInvoiceDashboard
+    // Invoice view internal keys used by ForwardInvoiceDashboard
     queryClient.refetchQueries({ 
       queryKey: ['projectInvoiceCommitments'],
       type: refetchActive ? 'active' : 'all'
     }),
     queryClient.refetchQueries({ 
       queryKey: ['projectInvoices'],
-      type: refetchActive ? 'active' : 'all'
+      type: 'all' // Always refetch all invoice lists
     }),
     queryClient.refetchQueries({ 
       queryKey: ['projectInvoiceLines'],
@@ -239,33 +239,48 @@ export async function forceAppRefresh(queryClient, options = {}) {
     );
   });
   
-  // Scoped refetches for affected projects
+  // PHASE 5: Scoped refetches for affected projects - DETERMINISTIC
+  // When projectId provided, ALWAYS invalidate + refetch these critical keys
   projectIds.forEach(id => {
     refetches.push(
       queryClient.refetchQueries({ 
         queryKey: ['projectSupplyView', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
       }),
-      // PHASE 4: Project-scoped billing refetches
+      // CANONICAL: billingProcurementStates is THE source of truth for exposure
       queryClient.refetchQueries({ 
         queryKey: ['billingProcurementStates', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
+      }),
+      // Invoice history views - must stay in sync
+      queryClient.refetchQueries({ 
+        queryKey: ['projectInvoicesView', id],
+        type: 'all' // Deterministic: always refetch
       }),
       queryClient.refetchQueries({ 
         queryKey: ['projectInvoiceCommitments', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
       }),
       queryClient.refetchQueries({ 
         queryKey: ['projectInvoices', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
       }),
       queryClient.refetchQueries({ 
+        queryKey: ['projectInvoiceLines', id],
+        type: 'all' // Deterministic: always refetch
+      }),
+      // Credit queries must sync immediately
+      queryClient.refetchQueries({ 
         queryKey: ['projectCreditLedger', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
       }),
       queryClient.refetchQueries({ 
         queryKey: ['projectCreditAllocations', id],
-        type: refetchActive ? 'active' : 'all'
+        type: 'all' // Deterministic: always refetch
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['creditAllocations', id],
+        type: 'all' // Deterministic: always refetch
       }),
     );
   });
