@@ -45,19 +45,26 @@ Deno.serve(async (req) => {
       category_id = null,
       vendor_id = null,
       search = null,
+      part_id = null,  // NEW: Support single-part filtering for modal
       limit = 500
     } = body;
 
-    // Fetch all parts
+    // Fetch parts - support single part_id for modal view
     let partsQuery = {};
-    if (!include_archived) {
-      partsQuery.is_archived = { $ne: true };
-    }
-    if (category_id) {
-      partsQuery.part_category_id = category_id;
-    }
-    if (vendor_id) {
-      partsQuery.default_vendor_id = vendor_id;
+    
+    // If part_id provided, fetch only that part (for PartModal)
+    if (part_id) {
+      partsQuery.id = part_id;
+    } else {
+      if (!include_archived) {
+        partsQuery.is_archived = { $ne: true };
+      }
+      if (category_id) {
+        partsQuery.part_category_id = category_id;
+      }
+      if (vendor_id) {
+        partsQuery.default_vendor_id = vendor_id;
+      }
     }
     
     const parts = Object.keys(partsQuery).length > 0
@@ -159,6 +166,7 @@ Deno.serve(async (req) => {
         // CANONICAL INVENTORY STATE (NO UI derivation allowed)
         physical_stock,
         reserved_total,
+        allocated_total: reserved_total, // Alias for backward compat
         available,
         on_order,
         to_order,
@@ -178,6 +186,9 @@ Deno.serve(async (req) => {
         // Pricing (for display only)
         cost: part.cost ?? part.default_cost,
         retail_effective: part.retail_override ?? part.retail_matrix_price ?? part.default_retail,
+        
+        // Location breakdown (NEW - single source for location data)
+        location_breakdown: partCommitments.length > 0 ? null : undefined, // Reserved for future
         
         // Timestamps
         created_date: part.created_date,

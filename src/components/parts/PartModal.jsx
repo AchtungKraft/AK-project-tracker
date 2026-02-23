@@ -166,34 +166,43 @@ export default function PartModal({ part, partId, onClose }) {
     },
   });
 
-  // Fetch inventory view data for canonical inventory metrics
-  const { data: partsInventoryView = [] } = useQuery({
-    queryKey: ['partsInventoryView'],
+  // PHASE 16: Single canonical source for inventory - scoped to this part only
+  const { data: partInventoryView, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery({
+    queryKey: ['partsInventoryView', activePart?.id],
     queryFn: async () => {
-      const res = await base44.functions.invoke('getPartsInventoryView', {});
-      return res.data?.parts || [];
+      const res = await base44.functions.invoke('getPartsInventoryView', { part_id: activePart?.id });
+      return res.data?.parts?.[0] || null;
     },
+    enabled: !!activePart?.id,
+    staleTime: 0, // Always refetch on mount
   });
 
-  // Fetch inventory items for location summary
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems', activePart?.id],
+  // Location breakdown - ONLY used for location display, NOT for totals
+  // This is a SECONDARY display, NOT a source of truth for inventory metrics
+  const { data: locationItems = [], isLoading: locationsLoading } = useQuery({
+    queryKey: ['inventoryLocations', activePart?.id],
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: activePart?.id }),
     enabled: !!activePart?.id,
   });
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
-    onSuccess: () => {
-      // PHASE 4: Full canonical invalidation for consistency
+    onSuccess: async () => {
+      // PHASE 16: Full canonical invalidation + explicit refetch
       invalidateSupplyQueries(queryClient, { 
         part_ids: [activePart.id],
         invalidateAll: true 
       });
-      // Additional explicit invalidations for certainty
+      // Explicit invalidations
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['part', activePart.id] });
+      queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryLocations', activePart.id] });
       queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+      
+      // PHASE 16: Explicit refetch to ensure UI updates before render
+      await refetchInventory();
+      
       toast.success('Part updated');
       setEditing(false);
     },
@@ -212,17 +221,20 @@ export default function PartModal({ part, partId, onClose }) {
     },
   });
 
-  // Get canonical inventory metrics from read model
-  const inventoryView = partsInventoryView.find(p => p.part_id === activePart?.id);
-  const inventoryMetrics = {
-    physical_stock: inventoryView?.physical_stock ?? activePart?.physical_stock ?? 0,
-    reserved_global: inventoryView?.allocated_total ?? activePart?.allocated_stock ?? 0,
-    on_order: inventoryView?.on_order ?? activePart?.on_order ?? 0,
-    available_to_allocate: Math.max(0, (inventoryView?.physical_stock ?? activePart?.physical_stock ?? 0) - (inventoryView?.allocated_total ?? activePart?.allocated_stock ?? 0)),
-  };
+  // PHASE 16: Canonical inventory metrics - SINGLE SOURCE, NO FALLBACK
+  // If data not loaded, inventoryMetrics is null (render skeleton)
+  const inventoryMetrics = partInventoryView ? {
+    physical_stock: partInventoryView.physical_stock,
+    reserved_global: partInventoryView.allocated_total,
+    on_order: partInventoryView.on_order,
+    available_to_allocate: partInventoryView.available,
+    to_order: partInventoryView.to_order,
+    required_total: partInventoryView.required_total,
+  } : null;
 
-  // Build location summary from inventory items
-  const locationSummary = inventoryItems.reduce((acc, item) => {
+  // Location breakdown - DISPLAY ONLY, not used for totals
+  // This is clearly separated from canonical metrics
+  const locationSummary = locationItems.reduce((acc, item) => {
     const locId = item.location_id || 'unassigned';
     if (!acc[locId]) acc[locId] = { qty: 0, reserved: 0 };
     acc[locId].qty += item.quantity_on_hand || 0;
@@ -490,7 +502,7 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
-      {/* Inventory Section - Compact Canonical Metrics */}
+      {/* Inventory Section - PHASE 16: Single Canonical Source */}
       <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-300">Inventory</span>
@@ -516,19 +528,28 @@ export default function PartModal({ part, partId, onClose }) {
           </div>
         </div>
         
-        {/* Compact Canonical Metrics - Single Row */}
-        <div className="flex items-center gap-1 max-w-[280px] font-mono text-[11px] bg-gray-900/60 px-2 py-1.5 rounded">
-          <span className="text-white">Stock <span className="font-bold">{inventoryMetrics.physical_stock}</span></span>
-          <span className="text-gray-500">•</span>
-          <span className="text-amber-400">Res <span className="font-bold">{inventoryMetrics.reserved_global}</span></span>
-          <span className="text-gray-500">•</span>
-          <span className="text-green-400">Avail <span className="font-bold">{inventoryMetrics.available_to_allocate}</span></span>
-          <span className="text-gray-500">•</span>
-          <span className="text-blue-400">Ord <span className="font-bold">{inventoryMetrics.on_order}</span></span>
-        </div>
+        {/* PHASE 16: Canonical Metrics - Show skeleton if loading, NEVER fallback */}
+        {inventoryLoading || !inventoryMetrics ? (
+          <div className="flex items-center gap-2 bg-gray-900/60 px-2 py-1.5 rounded animate-pulse">
+            <div className="h-3 w-16 bg-gray-700 rounded" />
+            <div className="h-3 w-12 bg-gray-700 rounded" />
+            <div className="h-3 w-14 bg-gray-700 rounded" />
+            <div className="h-3 w-10 bg-gray-700 rounded" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 max-w-[280px] font-mono text-[11px] bg-gray-900/60 px-2 py-1.5 rounded">
+            <span className="text-white">Stock <span className="font-bold">{inventoryMetrics.physical_stock}</span></span>
+            <span className="text-gray-500">•</span>
+            <span className="text-amber-400">Res <span className="font-bold">{inventoryMetrics.reserved_global}</span></span>
+            <span className="text-gray-500">•</span>
+            <span className="text-green-400">Avail <span className="font-bold">{inventoryMetrics.available_to_allocate}</span></span>
+            <span className="text-gray-500">•</span>
+            <span className="text-blue-400">Ord <span className="font-bold">{inventoryMetrics.on_order}</span></span>
+          </div>
+        )}
 
-        {/* Compact Location Summary */}
-        {Object.keys(locationSummary).length > 0 && (
+        {/* Location Breakdown - DISPLAY ONLY (not used for totals) */}
+        {!locationsLoading && Object.keys(locationSummary).length > 0 && (
           <div className="flex flex-wrap items-center gap-1 text-[11px]">
             <MapPin className="w-3 h-3 text-gray-500" />
             {Object.entries(locationSummary).slice(0, 3).map(([locId, data]) => {
