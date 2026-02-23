@@ -66,7 +66,12 @@ export default function ProjectInvoices() {
 
   const invoices = invoicesData?.invoices || [];
   const creditBalances = invoicesData?.credit_balances || {};
+  const creditApplied = invoicesData?.credit_applied || {};
   const summary = invoicesData?.summary || {};
+
+  // PHASE 6: Calculate global credit summary for display
+  const totalCreditAvailable = Object.values(creditBalances).reduce((sum, v) => sum + (v || 0), 0);
+  const totalCreditApplied = Object.values(creditApplied).reduce((sum, v) => sum + (v || 0), 0);
 
   // Filter invoices by tab, search, and project
   const filteredInvoices = useMemo(() => {
