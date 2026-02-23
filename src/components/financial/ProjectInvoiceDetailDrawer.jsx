@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function ProjectInvoiceDetailDrawer({
   invoiceId,
@@ -130,8 +131,10 @@ export default function ProjectInvoiceDetailDrawer({
       if (response.data?.success) {
         toast.success("Invoice marked as sent");
         setShowMarkSentModal(false);
-        queryClient.invalidateQueries({ queryKey: ["projectInvoice", invoiceId] });
-        queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
+        // PHASE 17: Deterministic refresh
+        await forceAppRefresh(queryClient, {
+          projectIds: invoice?.project_id ? [invoice.project_id] : [],
+        });
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as sent");
@@ -164,8 +167,10 @@ export default function ProjectInvoiceDetailDrawer({
             : "Invoice marked as paid"
         );
         setShowMarkPaidModal(false);
-        queryClient.invalidateQueries({ queryKey: ["projectInvoice", invoiceId] });
-        queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
+        // PHASE 17: Deterministic refresh
+        await forceAppRefresh(queryClient, {
+          projectIds: invoice?.project_id ? [invoice.project_id] : [],
+        });
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as paid");
