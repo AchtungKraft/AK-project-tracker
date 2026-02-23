@@ -184,7 +184,10 @@ export default function BillablePartsSelector({
   const [expandedCategories, setExpandedCategories] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: billingData, isLoading, error } = useBillingAndProcurementStates(projectId);
+  // DETERMINISTIC: Normalize project ID
+  const normalizedProjectId = projectId ? String(projectId) : "";
+
+  const { data: billingData, isLoading, error } = useBillingAndProcurementStates(normalizedProjectId);
   
   const { vendorGroups, summary, contractWarning } = useMemo(() => {
     if (!billingData) return { vendorGroups: [], summary: null, contractWarning: null };

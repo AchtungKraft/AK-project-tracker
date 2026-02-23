@@ -47,6 +47,9 @@ export default function ProjectInvoiceDetailDrawer({
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // DETERMINISTIC: Normalize invoice ID
+  const normalizedInvoiceId = invoiceId ? String(invoiceId) : "";
+
   // Mark Sent form state
   const [qbInvoiceNumber, setQbInvoiceNumber] = useState("");
   const [issueDate, setIssueDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -58,31 +61,34 @@ export default function ProjectInvoiceDetailDrawer({
 
   // Fetch invoice
   const { data: invoice, isLoading: loadingInvoice } = useQuery({
-    queryKey: ["projectInvoice", invoiceId],
+    queryKey: ["projectInvoice", normalizedInvoiceId],
     queryFn: async () => {
-      const invoices = await base44.entities.ProjectInvoice.filter({ id: invoiceId });
+      const invoices = await base44.entities.ProjectInvoice.filter({ id: normalizedInvoiceId });
       return invoices[0];
     },
-    enabled: !!invoiceId,
+    enabled: Boolean(normalizedInvoiceId),
   });
 
   // Fetch invoice lines
   const { data: lines = [], isLoading: loadingLines } = useQuery({
-    queryKey: ["projectInvoiceLines", invoiceId],
+    queryKey: ["projectInvoiceLines", normalizedInvoiceId],
     queryFn: async () => {
-      return base44.entities.ProjectInvoiceLine.filter({ invoice_id: invoiceId });
+      return base44.entities.ProjectInvoiceLine.filter({ invoice_id: normalizedInvoiceId });
     },
-    enabled: !!invoiceId,
+    enabled: Boolean(normalizedInvoiceId),
   });
+
+  // DETERMINISTIC: Normalize project ID from invoice
+  const normalizedProjectId = invoice?.project_id ? String(invoice.project_id) : "";
 
   // Fetch project
   const { data: project } = useQuery({
-    queryKey: ["project", invoice?.project_id],
+    queryKey: ["project", normalizedProjectId],
     queryFn: async () => {
-      const projects = await base44.entities.Project.filter({ id: invoice.project_id });
+      const projects = await base44.entities.Project.filter({ id: normalizedProjectId });
       return projects[0];
     },
-    enabled: !!invoice?.project_id,
+    enabled: Boolean(normalizedProjectId),
   });
 
   const isLoading = loadingInvoice || loadingLines;
@@ -131,10 +137,12 @@ export default function ProjectInvoiceDetailDrawer({
       if (response.data?.success) {
         toast.success("Invoice marked as sent");
         setShowMarkSentModal(false);
-        // PHASE 17: Deterministic refresh
-        await forceAppRefresh(queryClient, {
-          projectIds: invoice?.project_id ? [invoice.project_id] : [],
-        });
+        // DETERMINISTIC: Invalidate exact keys only
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["projectInvoice", normalizedInvoiceId] }),
+          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+        ]);
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as sent");
@@ -167,10 +175,13 @@ export default function ProjectInvoiceDetailDrawer({
             : "Invoice marked as paid"
         );
         setShowMarkPaidModal(false);
-        // PHASE 17: Deterministic refresh
-        await forceAppRefresh(queryClient, {
-          projectIds: invoice?.project_id ? [invoice.project_id] : [],
-        });
+        // DETERMINISTIC: Invalidate exact keys only
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["projectInvoice", normalizedInvoiceId] }),
+          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+        ]);
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as paid");
