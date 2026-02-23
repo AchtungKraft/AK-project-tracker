@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -273,6 +273,9 @@ export default function CreateProjectModal({ onClose }) {
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Create New Project</DialogTitle>
+          <DialogDescription>
+            Enter the details to create a new project.
+          </DialogDescription>
         </DialogHeader>
         {formContent}
       </DialogContent>
