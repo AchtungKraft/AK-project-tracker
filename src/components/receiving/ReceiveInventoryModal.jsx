@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,16 +199,11 @@ export default function ReceiveInventoryModal({
             <Package className="w-5 h-5 text-green-500" />
             {commitment ? 'Receive Against PO' : 'Add General Stock'}
           </DialogTitle>
-          {commitment && (
-            <p className="text-xs text-gray-400 mt-1">
-              Mode: Receiving from purchase order (will auto-allocate to open needs)
-            </p>
-          )}
-          {!commitment && (
-            <p className="text-xs text-yellow-400 mt-1">
-              Mode: General stock intake (will auto-allocate to open commitments by priority)
-            </p>
-          )}
+          <DialogDescription>
+            {commitment 
+              ? 'Receiving from purchase order (will auto-allocate to open needs).'
+              : 'General stock intake (will auto-allocate to open commitments by priority).'}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Archived Warning */}
