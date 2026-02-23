@@ -59,17 +59,74 @@ Deno.serve(async (req) => {
       : [];
     const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
 
-    // Fetch invoice lines for line counts
+    // Fetch invoice lines with full data for export
     const invoiceIds = invoices.map(inv => inv.id);
     const allLines = invoiceIds.length > 0
       ? await base44.entities.ProjectInvoiceLine.list()
       : [];
     
+    // Filter to only lines belonging to these invoices
+    const relevantLines = allLines.filter(line => invoiceIds.includes(line.invoice_id));
+    
+    // Fetch commitments for part details (needed for export)
+    const commitmentIds = [...new Set(relevantLines.filter(l => l.part_commitment_id).map(l => l.part_commitment_id))];
+    const commitments = commitmentIds.length > 0
+      ? await base44.entities.PartCommitment.list()
+      : [];
+    const commitmentMap = Object.fromEntries(commitments.map(c => [c.id, c]));
+    
+    // Fetch parts for names and vendor part numbers
+    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const parts = partIds.length > 0
+      ? await base44.entities.Part.list()
+      : [];
+    const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
+    
+    // Fetch categories for category names
+    const categories = await base44.entities.PartCategory.list();
+    const categoryMap = Object.fromEntries(categories.map(c => [c.id, c]));
+    
+    // Build line data map with enriched details
+    const linesByInvoice = {};
     const lineCountMap = {};
-    for (const line of allLines) {
-      if (invoiceIds.includes(line.invoice_id)) {
-        lineCountMap[line.invoice_id] = (lineCountMap[line.invoice_id] || 0) + 1;
+    
+    for (const line of relevantLines) {
+      if (!linesByInvoice[line.invoice_id]) {
+        linesByInvoice[line.invoice_id] = [];
       }
+      
+      // Enrich line with part/category data for export
+      let enrichedLine = { ...line };
+      
+      if (line.part_commitment_id) {
+        const commitment = commitmentMap[line.part_commitment_id];
+        if (commitment) {
+          const part = partMap[commitment.part_id];
+          const category = part?.part_category_id ? categoryMap[part.part_category_id] : null;
+          
+          enrichedLine = {
+            ...line,
+            // Export-required fields
+            part_name: part?.part_name || line.description || 'Unknown Part',
+            vendor_part_number: part?.vendor_part_number || '',
+            category_name: category?.name || 'Uncategorized',
+            // Pricing fields from commitment snapshot
+            unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
+          };
+        }
+      } else {
+        // Manual line - use description directly
+        enrichedLine = {
+          ...line,
+          part_name: line.description || 'Manual Item',
+          vendor_part_number: '',
+          category_name: line.type === 'outside_cost' ? 'Outside Costs' : 'Manual',
+          unit_retail_snapshot: line.unit_price ?? 0,
+        };
+      }
+      
+      linesByInvoice[line.invoice_id].push(enrichedLine);
+      lineCountMap[line.invoice_id] = (lineCountMap[line.invoice_id] || 0) + 1;
     }
 
     // Calculate today for overdue check
