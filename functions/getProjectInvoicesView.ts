@@ -106,14 +106,27 @@ Deno.serve(async (req) => {
     });
 
     // Calculate credit balances per project
-    const credits = await base44.entities.ProjectCreditLedger.list();
+    const [credits, creditAllocations] = await Promise.all([
+      base44.entities.ProjectCreditLedger.list(),
+      base44.entities.CreditAllocation.filter({ is_reversed: false }),
+    ]);
+    
     const creditBalanceMap = {};
+    const creditAppliedMap = {};
     
     for (const credit of credits) {
       const remaining = credit.remaining_amount ?? 0;
       if (remaining > 0) {
         creditBalanceMap[credit.project_id] = (creditBalanceMap[credit.project_id] || 0) + remaining;
       }
+    }
+    
+    // PHASE 6: Calculate credit applied per project from CreditAllocation
+    for (const alloc of creditAllocations) {
+      if (!creditAppliedMap[alloc.project_id]) {
+        creditAppliedMap[alloc.project_id] = 0;
+      }
+      creditAppliedMap[alloc.project_id] += alloc.amount_applied || 0;
     }
 
     // Summary stats
