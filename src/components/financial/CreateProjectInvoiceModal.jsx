@@ -359,8 +359,12 @@ export default function CreateProjectInvoiceModal({
           <div className="space-y-4 py-4">
             <Label>Select Project</Label>
             <FinancialProjectSelector
-              value={selectedProjectId}
-              onValueChange={setSelectedProjectId}
+              value={selectedProjectId ?? undefined}
+              onValueChange={(val) => {
+                if (!val) return;
+                console.log("[Modal] Project selected:", val);
+                setSelectedProjectId(val);
+              }}
               className="w-full"
             />
             {/* PHASE 1: Show canonical exposure data from getBillingAndProcurementStates */}
