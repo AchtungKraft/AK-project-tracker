@@ -476,22 +476,33 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     part_name: item.part_name,
     project_id: item.project_id,
     required_total: item.assigned_qty,
+    qty_remaining_to_bill: item.assigned_qty, // Alias for BillablePartsSelector
     unit_retail_snapshot: item.unit_retail,
+    unit_retail: item.unit_retail, // Alias for BillablePartsSelector
     unit_cost_snapshot: item.unit_cost,
     gross_exposure: item.gross_line_total || item.line_total || 0,
+    gross_line_total: item.gross_line_total || item.line_total || 0, // Alias
     credit_applied: item.credit_applied_line || 0,
+    credit_applied_line: item.credit_applied_line || 0, // Alias
     net_exposure: item.net_line_total || 0,
+    net_line_total: item.net_line_total || 0, // Alias
     invoiced_amount: item.invoiced_amount || 0,
     billing_status: item.client_billing_status,
+    client_billing_status: item.client_billing_status, // Alias
     payment_status: item.client_payment_status,
     invoice_status: item.client_billing_status === 'NOT_INVOICED' ? 'unbilled' 
                   : item.client_billing_status === 'INVOICED' ? 'invoiced' 
                   : item.client_billing_status === 'PAID' ? 'paid' 
                   : 'unbilled',
-    invoice_id: null, // TODO: link to ProjectInvoice
     lifecycle_category: item.lifecycle_category,
-    vendor_name: item.vendor_name,
-    category_name: item.category_name,
+    // PHASE 3: Grouping fields for BillablePartsSelector (must be resolved)
+    vendor_id: item.vendor_id || null,
+    vendor_name: item.vendor_name || 'Unknown Vendor',
+    default_vendor_id: item.default_vendor_id || item.vendor_id || null,
+    category_id: item.category_id || null,
+    category_name: item.category_name || 'Uncategorized',
+    part_category_id: item.part_category_id || item.category_id || null,
+    is_archived: item.is_archived || false,
   }));
 
   // PHASE 1 CANONICAL: Build totals object
