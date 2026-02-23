@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Loader2, Edit2, Trash2, X, Upload, Star, ChevronDown, ChevronRight, 
-  Camera, ExternalLink, Package
+  Camera, ExternalLink, Package, Plus, Wrench, MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -27,6 +27,9 @@ import CreateInlineModal from "../common/CreateInlineModal";
 import PartPricingFields from "./PartPricingFields";
 import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
+import AddInventoryModal from "../inventory/AddInventoryModal";
+import AddToBuildModal from "./AddToBuildModal";
+import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
 
 export default function PartModal({ part, partId, onClose }) {
   const queryClient = useQueryClient();
