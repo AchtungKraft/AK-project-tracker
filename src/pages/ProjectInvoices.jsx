@@ -34,6 +34,17 @@ import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDet
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 
+/**
+ * ProjectInvoices - Global Invoice Management Page
+ * 
+ * PHASE 1 UNIFIED: This is the canonical invoice management surface.
+ * Uses same CreateProjectInvoiceModal as ForwardInvoiceDashboard.
+ * 
+ * DATA SOURCES:
+ * - getProjectInvoicesView: Invoice history (list + flags)
+ * - getBillingAndProcurementStates: Canonical exposure when project selected
+ * - getFinancialProjectsView: Project dropdown data
+ */
 export default function ProjectInvoices() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("draft");
@@ -42,8 +53,7 @@ export default function ProjectInvoices() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
-  // PHASE 2: Scoped query key to prevent stale data across project switches
-  // Using projectFilter in key ensures fresh data when filter changes
+  // PHASE 1 UNIFIED: Scoped query key with staleTime=0 for immediate updates
   const { data: invoicesData, isLoading, refetch } = useQuery({
     queryKey: ["projectInvoicesView", projectFilter],
     queryFn: async () => {
