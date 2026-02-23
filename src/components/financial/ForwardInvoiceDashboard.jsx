@@ -178,20 +178,20 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     };
   }, [invoiceBatches]);
 
-  // Export to QB handler
-  const handleExport = async (batchId, action) => {
+  // Export to QB handler - PHASE 1: Uses ProjectInvoice system
+  const handleExport = async (invoiceId, action) => {
     setIsExporting(true);
     try {
-      audit.trackClick('qb_export', { batchId, action });
-      const response = await base44.functions.invoke('exportInvoiceBatchToQuickBooks', {
-        batch_id: batchId,
+      audit.trackClick('qb_export', { invoiceId, action });
+      const response = await base44.functions.invoke('exportProjectInvoicesToQB', {
+        invoice_id: invoiceId,
         action: action,
       });
       
       if (action === 'csv' && response.data?.csv_url) {
         const link = document.createElement('a');
         link.href = response.data.csv_url;
-        link.download = `invoice_${batchId}.csv`;
+        link.download = `invoice_${invoiceId}.csv`;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -209,10 +209,10 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     }
   };
 
-  // Update status handler
-  const handleStatusUpdate = async (batchId, status) => {
+  // Update status handler - PHASE 1: Uses ProjectInvoice
+  const handleStatusUpdate = async (invoiceId, status) => {
     try {
-      await base44.entities.InvoiceBatch.update(batchId, { status });
+      await base44.entities.ProjectInvoice.update(invoiceId, { status });
       toast.success('Status updated');
       refetch();
     } catch (error) {
@@ -227,19 +227,20 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     setShowPaymentModal(true);
   };
 
+  // PHASE 1: Payment uses markInvoicePaid function for ProjectInvoice
   const handlePaymentSubmit = async (paymentData) => {
     try {
-      audit.trackClick('record_payment', { batchId: paymentData.batchId });
-      const { batchId, ...data } = paymentData;
-      await base44.entities.InvoiceBatch.update(batchId, {
-        status: 'paid',
-        paid_date: data.paid_date,
-        payment_method: data.payment_method,
-        payment_reference: data.payment_reference,
-        amount_paid: data.amount_paid,
-        is_locked: true,
+      const invoiceId = paymentData.batchId || paymentData.invoiceId;
+      audit.trackClick('record_payment', { invoiceId });
+      
+      // Use markInvoicePaid backend function
+      await base44.functions.invoke('markInvoicePaid', {
+        invoice_id: invoiceId,
+        payment_date: paymentData.paid_date,
+        paid_amount: paymentData.amount_paid,
       });
-      audit.trackSuccess('record_payment', { batchId });
+      
+      audit.trackSuccess('record_payment', { invoiceId });
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
