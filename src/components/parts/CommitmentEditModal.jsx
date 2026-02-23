@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -60,6 +60,9 @@ export default function CommitmentEditModal({
               <Package className="w-5 h-5 text-gray-400" />
               Commitment Details
             </DialogTitle>
+            <DialogDescription>
+              View and manage this part commitment.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
