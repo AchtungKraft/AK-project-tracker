@@ -429,6 +429,29 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     last_recomputed_at: ctx.timestamp
   };
 
+  // PHASE 3: Reopen closed/cancelled commitments if requested
+  if (wasReopened) {
+    updateData.commitment_status = 'planned';
+    updateData.coverage_status = 'NOT_COVERED';
+    // Clear cancellation fields
+    updateData.cancelled_at = null;
+    updateData.cancelled_reason = null;
+    updateData.cancelled_by = null;
+    
+    ctx.lifecycle_events.push({
+      commitment_id: commitmentId,
+      event_type: 'COMMITMENT_REOPENED',
+      trigger_source: 'UNIFIED_ENGINE',
+      triggered_by: ctx.user.email,
+      actor_email: ctx.user.email,
+      old_values: JSON.stringify({ commitment_status: commitment.commitment_status }),
+      new_values: JSON.stringify({ commitment_status: 'planned' }),
+      part_id: part.id,
+      project_id: commitment?.project_id || project_id,
+      event_date: ctx.timestamp
+    });
+  }
+
   // If not a new commitment, update it
   if (!isNewCommitment && commitmentId) {
     await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, updateData);
