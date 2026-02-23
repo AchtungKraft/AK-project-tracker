@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, DollarSign, FileText, CreditCard, AlertTriangle, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { financialProjectKeys, normalizeProjectId } from "./queryKeyFactories";
 
 /**
  * PHASE 7 — Financial Bar for Project Supply Manager
@@ -13,8 +14,11 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  * Uses getFinancialProjectsView filtered to single project.
  */
 export default function ProjectFinancialBar({ projectId, className }) {
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedProjectId = normalizeProjectId(projectId);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["financialProjectsView"],
+    queryKey: financialProjectKeys.all(),
     queryFn: async () => {
       const response = await base44.functions.invoke("getFinancialProjectsView", {});
       return response.data;
@@ -23,7 +27,7 @@ export default function ProjectFinancialBar({ projectId, className }) {
   });
 
   // Find this project's financial data
-  const projectFinancials = data?.projects?.find((p) => p.project_id === projectId);
+  const projectFinancials = data?.projects?.find((p) => String(p.project_id) === normalizedProjectId);
 
   if (isLoading) {
     return (

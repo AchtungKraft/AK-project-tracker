@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, ExternalLink, CreditCard } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { creditKeys, normalizeProjectId } from "./queryKeyFactories";
 
 /**
  * BillingSummaryStrip - Compact billing summary for ProjectSupplyManager
@@ -20,15 +21,18 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  * READ-ONLY - No supply actions
  */
 export default function BillingSummaryStrip({ projectId, commitments = [] }) {
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedProjectId = normalizeProjectId(projectId);
+
   // Fetch credit balance for this project
   const { data: creditData } = useQuery({
-    queryKey: ["projectCreditBalance", projectId],
+    queryKey: creditKeys.projectBalance(normalizedProjectId),
     queryFn: async () => {
-      const credits = await base44.entities.ProjectCreditLedger.filter({ project_id: projectId });
+      const credits = await base44.entities.ProjectCreditLedger.filter({ project_id: normalizedProjectId });
       const balance = credits.reduce((sum, c) => sum + (c.remaining_amount ?? 0), 0);
       return { balance, credits };
     },
-    enabled: !!projectId,
+    enabled: !!normalizedProjectId,
     staleTime: 30000,
   });
 
