@@ -75,47 +75,39 @@ export default function CreateProjectInvoiceModal({
   initialSelectedItems = [], // PHASE 2: Allow pre-selection from PartsActionWorkbench
 }) {
   const queryClient = useQueryClient();
-  // DETERMINISTIC: Normalize preselected project ID using factory helper
-  // HARD FIX: Never use empty string - use null for "no project"
+  
+  // STABILIZATION FIX: Single normalization at top, used everywhere
   const normalizedPreselectedId = normalizeProjectId(preselectedProjectId);
   
-  // If project is preselected, skip to step 1 (type selection)
+  // STABILIZATION FIX: Single state declaration - NO other useState for projectId
   const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
-  const [selectedProjectId, setSelectedProjectId] = useState(normalizedPreselectedId);
+  const [selectedProjectId, setSelectedProjectId] = useState(normalizedPreselectedId ?? null);
   const [invoiceType, setInvoiceType] = useState("progress");
   const [depositAmount, setDepositAmount] = useState("");
   const [notes, setNotes] = useState("");
-  const [selectedParts, setSelectedParts] = useState([]);
+  const [selectedParts, setSelectedParts] = useState(initialSelectedItems || []);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // HARD FIX: Dev log for debugging project state
+  // PERMANENT DEBUG: Track selectedProjectId changes
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log("[CREATE_INVOICE_MODAL] selectedProjectId:", selectedProjectId);
-    }
+    console.log("[CreateInvoiceModal] selectedProjectId:", selectedProjectId);
   }, [selectedProjectId]);
 
-  // Normalized ID for queries - use factory helper
-  // HARD FIX: Do not fallback to empty string - keep as null
+  // STABILIZATION FIX: Normalize for queries using factory helper
   const normalizedProjectId = normalizeProjectId(selectedProjectId);
   
-  // Reset state when modal opens with preselected project
-  React.useEffect(() => {
-    if (open && normalizedPreselectedId) {
-      setSelectedProjectId(normalizedPreselectedId);
-      setStep(1); // Skip project selection
-      
-      // PHASE 2: Pre-populate selected parts if initialSelectedItems provided
-      if (initialSelectedItems && initialSelectedItems.length > 0) {
-        setSelectedParts(initialSelectedItems);
-        setStep(2); // Skip to lines step if items provided
-      }
-    } else if (open && !normalizedPreselectedId) {
-      setStep(0);
-      // HARD FIX: Use null, never empty string
-      setSelectedProjectId(null);
-      setSelectedParts([]);
+  // STABILIZATION FIX: Reset step/parts when modal closes, but NOT selectedProjectId
+  // State must only change via user selection in the Select component
+  useEffect(() => {
+    if (!open) {
+      // Modal closed - reset step and parts, but preserve project if preselected
+      setStep(normalizedPreselectedId ? 1 : 0);
+      setSelectedParts(initialSelectedItems || []);
+      setInvoiceType("progress");
+      setDepositAmount("");
+      setNotes("");
+      setManualLines([]);
     }
   }, [open, normalizedPreselectedId, initialSelectedItems]);
 
