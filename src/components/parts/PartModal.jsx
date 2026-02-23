@@ -383,20 +383,72 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
-      {/* Inventory Summary */}
-      <div className="grid grid-cols-3 gap-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-        <div className="text-center">
-          <p className="text-2xl font-bold text-white">{formData.physical_stock || 0}</p>
-          <p className="text-xs text-gray-400">Physical Stock</p>
+      {/* Inventory Section with Metrics + Actions */}
+      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">Inventory</span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAddInventoryModal(true)}
+              className="h-7 text-xs border-gray-600"
+            >
+              <Plus className="w-3 h-3 mr-1" />
+              Add Stock
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAddToBuildModal(true)}
+              className="h-7 text-xs border-gray-600"
+            >
+              <Wrench className="w-3 h-3 mr-1" />
+              Add to Build
+            </Button>
+          </div>
         </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold text-amber-400">{formData.allocated_stock || 0}</p>
-          <p className="text-xs text-gray-400">Allocated</p>
+        
+        {/* Canonical Metrics */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="text-center p-2 bg-gray-900/50 rounded">
+            <p className="text-xl font-bold text-white">{inventoryMetrics.physical_stock}</p>
+            <p className="text-xs text-gray-400">On Hand</p>
+          </div>
+          <div className="text-center p-2 bg-gray-900/50 rounded">
+            <p className="text-xl font-bold text-amber-400">{inventoryMetrics.reserved_global}</p>
+            <p className="text-xs text-gray-400">Reserved</p>
+          </div>
+          <div className="text-center p-2 bg-gray-900/50 rounded">
+            <p className="text-xl font-bold text-green-400">{inventoryMetrics.available_to_allocate}</p>
+            <p className="text-xs text-gray-400">Available</p>
+          </div>
+          <div className="text-center p-2 bg-gray-900/50 rounded">
+            <p className="text-xl font-bold text-blue-400">{inventoryMetrics.on_order}</p>
+            <p className="text-xs text-gray-400">On Order</p>
+          </div>
         </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold text-blue-400">{formData.on_order || 0}</p>
-          <p className="text-xs text-gray-400">On Order</p>
-        </div>
+
+        {/* Location Summary */}
+        {Object.keys(locationSummary).length > 0 && (
+          <div className="pt-2 border-t border-gray-700">
+            <p className="text-xs text-gray-400 mb-2 flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              By Location
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(locationSummary).map(([locId, data]) => {
+                const loc = locations.find(l => l.id === locId);
+                return (
+                  <Badge key={locId} variant="outline" className="text-xs border-gray-600">
+                    {loc?.bin_description || loc?.location_area || 'Unassigned'}: {data.qty}
+                    {data.reserved > 0 && <span className="text-amber-400 ml-1">({data.reserved} reserved)</span>}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vendor & Location */}
