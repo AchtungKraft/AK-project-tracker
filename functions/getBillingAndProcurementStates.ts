@@ -541,6 +541,30 @@ Deno.serve(async (req) => {
     }
     
     const payload = await req.json().catch(() => ({}));
+    
+    // HARD FIX: Guard against null/empty project_id - return safe empty response
+    const project_id = payload.filters?.project_id || payload.project_id;
+    if (!project_id) {
+      return Response.json({
+        success: false,
+        error: "Missing project_id",
+        totals: {
+          gross_exposure: 0,
+          net_exposure: 0,
+          invoiced_amount: 0,
+          paid_amount: 0
+        },
+        credit_summary: {
+          total_credit_available: 0,
+          total_credit_applied: 0
+        },
+        buckets: [],
+        commitments: [],
+        kpis: {},
+        project_summaries: [],
+      });
+    }
+    
     const result = await getBillingAndProcurementStates(base44, payload.filters || {});
     
     return Response.json({
