@@ -32,20 +32,12 @@ export function useProjectSupplyView(projectId, filters = {}) {
   // DETERMINISTIC: Normalize projectId once
   const normalizedId = normalizeProjectId(projectId);
 
-  // FIX: Serialize filters to ensure query key stability across renders
-  // Without this, filters = {} creates a NEW object each render → cache miss
-  const filtersKey = JSON.stringify(filters ?? {});
-  const queryKey = supplyKeys.projectView(normalizedId, filtersKey);
+  // CANONICAL: Pass raw filters to factory - serialization happens ONLY in factory
+  const queryKey = supplyKeys.projectView(normalizedId, filters);
   
-  // DIAGNOSTIC: Log query configuration
+  // DIAGNOSTIC: Log query key (factory handles serialization)
   if (process.env.NODE_ENV === 'development') {
-    console.log('[useProjectSupplyView] DIAGNOSTIC:', {
-      rawProjectId: projectId,
-      normalizedId,
-      enabled: Boolean(normalizedId),
-      queryKey,
-      filtersKey,
-    });
+    console.log('[SUPPLY KEY]', queryKey);
   }
   
   const query = useQuery({

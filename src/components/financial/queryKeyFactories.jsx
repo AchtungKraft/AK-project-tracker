@@ -11,6 +11,8 @@
  * - projectId is always normalized to String OR null (never empty string)
  * - Empty string keys broke loading because useQuery enabled: Boolean("") is false
  *   but the query key still contained "" which caused cache key mismatches
+ * - ALL FILTERS MUST BE SERIALIZED INSIDE FACTORIES ONLY
+ * - Hooks pass raw objects, factories serialize to ensure key stability
  * 
  * DOMAINS COVERED:
  * - Billing/Procurement (exposure, credit)
@@ -24,6 +26,8 @@
  * - Lifecycle
  * - Vendors
  */
+
+import { assertPrimitiveQueryKey } from "@/components/dev/queryKeyGuard";
 
 // ============================================
 // NORMALIZATION HELPERS
@@ -235,26 +239,47 @@ export const partsKeys = {
  * Supply view query keys
  * SOURCE: getProjectSupplyView, getOpsSupplyView
  */
+/**
+ * Serialize filters with sorted keys for stable cache keys
+ * ONLY used inside factories - hooks must pass raw objects
+ */
+const serializeFilters = (filters) => {
+  const obj = filters ?? {};
+  return JSON.stringify(obj, Object.keys(obj).sort());
+};
+
 export const supplyKeys = {
-  // FIX: filters param should already be serialized string for key stability
-  // If object passed, serialize it to prevent new object identity on each call
-  projectView: (projectId, filters = '{}') => {
+  // CANONICAL: Filters serialized HERE, not in hooks
+  projectView: (projectId, filters = {}) => {
     const normalized = normalizeProjectId(projectId);
-    // Accept either string (serialized) or object (legacy) - normalize to string
-    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
-    return ['projectSupplyView', normalized, filtersKey];
+    const filtersKey = serializeFilters(filters);
+    const key = ['projectSupplyView', normalized, filtersKey];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   opsView: (mode, filters = {}) => {
-    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
-    return ['opsSupplyView', mode, filtersKey];
+    const filtersKey = serializeFilters(filters);
+    const key = ['opsSupplyView', mode, filtersKey];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   poReceiving: (orderId, filters = {}) => {
     const normalized = normalizeId(orderId);
-    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
-    return ['poReceivingView', normalized, filtersKey];
+    const filtersKey = serializeFilters(filters);
+    const key = ['poReceivingView', normalized, filtersKey];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  portfolio: () => ['portfolioSupplyState'],
-  globalQueues: () => ['globalSupplyQueues'],
+  portfolio: () => {
+    const key = ['portfolioSupplyState'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  globalQueues: () => {
+    const key = ['globalSupplyQueues'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
 };
 
 // ============================================
