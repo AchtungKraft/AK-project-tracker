@@ -197,13 +197,13 @@ export default function ProjectInvoiceDetailDrawer({
             : "Invoice marked as paid"
         );
         setShowMarkPaidModal(false);
-        // DETERMINISTIC: Invalidate exact keys only
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["projectInvoice", normalizedInvoiceId] }),
-          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
-        ]);
+        
+        // Use forceAppRefresh for complete cache sync
+        const normalizedProjectId = invoice?.project_id || null;
+        await forceAppRefresh(queryClient, {
+          projectIds: normalizedProjectId ? [normalizedProjectId] : [],
+        });
+        
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as paid");
