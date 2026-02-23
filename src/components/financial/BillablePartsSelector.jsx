@@ -324,6 +324,12 @@ export default function BillablePartsSelector({
                               <p className="text-white text-sm truncate">{item.part_name}</p>
                               <p className="text-xs text-gray-500">
                                 {item.qty_remaining_to_bill} × {formatCurrencyUSD(item.unit_price)}
+                                {/* PHASE 2: Show credit applied inline */}
+                                {item.credit_applied > 0 && (
+                                  <span className="ml-2 text-green-400">
+                                    (−{formatCurrencyUSD(item.credit_applied)} credit)
+                                  </span>
+                                )}
                               </p>
                             </div>
                             {isSelected && (
@@ -340,13 +346,13 @@ export default function BillablePartsSelector({
                                   className="w-20 h-8 text-right text-sm"
                                 />
                                 <span className="text-sm font-mono text-gray-400 w-24 text-right">
-                                  {formatCurrencyUSD(selectedData?.line_total || 0)}
+                                  {formatCurrencyUSD(selectedData?.net_exposure || selectedData?.line_total || 0)}
                                 </span>
                               </div>
                             )}
                             {!isSelected && (
                               <span className="text-sm font-mono text-gray-500 w-24 text-right">
-                                {formatCurrencyUSD(item.remaining_to_bill)}
+                                {formatCurrencyUSD(item.net_exposure)}
                               </span>
                             )}
                           </div>
