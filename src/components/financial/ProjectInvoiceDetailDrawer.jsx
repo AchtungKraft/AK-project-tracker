@@ -35,6 +35,8 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { invoiceKeys } from "@/components/financial/queryKeyFactories";
+import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 
 export default function ProjectInvoiceDetailDrawer({
   invoiceId,
@@ -59,9 +61,9 @@ export default function ProjectInvoiceDetailDrawer({
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [paidAmount, setPaidAmount] = useState("");
 
-  // Fetch invoice
+  // Fetch invoice - uses factory key
   const { data: invoice, isLoading: loadingInvoice } = useQuery({
-    queryKey: ["projectInvoice", normalizedInvoiceId],
+    queryKey: invoiceKeys.detail(normalizedInvoiceId),
     queryFn: async () => {
       const invoices = await base44.entities.ProjectInvoice.filter({ id: normalizedInvoiceId });
       return invoices[0];
@@ -69,9 +71,9 @@ export default function ProjectInvoiceDetailDrawer({
     enabled: Boolean(normalizedInvoiceId),
   });
 
-  // Fetch invoice lines
+  // Fetch invoice lines - uses factory key
   const { data: lines = [], isLoading: loadingLines } = useQuery({
-    queryKey: ["projectInvoiceLines", normalizedInvoiceId],
+    queryKey: invoiceKeys.lines(normalizedInvoiceId),
     queryFn: async () => {
       return base44.entities.ProjectInvoiceLine.filter({ invoice_id: normalizedInvoiceId });
     },
