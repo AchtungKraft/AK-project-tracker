@@ -93,18 +93,29 @@ export default function PartModal({ part, partId, onClose }) {
     }
   }, [activePart?.id]);
 
-  // PHASE 2: Matrix pricing derivation - auto-recalculate retail when in MATRIX mode
+  // PHASE 2: Matrix pricing derivation - fetch from backend when cost changes in MATRIX mode
+  // FIXED: Uses backend computeRetailFromMatrix to get correct tier + markup, not stale applied_markup_pct
   useEffect(() => {
-    if (formData?.pricing_mode === 'matrix' && formData.cost != null && formData.applied_markup_pct != null) {
-      const computedRetail = formData.cost * (1 + (formData.applied_markup_pct || 0) / 100);
-      if (formData.retail_matrix_price !== computedRetail) {
-        setFormData(prev => ({
-          ...prev,
-          retail_matrix_price: Math.round(computedRetail * 100) / 100
-        }));
-      }
+    if (formData?.pricing_mode === 'matrix' && formData.cost > 0) {
+      const fetchMatrixPrice = async () => {
+        try {
+          const res = await base44.functions.invoke('computeRetailFromMatrix', { cost: formData.cost });
+          if (res.data?.success) {
+            setFormData(prev => ({
+              ...prev,
+              retail_matrix_price: res.data.retail_matrix_price,
+              applied_markup_pct: res.data.applied_markup_pct
+            }));
+          }
+        } catch (err) {
+          console.error('Matrix price fetch failed:', err);
+        }
+      };
+      // Debounce to avoid excessive calls while typing
+      const timer = setTimeout(fetchMatrixPrice, 300);
+      return () => clearTimeout(timer);
     }
-  }, [formData?.cost, formData?.applied_markup_pct, formData?.pricing_mode]);
+  }, [formData?.cost, formData?.pricing_mode]);
 
   // Fetch reference data
   const { data: categories = [] } = useQuery({
