@@ -838,6 +838,18 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   };
 
   const kpis = lifecycleData?.kpis || {};
+  const creditSummary = lifecycleData?.credit_summary || {};
+  
+  // Get current project summary for credit display
+  const currentProjectSummary = useMemo(() => {
+    if (projectFilter === 'all' || !lifecycleData?.project_summaries) return null;
+    return lifecycleData.project_summaries.find(p => p.project_id === projectFilter);
+  }, [lifecycleData?.project_summaries, projectFilter]);
+  
+  // Selected commitment IDs for credit modal
+  const selectedCommitmentIds = useMemo(() => {
+    return [...selectedIds];
+  }, [selectedIds]);
 
   // Modal wrapper when used as modal (has onClose prop)
   const isModal = !!onClose;
@@ -845,6 +857,30 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
     <div className="space-y-4">
       {/* KPI Header */}
       <LifecycleKPIHeader kpis={kpis} />
+      
+      {/* PHASE 4: Credit Summary Strip */}
+      {projectFilter !== 'all' && currentProjectSummary && (
+        <CreditSummaryStrip
+          grossExposure={currentProjectSummary.gross_exposure}
+          creditAvailable={currentProjectSummary.credit_available}
+          creditApplied={currentProjectSummary.credit_applied_total}
+          netExposure={currentProjectSummary.net_exposure}
+          selectedCount={selectedIds.size}
+          onApplyCredit={() => setShowCreditModal(true)}
+          isLoading={isLoading || isFetching}
+        />
+      )}
+      
+      {/* Global Credit Summary when viewing all projects */}
+      {projectFilter === 'all' && creditSummary.total_credit_available > 0 && (
+        <CreditSummaryStrip
+          grossExposure={creditSummary.gross_exposure_global}
+          creditAvailable={creditSummary.total_credit_available}
+          creditApplied={creditSummary.total_credit_applied}
+          netExposure={creditSummary.net_exposure_global}
+          isLoading={isLoading || isFetching}
+        />
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
