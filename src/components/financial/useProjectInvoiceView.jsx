@@ -1,15 +1,15 @@
 /**
- * useProjectInvoiceView - Canonical Financial Read Model
+ * useProjectInvoiceView - Canonical Invoice History Read Model
  * 
- * PHASE 1 REFACTOR: Unified Invoice State for Forward Model
+ * HARD-LOCKED: Returns EXACTLY what backend returns.
+ * NO mapping. NO transformation. NO renaming.
  * 
- * This hook provides invoice-history data from ProjectInvoice + ProjectInvoiceLine.
  * For exposure/credit calculations, use getBillingAndProcurementStates.
  * 
  * CANONICAL INVOICE STATES:
- * - UNBILLED: Not yet invoiced (ready to bill)
- * - INVOICED: Invoice sent, awaiting payment
- * - PAID: Payment received
+ * - draft: Not yet sent
+ * - sent/invoiced: Awaiting payment
+ * - paid: Payment received
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -28,7 +28,7 @@ export const CANONICAL_BILLING_STATUS = {
 };
 
 // ============================================
-// STATUS NORMALIZATION
+// STATUS NORMALIZATION (for commitment display)
 // ============================================
 
 /**
@@ -88,233 +88,46 @@ export function getBillingStatusConfig(status) {
 }
 
 // ============================================
-// MAIN HOOK
+// MAIN HOOK - HARD-LOCKED TO BACKEND OUTPUT
 // ============================================
 
 /**
  * useProjectInvoiceView - Invoice history read model
  * 
- * IMPORTANT: This is for INVOICE HISTORY only.
- * For exposure/credit data, use useBillingAndProcurementStates.
+ * HARD-LOCKED: Returns EXACTLY what getProjectInvoicesView returns.
+ * NO additional mapping. NO transformation. NO renaming.
  * 
  * CANONICAL: Uses invoiceKeys.view() factory for query key.
- * Returns invoices exactly as backend returns - NO local filtering.
  */
 export function useProjectInvoiceView(projectId) {
   // DETERMINISTIC: Normalize projectId once - null if invalid
-  const normalizedId = normalizeProjectId(projectId);
+  const normalizedProjectId = normalizeProjectId(projectId);
   
-  // CANONICAL: Use invoiceKeys.view() factory for query key
-  const queryKey = invoiceKeys.view(normalizedId);
-  
-  // DEV diagnostic logging
-  useEffect(() => {
-    console.log("[useProjectInvoiceView] Init:", {
-      rawProjectId: projectId,
-      normalizedId,
-      queryKey,
-      enabled: Boolean(normalizedId),
-    });
-  }, [projectId, normalizedId]);
+  // CANONICAL: Use invoiceKeys.view() factory for query key - NO inline arrays
+  const queryKey = invoiceKeys.view(normalizedProjectId);
   
   // CANONICAL: Single query to backend function for invoice history
-  const invoiceQuery = useQuery({
+  const query = useQuery({
     queryKey,
     queryFn: async () => {
-      if (!normalizedId) return { invoices: [], credit_balances: {}, credit_applied: {}, summary: {} };
+      if (!normalizedProjectId) return { invoices: [], credit_balances: {}, credit_applied: 0, summary: {} };
       const response = await base44.functions.invoke('getProjectInvoicesView', {
-        project_id: normalizedId,
+        project_id: normalizedProjectId,
       });
-      return response.data || { invoices: [], credit_balances: {}, credit_applied: {}, summary: {} };
+      return response.data || { invoices: [], credit_balances: {}, credit_applied: 0, summary: {} };
     },
-    enabled: Boolean(normalizedId),
+    enabled: Boolean(normalizedProjectId),
     staleTime: 30000,
   });
 
-  // Extract invoices from response - NO FILTERING
-  const invoices = invoiceQuery.data?.invoices ?? [];
-  const creditBalances = invoiceQuery.data?.credit_balances ?? {};
-  const creditAppliedMap = invoiceQuery.data?.credit_applied ?? {};
-  const backendSummary = invoiceQuery.data?.summary ?? {};
-
-  // DEBUG: Log invoices array
-  useEffect(() => {
-    console.log("[useProjectInvoiceView] invoices:", invoices);
-  }, [invoices]);
-
-  // LEGACY COMPAT: Also fetch commitments for existing consumers
-  const { 
-    data: rawCommitments = [], 
-    isLoading: loadingCommitments,
-    refetch: refetchCommitments
-  } = useQuery({
-    queryKey: ['projectInvoiceCommitments', normalizedId],
-    queryFn: async () => {
-      if (!normalizedId) return [];
-      return base44.entities.PartCommitment.filter({ project_id: normalizedId });
-    },
-    enabled: Boolean(normalizedId),
-    staleTime: 30000,
-  });
-
-  // Fetch parts for names
-  const partIds = [...new Set(rawCommitments.map(c => c.part_id).filter(Boolean))];
-  const { data: parts = [], isLoading: loadingParts } = useQuery({
-    queryKey: ['invoiceViewParts', partIds.sort().join(',')],
-    queryFn: async () => {
-      if (partIds.length === 0) return [];
-      const allParts = await base44.entities.Part.list();
-      return allParts.filter(p => partIds.includes(p.id));
-    },
-    enabled: partIds.length > 0,
-    staleTime: 60000,
-  });
-
-  // Fetch credit allocations for legacy compat
-  const { data: creditAllocations = [], isLoading: loadingAllocations } = useQuery({
-    queryKey: ['creditAllocations', normalizedId],
-    queryFn: async () => {
-      if (!normalizedId) return [];
-      return base44.entities.CreditAllocation.filter({ project_id: normalizedId, is_reversed: false });
-    },
-    enabled: Boolean(normalizedId),
-    staleTime: 30000,
-  });
-
-  // Fetch credit ledger for summary
-  const { data: creditLedgers = [], isLoading: loadingCredits } = useQuery({
-    queryKey: ['projectCreditLedger', normalizedId],
-    queryFn: async () => {
-      if (!normalizedId) return [];
-      return base44.entities.ProjectCreditLedger.filter({ project_id: normalizedId });
-    },
-    enabled: Boolean(normalizedId),
-    staleTime: 30000,
-  });
-
-  // Build lookup maps
-  const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
-
-  // Build credit allocation map by commitment
-  const creditByCommitmentLocal = {};
-  for (const alloc of creditAllocations) {
-    if (alloc.commitment_id) {
-      if (!creditByCommitmentLocal[alloc.commitment_id]) {
-        creditByCommitmentLocal[alloc.commitment_id] = 0;
-      }
-      creditByCommitmentLocal[alloc.commitment_id] += alloc.amount_applied || 0;
-    }
-  }
-
-  // Transform commitments to view models (LEGACY COMPAT)
-  const commitments = rawCommitments
-    .filter(c => !c.cancellation_type && c.cancellation_type !== 'full_cancel')
-    .map(c => {
-      const part = partsMap[c.part_id];
-      
-      // Derive canonical billing status
-      const canonicalStatus = normalizeCommitmentBillingStatus(c.billing_status);
-      
-      const unitRetail = c.unit_retail_snapshot ?? 0;
-      const unitCost = c.unit_cost_snapshot ?? 0;
-      const requiredTotal = c.required_total ?? 1;
-      
-      // Calculate exposure
-      const grossExposure = unitRetail * requiredTotal;
-      const creditAppliedLine = creditByCommitmentLocal[c.id] || 0;
-      const netExposure = Math.max(0, grossExposure - creditAppliedLine);
-      
-      return {
-        id: c.id,
-        part_id: c.part_id,
-        part_name: part?.part_name || 'Unknown Part',
-        part_number: part?.vendor_part_number,
-        project_id: c.project_id,
-        billing_status: canonicalStatus,
-        invoice_status: canonicalStatus,
-        unit_cost: unitCost,
-        unit_retail: unitRetail,
-        required_total: requiredTotal,
-        extended_retail: grossExposure,
-        gross_exposure: grossExposure,
-        credit_applied: creditAppliedLine,
-        net_exposure: netExposure,
-      };
-    });
-
-  // Calculate commitment-based summary (LEGACY COMPAT)
-  const commitmentSummary = {
-    unbilled_count: 0,
-    unbilled_total: 0,
-    invoiced_count: 0,
-    invoiced_total: 0,
-    paid_count: 0,
-    paid_total: 0,
-    outstanding_total: 0,
-    total_billable: 0,
-  };
-
-  for (const c of commitments) {
-    const amount = c.extended_retail || 0;
-    commitmentSummary.total_billable += amount;
-    
-    switch (c.billing_status) {
-      case CANONICAL_BILLING_STATUS.UNBILLED:
-        commitmentSummary.unbilled_count++;
-        commitmentSummary.unbilled_total += amount;
-        break;
-      case CANONICAL_BILLING_STATUS.INVOICED:
-        commitmentSummary.invoiced_count++;
-        commitmentSummary.invoiced_total += amount;
-        commitmentSummary.outstanding_total += amount;
-        break;
-      case CANONICAL_BILLING_STATUS.PAID:
-        commitmentSummary.paid_count++;
-        commitmentSummary.paid_total += amount;
-        break;
-    }
-  }
-
-  // Calculate credit summary
-  const totalCreditAvailable = creditLedgers.reduce((sum, c) => sum + (c.remaining_amount || 0), 0);
-  const totalCreditApplied = creditAllocations.reduce((sum, a) => sum + (a.amount_applied || 0), 0);
-  const grossExposureTotal = commitmentSummary.unbilled_total + commitmentSummary.invoiced_total;
-  const netExposureTotal = Math.max(0, grossExposureTotal - totalCreditApplied);
-
-  const creditSummary = {
-    total_credit_available: totalCreditAvailable,
-    total_credit_applied: totalCreditApplied,
-    gross_exposure: grossExposureTotal,
-    net_exposure: netExposureTotal,
-  };
-
-  const isLoading = invoiceQuery.isLoading || loadingCommitments || loadingParts || loadingCredits || loadingAllocations;
-  const isFetching = invoiceQuery.isFetching;
-
-  const refetch = async () => {
-    await Promise.all([
-      invoiceQuery.refetch(),
-      refetchCommitments(),
-    ]);
-  };
-
+  // HARD-LOCKED: Return EXACTLY what backend returns - NO transformation
   return {
-    // CANONICAL: Invoice history from backend - NO filtering
-    invoices,
-    invoiceBatches: invoices, // Alias for compatibility
-    projectInvoices: invoices, // Alias for compatibility
-    
-    // LEGACY COMPAT: Commitment data
-    commitments,
-    summary: commitmentSummary,
-    
-    // Credit data
-    creditSummary,
-    creditBalances,
-    
-    // Query state
-    isLoading,
-    isFetching,
-    refetch,
+    invoices: query.data?.invoices ?? [],
+    creditBalances: query.data?.credit_balances ?? {},
+    creditApplied: query.data?.credit_applied ?? 0,
+    summary: query.data?.summary ?? {},
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    refetch: query.refetch,
   };
 }
