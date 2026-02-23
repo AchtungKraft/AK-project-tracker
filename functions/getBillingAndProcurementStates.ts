@@ -151,6 +151,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
   const projectsMap = Object.fromEntries(projects.map(p => [p.id, p]));
+  const vendorsMap = Object.fromEntries(vendors.map(v => [v.id, v]));
+  const categoriesMap = Object.fromEntries(categories.map(c => [c.id, c]));
   
   // PHASE 3: Build credit allocation map by commitment
   const creditByCommitment = {};
