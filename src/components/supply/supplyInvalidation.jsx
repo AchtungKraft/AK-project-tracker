@@ -54,11 +54,13 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
   // Lifecycle action queue - affects PartsActionWorkbench
   queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
   
-  // Invoice batches - affects invoicing workflow
-  queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
-  queryClient.invalidateQueries({ queryKey: ['draftInvoiceBatches'] });
+  // PHASE 1: Forward invoice system only (ProjectInvoice + ProjectInvoiceLine)
+  queryClient.invalidateQueries({ queryKey: ['projectInvoices'] });
+  queryClient.invalidateQueries({ queryKey: ['projectInvoicesView'] });
+  queryClient.invalidateQueries({ queryKey: ['projectInvoiceLines'] });
+  queryClient.invalidateQueries({ queryKey: ['projectInvoiceCommitments'] });
   
-  // Billing/procurement states - affects InvoiceWorkbench
+  // Billing/procurement states - canonical source for exposure
   queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] });
   
   // Coverage diagnostics
