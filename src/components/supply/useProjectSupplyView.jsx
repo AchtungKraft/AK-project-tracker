@@ -3,13 +3,15 @@ import { base44 } from "@/api/base44Client";
 import { forceAppRefresh, extractRefreshContext } from "./forceAppRefresh";
 import { validateSupplyModelDrift } from "./ExecutionDataBlock";
 import { diagnoseSupplyItems, storePSMDiagnostics, storeGNODiagnostics } from "./supplyDiagnostics";
+import { normalizeProjectId } from "@/components/financial/queryKeyFactories";
 
 /**
- * Normalize projectId to string format
+ * Query key factories for supply views
  */
-const normalizeProjectId = (id) => {
-  if (id === null || id === undefined || id === 'all') return '';
-  return String(id);
+export const supplyKeys = {
+  projectView: (projectId, filters = {}) => ['projectSupplyView', normalizeProjectId(projectId), filters],
+  opsView: (mode, filters = {}) => ['opsSupplyView', mode, filters],
+  poReceiving: (orderId, filters = {}) => ['poReceivingView', orderId ?? null, filters],
 };
 
 /**
