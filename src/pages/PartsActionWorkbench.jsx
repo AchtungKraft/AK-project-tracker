@@ -638,65 +638,65 @@ export default function PartsActionWorkbench() {
     setTimelineOpen(true);
   };
 
-  const handleCreateBatch = () => {
+  // Forward model: Open CreateProjectInvoiceModal with selected items
+  const handleOpenCreateInvoice = () => {
     if (selectedItems.length === 0) {
       toast.error('No items selected', {
-        description: 'Please select at least one item to create an invoice batch.',
+        description: 'Please select at least one item to create an invoice.',
       });
       return;
     }
     
-    // Log preview opened event
-    base44.analytics.track({
-      eventName: 'invoice_preview_opened',
-      properties: { items_count: selectedItems.length }
-    });
-    
-    // Open preview modal instead of creating immediately
-    setPreviewModalOpen(true);
-  };
-  
-  const handleConfirmBatch = () => {
-    // Pre-check for items with missing pricing
-    const readyItems = selectedItems.filter(item => (item.unit_retail || 0) > 0);
-    
-    if (readyItems.length === 0) {
-      toast.error('No items ready for invoicing');
+    if (projectFilter === 'all') {
+      toast.error('Project required', {
+        description: 'Please select a specific project to create an invoice.',
+      });
       return;
     }
     
-    // CANONICAL: Send only required payload fields to backend
-    const payload = readyItems.map(item => {
-      // FAIL-FAST: Verify canonical fields exist
-      if (!item.commitment_id) {
-        console.error('[CANONICAL VIOLATION] Item missing commitment_id:', item);
-      }
-      if (item.unit_retail === undefined) {
-        console.error('[CANONICAL VIOLATION] Item missing unit_retail:', item);
-      }
-      if (item.line_total === undefined) {
-        console.error('[CANONICAL VIOLATION] Item missing line_total:', item);
-      }
-      
-      return {
-        commitment_id: item.commitment_id,
-        project_id: item.project_id,
-        part_id: item.part_id,
-        part_name: item.part_name,
-        project_name: item.project_name,
-        unit_retail: item.unit_retail,
-        unit_price: item.unit_retail, // Backend expects unit_price
-        line_total: item.line_total,
-        required_total: item.required_total || 0,
-        assigned_qty: item.required_total || 0, // Backend compatibility
-      };
+    // Log event
+    base44.analytics.track({
+      eventName: 'invoice_modal_opened',
+      properties: { items_count: selectedItems.length, project_id: projectFilter }
     });
     
-    createBatchMutation.mutate(payload);
+    setShowCreateInvoiceModal(true);
+  };
+  
+  // Map selected items to modal format using billingProcurementStates data
+  const initialSelectedItems = useMemo(() => {
+    if (!billingData?.commitments) return [];
+    
+    // Filter billingData commitments to match selected IDs
+    return billingData.commitments
+      .filter(c => selectedIds.has(c.commitment_id))
+      .map(c => ({
+        part_commitment_id: c.commitment_id,
+        commitment_id: c.commitment_id,
+        part_name: c.part_name,
+        qty: c.qty_remaining_to_bill || c.required_total || 0,
+        unit_price: c.unit_retail_snapshot || c.unit_retail || 0,
+        gross_exposure: c.gross_exposure || 0,
+        credit_applied: c.credit_applied || 0,
+        net_exposure: c.net_exposure || 0,
+        vendor_id: c.vendor_id,
+        vendor_name: c.vendor_name,
+        category_id: c.category_id,
+        category_name: c.category_name,
+        project_id: c.project_id,
+        part_id: c.part_id,
+      }));
+  }, [billingData, selectedIds]);
+  
+  const handleInvoiceSuccess = async () => {
+    // CANONICAL: Use forceAppRefresh for deterministic refresh
+    await forceAppRefresh(queryClient, { projectIds: [projectFilter] });
+    setShowCreateInvoiceModal(false);
+    setSelectedIds(new Set());
+    toast.success('Invoice created successfully');
   };
   
   const handleFixItem = (item) => {
-    setPreviewModalOpen(false);
     setSelectedItem(item);
     setTimelineOpen(true);
   };
