@@ -106,15 +106,22 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       ? String(projectId)
       : null;
 
-  // PHASE 6: Use canonical read model for invoice history
+  // CANONICAL: Invoice history from useProjectInvoiceView (NOT billingProcurementStates)
   const { 
+    invoices: canonicalInvoices,
+    invoiceBatches, 
     commitments,
     summary, 
-    invoiceBatches, 
     isLoading: invoiceLoading, 
+    isFetching: invoiceFetching,
     refetch,
     creditSummary: invoiceCreditSummary,
   } = useProjectInvoiceView(normalizedProjectId);
+  
+  // DEBUG: Log invoices array
+  React.useEffect(() => {
+    console.log("[ForwardInvoiceDashboard] invoices:", canonicalInvoices);
+  }, [canonicalInvoices]);
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
   // This ensures ForwardInvoiceDashboard matches BillablePartsSelector exactly
@@ -134,17 +141,18 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   };
 
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === "development") {
+  React.useEffect(() => {
     console.log("[ForwardInvoiceDashboard] Query State:", {
       normalizedProjectId,
       queryKey: billingKeys.states(normalizedProjectId),
+      invoiceCount: canonicalInvoices?.length ?? 0,
       billingData: billingData ? "loaded" : "null",
       isLoading,
       billingFetching,
       dataUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null,
       netExposure: canonicalTotals.net_exposure ?? "N/A",
     });
-  }
+  }, [normalizedProjectId, canonicalInvoices, billingData, isLoading, billingFetching, dataUpdatedAt, canonicalTotals.net_exposure]);
 
   // Toggle commitment selection
   const toggleCommitmentSelection = (commitmentId, checked) => {
