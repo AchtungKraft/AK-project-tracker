@@ -42,6 +42,13 @@ import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoi
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
+import { 
+  invoiceKeys, 
+  billingKeys, 
+  financialProjectKeys, 
+  creditKeys,
+  normalizeProjectId 
+} from "@/components/financial/queryKeyFactories";
 
 /**
  * ProjectInvoices - Global Invoice Management Page
@@ -63,13 +70,12 @@ export default function ProjectInvoices() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
   // DETERMINISTIC: Normalize projectId once - null for global, string for scoped
-  const normalizedProjectId = 
-    projectFilter !== undefined && projectFilter !== null && projectFilter !== "all" && projectFilter !== ""
-      ? String(projectFilter)
-      : null;
+  const normalizedProjectId = normalizeProjectId(
+    projectFilter !== "all" ? projectFilter : null
+  );
 
-  // PHASE 1 UNIFIED: Scoped query key with staleTime=0 for immediate updates
-  const invoiceQueryKey = ["projectInvoicesView", normalizedProjectId];
+  // PHASE 1 UNIFIED: Use factory keys for all queries
+  const invoiceQueryKey = invoiceKeys.view(normalizedProjectId);
   const { data: invoicesData, isLoading, isFetching, refetch, dataUpdatedAt: invoiceDataUpdatedAt } = useQuery({
     queryKey: invoiceQueryKey,
     queryFn: async () => {
@@ -78,13 +84,12 @@ export default function ProjectInvoices() {
       return response.data;
     },
     staleTime: 0, // Always fresh for invoice page
-    // Global view (normalizedProjectId=null) is always enabled
-    // Scoped view requires valid projectId
   });
 
   // Fetch financial projects view for filter (only shows projects with parts)
+  const financialQueryKey = financialProjectKeys.all();
   const { data: financialData } = useQuery({
-    queryKey: ["financialProjectsView"],
+    queryKey: financialQueryKey,
     queryFn: async () => {
       const response = await base44.functions.invoke("getFinancialProjectsView", {});
       return response.data;
@@ -93,7 +98,7 @@ export default function ProjectInvoices() {
   });
   
   // PHASE 2: Fetch canonical exposure/credit data when project is selected
-  const billingQueryKey = ["billingProcurementStates", normalizedProjectId];
+  const billingQueryKey = billingKeys.states(normalizedProjectId);
   const { data: billingData, isFetching: billingFetching, dataUpdatedAt: billingDataUpdatedAt } = useQuery({
     queryKey: billingQueryKey,
     queryFn: async () => {
@@ -172,7 +177,7 @@ export default function ProjectInvoices() {
     // Only invalidate scoped keys when we have a valid projectId (not null)
     if (normalizedProjectId) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
-      invalidations.push(queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }));
+      invalidations.push(queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }));
     }
     await Promise.all(invalidations);
     await refetch();
