@@ -23,7 +23,20 @@
  * - Critical queries are actively refetched
  * - No stale data in PartsTracker, PartModal, Supply views
  * - No reliance on staleTime or refetchOnMount
+ * 
+ * DETERMINISTIC KEY FORMAT:
+ * - All projectIds are normalized to String
+ * - Keys are string arrays only (no objects)
+ * - No partial/prefix matching - exact keys only
  */
+
+/**
+ * Normalize projectId to string format (matches queryKeyFactories.js)
+ */
+const normalizeId = (id) => {
+  if (id === null || id === undefined || id === 'all') return '';
+  return String(id);
+};
 
 /**
  * Force refresh all app queries after a mutation
@@ -44,6 +57,9 @@ export async function forceAppRefresh(queryClient, options = {}) {
     orderIds = [],
     refetchActive = true,
   } = options;
+
+  // Normalize project IDs to strings
+  const normalizedProjectIds = projectIds.map(normalizeId).filter(Boolean);
 
   // === PHASE 1: Invalidate all related queries ===
   // This marks queries as stale so they'll refetch on next access
@@ -76,19 +92,6 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.invalidateQueries({ queryKey: ['poReceivingView'] }),
     queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] }),
     
-    // Financial domain - PHASE 1: Forward model only (ProjectInvoice)
-    queryClient.invalidateQueries({ queryKey: ['projectFinancials'] }),
-    queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectInvoicesView'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectInvoices'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectInvoiceLines'] }),
-    queryClient.invalidateQueries({ queryKey: ['financialProjectsView'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectRevenueSummary'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectCostSummary'] }),
-    queryClient.invalidateQueries({ queryKey: ['creditLedger'] }),
-    queryClient.invalidateQueries({ queryKey: ['projectCreditBalance'] }),
-    queryClient.invalidateQueries({ queryKey: ['creditAllocations'] }),
-    
     // Pricing domain
     queryClient.invalidateQueries({ queryKey: ['pricingAudit'] }),
     queryClient.invalidateQueries({ queryKey: ['pricingIntegrity'] }),
@@ -99,24 +102,26 @@ export async function forceAppRefresh(queryClient, options = {}) {
   
   // Scoped part invalidations
   partIds.forEach(id => {
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['part', id] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partsInventoryView', id] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', id] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryItems', 'forPart', id] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryLocations', id] }));
+    const normalizedPartId = normalizeId(id);
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['part', normalizedPartId] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partsInventoryView', normalizedPartId] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', normalizedPartId] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryItems', 'forPart', normalizedPartId] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryLocations', normalizedPartId] }));
   });
   
-  // Scoped project invalidations
-  projectIds.forEach(id => {
+  // Scoped project invalidations - DETERMINISTIC STRING KEYS
+  normalizedProjectIds.forEach(id => {
+    // Supply views
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectFinancials', id] }));
-    // PHASE 5: Invoice and credit queries - Forward model (ProjectInvoice only)
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoices', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditLedger', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditAllocations', id] }));
-    // PHASE 1 UNIFIED: Scoped billing/invoice views - CANONICAL
+    
+    // CANONICAL FINANCIAL KEYS - exact string array format
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['billingProcurementStates', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['creditAllocations', id] }));
@@ -125,12 +130,12 @@ export async function forceAppRefresh(queryClient, options = {}) {
   
   // Scoped commitment invalidations
   commitmentIds.forEach(id => {
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['commitmentState', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['commitmentState', normalizeId(id)] }));
   });
   
   // Scoped order invalidations
   orderIds.forEach(id => {
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['order', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['order', normalizeId(id)] }));
   });
   
   // Wait for all invalidations to complete
