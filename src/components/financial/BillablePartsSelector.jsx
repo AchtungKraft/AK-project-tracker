@@ -1,14 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   ChevronDown,
   ChevronRight,
@@ -33,18 +27,8 @@ import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
  *           └── Parts
  * 
  * FILTER: net_exposure > 0 AND is_archived !== true
- * 
- * CANONICAL FIELDS from backend:
- * - invoice_status ('unbilled'|'invoiced'|'paid')
- * - OR client_billing_status ('NOT_INVOICED'|'INVOICED'|'PAID')
- * - net_exposure, gross_exposure, credit_applied
- * - required_total, unit_retail_snapshot
- * - vendor_name, category_name
  */
 
-/**
- * Group commitments by Vendor → Category hierarchy
- */
 function groupByVendorThenCategory(items) {
   const vendorMap = {};
   
@@ -93,7 +77,6 @@ function groupByVendorThenCategory(items) {
     vendorMap[vendorKey].vendor_total += netExposure;
   }
   
-  // Convert to sorted arrays
   return Object.values(vendorMap)
     .sort((a, b) => a.vendor_name.localeCompare(b.vendor_name))
     .map(vendor => ({
@@ -116,33 +99,21 @@ export default function BillablePartsSelector({
   const [expandedVendors, setExpandedVendors] = useState({});
   const [expandedCategories, setExpandedCategories] = useState({});
 
-  // CANONICAL: Use getBillingAndProcurementStates as single source
   const { data: billingData, isLoading, error } = useBillingAndProcurementStates(projectId);
   
-  // Transform and filter canonical commitments
   const { vendorGroups, summary, contractWarning } = useMemo(() => {
     if (!billingData) return { vendorGroups: [], summary: null, contractWarning: null };
     
     const commitments = billingData.commitments || [];
-    
-    // DEV: Contract drift detection
     let warning = null;
-    if (process.env.NODE_ENV === 'development' && commitments.length > 0) {
-      const sample = commitments[0];
-      console.log('[BillablePartsSelector] Sample fields:', Object.keys(sample));
-    }
     
-    // CANONICAL FILTER: net_exposure > 0 AND not archived
     const unbilledItems = commitments.filter(c => {
-      // Skip archived
       if (c.is_archived === true) return false;
       
-      // Must have positive exposure
       const netExposure = c.net_exposure ?? c.net_line_total ?? 0;
       const grossExposure = c.gross_exposure ?? c.gross_line_total ?? 0;
       if (netExposure <= 0 && grossExposure <= 0) return false;
       
-      // Check invoice_status OR client_billing_status for unbilled
       const invoiceStatus = c.invoice_status;
       const billingStatus = c.billing_status || c.client_billing_status;
       
@@ -155,14 +126,10 @@ export default function BillablePartsSelector({
       return isUnbilled;
     });
     
-    // DEV: Contract guard - warn if filter results are empty but data exists
-    if (process.env.NODE_ENV === 'development' && commitments.length > 0 && unbilledItems.length === 0) {
-      console.warn('[BillablePartsSelector] CONTRACT MISMATCH: Commitments exist but none pass filter');
-      console.warn('First commitment:', JSON.stringify(commitments[0], null, 2));
-      warning = 'Contract mismatch detected - see console';
+    if (commitments.length > 0 && unbilledItems.length === 0) {
+      warning = 'No unbilled items found';
     }
     
-    // Group by Vendor → Category
     const grouped = groupByVendorThenCategory(unbilledItems);
     
     return {
@@ -175,7 +142,6 @@ export default function BillablePartsSelector({
     };
   }, [billingData]);
   
-  // Auto-expand first vendor on load
   useEffect(() => {
     if (vendorGroups.length > 0 && Object.keys(expandedVendors).length === 0) {
       setExpandedVendors({ [vendorGroups[0].vendor_name]: true });
@@ -191,7 +157,6 @@ export default function BillablePartsSelector({
     setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Selection handlers with canonical fields
   const handleToggleItem = (item, checked) => {
     if (checked) {
       onSelectionChange([
@@ -225,7 +190,6 @@ export default function BillablePartsSelector({
     );
   };
 
-  // Bulk selection for all items in a category
   const handleSelectCategory = (categoryItems) => {
     const currentIds = new Set(selectedItems.map((s) => s.part_commitment_id));
     const newItems = categoryItems
@@ -248,7 +212,6 @@ export default function BillablePartsSelector({
     onSelectionChange(selectedItems.filter((s) => !catIds.has(s.part_commitment_id)));
   };
 
-  // Bulk selection for all items in a vendor
   const handleSelectVendor = (vendor) => {
     const allItems = vendor.categories.flatMap(c => c.items);
     handleSelectCategory(allItems);
@@ -259,17 +222,14 @@ export default function BillablePartsSelector({
     handleDeselectCategory(allItems);
   };
 
-  // Check if item is selected
   const isItemSelected = (commitmentId) => {
     return selectedItems.some(s => s.part_commitment_id === commitmentId);
   };
 
-  // Check if all items in a category are selected
   const isCategoryFullySelected = (categoryItems) => {
     return categoryItems.every(item => isItemSelected(item.part_commitment_id));
   };
 
-  // Check if some items in a category are selected
   const isCategoryPartiallySelected = (categoryItems) => {
     const selected = categoryItems.filter(item => isItemSelected(item.part_commitment_id));
     return selected.length > 0 && selected.length < categoryItems.length;
@@ -316,14 +276,6 @@ export default function BillablePartsSelector({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Contract Warning (dev only) */}
-      {contractWarning && (
-        <div className="flex items-center gap-2 p-2 bg-amber-900/30 border border-amber-700 rounded-lg text-amber-300 text-xs">
-          <AlertTriangle className="w-4 h-4" />
-          {contractWarning}
-        </div>
-      )}
-
       {/* Summary Header */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
@@ -360,13 +312,11 @@ export default function BillablePartsSelector({
                   )}
                   <Checkbox
                     checked={vendorFullySelected}
-                    ref={el => { if (el && vendorPartiallySelected) el.dataset.state = 'indeterminate'; }}
                     onCheckedChange={(checked) => {
                       if (checked) handleSelectVendor(vendor);
                       else handleDeselectVendor(vendor);
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="data-[state=indeterminate]:bg-blue-600/50"
                   />
                   <Building2 className="w-4 h-4 text-blue-400" />
                   <span className="font-medium text-white flex-1">{vendor.vendor_name}</span>
@@ -401,7 +351,6 @@ export default function BillablePartsSelector({
                             )}
                             <Checkbox
                               checked={catFullySelected}
-                              ref={el => { if (el && catPartiallySelected) el.dataset.state = 'indeterminate'; }}
                               onCheckedChange={(checked) => {
                                 if (checked) handleSelectCategory(category.items);
                                 else handleDeselectCategory(category.items);
