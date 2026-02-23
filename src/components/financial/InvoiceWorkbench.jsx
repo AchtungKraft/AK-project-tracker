@@ -321,8 +321,22 @@ function LifecycleTable({ items, tabConfig, selectedIds, onToggleSelection, onRo
                 <Badge className="bg-red-600/30 text-red-400 text-xs">Missing</Badge>
               )}
             </TableCell>
-            <TableCell className="text-right text-green-400 font-medium">
-              {formatCurrencyUSD(item.line_total || 0)}
+            <TableCell className="text-right">
+              {/* PHASE 6: Show net exposure if credit applied */}
+              {item.credit_applied_line > 0 ? (
+                <div className="text-right">
+                  <span className="text-gray-500 line-through text-xs">
+                    {formatCurrencyUSD(item.gross_line_total || item.line_total || 0)}
+                  </span>
+                  <span className="text-green-400 font-medium ml-1">
+                    {formatCurrencyUSD(item.net_line_total || 0)}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-green-400 font-medium">
+                  {formatCurrencyUSD(item.line_total || 0)}
+                </span>
+              )}
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
