@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,6 +117,9 @@ export default function AddRequirementModal({ projectId, onClose }) {
       <DialogContent className="bg-gray-900 border border-red-900/30 text-white max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Part Requirement</DialogTitle>
+          <DialogDescription>
+            Add a part requirement for this project.
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
