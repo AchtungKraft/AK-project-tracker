@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
-import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2B
@@ -189,17 +189,13 @@ export default function AddToBuildModal({ part, onClose }) {
         wasUpdate: !!existing
       };
     },
-    onSuccess: ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
-      // CANONICAL: Use unified invalidation helper
-      invalidateSupplyQueries(queryClient, {
-        part_ids: [part_id],
-        project_ids: [project_id],
-        commitment_ids: commitment ? [commitment.id] : [],
-        invalidateAll: true, // Ensure GlobalNeedToOrder and all views update
+    onSuccess: async ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [part_id],
+        projectIds: [project_id],
+        commitmentIds: commitment ? [commitment.id] : [],
       });
-      
-      // Also explicitly invalidate partCommitments for this part
-      queryClient.invalidateQueries({ queryKey: ['partCommitments', 'forPart', part_id] });
       
       let message = wasUpdate ? 'Commitment updated' : 'Part added to build';
       if (qtyAllocated > 0) {

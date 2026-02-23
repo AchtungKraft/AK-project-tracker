@@ -29,7 +29,7 @@ import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
-import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 export default function PartModal({ part, partId, onClose }) {
   const queryClient = useQueryClient();
@@ -188,20 +188,8 @@ export default function PartModal({ part, partId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: async () => {
-      // PHASE 16: Full canonical invalidation + explicit refetch
-      invalidateSupplyQueries(queryClient, { 
-        part_ids: [activePart.id],
-        invalidateAll: true 
-      });
-      // Explicit invalidations
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
-      queryClient.invalidateQueries({ queryKey: ['part', activePart.id] });
-      queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryLocations', activePart.id] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      
-      // PHASE 16: Explicit refetch to ensure UI updates before render
-      await refetchInventory();
+      // PHASE 17: Deterministic refresh - invalidate + refetch
+      await forceAppRefresh(queryClient, { partIds: [activePart.id] });
       
       toast.success('Part updated');
       setEditing(false);
@@ -210,12 +198,9 @@ export default function PartModal({ part, partId, onClose }) {
 
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Part.delete(activePart.id),
-    onSuccess: () => {
-      invalidateSupplyQueries(queryClient, { full_invalidate: true });
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['locations'] });
-      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh for delete
+      await forceAppRefresh(queryClient, { partIds: [activePart.id] });
       toast.success('Part deleted');
       onClose();
     },

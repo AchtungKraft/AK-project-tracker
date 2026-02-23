@@ -12,7 +12,7 @@ import LocationSelect from "@/components/common/LocationSelect";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
  * AddInventoryModal - Add inventory for a part
@@ -86,12 +86,10 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
 
       return response.data;
     },
-    onSuccess: (result) => {
-      // CANONICAL: Use unified invalidation helper with context from dispatcher
-      invalidateSupplyQueries(queryClient, result.invalidation_context || {
-        part_ids: [result.part_id],
-        invalidateAll: true
-      });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      const context = extractRefreshContext(result, { part_id: result.part_id });
+      await forceAppRefresh(queryClient, context);
       
       toast.success(`Added ${result.qty_added} to inventory (new total: ${result.new_physical_stock})`);
       onClose();
