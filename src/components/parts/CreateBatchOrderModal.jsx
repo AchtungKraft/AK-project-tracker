@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -354,6 +354,9 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
         <DialogContent className="bg-gray-900 border border-red-900/30 text-white">
           <DialogHeader>
             <DialogTitle>Create Orders</DialogTitle>
+            <DialogDescription>
+              Create purchase orders from selected commitments.
+            </DialogDescription>
           </DialogHeader>
           <div className="text-center py-8 text-gray-400">
             <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -377,6 +380,9 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
               {totals.totalItems} items
             </div>
           </DialogTitle>
+          <DialogDescription>
+            Create purchase orders from selected commitments grouped by vendor.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Live Cost Summary */}

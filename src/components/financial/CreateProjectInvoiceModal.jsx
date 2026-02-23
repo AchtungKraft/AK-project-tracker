@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -606,6 +607,9 @@ export default function CreateProjectInvoiceModal({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Invoice</DialogTitle>
+          <DialogDescription>
+            Create a new invoice for the selected project.
+          </DialogDescription>
         </DialogHeader>
 
         {renderStepIndicator()}
