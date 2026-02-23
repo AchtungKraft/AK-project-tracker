@@ -80,7 +80,7 @@ export function CoverageDiagnosticsPanel({ projectId, onOpenCommitment }) {
     setIsRepairing(true);
     try {
       const response = await base44.functions.invoke('runCommitmentQtyDriftCheck', {
-        project_id: projectId || undefined,
+        project_id: normalizedProjectId || undefined,
         limit: 200,
         repair_safe: true
       });
