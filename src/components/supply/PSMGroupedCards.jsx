@@ -173,7 +173,8 @@ export function PSMItemRow({
     categoriesMap
   );
 
-  const canOrder = allowed?.canCreatePO && toOrder > 0;
+  // PHASE 6: PROCUREMENT GUARD - Disable ordering when gap_qty === 0
+  const canOrder = allowed?.canCreatePO && toOrder > 0 && commitment.coverage_status !== 'FULL';
 
   return (
     <div className={cn(
