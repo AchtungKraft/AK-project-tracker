@@ -1,6 +1,13 @@
 /**
+ * CreateProjectInvoiceModal - CANONICAL INVOICE CREATION SURFACE
+ * 
+ * ARCHITECTURE LOCK:
+ * - This is the ONLY component allowed to call createProjectInvoiceDraft
+ * - All invoice creation MUST flow through this modal
+ * - Uses queryKeyFactories for all queries
+ * - Uses getBillingAndProcurementStates as SOLE exposure source
+ * 
  * INVOICEBATCH IS REMOVED. Do not import or use InvoiceBatch* components or functions.
- * Use ProjectInvoice + CreateProjectInvoiceModal.
  */
 import React, { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,10 +44,13 @@ import BillablePartsSelector from "./BillablePartsSelector";
 import { useFinancialProjectsView, useBillingAndProcurementStates } from "./useFinancialProjectsView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
+import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
 
-// DEV guardrail
+// DEV guardrails
 if (process.env.NODE_ENV === "development") {
   window.__INVOICEBATCH_REMOVED__ = true;
+  window.__CANONICAL_INVOICE_MODAL__ = 'CreateProjectInvoiceModal';
+  registerInvoiceCreationSurface('CreateProjectInvoiceModal');
 }
 
 const STEPS = ["project", "type", "lines", "review"];
