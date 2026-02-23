@@ -270,7 +270,13 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
-      await forceAppRefresh(queryClient, { projectIds: [projectId] });
+      // DETERMINISTIC: Invalidate specific keys only
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+        queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+        queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+      ]);
+      refetch();
     } catch (error) {
       audit.trackError('record_payment', error);
       toast.error(error.message || 'Failed to record payment');
@@ -285,8 +291,12 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   
   const handleInvoiceCreated = async () => {
     setShowCreateInvoiceModal(false);
-    // Deterministic refresh after creation
-    await forceAppRefresh(queryClient, { projectIds: [projectId] });
+    // DETERMINISTIC: Invalidate specific keys only
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+      queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+      queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+    ]);
     refetch();
   };
 
@@ -308,13 +318,13 @@ export default function ForwardInvoiceDashboard({ projectId }) {
 
   return (
     <div className="space-y-4">
-      {/* PHASE 4: Credit Summary Strip */}
-      {creditSummary && (creditSummary.credit_available > 0 || creditSummary.credit_applied > 0) && (
+      {/* PHASE 4: Credit Summary Strip - CANONICAL VALUES ONLY */}
+      {creditSummary && (creditSummary.total_credit_available > 0 || creditSummary.total_credit_applied > 0) && (
         <CreditSummaryStrip
-          grossExposure={creditSummary.gross_exposure || summary.unbilled_total + summary.invoiced_total}
-          creditAvailable={creditSummary.credit_available || 0}
-          creditApplied={creditSummary.credit_applied || 0}
-          netExposure={creditSummary.net_exposure || (summary.unbilled_total + summary.invoiced_total - (creditSummary.credit_applied || 0))}
+          grossExposure={creditSummary.gross_exposure}
+          creditAvailable={creditSummary.total_credit_available}
+          creditApplied={creditSummary.total_credit_applied}
+          netExposure={creditSummary.net_exposure}
           selectedCount={selectedCommitmentIds.size}
           onApplyCredit={() => setShowCreditModal(true)}
           isLoading={isLoading}
