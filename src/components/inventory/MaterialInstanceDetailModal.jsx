@@ -1,7 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Wrench, MapPin, Package, ClipboardCheck, Calendar, User, AlertTriangle } from "lucide-react";
@@ -75,6 +75,9 @@ export default function MaterialInstanceDetailModal({ instance, open, onOpenChan
             <Wrench className="w-5 h-5 text-purple-500" />
             Material Instance
           </DialogTitle>
+          <DialogDescription>
+            View details for this tracked material instance.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
