@@ -555,22 +555,29 @@ function BatchHistoryPanel({ onBatchClick }) {
 function BatchDetailModal({ batch, isOpen, onClose }) {
   const queryClient = useQueryClient();
   
+  // DETERMINISTIC: Normalize IDs
+  const normalizedBatchId = batch?.id ? String(batch.id) : "";
+  const normalizedProjectId = batch?.project_id ? String(batch.project_id) : "";
+  
   // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
   const { data: lines = [], isLoading } = useQuery({
-    queryKey: ['invoiceLines', batch?.id],
-    queryFn: () => base44.entities.ProjectInvoiceLine.filter({ invoice_id: batch.id }),
-    enabled: isOpen && !!batch?.id,
+    queryKey: ['invoiceLines', normalizedBatchId],
+    queryFn: () => base44.entities.ProjectInvoiceLine.filter({ invoice_id: normalizedBatchId }),
+    enabled: isOpen && Boolean(normalizedBatchId),
   });
 
   const exportMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke('exportProjectInvoicesToQB', { invoice_id: batch.id });
+      const response = await base44.functions.invoke('exportProjectInvoicesToQB', { invoice_id: normalizedBatchId });
       return response.data;
     },
     onSuccess: () => {
       toast.success('Invoice exported successfully');
       queryClient.invalidateQueries({ queryKey: ['projectInvoicesRecent'] });
-      queryClient.invalidateQueries({ queryKey: ['invoiceLines', batch?.id] });
+      queryClient.invalidateQueries({ queryKey: ['invoiceLines', normalizedBatchId] });
+      if (normalizedProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', normalizedProjectId] });
+      }
     },
     onError: (error) => {
       toast.error(error.message || 'Export failed');
