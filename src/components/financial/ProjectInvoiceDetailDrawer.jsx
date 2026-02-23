@@ -42,8 +42,6 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
-import { invoiceKeys, billingKeys } from "@/components/financial/queryKeyFactories";
-import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 
