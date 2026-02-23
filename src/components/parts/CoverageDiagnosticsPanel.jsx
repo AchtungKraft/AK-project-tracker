@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { CoverageBadge } from "./CoverageBadge";
 import { cn } from "@/lib/utils";
+import { normalizeProjectId } from "@/components/financial/queryKeyFactories";
 
 /**
  * Phase 9.7c — Coverage Diagnostics Panel
@@ -46,11 +47,10 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * Normalize projectId to string format
+ * Query key factory for coverage diagnostics
  */
-const normalizeProjectId = (id) => {
-  if (id === null || id === undefined || id === 'all') return '';
-  return String(id);
+const diagnosticsKeys = {
+  coverage: (projectId) => ['coverageDiagnostics', normalizeProjectId(projectId)],
 };
 
 export function CoverageDiagnosticsPanel({ projectId, onOpenCommitment }) {
