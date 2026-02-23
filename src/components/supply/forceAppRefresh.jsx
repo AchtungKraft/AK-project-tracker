@@ -174,25 +174,30 @@ export async function forceAppRefresh(queryClient, options = {}) {
     }),
   );
   
-  // PHASE 5 CANONICAL: billingProcurementStates is THE source of truth for exposure
-  // Refetch ALL scoped keys (both global and project-specific)
-  refetches.push(
-    queryClient.refetchQueries({ 
-      queryKey: ['billingProcurementStates'],
-      type: 'all' // Always refetch all billing states
-    }),
-  );
+  // CANONICAL FINANCIAL REFETCH - scoped by project ID
+  // Use exact keys to avoid partial matching issues
+  normalizedProjectIds.forEach(id => {
+    refetches.push(
+      queryClient.refetchQueries({ 
+        queryKey: ['billingProcurementStates', id],
+        type: 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['projectInvoicesView', id],
+        type: 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['creditAllocations', id],
+        type: 'all'
+      }),
+    );
+  });
   
-  // PHASE 1 UNIFIED: Deterministic refetch for billing & invoice queries
-  // These are the CANONICAL query keys for forward invoice flow
+  // Global financial queries (no project scope)
   refetches.push(
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
       type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectInvoicesView'],
-      type: 'all' // Always refetch all scoped views
     }),
     queryClient.refetchQueries({ 
       queryKey: ['financialProjectsView'],
@@ -201,11 +206,6 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.refetchQueries({ 
       queryKey: ['billablePartsView'],
       type: refetchActive ? 'active' : 'all'
-    }),
-    // Credit allocations for exposure net calculation
-    queryClient.refetchQueries({ 
-      queryKey: ['creditAllocations'],
-      type: 'all' // Always refetch all credit data
     }),
     // Invoice view internal keys used by ForwardInvoiceDashboard
     queryClient.refetchQueries({ 
