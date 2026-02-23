@@ -337,11 +337,16 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     }
   }
 
-  // Fetch commitment if not yet loaded
+  // Fetch commitment if not yet loaded (handles case where commitment_id was passed directly)
   if (!commitment && commitmentId) {
     const commitments = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
     commitment = commitments[0];
     if (!commitment) throw new Error('Commitment not found');
+
+    // PHASE 3: Check for reopen if commitment was passed directly
+    if (reopen_if_closed && ['closed', 'cancelled'].includes(commitment.commitment_status)) {
+      wasReopened = true;
+    }
   }
 
   // Fetch part if not yet loaded
