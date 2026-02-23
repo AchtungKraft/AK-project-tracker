@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,14 +19,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { useBillablePartsView } from "./useFinancialProjectsView";
+import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 
 /**
- * PHASE 4 — Billable Parts Selector UX
+ * PHASE 2 REFACTOR — Billable Parts Selector UX
+ * 
+ * NOW USES getBillingAndProcurementStates as CANONICAL data source.
  * 
  * Shows grouped billable parts for a project.
  * Supports vendor or category grouping.
- * Only shows parts with remaining_to_bill > 0.
+ * Only shows parts with net_exposure > 0 and billing_status = NOT_INVOICED.
  */
 export default function BillablePartsSelector({
   projectId,
@@ -37,7 +39,56 @@ export default function BillablePartsSelector({
   const [groupingMode, setGroupingMode] = useState("vendor");
   const [expandedGroups, setExpandedGroups] = useState({});
 
-  const { data, isLoading, error } = useBillablePartsView(projectId, groupingMode);
+  // PHASE 2: Use canonical data source
+  const { data: billingData, isLoading, error } = useBillingAndProcurementStates(projectId);
+  
+  // PHASE 2: Transform canonical commitments to billable parts format
+  const data = useMemo(() => {
+    if (!billingData) return null;
+    
+    // Get unbilled commitments with net_exposure > 0
+    const unbilledItems = (billingData.commitments || []).filter(c => 
+      c.billing_status === 'NOT_INVOICED' && 
+      (c.net_exposure > 0 || c.gross_exposure > 0)
+    );
+    
+    // Group by vendor or category
+    const groups = {};
+    for (const item of unbilledItems) {
+      const groupKey = groupingMode === 'vendor' 
+        ? (item.vendor_name || 'No Vendor')
+        : (item.category_name || 'Uncategorized');
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          group_key: groupKey,
+          items: [],
+          group_total: 0,
+        };
+      }
+      
+      // Map to expected BillablePartsSelector format
+      groups[groupKey].items.push({
+        part_commitment_id: item.id,
+        part_name: item.part_name,
+        qty_remaining_to_bill: item.required_total,
+        unit_price: item.unit_retail_snapshot,
+        remaining_to_bill: item.net_exposure, // PHASE 2: Use net exposure
+        gross_exposure: item.gross_exposure,
+        credit_applied: item.credit_applied,
+        net_exposure: item.net_exposure,
+      });
+      groups[groupKey].group_total += item.net_exposure;
+    }
+    
+    return {
+      groups: Object.values(groups),
+      summary: {
+        total_items: unbilledItems.length,
+        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + i.net_exposure, 0),
+      },
+    };
+  }, [billingData, groupingMode]);
 
   const toggleGroup = (groupKey) => {
     setExpandedGroups((prev) => ({
