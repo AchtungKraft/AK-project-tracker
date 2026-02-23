@@ -39,6 +39,7 @@ import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
+import ExecutionDataBlock, { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
 import { cn } from "@/lib/utils";
 
 /**
