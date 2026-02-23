@@ -296,15 +296,14 @@ export default function GlobalNeedToOrder() {
   // Uses ExecutionDataBlock from @/components/supply/ExecutionDataBlock
 
   const renderItem = (item) => {
-    // PHASE 9K: Use ONLY backend is_orderable - NO local gating logic
-    const isOrderable = item.is_orderable === true;
+    // PHASE 6: PROCUREMENT GUARD - Disable ordering when gap_qty === 0
+    // Use backend is_orderable AND verify coverage_status !== 'FULL'
+    const isOrderable = item.is_orderable === true && item.coverage_status !== 'FULL' && (item.to_order ?? 0) > 0;
     
-    // CANONICAL: Inventory stats from read model only
+    // CANONICAL: Inventory stats from read model only - NO local derivation
     const snap = item.inventory_snapshot || {};
-    const inStock = snap.physical_stock_global ?? 0;
-    const reservedGlobal = snap.reserved_global_active ?? 0;
-    const reservedProject = snap.reserved_this_project ?? 0;
-    const needed = (item.required_total ?? 0) - (item.qty_installed ?? 0);
+    const reservedProject = snap.reserved_this_project ?? item.reserved_from_stock ?? 0;
+    const needed = item.required_total ?? 0;
     const toOrder = item.to_order ?? 0;
 
     // Resolve vendor/category names - NEVER display IDs
