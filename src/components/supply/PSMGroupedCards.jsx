@@ -503,6 +503,7 @@ export function PSMGroupCard({
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
+                tab={tab}
               />
             ))
           )}
