@@ -250,9 +250,17 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     }
   };
 
+  // PHASE 1 UNIFIED: Use same modal as ProjectInvoices page
   const handleCreateInvoice = () => {
     audit.trackClick('create_invoice');
-    setShowInvoiceWorkbench(true);
+    setShowCreateInvoiceModal(true);
+  };
+  
+  const handleInvoiceCreated = async () => {
+    setShowCreateInvoiceModal(false);
+    // Deterministic refresh after creation
+    await forceAppRefresh(queryClient, { projectIds: [projectId] });
+    refetch();
   };
 
   // PHASE 5: Status badge with canonical colors
