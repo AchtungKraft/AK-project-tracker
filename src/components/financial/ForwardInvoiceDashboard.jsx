@@ -146,22 +146,6 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     });
   }, [normalizedProjectId, invoices, billingData, isLoading, billingFetching, dataUpdatedAt, canonicalTotals.net_exposure]);
 
-  // Toggle commitment selection
-  const toggleCommitmentSelection = (commitmentId, checked) => {
-    setSelectedCommitmentIds(prev => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(commitmentId);
-      } else {
-        next.delete(commitmentId);
-      }
-      return next;
-    });
-  };
-
-  // Get selected commitment IDs as array
-  const selectedIdsArray = useMemo(() => [...selectedCommitmentIds], [selectedCommitmentIds]);
-
   // Compute ProjectInvoice-level KPIs from canonical invoices array
   const batchKpis = useMemo(() => {
     const nonVoided = invoices.filter(b => b.status !== 'voided');
