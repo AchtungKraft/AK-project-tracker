@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -82,6 +82,9 @@ export default function ReverseInstallationModal({
             <RotateCcw className="w-5 h-5 text-orange-400" />
             Reverse Installation
           </DialogTitle>
+          <DialogDescription>
+            Reverse an installed part and return it to inventory.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
