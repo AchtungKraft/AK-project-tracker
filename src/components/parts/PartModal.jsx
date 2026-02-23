@@ -40,6 +40,10 @@ export default function PartModal({ part, partId, onClose }) {
   const [mediaSectionOpen, setMediaSectionOpen] = useState(true);
   const [journalSectionOpen, setJournalSectionOpen] = useState(true);
   
+  // Action modals
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
+  const [showAddToBuildModal, setShowAddToBuildModal] = useState(false);
+  
   // Fetch part if only partId provided
   const { data: fetchedPart, isLoading: partLoading } = useQuery({
     queryKey: ['part', partId],
