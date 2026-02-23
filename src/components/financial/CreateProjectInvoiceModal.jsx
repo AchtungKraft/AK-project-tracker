@@ -60,6 +60,7 @@ export default function CreateProjectInvoiceModal({
   onClose, 
   onSuccess,
   preselectedProjectId = null, // PHASE 1: Allow pre-selection from ForwardInvoiceDashboard
+  initialSelectedItems = [], // PHASE 2: Allow pre-selection from PartsActionWorkbench
 }) {
   const queryClient = useQueryClient();
   // If project is preselected, skip to step 1 (type selection)
