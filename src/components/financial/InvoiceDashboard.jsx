@@ -36,6 +36,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * InvoiceDashboard - Forward Model Only
@@ -263,10 +264,13 @@ export default function InvoiceDashboard({ projectId }) {
         qb_exported: false, // Allow re-export
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Invoice unlocked for editing');
       setShowUnlockConfirm(false);
-      queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: projectId ? [projectId] : [],
+      });
     },
   });
 
