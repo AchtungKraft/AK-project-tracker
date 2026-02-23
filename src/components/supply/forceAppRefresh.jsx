@@ -172,7 +172,7 @@ export async function forceAppRefresh(queryClient, options = {}) {
     }),
   );
   
-  // PHASE 2 CANONICAL: billingProcurementStates is THE source of truth for exposure
+  // PHASE 5 CANONICAL: billingProcurementStates is THE source of truth for exposure
   // Refetch ALL scoped keys (both global and project-specific)
   refetches.push(
     queryClient.refetchQueries({ 
@@ -181,8 +181,8 @@ export async function forceAppRefresh(queryClient, options = {}) {
     }),
   );
   
-  // PHASE 4: Deterministic refetch for billing & invoice queries
-  // Project-scoped invoice views for consistency
+  // PHASE 5: Deterministic refetch for billing & invoice queries
+  // These are the CANONICAL query keys for invoice flow
   refetches.push(
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
@@ -200,7 +200,7 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['billablePartsView'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 2: Credit allocations for exposure net calculation
+    // PHASE 5: Credit allocations for exposure net calculation
     queryClient.refetchQueries({ 
       queryKey: ['creditAllocations'],
       type: refetchActive ? 'active' : 'all'
