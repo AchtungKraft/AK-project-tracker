@@ -15,6 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { XCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * ClosePoolModal - Close a billing pool
@@ -39,9 +40,11 @@ export default function ClosePoolModal({ pool, onClose, onSuccess }) {
         reason: reason || `Pool closed by user`
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Pool closed successfully');
       onSuccess?.();
     },
