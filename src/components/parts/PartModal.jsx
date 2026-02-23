@@ -861,33 +861,54 @@ export default function PartModal({ part, partId, onClose }) {
     </form>
   );
 
-  // --- FOOTER ---
+  // --- FOOTER (always visible) ---
   const renderFooter = () => {
-    if (!editing) return null;
+    if (editing) {
+      return (
+        <div className="flex gap-3 p-4 border-t border-red-900/30 bg-gray-900">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setFormData({ ...activePart, photos: activePart.photos || [], featured_photo: activePart.featured_photo || '' });
+              setEditing(false);
+            }}
+            className="flex-1 border-gray-700"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={updateMutation.isPending}
+            className="flex-1 bg-red-600 hover:bg-red-700"
+          >
+            {updateMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
+        </div>
+      );
+    }
     
+    // View mode footer
     return (
       <div className="flex gap-3 p-4 border-t border-red-900/30 bg-gray-900">
         <Button
           type="button"
           variant="outline"
-          onClick={() => {
-            setFormData({ ...activePart, photos: activePart.photos || [], featured_photo: activePart.featured_photo || '' });
-            setEditing(false);
-          }}
+          onClick={onClose}
           className="flex-1 border-gray-700"
         >
-          Cancel
+          Close
         </Button>
         <Button
-          onClick={handleSave}
-          disabled={updateMutation.isPending}
+          onClick={() => setEditing(true)}
           className="flex-1 bg-red-600 hover:bg-red-700"
         >
-          {updateMutation.isPending ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-          ) : (
-            'Save Changes'
-          )}
+          <Edit2 className="w-4 h-4 mr-2" />
+          Edit
         </Button>
       </div>
     );
