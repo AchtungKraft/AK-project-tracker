@@ -376,3 +376,12 @@ export function useSupplyActionPreview() {
     data: mutation.data,
   };
 }
+
+// Re-export diagnostic functions for external use
+export { 
+  diagnoseSupplyItems, 
+  diagnoseCommitment, 
+  compareViews, 
+  runCrossViewComparison, 
+  runFullDiagnosticReport 
+} from "./supplyDiagnostics";
