@@ -97,10 +97,18 @@ Deno.serve(async (req) => {
     // HARD GUARD: No invoices to export
     // ============================================
     if (exportInvoices.length === 0) {
+      console.log('[EXPORT WARNING] No invoices found for export');
       return Response.json({
         success: false,
         error: 'No invoices to export',
       });
+    }
+
+    // DEBUG: Defensive guard - warn if invoices have no lines
+    for (const invoice of exportInvoices) {
+      if (!invoice.lines || invoice.lines.length === 0) {
+        console.log('[EXPORT WARNING] Invoice has no lines:', invoice.id, 'status:', invoice.status);
+      }
     }
 
     // ============================================
