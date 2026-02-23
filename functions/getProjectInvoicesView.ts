@@ -158,6 +158,8 @@ Deno.serve(async (req) => {
         project_name: project?.name || 'Unknown',
         client_name: project?.client_name || '',
         line_count: lineCountMap[inv.id] || 0,
+        // CRITICAL: Include lines array for export functionality
+        lines: linesByInvoice[inv.id] || [],
         flags: {
           overdue: isOverdue,
           missing_qb_fields: missingQbFields,
