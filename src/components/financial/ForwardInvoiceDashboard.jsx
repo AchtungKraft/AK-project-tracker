@@ -163,26 +163,26 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // Get selected commitment IDs as array
   const selectedIdsArray = useMemo(() => [...selectedCommitmentIds], [selectedCommitmentIds]);
 
-  // Compute ProjectInvoice-level KPIs (separate from commitment summary)
+  // Compute ProjectInvoice-level KPIs from canonical invoices array
   const batchKpis = useMemo(() => {
-    const nonVoided = invoiceBatches.filter(b => b.status !== 'voided');
+    const nonVoided = invoices.filter(b => b.status !== 'voided');
     const drafts = nonVoided.filter(b => b.status === 'draft');
     const sent = nonVoided.filter(b => ['sent', 'invoiced'].includes(b.status));
     const paid = nonVoided.filter(b => b.status === 'paid');
     const needsExport = nonVoided.filter(b => !b.qb_exported && b.status !== 'draft');
 
-    const totalInvoiced = nonVoided.reduce((sum, b) => sum + (b.total_amount || 0), 0);
-    const totalPaid = paid.reduce((sum, b) => sum + (b.amount_paid || b.total_amount || 0), 0);
-    const totalOutstanding = sent.reduce((sum, b) => sum + (b.total_amount || 0), 0);
+    const totalInvoiced = nonVoided.reduce((sum, b) => sum + (b.total_amount || b.total || 0), 0);
+    const totalPaid = paid.reduce((sum, b) => sum + (b.paid_amount || b.total_amount || b.total || 0), 0);
+    const totalOutstanding = sent.reduce((sum, b) => sum + (b.total_amount || b.total || 0), 0);
 
     // Aging buckets
     const today = new Date();
     let totalOverdue = 0;
     const aging = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
 
-    for (const batch of sent) {
-      const amount = batch.total_amount || 0;
-      const dueDate = batch.due_date ? parseISO(batch.due_date) : null;
+    for (const inv of sent) {
+      const amount = inv.total_amount || inv.total || 0;
+      const dueDate = inv.due_date ? parseISO(inv.due_date) : null;
       if (dueDate) {
         const daysOverdue = differenceInDays(today, dueDate);
         if (daysOverdue <= 0) {
@@ -210,7 +210,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       paidCount: paid.length,
       needsExportCount: needsExport.length,
     };
-  }, [invoiceBatches]);
+  }, [invoices]);
 
   // Export to QB handler - PHASE 1: Uses ProjectInvoice system
   const handleExport = async (invoiceId, action) => {
