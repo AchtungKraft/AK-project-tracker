@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -190,6 +190,9 @@ export default function BlockedActionResolutionModal({
             <AlertTriangle className="w-5 h-5 text-yellow-400" />
             {blocked.length} Item{blocked.length !== 1 ? 's' : ''} Blocked
           </DialogTitle>
+          <DialogDescription>
+            Review and resolve issues preventing these items from being ordered.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-2">

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -318,6 +318,9 @@ export default function OrderPartModal({
             <ShoppingCart className="w-5 h-5 text-red-400" />
             Order Part
           </DialogTitle>
+          <DialogDescription>
+            Create a purchase order for this part commitment.
+          </DialogDescription>
         </DialogHeader>
         {formContent}
       </DialogContent>
