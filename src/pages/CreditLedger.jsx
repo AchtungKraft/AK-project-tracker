@@ -143,6 +143,7 @@ export default function CreditLedger() {
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["creditLedger"] });
     queryClient.invalidateQueries({ queryKey: ["projectInvoices"] });
+    queryClient.invalidateQueries({ queryKey: ["creditAllocations"] });
   };
 
   const getStatusBadge = (status) => {
