@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box, Wrench, Archive, RotateCcw, AlertTriangle } from "lucide-react";
+import { Upload, Trash2, Star, Loader2, Save, Camera, X as XIcon, Package, ShoppingCart, Box, Wrench, Archive, RotateCcw, AlertTriangle, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CreateInlineModal from "../common/CreateInlineModal";
