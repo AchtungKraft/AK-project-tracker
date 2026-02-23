@@ -814,15 +814,4 @@ function generateRecommendations(psmDiag, gnoDiag, crossViewDrifted, psmSources,
   return recommendations;
 }
 
-// ============================================================================
-// EXPORTS
-// ============================================================================
-
-export {
-  extractRawInventorySnapshot,
-  computeLocalValues,
-  detectDriftFlags,
-  traceInventorySource,
-  analyzeInventorySources,
-  getUIFieldMapping,
-};
+// Functions are already exported inline where defined
