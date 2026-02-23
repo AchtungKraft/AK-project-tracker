@@ -1,17 +1,20 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * getProjectInvoicesView - PHASE 10 Forward Invoice System
+ * getProjectInvoicesView - Invoice History Read Model
  * 
- * Returns invoices list with computed flags and project credit balance.
- * 
- * Inputs:
- * - project_id (optional - filter by project)
- * - status (optional - filter by status)
+ * PHASE 1 REFACTOR: This is now INVOICE-HISTORY ONLY.
+ * Do NOT use this for exposure calculations.
+ * Use getBillingAndProcurementStates for canonical exposure data.
  * 
  * Returns:
- * - invoices list with flags: overdue, missing_qb_fields
- * - project credit balances
+ * - invoices list with computed flags: overdue, missing_qb_fields
+ * - project credit balances (read-only summary)
+ * - credit applied totals (read-only summary)
+ * 
+ * Does NOT return:
+ * - Commitment-level exposure (use getBillingAndProcurementStates)
+ * - Invoiceable parts list (use getBillingAndProcurementStates)
  */
 
 Deno.serve(async (req) => {
