@@ -338,6 +338,11 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       is_queued: queuedSourceIds.has(commitment.id),
       billing_source: billingSource,
       source_type: 'commitment',
+      // PHASE 3: Grouping fields for BillablePartsSelector
+      vendor_id: part.default_vendor_id || null,
+      vendor_name: null, // Will be resolved below
+      category_id: part.part_category_id || null,
+      category_name: null, // Will be resolved below
       source_id: commitment.id,
     };
 
