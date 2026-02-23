@@ -445,11 +445,50 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     net_exposure_global: allItems.reduce((sum, i) => sum + (i.net_line_total || i.line_total || 0), 0),
   };
 
+  // PHASE 1 CANONICAL: Build canonical commitment exposure list for invoice modal
+  // This is the SINGLE SOURCE OF TRUTH for invoiceable commitments
+  const canonicalCommitments = allItems.map(item => ({
+    id: item.commitment_id || item.id,
+    part_id: item.part_id,
+    part_name: item.part_name,
+    project_id: item.project_id,
+    required_total: item.assigned_qty,
+    unit_retail_snapshot: item.unit_retail,
+    unit_cost_snapshot: item.unit_cost,
+    gross_exposure: item.gross_line_total || item.line_total || 0,
+    credit_applied: item.credit_applied_line || 0,
+    net_exposure: item.net_line_total || 0,
+    invoiced_amount: item.invoiced_amount || 0,
+    billing_status: item.client_billing_status,
+    payment_status: item.client_payment_status,
+    invoice_status: item.client_billing_status === 'NOT_INVOICED' ? 'unbilled' 
+                  : item.client_billing_status === 'INVOICED' ? 'invoiced' 
+                  : item.client_billing_status === 'PAID' ? 'paid' 
+                  : 'unbilled',
+    invoice_id: null, // TODO: link to ProjectInvoice
+    lifecycle_category: item.lifecycle_category,
+    vendor_name: item.vendor_name,
+    category_name: item.category_name,
+  }));
+
+  // PHASE 1 CANONICAL: Build totals object
+  const totals = {
+    gross_exposure: creditSummary.gross_exposure_global,
+    credit_available: creditSummary.total_credit_available,
+    credit_applied_total: creditSummary.total_credit_applied,
+    net_exposure: creditSummary.net_exposure_global,
+    unbilled_count: results.assigned_needs_billing.length,
+    unbilled_total: results.assigned_needs_billing.reduce((sum, i) => sum + (i.net_line_total || 0), 0),
+  };
+
   return {
     ...results,
     kpis,
     credit_summary: creditSummary,
     project_summaries: Object.values(projectSummaries),
+    // PHASE 1 CANONICAL: New canonical outputs
+    commitments: canonicalCommitments,
+    totals,
     last_scan_at: new Date().toISOString(),
   };
 }
