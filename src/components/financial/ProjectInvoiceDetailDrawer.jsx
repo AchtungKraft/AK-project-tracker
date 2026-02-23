@@ -429,8 +429,17 @@ export default function ProjectInvoiceDetailDrawer({
                     Mark as Paid
                   </Button>
                 )}
-                <Button variant="outline" onClick={handleExportCSV} className="gap-2">
-                  <Download className="w-4 h-4" />
+                <Button 
+                  variant="outline" 
+                  onClick={handleExportCSV} 
+                  className="gap-2"
+                  disabled={isExporting}
+                >
+                  {isExporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
                   Export CSV
                 </Button>
               </div>
