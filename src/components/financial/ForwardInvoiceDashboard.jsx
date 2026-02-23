@@ -610,16 +610,15 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         preselectedProjectId={projectId}
       />
 
-      {/* PHASE 4: Credit Allocation Modal */}
+      {/* Credit Allocation Modal */}
       <ApplyCreditModal
         open={showCreditModal}
         onClose={() => setShowCreditModal(false)}
         projectId={projectId}
-        projectName={summary?.project_name || 'Project'}
-        selectedCommitmentIds={selectedIdsArray}
+        projectName={'Project'}
+        selectedCommitmentIds={[]}
         creditSummary={creditSummary}
         onSuccess={async () => {
-          setSelectedCommitmentIds(new Set());
           // DETERMINISTIC: Invalidate specific keys only using factories
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
