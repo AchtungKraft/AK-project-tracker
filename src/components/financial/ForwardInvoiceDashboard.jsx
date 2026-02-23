@@ -575,34 +575,34 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         </CardContent>
       </Card>
 
-      {/* Commitment Summary by Status - PHASE 7: Only financial states */}
+      {/* Invoice Summary by Status */}
       <Card className="bg-black/40 border-gray-800">
         <CardContent className="p-4">
           <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
             <DollarSign className="w-4 h-4" />
-            Commitment Billing Summary
+            Invoice Summary
           </h4>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-              <p className="text-xs text-gray-500 mb-1">Ready to Bill</p>
+              <p className="text-xs text-gray-500 mb-1">Draft</p>
               <p className="text-lg font-bold text-gray-400">
-                {formatCurrencyUSD(summary.unbilled_total)}
+                {batchKpis.draftCount}
               </p>
-              <p className="text-xs text-gray-600">{summary.unbilled_count} commitments</p>
+              <p className="text-xs text-gray-600">invoices</p>
             </div>
             <div className="p-3 rounded-lg bg-purple-900/30 border border-purple-800/50">
-              <p className="text-xs text-gray-500 mb-1">Awaiting Payment</p>
+              <p className="text-xs text-gray-500 mb-1">Outstanding</p>
               <p className="text-lg font-bold text-purple-400">
-                {formatCurrencyUSD(summary.invoiced_total)}
+                {formatCurrencyUSD(batchKpis.totalOutstanding)}
               </p>
-              <p className="text-xs text-gray-600">{summary.invoiced_count} commitments</p>
+              <p className="text-xs text-gray-600">{batchKpis.sentCount} invoices</p>
             </div>
             <div className="p-3 rounded-lg bg-green-900/30 border border-green-800/50">
               <p className="text-xs text-gray-500 mb-1">Paid</p>
               <p className="text-lg font-bold text-green-400">
-                {formatCurrencyUSD(summary.paid_total)}
+                {formatCurrencyUSD(batchKpis.totalPaid)}
               </p>
-              <p className="text-xs text-gray-600">{summary.paid_count} commitments</p>
+              <p className="text-xs text-gray-600">{batchKpis.paidCount} invoices</p>
             </div>
           </div>
         </CardContent>
