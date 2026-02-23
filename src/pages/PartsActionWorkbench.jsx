@@ -526,7 +526,6 @@ export default function PartsActionWorkbench() {
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [batchMode, setBatchMode] = useState('MANUAL');
   const [selectedItem, setSelectedItem] = useState(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
@@ -534,9 +533,8 @@ export default function PartsActionWorkbench() {
   const [showNonBillable, setShowNonBillable] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [executingIds, setExecutingIds] = useState(new Set());
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-  const [successDrawerOpen, setSuccessDrawerOpen] = useState(false);
-  const [lastBatchResult, setLastBatchResult] = useState(null);
+  // Forward model: single ProjectInvoice flow via CreateProjectInvoiceModal
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
   // Lifecycle action hook
   const { executeActionAsync, isExecuting } = useLifecycleAction();
@@ -563,59 +561,19 @@ export default function PartsActionWorkbench() {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
   });
-
-  // Create batch mutation
-  const createBatchMutation = useMutation({
-    mutationFn: async (items) => {
-      console.log("Create Invoice Batch clicked");
-      console.log("Selected items:", items.length, items);
-      
-      const response = await base44.functions.invoke('createInvoiceBatch', {
-        items,
-        batch_mode: batchMode,
+  
+  // CANONICAL: Fetch billingProcurementStates for invoiceable parts when project is selected
+  const { data: billingData } = useQuery({
+    queryKey: ['billingProcurementStates', projectFilter],
+    queryFn: async () => {
+      if (projectFilter === 'all') return null;
+      const response = await base44.functions.invoke('getBillingAndProcurementStates', {
+        filters: { project_id: projectFilter }
       });
       return response.data;
     },
-    onSuccess: (data) => {
-      if (data.success) {
-        // Store result and open success drawer
-        setLastBatchResult(data);
-        setPreviewModalOpen(false);
-        setSuccessDrawerOpen(true);
-        
-        // Log analytics event
-        base44.analytics.track({
-          eventName: 'invoice_batch_created',
-          properties: {
-            batches_created: data.batches_created,
-            lines_created: data.lines_created,
-            total_amount: data.total_amount,
-            batch_mode: batchMode,
-          }
-        });
-        
-        setSelectedIds(new Set());
-        queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
-        queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
-        queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
-      } else {
-        toast.error(data.message || 'Batch creation failed');
-      }
-    },
-    onError: (error) => {
-      console.error("Create batch error:", error);
-      const errorData = error.response?.data || error;
-      
-      if (errorData.blocked_items?.length > 0) {
-        toast.error(errorData.message || 'Items cannot be invoiced', {
-          description: errorData.blocked_items.slice(0, 3).map(b => 
-            `${b.part_name}: ${b.reasons?.join(', ') || 'Unknown'}`
-          ).join('\n'),
-        });
-      } else {
-        toast.error(errorData.message || error.message || 'Failed to create batch');
-      }
-    },
+    enabled: projectFilter !== 'all',
+    staleTime: 0,
   });
 
   // Get action groups and current tab config
