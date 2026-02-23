@@ -414,14 +414,15 @@ export default function ProjectSupplyManager() {
       return;
     }
     
-    // PHASE 9G: GUARD - Check if any selected items have to_order <= 0 OR have available stock
+    // PHASE 6: PROCUREMENT GUARD - Disable ordering when gap_qty === 0
+    // Check if any selected items have to_order <= 0 OR coverage_status === 'FULL'
     const selectedWithZeroOrder = enrichedCommitments.filter(
-      c => selectedItems.has(c.id) && (c.to_order <= 0 || (c.inventory_snapshot?.available ?? 0) > 0)
+      c => selectedItems.has(c.id) && (c.to_order <= 0 || c.coverage_status === 'FULL')
     );
     if (selectedWithZeroOrder.length > 0) {
-      const withStock = selectedWithZeroOrder.filter(c => (c.inventory_snapshot?.available ?? 0) > 0);
-      if (withStock.length > 0) {
-        toast.error(`${withStock.length} item(s) have available stock - cannot create PO. System should auto-reserve first.`);
+      const fullyCovered = selectedWithZeroOrder.filter(c => c.coverage_status === 'FULL');
+      if (fullyCovered.length > 0) {
+        toast.error(`${fullyCovered.length} item(s) are fully covered - cannot create PO for covered items.`);
       } else {
         toast.error(`${selectedWithZeroOrder.length} selected items have nothing to order`);
       }
