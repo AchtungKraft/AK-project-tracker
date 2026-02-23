@@ -494,7 +494,7 @@ export default function GlobalNeedToOrder() {
             </div>
           </div>
 
-          {/* Summary Stats */}
+          {/* Summary Stats - using formatCurrencyUSD for canonical formatting */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
@@ -506,13 +506,13 @@ export default function GlobalNeedToOrder() {
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Est. Cost</p>
-                <p className="text-2xl font-bold text-yellow-400">${totalCost.toFixed(0)}</p>
+                <p className="text-2xl font-bold text-yellow-400">{formatCurrencyUSD(totalCost)}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Total Exposure</p>
-                <p className="text-2xl font-bold text-red-400">${totalExposure.toFixed(0)}</p>
+                <p className="text-2xl font-bold text-red-400">{formatCurrencyUSD(totalExposure)}</p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
