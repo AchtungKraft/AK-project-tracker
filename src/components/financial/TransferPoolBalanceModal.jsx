@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, ArrowRight, Loader2, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { CommitmentActions } from "./financialMutationGuard";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * TransferPoolBalanceModal - Transfer balance between pools
@@ -52,9 +53,14 @@ export default function TransferPoolBalanceModal({ pool, onClose }) {
         notes: notes.trim() || undefined,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPool'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      const projectIds = [];
+      if (pool?.project_id) projectIds.push(pool.project_id);
+      if (targetPool?.project_id && !projectIds.includes(targetPool.project_id)) {
+        projectIds.push(targetPool.project_id);
+      }
+      await forceAppRefresh(queryClient, { projectIds });
       toast.success(`$${transferAmount.toFixed(2)} transferred successfully`);
       onClose();
     },

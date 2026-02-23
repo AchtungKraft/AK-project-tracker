@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Edit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * EditPoolModal - Edit pool name, invoiced amount, and notes
@@ -46,9 +47,11 @@ export default function EditPoolModal({ pool, onClose, onSuccess }) {
                 invoicedAmount > 0 ? 'invoiced' : 'draft'
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Pool updated successfully');
       onSuccess?.();
     },
