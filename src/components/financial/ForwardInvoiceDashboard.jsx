@@ -270,11 +270,11 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
-      // DETERMINISTIC: Invalidate specific keys only
+      // DETERMINISTIC: Invalidate specific keys only using factories
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
-        queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
-        queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+        queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+        queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+        queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
       ]);
       refetch();
     } catch (error) {
@@ -291,11 +291,11 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   
   const handleInvoiceCreated = async () => {
     setShowCreateInvoiceModal(false);
-    // DETERMINISTIC: Invalidate specific keys only
+    // DETERMINISTIC: Invalidate specific keys only using factories
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
-      queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
-      queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+      queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+      queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
     ]);
     refetch();
   };
