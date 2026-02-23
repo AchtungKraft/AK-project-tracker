@@ -1049,6 +1049,20 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         isOpen={!!selectedBatch}
         onClose={() => setSelectedBatch(null)}
       />
+      
+      {/* PHASE 4: Credit Allocation Modal */}
+      <ApplyCreditModal
+        open={showCreditModal}
+        onClose={() => setShowCreditModal(false)}
+        projectId={projectFilter !== 'all' ? projectFilter : null}
+        projectName={currentProjectSummary?.project_name || 'Project'}
+        selectedCommitmentIds={selectedCommitmentIds}
+        creditSummary={currentProjectSummary || creditSummary}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          refetch();
+        }}
+      />
     </div>
   );
 
