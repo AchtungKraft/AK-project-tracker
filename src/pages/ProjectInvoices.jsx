@@ -62,11 +62,15 @@ export default function ProjectInvoices() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedProjectId = projectFilter === "all" ? "" : String(projectFilter ?? "");
+
   // PHASE 1 UNIFIED: Scoped query key with staleTime=0 for immediate updates
-  const { data: invoicesData, isLoading, refetch } = useQuery({
-    queryKey: ["projectInvoicesView", projectFilter],
+  const invoiceQueryKey = ["projectInvoicesView", normalizedProjectId];
+  const { data: invoicesData, isLoading, refetch, dataUpdatedAt: invoiceDataUpdatedAt } = useQuery({
+    queryKey: invoiceQueryKey,
     queryFn: async () => {
-      const payload = projectFilter !== "all" ? { project_id: projectFilter } : {};
+      const payload = normalizedProjectId ? { project_id: normalizedProjectId } : {};
       const response = await base44.functions.invoke("getProjectInvoicesView", payload);
       return response.data;
     },
@@ -84,18 +88,31 @@ export default function ProjectInvoices() {
   });
   
   // PHASE 2: Fetch canonical exposure/credit data when project is selected
-  const { data: billingData } = useQuery({
-    queryKey: ["billingProcurementStates", projectFilter],
+  const billingQueryKey = ["billingProcurementStates", normalizedProjectId];
+  const { data: billingData, dataUpdatedAt: billingDataUpdatedAt } = useQuery({
+    queryKey: billingQueryKey,
     queryFn: async () => {
-      if (projectFilter === "all") return null;
+      if (!normalizedProjectId) return null;
       const response = await base44.functions.invoke("getBillingAndProcurementStates", {
-        filters: { project_id: projectFilter }
+        filters: { project_id: normalizedProjectId }
       });
       return response.data;
     },
-    enabled: projectFilter !== "all",
+    enabled: Boolean(normalizedProjectId),
     staleTime: 0,
   });
+
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === "development") {
+    console.log("[ProjectInvoices] Query State:", {
+      projectId: normalizedProjectId,
+      invoiceQueryKey,
+      billingQueryKey,
+      invoiceDataUpdatedAt: invoiceDataUpdatedAt ? new Date(invoiceDataUpdatedAt).toISOString() : null,
+      billingDataUpdatedAt: billingDataUpdatedAt ? new Date(billingDataUpdatedAt).toISOString() : null,
+      netExposure: billingData?.totals?.net_exposure ?? "N/A",
+    });
+  }
 
   const financialProjects = financialData?.projects || [];
 
@@ -139,11 +156,15 @@ export default function ProjectInvoices() {
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
   const handleRefresh = async () => {
-    // PHASE 1 UNIFIED: Deterministic refresh with scoped keys
-    await forceAppRefresh(queryClient, {
-      projectIds: projectFilter !== "all" ? [projectFilter] : [],
-    });
-    // Explicitly refetch the scoped invoice view query
+    // DETERMINISTIC: Invalidate specific keys only
+    const invalidations = [
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
+    ];
+    if (normalizedProjectId) {
+      invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
+      invalidations.push(queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }));
+    }
+    await Promise.all(invalidations);
     await refetch();
   };
 

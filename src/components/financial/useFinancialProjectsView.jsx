@@ -1,5 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { 
+  billingKeys, 
+  financialProjectKeys, 
+  normalizeProjectId,
+  logQueryKeyUsage 
+} from "./queryKeyFactories";
 
 /**
  * PHASE 1 — Hook for Canonical Financial Projects View
@@ -8,8 +14,10 @@ import { base44 } from "@/api/base44Client";
  * Uses getFinancialProjectsView backend function.
  */
 export function useFinancialProjectsView(options = {}) {
+  const queryKey = financialProjectKeys.all();
+  
   return useQuery({
-    queryKey: ["financialProjectsView"],
+    queryKey,
     queryFn: async () => {
       const response = await base44.functions.invoke("getFinancialProjectsView", {});
       return response.data;
@@ -30,19 +38,35 @@ export function useFinancialProjectsView(options = {}) {
  * Uses getBillingAndProcurementStates backend function.
  */
 export function useBillingAndProcurementStates(projectId, options = {}) {
-  return useQuery({
-    queryKey: ["billingProcurementStates", projectId],
+  const normalizedId = normalizeProjectId(projectId);
+  const queryKey = billingKeys.states(normalizedId);
+  
+  const query = useQuery({
+    queryKey,
     queryFn: async () => {
-      const filters = projectId ? { project_id: projectId } : {};
+      const filters = normalizedId ? { project_id: normalizedId } : {};
       const response = await base44.functions.invoke("getBillingAndProcurementStates", {
         filters,
       });
       return response.data;
     },
-    enabled: options.enabled !== false,
+    enabled: Boolean(normalizedId) && options.enabled !== false,
     staleTime: 0, // PHASE 6: Always fresh for invoice modal
     ...options,
   });
+  
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === 'development' && query.data) {
+    logQueryKeyUsage(
+      'useBillingAndProcurementStates',
+      'billingKeys.states',
+      queryKey,
+      query.dataUpdatedAt,
+      query.data?.totals
+    );
+  }
+  
+  return query;
 }
 
 /**
