@@ -1,5 +1,9 @@
+/**
+ * INVOICEBATCH IS REMOVED. Do not import or use InvoiceBatch* components or functions.
+ * Use ProjectInvoice + CreateProjectInvoiceModal.
+ */
 import React, { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,8 +32,6 @@ import {
   Eye,
   X,
   FolderOpen,
-  Users,
-  ListChecks,
   Zap,
   Settings2,
   Archive,
@@ -48,8 +49,13 @@ import UniversalLifecycleBadge, { OrderingSafetyBadge } from "@/components/lifec
 import LifecycleTimelineDrawer from "@/components/lifecycle/LifecycleTimelineDrawer";
 import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnosticsDrawer";
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
-import InvoiceBatchPreviewModal from "@/components/financial/InvoiceBatchPreviewModal";
-import InvoiceBatchSuccessDrawer from "@/components/financial/InvoiceBatchSuccessDrawer";
+import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+
+// DEV guardrail
+if (process.env.NODE_ENV === "development") {
+  window.__INVOICEBATCH_REMOVED__ = true;
+}
 
 // ============================================
 // CONSTANTS
