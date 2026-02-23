@@ -63,7 +63,7 @@ export function CoverageDiagnosticsPanel({ projectId, onOpenCommitment }) {
   const normalizedProjectId = normalizeProjectId(projectId);
 
   const { data: diagnostics, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['coverageDiagnostics', normalizedProjectId],
+    queryKey: diagnosticsKeys.coverage(normalizedProjectId),
     queryFn: async () => {
       const response = await base44.functions.invoke('runCommitmentQtyDriftCheck', {
         project_id: normalizedProjectId || undefined,
