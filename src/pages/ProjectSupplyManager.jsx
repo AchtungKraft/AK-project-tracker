@@ -60,16 +60,10 @@ import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * ProjectSupplyManager - Per-Project Execution (Screen 2)
+ * ProjectSupplyManager - Per-Project Execution
  * Route: /supply/project/:projectId
  * 
- * Unified lifecycle-driven interface with tabs:
- * - Plan: Requirements management
- * - Fund: Pools + Allocation
- * - Buy: Procurement with gating
- * - Receive: Receiving + Put-away
- * - Install: Consumption
- * - Report: Consolidated summary
+ * Tabs: Plan, Buy, Receive, Install, Invoice, Report
  */
 export default function ProjectSupplyManager() {
   const navigate = useNavigate();
