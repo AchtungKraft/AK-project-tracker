@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       lineItems,
       orders,
       categories,
-      invoiceBatches,
+      projectInvoices,
     ] = await Promise.all([
       base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
       base44.entities.PartCommitment.filter({ project_id }),
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       base44.entities.PartPurchaseLineItem.list(),
       base44.entities.Order.list(),
       base44.entities.PartCategory.list(),
-      base44.entities.InvoiceBatch.filter({ project_id }),
+      base44.entities.ProjectInvoice.filter({ project_id }),
     ]);
 
     if (!project) {
@@ -70,10 +70,10 @@ Deno.serve(async (req) => {
     const orderMap = new Map(orders.map(o => [o.id, o]));
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
-    // FORWARD MODEL: Calculate invoice-based billing metrics
-    const paidInvoices = invoiceBatches.filter(ib => ib.status === 'paid');
-    const totalInvoiced = invoiceBatches.reduce((sum, ib) => sum + (ib.total_amount || 0), 0);
-    const totalPaid = paidInvoices.reduce((sum, ib) => sum + (ib.total_amount || 0), 0);
+    // FORWARD MODEL: Calculate invoice-based billing metrics using ProjectInvoice entity
+    const paidInvoices = projectInvoices.filter(inv => inv.status === 'paid');
+    const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalPaid = paidInvoices.reduce((sum, inv) => sum + (inv.paid_amount || inv.total || 0), 0);
     const invoiceOutstanding = totalInvoiced - totalPaid;
 
     // Group line items by commitment
