@@ -78,8 +78,10 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
     // Project financial data
     queryClient.invalidateQueries({ queryKey: ['projectFinancials'] });
     
-    // Billing pools
-    queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+    // Credit ledger and allocations
+    queryClient.invalidateQueries({ queryKey: ['projectCreditLedger'] });
+    queryClient.invalidateQueries({ queryKey: ['creditAllocations'] });
+    queryClient.invalidateQueries({ queryKey: ['creditLedger'] });
   }
 
   // === PART-SPECIFIC INVALIDATION ===
