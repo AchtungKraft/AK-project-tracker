@@ -556,9 +556,9 @@ function BatchHistoryPanel({ onBatchClick }) {
 function BatchDetailModal({ batch, isOpen, onClose }) {
   const queryClient = useQueryClient();
   
-  // DETERMINISTIC: Normalize IDs
-  const normalizedBatchId = batch?.id ? String(batch.id) : "";
-  const normalizedProjectId = batch?.project_id ? String(batch.project_id) : "";
+  // DETERMINISTIC: Normalize IDs - null if invalid
+  const normalizedBatchId = batch?.id ? String(batch.id) : null;
+  const normalizedProjectIdLocal = normalizeProjectId(batch?.project_id);
   
   // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
   const { data: lines = [], isLoading } = useQuery({
@@ -575,9 +575,11 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
     onSuccess: () => {
       toast.success('Invoice exported successfully');
       queryClient.invalidateQueries({ queryKey: ['projectInvoicesRecent'] });
-      queryClient.invalidateQueries({ queryKey: ['invoiceLines', normalizedBatchId] });
-      if (normalizedProjectId) {
-        queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', normalizedProjectId] });
+      if (normalizedBatchId) {
+        queryClient.invalidateQueries({ queryKey: ['invoiceLines', normalizedBatchId] });
+      }
+      if (normalizedProjectIdLocal) {
+        queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectIdLocal) });
       }
     },
     onError: (error) => {
