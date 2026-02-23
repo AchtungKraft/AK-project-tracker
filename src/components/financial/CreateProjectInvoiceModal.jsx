@@ -600,9 +600,13 @@ export default function CreateProjectInvoiceModal({
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isSubmitting || !canProceed()}>
+              <Button 
+                onClick={handleSubmit} 
+                disabled={isSubmitting || !canProceed()}
+                className="bg-green-600 hover:bg-green-700"
+              >
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Create Draft
+                Create Invoice
               </Button>
             )}
           </div>
