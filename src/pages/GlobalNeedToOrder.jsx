@@ -44,23 +44,31 @@ import { cn } from "@/lib/utils";
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
  * 
- * PHASE 1 COMPLETE: Uses ONLY useOpsSupplyView (getOpsSupplyView backend)
- * DEPRECATED: getGlobalOrderQueue is no longer used
+ * ALIGNED WITH ProjectSupplyManager (PSM) - Same canonical data contract
  * 
  * DATA SOURCE: getOpsSupplyView with mode='ORDERING'
  * MUTATIONS: Routes through executeSupplyAction (CREATE_PO)
  * 
- * CANONICAL FIELDS USED:
- * - item.to_order (computed gap from read model)
- * - item.coverage_status (FULL/PARTIAL/NONE)
- * - item.next_action, item.block_reason_code
- * - item.required_total, item.reserved_from_stock, item.covered_from_po
+ * CANONICAL FIELDS USED (from read model ONLY):
+ * - required_total, reserved_from_stock, covered_from_po, qty_installed
+ * - to_order (computed gap - NEVER derive locally)
+ * - coverage_status (FULL/PARTIAL/NONE)
+ * - inventory_snapshot.physical_stock_global, .reserved_global_active, .reserved_this_project
+ * - billing_status, unit_cost, unit_retail, exposure_gap
+ * - next_action, block_reason_code
+ * - pricing_integrity_status
  * 
  * NO LEGACY FIELDS:
  * - NO item.qty_committed
  * - NO item.qty_ordered
  * - NO item.qty_to_order
  * - NO local derivation like: qtyToOrder = qty_committed - qty_ordered
+ * 
+ * COLUMN ORDER (matches PSM):
+ * Checkbox | Part | Category | In Stock | Reserved (G|P) | Needed | To Order | Cost | Retail | Vendor | Payment | Coverage | Pricing | Next Action
+ * 
+ * CURRENCY FORMAT: formatCurrencyUSD (USA format with thousands separator)
+ * NAME RESOLUTION: resolveVendorDisplay / resolveCategoryDisplay (never display IDs)
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
