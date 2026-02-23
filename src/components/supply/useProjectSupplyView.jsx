@@ -196,7 +196,7 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     };
   });
   
-  // DEV ONLY: Runtime schema validation
+  // PHASE 2: DEV DRIFT GUARD - Use shared validation function
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
     const sample = items[0];
     console.log('[DEV] Ops Supply View - Sample commitment shape:', sample);
@@ -208,28 +208,8 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
       console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
     }
     
-    // PHASE 7: DEV VALIDATION GUARD for ops view
-    items.forEach(item => {
-      const { commitment_id, required_total, reserved_from_stock, covered_from_po, to_order, inventory_snapshot } = item;
-      if (required_total !== undefined) {
-        const sum = (reserved_from_stock || 0) + (covered_from_po || 0) + (to_order || 0);
-        if (Math.abs(sum - required_total) > 0.01) {
-          console.error(
-            `[SUPPLY MODEL DRIFT] Commitment mismatch detected: commitment=${commitment_id}: ` +
-            `required_total(${required_total}) !== sum(${sum})`
-          );
-        }
-        
-        // FAIL-FAST: to_order contradiction check
-        const availableGlobal = inventory_snapshot?.available_global_active ?? inventory_snapshot?.available ?? 0;
-        if (to_order > 0 && availableGlobal >= required_total) {
-          console.error(
-            `[CANONICAL VIOLATION] to_order > 0 but available >= required: ` +
-            `commitment=${commitment_id}, to_order=${to_order}, available=${availableGlobal}, required=${required_total}`
-          );
-        }
-      }
-    });
+    // Use shared drift validation
+    validateSupplyModelDrift(items, 'useOpsSupplyView');
   }
   
   return {
