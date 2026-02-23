@@ -8,7 +8,7 @@ import { createPageUrl } from "@/utils";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import InventoryLocations from "../components/inventory/InventoryLocations";
 import InventoryManagement from "../components/inventory/InventoryManagement";
-import EditPartDrawer from "../components/parts/EditPartDrawer";
+import PartModal from "../components/parts/PartModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 
 export default function PartsTracker() {
@@ -89,7 +89,7 @@ export default function PartsTracker() {
       </MobileSafeAreaContainer>
 
       {selectedPartId && (
-        <EditPartDrawer
+        <PartModal
           partId={selectedPartId}
           onClose={() => setSelectedPartId(null)}
         />

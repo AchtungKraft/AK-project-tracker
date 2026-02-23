@@ -10,7 +10,7 @@ import {
   FolderOpen, Folder, AlertTriangle, Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import EditPartDrawer from "../parts/EditPartDrawer";
+import PartModal from "../parts/PartModal";
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
 import AddToBuildModal from "../parts/AddToBuildModal";

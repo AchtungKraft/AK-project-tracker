@@ -10,7 +10,7 @@ import PartsListView from "./PartsListView";
 import PartsViewToolbar from "./PartsViewToolbar";
 import PartsBreadcrumb from "./PartsBreadcrumb";
 import UnifiedAddPartModal from "./UnifiedAddPartModal";
-import EditPartDrawer from "./EditPartDrawer";
+import PartModal from "./PartModal";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
