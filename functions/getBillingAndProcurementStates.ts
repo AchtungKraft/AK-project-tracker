@@ -447,29 +447,45 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
 
   // PHASE 1 CANONICAL: Build canonical commitment exposure list for invoice modal
   // This is the SINGLE SOURCE OF TRUTH for invoiceable commitments
-  const canonicalCommitments = allItems.map(item => ({
-    id: item.commitment_id || item.id,
-    part_id: item.part_id,
-    part_name: item.part_name,
-    project_id: item.project_id,
-    required_total: item.assigned_qty,
-    unit_retail_snapshot: item.unit_retail,
-    unit_cost_snapshot: item.unit_cost,
-    gross_exposure: item.gross_line_total || item.line_total || 0,
-    credit_applied: item.credit_applied_line || 0,
-    net_exposure: item.net_line_total || 0,
-    invoiced_amount: item.invoiced_amount || 0,
-    billing_status: item.client_billing_status,
-    payment_status: item.client_payment_status,
-    invoice_status: item.client_billing_status === 'NOT_INVOICED' ? 'unbilled' 
-                  : item.client_billing_status === 'INVOICED' ? 'invoiced' 
-                  : item.client_billing_status === 'PAID' ? 'paid' 
-                  : 'unbilled',
-    invoice_id: null, // TODO: link to ProjectInvoice
-    lifecycle_category: item.lifecycle_category,
-    vendor_name: item.vendor_name,
-    category_name: item.category_name,
-  }));
+  const canonicalCommitments = allItems.map(item => {
+    // Get part for vendor/category IDs
+    const part = partsMap[item.part_id];
+    
+    return {
+      id: item.commitment_id || item.id,
+      part_id: item.part_id,
+      part_name: item.part_name,
+      project_id: item.project_id,
+      required_total: item.assigned_qty,
+      qty_remaining_to_bill: item.assigned_qty, // Alias for selector
+      unit_retail_snapshot: item.unit_retail,
+      unit_retail: item.unit_retail, // Alias for selector
+      unit_cost_snapshot: item.unit_cost,
+      gross_exposure: item.gross_line_total || item.line_total || 0,
+      gross_line_total: item.gross_line_total || item.line_total || 0,
+      credit_applied: item.credit_applied_line || 0,
+      credit_applied_line: item.credit_applied_line || 0,
+      net_exposure: item.net_line_total || 0,
+      net_line_total: item.net_line_total || 0,
+      invoiced_amount: item.invoiced_amount || 0,
+      billing_status: item.client_billing_status,
+      client_billing_status: item.client_billing_status,
+      payment_status: item.client_payment_status,
+      invoice_status: item.client_billing_status === 'NOT_INVOICED' ? 'unbilled' 
+                    : item.client_billing_status === 'INVOICED' ? 'invoiced' 
+                    : item.client_billing_status === 'PAID' ? 'paid' 
+                    : 'unbilled',
+      lifecycle_category: item.lifecycle_category,
+      // PHASE 3: Grouping fields for BillablePartsSelector
+      vendor_id: part?.default_vendor_id || null,
+      vendor_name: item.vendor_name || 'Unknown Vendor',
+      category_id: part?.part_category_id || null,
+      category_name: item.category_name || 'Uncategorized',
+      part_category_id: part?.part_category_id || null,
+      default_vendor_id: part?.default_vendor_id || null,
+      is_archived: part?.is_archived || false,
+    };
+  });
 
   // PHASE 1 CANONICAL: Build totals object
   const totals = {
