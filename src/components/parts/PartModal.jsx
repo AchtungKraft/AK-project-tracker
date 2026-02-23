@@ -925,13 +925,13 @@ export default function PartModal({ part, partId, onClose }) {
           loading: updateMutation.isPending,
         }}
         secondaryActions={[
-          { label: 'Cancel', onClick: () => setEditing(false), variant: 'outline' }
+          { label: 'Cancel', onClick: () => { setFormData({ ...activePart, photos: activePart.photos || [], featured_photo: activePart.featured_photo || '' }); setEditing(false); }, variant: 'outline' }
         ]}
       />
     ) : (
       <MobilePrimaryActionStack
         primaryAction={{
-          label: 'Edit Part',
+          label: 'Edit',
           onClick: () => setEditing(true),
           icon: Edit2,
         }}
