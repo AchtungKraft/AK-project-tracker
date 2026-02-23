@@ -124,58 +124,8 @@ export function PSMSummaryStrip({ items, tab }) {
   );
 }
 
-/**
- * PHASE 4: Compact Execution Data Block
- * Shows full inventory breakdown in monospace compact format
- */
-function ExecutionDataBlock({ commitment, tab }) {
-  const inv = commitment.inventory_snapshot || {};
-  const physical = inv.physical_stock_global ?? inv.physical ?? 0;
-  const reservedGlobal = inv.reserved_global_active ?? inv.reserved ?? 0;
-  const reservedProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
-  const requiredTotal = commitment.required_total ?? 0;
-  const toOrder = commitment.to_order ?? 0;
-  const onOrderQty = commitment.on_order_qty ?? commitment.covered_from_po ?? 0;
-  const availableToInstall = commitment.available_to_install ?? 
-    Math.min(physical - reservedGlobal + reservedProject, requiredTotal - (commitment.qty_installed ?? 0));
-  
-  // PHASE 5: Show "Covered" badge for fully covered items
-  const isCovered = commitment.coverage_status === 'FULL';
-  
-  return (
-    <div className="bg-gray-900/50 rounded px-2 py-1.5 text-[10px] font-mono text-gray-400 space-y-0.5">
-      <div className="flex justify-between">
-        <span>Stock:</span>
-        <span className="text-gray-300">{physical}</span>
-      </div>
-      <div className="flex justify-between">
-        <span>Reserved (G|P):</span>
-        <span className="text-gray-300">{reservedGlobal} | {reservedProject}</span>
-      </div>
-      <div className="flex justify-between">
-        <span>Needed:</span>
-        <span className="text-gray-300">{requiredTotal}</span>
-      </div>
-      <div className="flex justify-between">
-        <span>To Order:</span>
-        <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
-      </div>
-      <div className="flex justify-between">
-        <span>On Order:</span>
-        <span className={onOrderQty > 0 ? "text-blue-400" : "text-gray-500"}>{onOrderQty}</span>
-      </div>
-      <div className="flex justify-between">
-        <span>Avail Install:</span>
-        <span className={availableToInstall > 0 ? "text-emerald-400" : "text-gray-500"}>{availableToInstall}</span>
-      </div>
-      {isCovered && (tab === 'plan') && (
-        <div className="mt-1 pt-1 border-t border-gray-700">
-          <span className="text-emerald-500 text-[9px]">✓ Covered</span>
-        </div>
-      )}
-    </div>
-  );
-}
+// PHASE 4: Import shared ExecutionDataBlock component
+import ExecutionDataBlock from "./ExecutionDataBlock";
 
 /**
  * PSMItemRow - Compact horizontal item row within a group
