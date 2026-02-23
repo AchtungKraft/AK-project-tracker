@@ -213,6 +213,27 @@ export function useProjectInvoiceView(projectId) {
     staleTime: 30000,
   });
 
+  // PHASE 4: Fetch credit ledger and allocations
+  const { data: creditLedgers = [], isLoading: loadingCredits } = useQuery({
+    queryKey: ['projectCreditLedger', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      return base44.entities.ProjectCreditLedger.filter({ project_id: projectId });
+    },
+    enabled: !!projectId,
+    staleTime: 30000,
+  });
+
+  const { data: creditAllocations = [], isLoading: loadingAllocations } = useQuery({
+    queryKey: ['projectCreditAllocations', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      return base44.entities.CreditAllocation.filter({ project_id: projectId, is_reversed: false });
+    },
+    enabled: !!projectId,
+    staleTime: 30000,
+  });
+
   // Fetch batch lines for mapping
   const batchIds = invoiceBatches.map(b => b.id);
   const { data: batchLines = [], isLoading: loadingLines } = useQuery({
