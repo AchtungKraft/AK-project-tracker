@@ -4,6 +4,8 @@
  * ALL supply mutations MUST use this helper to ensure cross-view consistency.
  * This is the SINGLE point for invalidating supply-related React Query caches.
  * 
+ * CANONICAL ARCHITECTURE LOCK - Uses queryKeyFactories
+ * 
  * Usage:
  *   import { invalidateSupplyQueries } from '@/components/supply/supplyInvalidation';
  *   
@@ -15,6 +17,20 @@
  *     commitment_ids: ['commitment_abc'],
  *   });
  */
+
+import {
+  billingKeys,
+  invoiceKeys,
+  creditKeys,
+  partsKeys,
+  supplyKeys,
+  commitmentKeys,
+  orderKeys,
+  inventoryKeys,
+  lifecycleKeys,
+  normalizeProjectId,
+  normalizeId,
+} from '@/components/financial/queryKeyFactories';
 
 /**
  * Invalidate all supply-related queries after a mutation.

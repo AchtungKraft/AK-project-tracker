@@ -5,6 +5,8 @@
  * This replaces scattered invalidateQueries calls with a deterministic
  * invalidate + refetch pattern that guarantees UI consistency.
  * 
+ * CANONICAL ARCHITECTURE LOCK - Uses queryKeyFactories
+ * 
  * Usage:
  *   import { forceAppRefresh } from '@/components/supply/forceAppRefresh';
  *   
@@ -30,16 +32,22 @@
  * - No partial/prefix matching - exact keys only
  */
 
-/**
- * Normalize projectId to string format OR null (matches queryKeyFactories.js)
- * 
- * CRITICAL: Returns null (not empty string) for invalid inputs.
- * Empty strings in query keys caused cache mismatches and data not loading.
- */
-const normalizeId = (id) => {
-  if (id === null || id === undefined || id === '' || id === 'all') return null;
-  return String(id);
-};
+import {
+  billingKeys,
+  invoiceKeys,
+  creditKeys,
+  partsKeys,
+  supplyKeys,
+  commitmentKeys,
+  orderKeys,
+  inventoryKeys,
+  lifecycleKeys,
+  normalizeProjectId,
+  normalizeId,
+} from '@/components/financial/queryKeyFactories';
+
+// Re-export normalizeId for backwards compatibility
+export { normalizeId };
 
 /**
  * Force refresh all app queries after a mutation
