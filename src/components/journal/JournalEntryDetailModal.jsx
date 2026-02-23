@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -155,6 +155,9 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
             <DialogTitle className="text-xl font-bold">
               Journal Entry - {entry?.entry_date ? format(new Date(entry.entry_date), 'PPP') : 'Details'}
             </DialogTitle>
+            <DialogDescription>
+              Edit or delete this journal entry.
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
