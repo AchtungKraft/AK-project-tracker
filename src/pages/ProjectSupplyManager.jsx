@@ -1255,88 +1255,76 @@ export default function ProjectSupplyManager() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab Contents */}
-            <TabsContent value="plan" className="mt-4">
-              <Card className="bg-black/40 border-gray-800">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-white">Planned Requirements</CardTitle>
-                      <AddPartButton projectId={projectId} onSuccess={() => invalidateSupply()} />
-                    </div>
-                    {/* Unified Grouping Controls */}
-                    <div className="flex flex-col md:flex-row gap-3">
-                      <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                        <Input
-                          placeholder="Search parts..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
-                        />
-                      </div>
-                      <SupplyGroupingControls
-                        onGroupChange={setGroupConfig}
-                        onSortChange={setSortBy}
-                        onShowClosedChange={setShowClosedCancelled}
-                        showProjectOption={false}
-                        projectId={projectId}
-                        tabId="plan"
-                        className="flex-1"
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <p className="text-xs text-gray-500 px-4 py-2 border-b border-gray-800">
-                    Auto: reserves stock first, remainder goes to order queue.
-                  </p>
-                  
-                  {/* Mobile View */}
-                  {isMobile ? (
-                    <div className="p-3">
-                      {getFilteredCommitments('plan').length === 0 ? (
-                        <p className="text-center py-8 text-gray-500">No planned items.</p>
-                      ) : (
-                        renderMobileGroupedCommitments('plan')
-                      )}
-                    </div>
-                  ) : (
-                    <Table>
-                      {/* Desktop Table - Column Order: Part | Category | In Stock | Reserved (G|P) | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Warning */}
-                      <TableHeader>
-                        <TableRow className="border-gray-800 hover:bg-transparent">
-                          <TableHead className="w-10"></TableHead>
-                          <TableHead className="text-gray-400">Part</TableHead>
-                          <TableHead className="text-gray-400">Category</TableHead>
-                          <TableHead className="text-gray-400 text-center">In Stock</TableHead>
-                          <TableHead className="text-gray-400 text-center" title="Global | This Project">Reserved (G|P)</TableHead>
-                          <TableHead className="text-gray-400 text-center">Needed</TableHead>
-                          <TableHead className="text-gray-400 text-right">Cost</TableHead>
-                          <TableHead className="text-gray-400 text-right">Retail</TableHead>
-                          <TableHead className="text-gray-400">Status</TableHead>
-                          <TableHead className="text-gray-400">Vendor</TableHead>
-                          <TableHead className="text-gray-400">Payment</TableHead>
-                          <TableHead className="text-gray-400">Coverage</TableHead>
-                          <TableHead className="text-gray-400">Pricing</TableHead>
-                          <TableHead className="w-10"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {getFilteredCommitments('plan').length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
-                              No planned items. All requirements are in progress or completed.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          renderGroupedCommitments('plan')
-                        )}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Tab Contents - GNO-style card-based grouped views */}
+            <TabsContent value="plan" className="mt-4 space-y-4">
+              {/* Tab Header */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Planned Requirements</h2>
+                  <p className="text-xs text-gray-500">Auto: reserves stock first, remainder goes to order queue.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AddPartButton projectId={projectId} onSuccess={() => invalidateSupply()} />
+                </div>
+              </div>
+
+              {/* Controls Row */}
+              <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search parts..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
+                  />
+                </div>
+                <Select value={groupMode} onValueChange={setGroupMode}>
+                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white h-8">
+                    <SelectValue placeholder="Group by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="category">By Category</SelectItem>
+                    <SelectItem value="vendor">By Vendor</SelectItem>
+                    <SelectItem value="coverage">By Coverage</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-32 bg-gray-900/50 border-gray-700 text-white h-8">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Recent</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="qty">Quantity</SelectItem>
+                    <SelectItem value="cost">Cost</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Summary Strip */}
+              <PSMSummaryStrip items={getFilteredCommitments('plan')} tab="plan" />
+
+              {/* Grouped Cards */}
+              <PSMGroupedView
+                items={applySorting(filterActiveCommitments(getFilteredCommitments('plan'), showClosedCancelled), sortBy)}
+                groupMode={groupMode}
+                selectedItems={selectedItems}
+                setSelectedItems={setSelectedItems}
+                onPartClick={handlePartClick}
+                onCreatePO={handleSinglePOCreate}
+                onReceive={setReceiveModal}
+                onInstall={setInstallModal}
+                onReverseInstall={setReverseInstallModal}
+                onDeltaOrder={setDeltaOrderCommitment}
+                onManageQty={setQtyManagerDrawer}
+                onCancel={setCancelModal}
+                onBatchPO={handleBulkPOPreview}
+                actionsEnabled={actionsEnabled}
+                categoriesMap={categoriesMap}
+                vendorsMap={vendorsMap}
+                tab="plan"
+              />
             </TabsContent>
 
             {/* Invoice tab content - FORWARD MODEL */}
