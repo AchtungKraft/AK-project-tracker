@@ -286,6 +286,20 @@ export default function CreditLedger() {
                     {formatCurrencyUSD(credit.credit_amount)}
                   </TableCell>
                   <TableCell className="text-right font-mono">
+                    {credit.allocation_count > 0 ? (
+                      <div className="text-right">
+                        <span className="text-amber-400">
+                          {formatCurrencyUSD(credit.allocation_total)}
+                        </span>
+                        <span className="text-gray-500 text-xs ml-1">
+                          ({credit.allocation_count} alloc)
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
                     <span
                       className={cn(
                         credit.remaining_amount > 0 ? "text-green-400" : "text-gray-500"
@@ -293,9 +307,6 @@ export default function CreditLedger() {
                     >
                       {formatCurrencyUSD(credit.remaining_amount)}
                     </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-gray-400">
-                    {credit.applied_invoice_number || "—"}
                   </TableCell>
                   <TableCell>{getStatusBadge(credit.status)}</TableCell>
                   <TableCell className="text-gray-400">
