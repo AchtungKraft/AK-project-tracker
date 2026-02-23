@@ -574,18 +574,13 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         onSubmit={handlePaymentSubmit}
       />
 
-      {/* Invoice Workbench Modal */}
-      {showInvoiceWorkbench && (
-        <InvoiceWorkbench
-          projectId={projectId}
-          onClose={() => setShowInvoiceWorkbench(false)}
-          onSuccess={() => {
-            setShowInvoiceWorkbench(false);
-            refetch();
-            queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
-          }}
-        />
-      )}
+      {/* PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices */}
+      <CreateProjectInvoiceModal
+        open={showCreateInvoiceModal}
+        onClose={() => setShowCreateInvoiceModal(false)}
+        onSuccess={handleInvoiceCreated}
+        preselectedProjectId={projectId}
+      />
 
       {/* PHASE 4: Credit Allocation Modal */}
       <ApplyCreditModal
