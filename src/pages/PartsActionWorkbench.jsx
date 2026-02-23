@@ -899,16 +899,13 @@ export default function PartsActionWorkbench() {
         </CardContent>
       </Card>
 
-      {/* Batch Builder Panel */}
-      {currentTabConfig.allowSelection && (
-        <BatchBuilderPanel
+      {/* Invoice Selection Panel - Forward model only */}
+      {currentTabConfig.allowSelection && currentTabConfig.selectionAction === 'invoice' && (
+        <InvoiceSelectionPanel
           selectedItems={selectedItems}
-          batchMode={batchMode}
-          setBatchMode={setBatchMode}
-          onCreateBatch={handleCreateBatch}
+          onCreateInvoice={handleOpenCreateInvoice}
           onClearSelection={() => setSelectedIds(new Set())}
-          isCreating={createBatchMutation.isPending}
-          actionType={currentTabConfig.selectionAction}
+          projectFilter={projectFilter}
         />
       )}
 
@@ -926,32 +923,13 @@ export default function PartsActionWorkbench() {
         onClose={() => setDiagnosticsOpen(false)}
       />
 
-      {/* Invoice Batch Preview Modal */}
-      <InvoiceBatchPreviewModal
-        isOpen={previewModalOpen}
-        onClose={() => setPreviewModalOpen(false)}
-        selectedItems={selectedItems}
-        blockedItems={selectedItems.filter(item => (item.unit_retail || 0) <= 0).map(item => ({
-          commitment_id: item.commitment_id,
-          part_name: item.part_name,
-          project_name: item.project_name,
-          reasons: ['Missing retail pricing'],
-          lifecycle_stage: item.lifecycle_overall_stage,
-        }))}
-        batchMode={batchMode}
-        onConfirm={handleConfirmBatch}
-        onFixItem={handleFixItem}
-        isCreating={createBatchMutation.isPending}
-      />
-
-      {/* Invoice Batch Success Drawer */}
-      <InvoiceBatchSuccessDrawer
-        isOpen={successDrawerOpen}
-        onClose={() => setSuccessDrawerOpen(false)}
-        batchData={lastBatchResult}
-        onExportToQB={handleExportToQB}
-        onViewBatch={handleViewBatch}
-        onReturnToWorkbench={() => setSuccessDrawerOpen(false)}
+      {/* Forward Model: CreateProjectInvoiceModal */}
+      <CreateProjectInvoiceModal
+        open={showCreateInvoiceModal}
+        onClose={() => setShowCreateInvoiceModal(false)}
+        preselectedProjectId={projectFilter !== 'all' ? projectFilter : null}
+        initialSelectedItems={initialSelectedItems}
+        onSuccess={handleInvoiceSuccess}
       />
     </div>
   );
