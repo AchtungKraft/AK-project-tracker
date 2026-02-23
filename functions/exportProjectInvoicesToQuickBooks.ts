@@ -51,15 +51,94 @@ Deno.serve(async (req) => {
     const exportTimestamp = new Date().toISOString();
 
     // ============================================
-    // STEP 1: Fetch Canonical Invoice View
+    // STEP 1: Fetch Invoice Data Directly (inline read model)
     // ============================================
-    const { data } = await base44.asServiceRole.functions.invoke('getProjectInvoicesView', {
-      project_id,
-    });
-
-    if (!data?.invoices) {
-      throw new Error('No invoices returned from read model');
+    
+    // Fetch invoices for this project
+    const invoices = await base44.entities.ProjectInvoice.filter({ project_id }, '-created_date');
+    
+    if (!invoices || invoices.length === 0) {
+      return Response.json({
+        success: false,
+        error: 'No invoices found for this project',
+      });
     }
+
+    // Fetch project for name
+    const projects = await base44.entities.Project.filter({ id: project_id });
+    const project = projects[0];
+    const projectName = project?.name || 'Unknown Project';
+
+    // Fetch all invoice lines
+    const invoiceIds = invoices.map(inv => inv.id);
+    const allLines = await base44.entities.ProjectInvoiceLine.list();
+    const relevantLines = allLines.filter(line => invoiceIds.includes(line.invoice_id));
+
+    // Fetch commitments for part details
+    const commitmentIds = [...new Set(relevantLines.filter(l => l.part_commitment_id).map(l => l.part_commitment_id))];
+    const commitments = commitmentIds.length > 0
+      ? await base44.entities.PartCommitment.list()
+      : [];
+    const commitmentMap = Object.fromEntries(commitments.map(c => [c.id, c]));
+
+    // Fetch parts for names
+    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const parts = partIds.length > 0
+      ? await base44.entities.Part.list()
+      : [];
+    const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
+
+    // Fetch categories
+    const categories = await base44.entities.PartCategory.list();
+    const categoryMap = Object.fromEntries(categories.map(c => [c.id, c]));
+
+    // Build lines by invoice with enriched data
+    const linesByInvoice = {};
+    for (const line of relevantLines) {
+      if (!linesByInvoice[line.invoice_id]) {
+        linesByInvoice[line.invoice_id] = [];
+      }
+
+      let enrichedLine = { ...line };
+
+      if (line.part_commitment_id) {
+        const commitment = commitmentMap[line.part_commitment_id];
+        if (commitment) {
+          const part = partMap[commitment.part_id];
+          const category = part?.part_category_id ? categoryMap[part.part_category_id] : null;
+
+          enrichedLine = {
+            ...line,
+            part_name: part?.part_name || line.description || 'Unknown Part',
+            vendor_part_number: part?.vendor_part_number || '',
+            category_name: category?.name || 'Uncategorized',
+            unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
+          };
+        }
+      } else {
+        enrichedLine = {
+          ...line,
+          part_name: line.description || 'Manual Item',
+          vendor_part_number: '',
+          category_name: line.type === 'outside_cost' ? 'Outside Costs' : 'Manual',
+          unit_retail_snapshot: line.unit_price ?? 0,
+        };
+      }
+
+      linesByInvoice[line.invoice_id].push(enrichedLine);
+    }
+
+    // Attach lines to invoices
+    const invoicesWithLines = invoices.map(inv => ({
+      ...inv,
+      lines: linesByInvoice[inv.id] || [],
+    }));
+
+    // Build data structure matching expected format
+    const data = {
+      invoices: invoicesWithLines,
+      project_name: projectName,
+    };
 
     // DEBUG: Log raw invoice structure
     console.log('[EXPORT DEBUG] Raw invoices count:', data.invoices.length);
@@ -67,7 +146,6 @@ Deno.serve(async (req) => {
       console.log('[EXPORT DEBUG] First invoice structure:', JSON.stringify({
         id: data.invoices[0].id,
         status: data.invoices[0].status,
-        line_count: data.invoices[0].line_count,
         lines_array_length: data.invoices[0].lines?.length ?? 'NO LINES PROPERTY',
         first_line: data.invoices[0].lines?.[0] ?? 'NO LINES',
       }, null, 2));
