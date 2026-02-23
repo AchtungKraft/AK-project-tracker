@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,6 +103,9 @@ export default function ManageBucketsModal({ projectId, onClose }) {
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Manage Kanban Buckets</DialogTitle>
+          <DialogDescription>
+            Create, edit, and reorder Kanban buckets for organizing tasks.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
