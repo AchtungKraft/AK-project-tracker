@@ -528,16 +528,11 @@ export default function SupplyQueueSimplified() {
         </div>
       </div>
 
-      {/* Part Drawer */}
+      {/* Part Modal */}
       {selectedPartId && (
-        <EditPartDrawer
+        <PartModal
           partId={selectedPartId}
-          open={!!selectedPartId}
           onClose={() => setSelectedPartId(null)}
-          onSaved={() => {
-            setSelectedPartId(null);
-            refetchCommitments();
-          }}
         />
       )}
     </MobileSafeAreaContainer>
