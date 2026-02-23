@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
-import { invalidateSupplyQueries, extractInvalidationContext } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
  * useSupplyAction - Hook for executing canonical supply actions
@@ -9,7 +9,8 @@ import { invalidateSupplyQueries, extractInvalidationContext } from "@/component
  * This is the ONLY way UI components should mutate supply state.
  * All actions go through executeSupplyAction dispatcher.
  * 
- * PHASE 4: Uses unified invalidation helper for cross-view consistency
+ * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh
+ * Guarantees immediate UI updates without stale cache drift
  * 
  * Usage:
  * const { adjustRequired, createPO, receive, install } = useSupplyAction();
@@ -41,14 +42,11 @@ export function useSupplyAction(options = {}) {
       }
       return { ...result, _payload: payload, _action_type: action_type };
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       if (!variables.dry_run) {
-        // PHASE 4: Use unified invalidation helper
-        const context = extractInvalidationContext(data, variables.payload);
-        invalidateSupplyQueries(queryClient, {
-          ...context,
-          invalidateAll: true // Ensure all supply views refresh
-        });
+        // PHASE 17: Use forceAppRefresh for deterministic refresh
+        const context = extractRefreshContext(data, variables.payload);
+        await forceAppRefresh(queryClient, context);
       }
       if (showSuccessToast && data._action_type) {
         toast.success(`${data._action_type} completed`);
@@ -178,8 +176,8 @@ export function useSupplyAction(options = {}) {
     reverseInstall,
     cancelCommitment,
     
-    // Manual invalidation via unified helper
-    invalidateQueries: (context = {}) => invalidateSupplyQueries(queryClient, context)
+    // Manual refresh via forceAppRefresh
+    forceRefresh: (context = {}) => forceAppRefresh(queryClient, context)
   };
 }
 
