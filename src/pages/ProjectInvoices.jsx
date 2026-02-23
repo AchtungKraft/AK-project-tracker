@@ -42,14 +42,16 @@ export default function ProjectInvoices() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
-  // Fetch invoices view
+  // PHASE 2: Scoped query key to prevent stale data across project switches
+  // Using projectFilter in key ensures fresh data when filter changes
   const { data: invoicesData, isLoading, refetch } = useQuery({
-    queryKey: ["projectInvoicesView"],
+    queryKey: ["projectInvoicesView", projectFilter],
     queryFn: async () => {
-      const response = await base44.functions.invoke("getProjectInvoicesView", {});
+      const payload = projectFilter !== "all" ? { project_id: projectFilter } : {};
+      const response = await base44.functions.invoke("getProjectInvoicesView", payload);
       return response.data;
     },
-    staleTime: 30000,
+    staleTime: 0, // Always fresh for invoice page
   });
 
   // Fetch financial projects view for filter (only shows projects with parts)
@@ -61,6 +63,20 @@ export default function ProjectInvoices() {
     },
     staleTime: 30000,
   });
+  
+  // PHASE 2: Fetch canonical exposure/credit data when project is selected
+  const { data: billingData } = useQuery({
+    queryKey: ["billingProcurementStates", projectFilter],
+    queryFn: async () => {
+      if (projectFilter === "all") return null;
+      const response = await base44.functions.invoke("getBillingAndProcurementStates", {
+        filters: { project_id: projectFilter }
+      });
+      return response.data;
+    },
+    enabled: projectFilter !== "all",
+    staleTime: 0,
+  });
 
   const financialProjects = financialData?.projects || [];
 
@@ -70,8 +86,16 @@ export default function ProjectInvoices() {
   const summary = invoicesData?.summary || {};
 
   // PHASE 6: Calculate global credit summary for display
-  const totalCreditAvailable = Object.values(creditBalances).reduce((sum, v) => sum + (v || 0), 0);
-  const totalCreditApplied = Object.values(creditApplied).reduce((sum, v) => sum + (v || 0), 0);
+  // Use canonical billing data when available (scoped), fallback to invoice view data
+  const canonicalTotals = billingData?.totals || {};
+  const canonicalCreditSummary = billingData?.credit_summary || {};
+  
+  const totalCreditAvailable = canonicalCreditSummary.total_credit_available ?? 
+    Object.values(creditBalances).reduce((sum, v) => sum + (v || 0), 0);
+  const totalCreditApplied = canonicalCreditSummary.total_credit_applied ?? 
+    Object.values(creditApplied).reduce((sum, v) => sum + (v || 0), 0);
+  const grossExposure = canonicalTotals.gross_exposure ?? (summary.total_balance_due || 0);
+  const netExposure = canonicalTotals.net_exposure ?? Math.max(0, grossExposure - totalCreditApplied);
 
   // Filter invoices by tab, search, and project
   const filteredInvoices = useMemo(() => {
@@ -96,13 +120,18 @@ export default function ProjectInvoices() {
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
   const handleRefresh = async () => {
-    // PHASE 17: Deterministic refresh
-    await forceAppRefresh(queryClient, {});
+    // PHASE 17: Deterministic refresh with scoped keys
+    await forceAppRefresh(queryClient, {
+      projectIds: projectFilter !== "all" ? [projectFilter] : [],
+    });
+    // Also explicitly refetch scoped queries
+    await refetch();
   };
 
   const handleInvoiceCreated = async () => {
-    setShowCreateModal(false);
+    // PHASE 2: Deterministic refresh BEFORE closing modal
     await handleRefresh();
+    setShowCreateModal(false);
   };
 
   const getInvoiceTypeBadge = (type) => {
@@ -143,13 +172,13 @@ export default function ProjectInvoices() {
         </div>
       </div>
 
-      {/* PHASE 6: Credit Summary (read-only) */}
-      {(totalCreditAvailable > 0 || totalCreditApplied > 0) && (
+      {/* PHASE 6: Credit Summary (read-only) - uses canonical data when project selected */}
+      {(totalCreditAvailable > 0 || totalCreditApplied > 0 || projectFilter !== "all") && (
         <CreditSummaryStrip
-          grossExposure={summary.total_balance_due || 0}
+          grossExposure={grossExposure}
           creditAvailable={totalCreditAvailable}
           creditApplied={totalCreditApplied}
-          netExposure={Math.max(0, (summary.total_balance_due || 0) - totalCreditApplied)}
+          netExposure={netExposure}
           isLoading={isLoading}
         />
       )}

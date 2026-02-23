@@ -28,7 +28,11 @@ import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
  * 
  * Shows grouped billable parts for a project.
  * Supports vendor or category grouping.
- * Only shows parts with net_exposure > 0 and billing_status = NOT_INVOICED.
+ * Only shows parts with net_exposure > 0 and unbilled status.
+ * 
+ * CANONICAL FIELD MAPPING:
+ * - Backend returns: invoice_status ('unbilled'|'invoiced'|'paid') OR client_billing_status ('NOT_INVOICED'|'INVOICED'|'PAID')
+ * - We check BOTH fields for compatibility
  */
 export default function BillablePartsSelector({
   projectId,
@@ -46,11 +50,40 @@ export default function BillablePartsSelector({
   const data = useMemo(() => {
     if (!billingData) return null;
     
-    // Get unbilled commitments with net_exposure > 0
-    const unbilledItems = (billingData.commitments || []).filter(c => 
-      c.billing_status === 'NOT_INVOICED' && 
-      (c.net_exposure > 0 || c.gross_exposure > 0)
-    );
+    const commitments = billingData.commitments || [];
+    
+    // DEV: Log field names present for contract drift detection
+    if (process.env.NODE_ENV === 'development' && commitments.length > 0) {
+      const sample = commitments[0];
+      console.log('[BillablePartsSelector] Sample commitment fields:', Object.keys(sample));
+    }
+    
+    // CANONICAL FILTER: Use net_exposure > 0 as primary criterion
+    // Status filter uses BOTH possible field names for compatibility
+    const unbilledItems = commitments.filter(c => {
+      // Must have positive exposure
+      const netExposure = c.net_exposure ?? c.net_line_total ?? 0;
+      const grossExposure = c.gross_exposure ?? c.gross_line_total ?? 0;
+      if (netExposure <= 0 && grossExposure <= 0) return false;
+      
+      // Check invoice_status (lowercase) OR client_billing_status (uppercase)
+      const invoiceStatus = c.invoice_status; // 'unbilled' | 'invoiced' | 'paid'
+      const billingStatus = c.billing_status || c.client_billing_status; // 'NOT_INVOICED' | 'INVOICED' | 'PAID'
+      
+      // Accept if either field indicates unbilled
+      const isUnbilled = 
+        invoiceStatus === 'unbilled' || 
+        billingStatus === 'NOT_INVOICED' ||
+        billingStatus === 'not_invoiced' ||
+        (!invoiceStatus && !billingStatus); // Default to unbilled if no status
+      
+      return isUnbilled;
+    });
+    
+    // DEV: Log filter results
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[BillablePartsSelector] ${commitments.length} total → ${unbilledItems.length} unbilled`);
+    }
     
     // Group by vendor or category
     const groups = {};
@@ -67,25 +100,32 @@ export default function BillablePartsSelector({
         };
       }
       
-      // Map to expected BillablePartsSelector format
+      // CANONICAL: Use backend-provided fields with null guards
+      const netExposure = item.net_exposure ?? item.net_line_total ?? 0;
+      const grossExposure = item.gross_exposure ?? item.gross_line_total ?? 0;
+      const creditApplied = item.credit_applied ?? item.credit_applied_line ?? 0;
+      const qty = item.required_total ?? item.assigned_qty ?? 1;
+      const unitPrice = item.unit_retail_snapshot ?? item.unit_retail ?? 0;
+      
       groups[groupKey].items.push({
         part_commitment_id: item.id,
-        part_name: item.part_name,
-        qty_remaining_to_bill: item.required_total,
-        unit_price: item.unit_retail_snapshot,
-        remaining_to_bill: item.net_exposure, // PHASE 2: Use net exposure
-        gross_exposure: item.gross_exposure,
-        credit_applied: item.credit_applied,
-        net_exposure: item.net_exposure,
+        part_name: item.part_name || 'Unknown Part',
+        part_id: item.part_id,
+        qty_remaining_to_bill: qty,
+        unit_price: unitPrice,
+        remaining_to_bill: netExposure,
+        gross_exposure: grossExposure,
+        credit_applied: creditApplied,
+        net_exposure: netExposure,
       });
-      groups[groupKey].group_total += item.net_exposure;
+      groups[groupKey].group_total += netExposure;
     }
     
     return {
       groups: Object.values(groups),
       summary: {
         total_items: unbilledItems.length,
-        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + i.net_exposure, 0),
+        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + (i.net_exposure ?? i.net_line_total ?? 0), 0),
       },
     };
   }, [billingData, groupingMode]);

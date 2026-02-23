@@ -166,20 +166,27 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['projectSupplyView'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 2 CANONICAL: billingProcurementStates is THE source of truth for exposure
-    // Must refetch FIRST before any invoice/credit views
+  );
+  
+  // PHASE 2 CANONICAL: billingProcurementStates is THE source of truth for exposure
+  // Refetch ALL scoped keys (both global and project-specific)
+  refetches.push(
     queryClient.refetchQueries({ 
       queryKey: ['billingProcurementStates'],
-      type: refetchActive ? 'active' : 'all'
+      type: 'all' // Always refetch all billing states
     }),
-    // PHASE 4: Deterministic refetch for billing & invoice queries
+  );
+  
+  // PHASE 4: Deterministic refetch for billing & invoice queries
+  // Project-scoped invoice views for consistency
+  refetches.push(
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
       type: refetchActive ? 'active' : 'all'
     }),
     queryClient.refetchQueries({ 
       queryKey: ['projectInvoicesView'],
-      type: refetchActive ? 'active' : 'all'
+      type: 'all' // Always refetch all scoped views
     }),
     queryClient.refetchQueries({ 
       queryKey: ['financialProjectsView'],
@@ -192,6 +199,23 @@ export async function forceAppRefresh(queryClient, options = {}) {
     // PHASE 2: Credit allocations for exposure net calculation
     queryClient.refetchQueries({ 
       queryKey: ['creditAllocations'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    // PHASE 2: Invoice view internal keys used by ForwardInvoiceDashboard
+    queryClient.refetchQueries({ 
+      queryKey: ['projectInvoiceCommitments'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['projectInvoiceBatches'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['projectCreditLedger'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['projectCreditAllocations'],
       type: refetchActive ? 'active' : 'all'
     }),
   );

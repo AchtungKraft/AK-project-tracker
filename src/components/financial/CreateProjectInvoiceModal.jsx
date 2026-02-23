@@ -189,17 +189,23 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
 
     setIsSubmitting(true);
     try {
-      // Build lines array
+      // Build lines array using CANONICAL backend-provided fields
       const lines = [];
 
-      // Part lines
+      // Part lines - use backend-provided qty/price from selector
       for (const part of selectedParts) {
+        // Validate part_commitment_id exists
+        if (!part.part_commitment_id) {
+          console.warn('[CreateProjectInvoiceModal] Skipping part without commitment ID:', part);
+          continue;
+        }
+        
         lines.push({
           type: "part",
           part_commitment_id: part.part_commitment_id,
-          description: part.part_name,
-          qty: part.qty,
-          unit_price: part.unit_price,
+          description: part.part_name || 'Unknown Part',
+          qty: part.qty ?? part.qty_remaining_to_bill ?? 1,
+          unit_price: part.unit_price ?? 0,
         });
       }
 
@@ -237,11 +243,23 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
 
       if (response.data?.success) {
         toast.success("Invoice draft created");
-        // PHASE 17: Deterministic refresh
+        
+        // PHASE 2: Deterministic refresh - await ALL refetches before callback
         await forceAppRefresh(queryClient, {
           projectIds: [selectedProjectId],
           commitmentIds: selectedParts.map(p => p.part_commitment_id).filter(Boolean),
         });
+        
+        // Explicitly refetch scoped billing states to ensure UI consistency
+        await queryClient.refetchQueries({ 
+          queryKey: ['billingProcurementStates', selectedProjectId],
+          type: 'all'
+        });
+        await queryClient.refetchQueries({ 
+          queryKey: ['projectInvoicesView'],
+          type: 'all'
+        });
+        
         onSuccess?.();
       } else {
         toast.error(response.data?.error || "Failed to create invoice");

@@ -48,6 +48,7 @@ import {
   CANONICAL_BILLING_STATUS,
   getBillingStatusConfig 
 } from "./useProjectInvoiceView";
+import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
@@ -82,15 +83,32 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [selectedCommitmentIds, setSelectedCommitmentIds] = useState(new Set());
 
-  // PHASE 6: Use canonical read model
+  // PHASE 6: Use canonical read model for invoice history
   const { 
     commitments,
     summary, 
     invoiceBatches, 
-    isLoading, 
+    isLoading: invoiceLoading, 
     refetch,
-    creditSummary,
+    creditSummary: invoiceCreditSummary,
   } = useProjectInvoiceView(projectId);
+  
+  // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
+  // This ensures ForwardInvoiceDashboard matches BillablePartsSelector exactly
+  const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(projectId);
+  
+  // Merge loading states
+  const isLoading = invoiceLoading || billingLoading;
+  
+  // CANONICAL: Use billing data for exposure/credit, fallback to invoice view
+  const canonicalTotals = billingData?.totals || {};
+  const canonicalCreditSummary = billingData?.credit_summary || {};
+  const creditSummary = {
+    total_credit_available: canonicalCreditSummary.total_credit_available ?? invoiceCreditSummary?.total_credit_available ?? 0,
+    total_credit_applied: canonicalCreditSummary.total_credit_applied ?? invoiceCreditSummary?.total_credit_applied ?? 0,
+    gross_exposure: canonicalTotals.gross_exposure ?? invoiceCreditSummary?.gross_exposure ?? 0,
+    net_exposure: canonicalTotals.net_exposure ?? invoiceCreditSummary?.net_exposure ?? 0,
+  };
 
   // Toggle commitment selection
   const toggleCommitmentSelection = (commitmentId, checked) => {
