@@ -670,19 +670,25 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   // PHASE 4: Credit allocation modal state
   const [showCreditModal, setShowCreditModal] = useState(false);
 
+  // DETERMINISTIC: Normalize project ID
+  const normalizedProjectId = projectId ? String(projectId) : "";
+
   // Fetch lifecycle data
   // Override project filter if projectId prop provided
   React.useEffect(() => {
-    if (projectId) {
-      setProjectFilter(projectId);
+    if (normalizedProjectId) {
+      setProjectFilter(normalizedProjectId);
     }
-  }, [projectId]);
+  }, [normalizedProjectId]);
+
+  // DETERMINISTIC: Normalize project filter for query key
+  const normalizedProjectFilter = projectFilter === 'all' ? 'all' : String(projectFilter);
 
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['billingProcurementStates', projectFilter, financialRoleFilter],
+    queryKey: ['billingProcurementStates', normalizedProjectFilter, financialRoleFilter],
     queryFn: async () => {
       const filters = {};
-      if (projectFilter !== 'all') filters.project_id = projectFilter;
+      if (normalizedProjectFilter !== 'all') filters.project_id = normalizedProjectFilter;
       if (financialRoleFilter !== 'all') filters.financial_role = financialRoleFilter;
       
       const response = await base44.functions.invoke('getBillingAndProcurementStates', { filters });
