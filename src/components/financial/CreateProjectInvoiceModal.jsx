@@ -96,12 +96,19 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
     return manualLines.reduce((sum, l) => sum + (l.amount || 0), 0);
   }, [manualLines]);
 
+  // PHASE 5: Use canonical net values - no frontend credit math
   const subtotal = invoiceType === "deposit" 
     ? parseFloat(depositAmount) || 0 
     : partsTotal + manualTotal;
 
-  const creditPreview = Math.min(availableCredit, subtotal);
-  const balanceDue = Math.max(0, subtotal - creditPreview);
+  // For display: gross total before credit
+  const grossSubtotal = invoiceType === "deposit"
+    ? parseFloat(depositAmount) || 0
+    : partsGrossTotal + manualTotal;
+
+  // Credit preview: backend already applied credits to selected parts
+  const creditPreview = partsCreditApplied;
+  const balanceDue = subtotal; // Net exposure is already credit-adjusted
 
   // Manual line handlers
   const handleAddManualLine = () => {
