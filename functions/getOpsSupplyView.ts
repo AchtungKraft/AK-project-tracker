@@ -86,6 +86,42 @@ Deno.serve(async (req) => {
       }
     });
 
+    // ============================================================================
+    // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP (same as getProjectSupplyView)
+    // This computes GLOBAL reserved/on_order across ALL active commitments for each part
+    // ============================================================================
+    const partInventoryMap = new Map();
+    
+    // Initialize from Part entities
+    for (const part of parts) {
+      partInventoryMap.set(part.id, {
+        physical_stock: part.physical_stock ?? 0,
+        reserved_global: 0,
+        on_order_global: 0,
+        to_order_global: 0,
+        available: 0,
+      });
+    }
+    
+    // Aggregate from ALL active commitments (global, not per-project)
+    for (const c of commitments) {
+      const inv = partInventoryMap.get(c.part_id);
+      if (!inv) continue;
+      
+      const reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      const covered = c.covered_from_po ?? c.qty_ordered ?? 0;
+      const required = c.required_total ?? c.qty_committed ?? 0;
+      
+      inv.reserved_global += reserved;
+      inv.on_order_global += covered;
+      inv.to_order_global += Math.max(0, required - reserved - covered);
+    }
+    
+    // Calculate available after aggregation
+    for (const [partId, inv] of partInventoryMap.entries()) {
+      inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+    }
+
     // Build SupplyCommitmentViewModel for each commitment
     const viewModels = commitments.map(c => {
       const part = partMap.get(c.part_id);
