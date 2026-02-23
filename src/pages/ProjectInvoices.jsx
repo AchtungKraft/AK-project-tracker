@@ -165,10 +165,11 @@ export default function ProjectInvoices() {
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
   const handleRefresh = async () => {
-    // DETERMINISTIC: Invalidate specific keys only
+    // DETERMINISTIC: Invalidate specific keys only - use factory keys
     const invalidations = [
       queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
     ];
+    // Only invalidate scoped keys when we have a valid projectId (not null)
     if (normalizedProjectId) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
       invalidations.push(queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }));
