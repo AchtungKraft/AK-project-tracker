@@ -395,8 +395,8 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
-      {/* Inventory Section with Metrics + Actions */}
-      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-3">
+      {/* Inventory Section - Compact Canonical Metrics */}
+      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-300">Inventory</span>
           <div className="flex gap-2">
@@ -404,61 +404,50 @@ export default function PartModal({ part, partId, onClose }) {
               size="sm"
               variant="outline"
               onClick={() => setShowAddInventoryModal(true)}
-              className="h-7 text-xs border-gray-600"
+              className="h-6 text-[11px] px-2 border-gray-600"
             >
               <Plus className="w-3 h-3 mr-1" />
-              Add Stock
+              Stock
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={() => setShowAddToBuildModal(true)}
-              className="h-7 text-xs border-gray-600"
+              className="h-6 text-[11px] px-2 border-gray-600"
             >
               <Wrench className="w-3 h-3 mr-1" />
-              Add to Build
+              Build
             </Button>
           </div>
         </div>
         
-        {/* Canonical Metrics */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="text-center p-2 bg-gray-900/50 rounded">
-            <p className="text-xl font-bold text-white">{inventoryMetrics.physical_stock}</p>
-            <p className="text-xs text-gray-400">On Hand</p>
-          </div>
-          <div className="text-center p-2 bg-gray-900/50 rounded">
-            <p className="text-xl font-bold text-amber-400">{inventoryMetrics.reserved_global}</p>
-            <p className="text-xs text-gray-400">Reserved</p>
-          </div>
-          <div className="text-center p-2 bg-gray-900/50 rounded">
-            <p className="text-xl font-bold text-green-400">{inventoryMetrics.available_to_allocate}</p>
-            <p className="text-xs text-gray-400">Available</p>
-          </div>
-          <div className="text-center p-2 bg-gray-900/50 rounded">
-            <p className="text-xl font-bold text-blue-400">{inventoryMetrics.on_order}</p>
-            <p className="text-xs text-gray-400">On Order</p>
-          </div>
+        {/* Compact Canonical Metrics - Single Row */}
+        <div className="flex items-center gap-1 max-w-[280px] font-mono text-[11px] bg-gray-900/60 px-2 py-1.5 rounded">
+          <span className="text-white">Stock <span className="font-bold">{inventoryMetrics.physical_stock}</span></span>
+          <span className="text-gray-500">•</span>
+          <span className="text-amber-400">Res <span className="font-bold">{inventoryMetrics.reserved_global}</span></span>
+          <span className="text-gray-500">•</span>
+          <span className="text-green-400">Avail <span className="font-bold">{inventoryMetrics.available_to_allocate}</span></span>
+          <span className="text-gray-500">•</span>
+          <span className="text-blue-400">Ord <span className="font-bold">{inventoryMetrics.on_order}</span></span>
         </div>
 
-        {/* Location Summary */}
+        {/* Compact Location Summary */}
         {Object.keys(locationSummary).length > 0 && (
-          <div className="pt-2 border-t border-gray-700">
-            <p className="text-xs text-gray-400 mb-2 flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              By Location
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(locationSummary).map(([locId, data]) => {
-                const loc = locations.find(l => l.id === locId);
-                return (
-                  <Badge key={locId} variant="outline" className="text-xs border-gray-600">
-                    {loc?.bin_description || loc?.location_area || 'Unassigned'}: {data.qty}
-                    {data.reserved > 0 && <span className="text-amber-400 ml-1">({data.reserved} reserved)</span>}
-                  </Badge>
-                );
-              })}
-            </div>
+          <div className="flex flex-wrap items-center gap-1 text-[11px]">
+            <MapPin className="w-3 h-3 text-gray-500" />
+            {Object.entries(locationSummary).slice(0, 3).map(([locId, data]) => {
+              const loc = locations.find(l => l.id === locId);
+              return (
+                <span key={locId} className="text-gray-400">
+                  {loc?.bin_description || loc?.location_area || '?'}: <span className="text-white">{data.qty}</span>
+                  {data.reserved > 0 && <span className="text-amber-400/70">({data.reserved})</span>}
+                </span>
+              );
+            })}
+            {Object.keys(locationSummary).length > 3 && (
+              <span className="text-gray-500">+{Object.keys(locationSummary).length - 3} more</span>
+            )}
           </div>
         )}
       </div>
@@ -983,8 +972,12 @@ export default function PartModal({ part, partId, onClose }) {
         {/* Add Inventory Modal (Mobile) */}
         {showAddInventoryModal && activePart && (
           <AddInventoryModal
-            part={activePart}
-            onClose={() => setShowAddInventoryModal(false)}
+            preselectedPartId={activePart.id}
+            onClose={() => {
+              setShowAddInventoryModal(false);
+              // Refresh inventory data after add
+              invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+            }}
           />
         )}
         
@@ -992,7 +985,11 @@ export default function PartModal({ part, partId, onClose }) {
         {showAddToBuildModal && activePart && (
           <AddToBuildModal
             part={activePart}
-            onClose={() => setShowAddToBuildModal(false)}
+            onClose={() => {
+              setShowAddToBuildModal(false);
+              // Refresh after build assignment
+              invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+            }}
           />
         )}
       </>
@@ -1051,8 +1048,11 @@ export default function PartModal({ part, partId, onClose }) {
       {/* Add Inventory Modal */}
       {showAddInventoryModal && activePart && (
         <AddInventoryModal
-          part={activePart}
-          onClose={() => setShowAddInventoryModal(false)}
+          preselectedPartId={activePart.id}
+          onClose={() => {
+            setShowAddInventoryModal(false);
+            invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+          }}
         />
       )}
       
@@ -1060,7 +1060,10 @@ export default function PartModal({ part, partId, onClose }) {
       {showAddToBuildModal && activePart && (
         <AddToBuildModal
           part={activePart}
-          onClose={() => setShowAddToBuildModal(false)}
+          onClose={() => {
+            setShowAddToBuildModal(false);
+            invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+          }}
         />
       )}
     </>
