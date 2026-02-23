@@ -49,6 +49,7 @@ import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
+import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
 import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx";
 import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
