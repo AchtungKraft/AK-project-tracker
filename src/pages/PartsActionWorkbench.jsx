@@ -1,6 +1,10 @@
 /**
  * INVOICEBATCH IS REMOVED. Do not import or use InvoiceBatch* components or functions.
  * Use ProjectInvoice + CreateProjectInvoiceModal.
+ * 
+ * CANONICAL ARCHITECTURE LOCK:
+ * - Uses queryKeyFactories for all query keys
+ * - Invoice creation ONLY via CreateProjectInvoiceModal
  */
 import React, { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,10 +55,12 @@ import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnostic
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { lifecycleKeys } from "@/components/financial/queryKeyFactories";
 
 // DEV guardrail
 if (process.env.NODE_ENV === "development") {
   window.__INVOICEBATCH_REMOVED__ = true;
+  window.__CANONICAL_INVOICE_MODAL__ = 'CreateProjectInvoiceModal';
 }
 
 // ============================================
@@ -137,7 +143,7 @@ const ACTION_TAB_CONFIG = {
 
 function CoverageHealthKPI({ onOpenDiagnostics }) {
   const { data: diagnostics, isLoading } = useQuery({
-    queryKey: ['coverageDiagnostics'],
+    queryKey: lifecycleKeys.diagnostics(),
     queryFn: async () => {
       const response = await base44.functions.invoke('diagnoseActionWorkbenchCoverage', {
         options: { limit: 10 }
