@@ -63,20 +63,26 @@ export default function CreateProjectInvoiceModal({
   initialSelectedItems = [], // PHASE 2: Allow pre-selection from PartsActionWorkbench
 }) {
   const queryClient = useQueryClient();
+  // DETERMINISTIC: Normalize preselected project ID
+  const normalizedPreselectedId = preselectedProjectId ? String(preselectedProjectId) : "";
+  
   // If project is preselected, skip to step 1 (type selection)
-  const [step, setStep] = useState(preselectedProjectId ? 1 : 0);
-  const [selectedProjectId, setSelectedProjectId] = useState(preselectedProjectId || "");
+  const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
+  const [selectedProjectId, setSelectedProjectId] = useState(normalizedPreselectedId);
   const [invoiceType, setInvoiceType] = useState("progress");
   const [depositAmount, setDepositAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedParts, setSelectedParts] = useState([]);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Normalized ID for queries
+  const normalizedProjectId = selectedProjectId ? String(selectedProjectId) : "";
   
   // Reset state when modal opens with preselected project
   React.useEffect(() => {
-    if (open && preselectedProjectId) {
-      setSelectedProjectId(preselectedProjectId);
+    if (open && normalizedPreselectedId) {
+      setSelectedProjectId(normalizedPreselectedId);
       setStep(1); // Skip project selection
       
       // PHASE 2: Pre-populate selected parts if initialSelectedItems provided
@@ -84,12 +90,12 @@ export default function CreateProjectInvoiceModal({
         setSelectedParts(initialSelectedItems);
         setStep(2); // Skip to lines step if items provided
       }
-    } else if (open && !preselectedProjectId) {
+    } else if (open && !normalizedPreselectedId) {
       setStep(0);
       setSelectedProjectId("");
       setSelectedParts([]);
     }
-  }, [open, preselectedProjectId, initialSelectedItems]);
+  }, [open, normalizedPreselectedId, initialSelectedItems]);
 
   // Get financial projects data for project dropdown
   const { data: financialData } = useFinancialProjectsView();
@@ -99,8 +105,8 @@ export default function CreateProjectInvoiceModal({
 
   // PHASE 1 CANONICAL: Use getBillingAndProcurementStates as single source of truth
   const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(
-    selectedProjectId,
-    { enabled: !!selectedProjectId && open }
+    normalizedProjectId,
+    { enabled: Boolean(normalizedProjectId) && open }
   );
 
   // PHASE 1: Extract canonical totals from billing data
@@ -278,12 +284,12 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // PHASE 1 UNIFIED: Deterministic refresh - await ALL refetches before callback
-        // This ensures BOTH ProjectInvoices page AND ForwardInvoiceDashboard update
-        await forceAppRefresh(queryClient, {
-          projectIds: [selectedProjectId],
-          commitmentIds: selectedParts.map(p => p.part_commitment_id).filter(Boolean),
-        });
+        // DETERMINISTIC: Invalidate exact keys only
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+        ]);
         
         onSuccess?.();
       } else {
