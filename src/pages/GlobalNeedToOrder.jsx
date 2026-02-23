@@ -666,11 +666,11 @@ export default function GlobalNeedToOrder() {
                         <div className="flex items-center gap-4">
                           <div className="text-right">
                             <p className="text-xs text-gray-500">Exposure</p>
-                            <p className="text-red-400 font-medium">${group.totalExposure.toFixed(0)}</p>
+                            <p className="text-red-400 font-medium">{formatCurrencyUSD(group.totalExposure)}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-xs text-gray-500">Est. Cost</p>
-                            <p className="text-yellow-400 font-medium">${group.totalCost.toFixed(0)}</p>
+                            <p className="text-yellow-400 font-medium">{formatCurrencyUSD(group.totalCost)}</p>
                           </div>
                           {group.canOrderCount > 0 && (
                             <Button
