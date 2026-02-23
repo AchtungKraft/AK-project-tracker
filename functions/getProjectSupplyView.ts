@@ -95,10 +95,15 @@ Deno.serve(async (req) => {
     
     // First, fetch ALL commitments for parts in this project (to get global reservations)
     const partIdsInProject = [...new Set(commitments.map(c => c.part_id))];
-    const allCommitmentsForParts = await base44.entities.PartCommitment.filter({
-      part_id: { $in: partIdsInProject },
-      commitment_status: { $nin: ['cancelled', 'closed'] }
-    });
+    
+    // Handle empty part list gracefully
+    let allCommitmentsForParts = [];
+    if (partIdsInProject.length > 0) {
+      allCommitmentsForParts = await base44.entities.PartCommitment.filter({
+        part_id: { $in: partIdsInProject },
+        commitment_status: { $nin: ['cancelled', 'closed'] }
+      });
+    }
     
     // Build canonical part inventory map with GLOBAL totals
     const partInventoryMap = new Map();
@@ -173,20 +178,6 @@ Deno.serve(async (req) => {
           throw new Error(
             `COVERAGE_INVARIANT_VIOLATION: part=${c.part_id} commitment=${c.id} ` +
             `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} to_order=${to_order} sum=${coverage_sum}`
-          );
-        }
-        
-        // ============================================================================
-        // PHASE 9G: HARD INVARIANT ENFORCEMENT - Read model does NOT mutate
-        // ============================================================================
-        
-        // Check coverage invariant at commitment level
-        const sum = reserved_from_stock + covered_from_po + to_order;
-        if (Math.abs(sum - required_total) > 0.001) {
-          throw new Error(
-            `COVERAGE_INVARIANT_VIOLATION: commitment=${c.id} part=${c.part_id} ` +
-            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} ` +
-            `to_order=${to_order} sum=${sum} diff=${sum - required_total}`
           );
         }
         
@@ -268,18 +259,6 @@ Deno.serve(async (req) => {
         // PHASE 2B: CANONICAL INVENTORY SNAPSHOT
         // All UI views MUST use these values - NO local calculations allowed
         // UI must display BOTH global reserved AND this-project reserved
-        // 
-        // GLOBAL CONTEXT (Part-level):
-        //   - physical_stock_global: Part.physical_stock
-        //   - reserved_global_active: SUM(reserved_from_stock) across ALL active commitments
-        //   - available_global_active: physical_stock_global - reserved_global_active
-        //
-        // PROJECT CONTEXT (Commitment-level):
-        //   - reserved_this_project: reserved_from_stock for THIS commitment
-        //
-        // UI DISPLAY CONTRACT:
-        //   "In Stock" column: physical_stock_global
-        //   "Reserved" column: "X | Y" format (X=global, Y=this project)
         // ============================================================================
         const inventory_snapshot = {
           // CANONICAL: Part-level physical stock (GLOBAL)
@@ -498,31 +477,20 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
-  
-  // Get available stock from part inventory
   const available_stock = partInventory.available ?? 0;
 
-  // PHASE 9H Step 2: STRICT billing gating
-  // Normalize requires_prepay - treat null/undefined as false (legacy default)
-  let requires_prepay = rawCommitment.requires_prepay;
-  if (typeof requires_prepay !== 'boolean') {
-    requires_prepay = false; // Legacy default: order without invoice
-  }
+  // PHASE 9H: Check billing flags for prepay requirements
+  const requires_prepay = rawCommitment.requires_prepay ?? false;
+  const billing_status = rawCommitment.billing_status || 'unbilled';
   
-  const billing_status = rawCommitment.billing_status || 'billable';
-
-  // Check if ordering is blocked by prepay requirement
-  if (to_order > 0) {
-    // STRICT: requires_prepay === true AND NOT invoiced/paid = BLOCKED
-    if (
-      requires_prepay === true &&
-      billing_status !== 'INVOICED' &&
+  // If requires_prepay and NOT yet invoiced/paid, block ordering
+  if (requires_prepay && 
+      billing_status !== 'INVOICED' && 
       billing_status !== 'invoiced' &&
       billing_status !== 'PAID' &&
       billing_status !== 'paid'
-    ) {
-      return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY' };
-    }
+  ) {
+    return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY' };
   }
 
   // Only block: no vendor
