@@ -1,21 +1,15 @@
 /**
  * useProjectInvoiceView - Canonical Financial Read Model
  * 
- * PHASE 6: Unified Financial State Resolver for Forward Model
+ * PHASE 1 REFACTOR: Unified Invoice State for Forward Model
  * 
- * This hook provides the ONLY source of truth for invoice tab data.
- * It abstracts all entity queries and returns normalized financial state.
+ * This hook provides invoice-history data from ProjectInvoice + ProjectInvoiceLine.
+ * For exposure/credit calculations, use getBillingAndProcurementStates.
  * 
  * CANONICAL INVOICE STATES:
  * - UNBILLED: Not yet invoiced (ready to bill)
  * - INVOICED: Invoice sent, awaiting payment
  * - PAID: Payment received
- * 
- * NO LIFECYCLE LEAKAGE:
- * - Does NOT inspect commitment_status
- * - Does NOT inspect coverage_status
- * - Does NOT inspect inventory
- * - Does NOT inspect to_order / install progress
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -37,38 +31,8 @@ export const CANONICAL_BILLING_STATUS = {
 
 /**
  * Normalize any legacy billing_status to canonical values
- * 
- * Legacy values that map to UNBILLED:
- * - null, undefined, ''
- * - 'billable'
- * - 'not_invoiced'
- * - 'NOT_INVOICED'
- * - 'invoice_client'
- * - 'awaiting_invoice'
- * 
- * Legacy values that map to INVOICED:
- * - 'awaiting_pay'
- * - 'AWAITING_PAY'
- * - 'awaiting_payment'
- * - 'sent'
- * - 'invoiced'
- * - 'INVOICED'
- * 
- * Values that map to PAID:
- * - 'paid'
- * - 'PAID'
- * - 'client_paid'
  */
 export function normalizeCommitmentBillingStatus(rawStatus, commitment = {}) {
-  // First check if commitment is linked to an InvoiceBatch
-  if (commitment.invoice_batch_id) {
-    // Status derived from batch
-    const batchStatus = commitment.invoice_batch_status;
-    if (batchStatus === 'paid') return CANONICAL_BILLING_STATUS.PAID;
-    if (['sent', 'invoiced'].includes(batchStatus)) return CANONICAL_BILLING_STATUS.INVOICED;
-  }
-  
-  // Normalize raw status string
   const status = (rawStatus || '').toLowerCase().trim();
   
   // PAID states
@@ -122,51 +86,14 @@ export function getBillingStatusConfig(status) {
 }
 
 // ============================================
-// VIEW MODEL TYPES
-// ============================================
-
-/**
- * @typedef {Object} InvoiceCommitmentViewModel
- * @property {string} id - Commitment ID
- * @property {string} part_id
- * @property {string} part_name
- * @property {string} project_id
- * @property {string} billing_status - Canonical: unbilled | invoiced | paid
- * @property {number} unit_cost
- * @property {number} unit_retail
- * @property {number} required_total
- * @property {number} extended_retail - unit_retail * required_total
- * @property {string|null} invoice_batch_id
- * @property {string|null} invoice_number
- */
-
-/**
- * @typedef {Object} InvoiceSummary
- * @property {number} unbilled_count
- * @property {number} unbilled_total
- * @property {number} invoiced_count
- * @property {number} invoiced_total
- * @property {number} paid_count
- * @property {number} paid_total
- * @property {number} outstanding_total - invoiced_total (awaiting payment)
- * @property {number} total_billable - All non-cancelled commitments
- */
-
-// ============================================
 // MAIN HOOK
 // ============================================
 
 /**
- * useProjectInvoiceView - Canonical read model for invoice tab
+ * useProjectInvoiceView - Invoice history read model
  * 
- * @param {string} projectId 
- * @returns {{ 
- *   commitments: InvoiceCommitmentViewModel[], 
- *   summary: InvoiceSummary,
- *   invoiceBatches: Array,
- *   isLoading: boolean,
- *   refetch: Function
- * }}
+ * IMPORTANT: This is for INVOICE HISTORY only.
+ * For exposure/credit data, use useBillingAndProcurementStates.
  */
 export function useProjectInvoiceView(projectId) {
   // Fetch commitments for this project
@@ -190,7 +117,6 @@ export function useProjectInvoiceView(projectId) {
     queryKey: ['invoiceViewParts', partIds.sort().join(',')],
     queryFn: async () => {
       if (partIds.length === 0) return [];
-      // Batch fetch parts
       const allParts = await base44.entities.Part.list();
       return allParts.filter(p => partIds.includes(p.id));
     },
@@ -198,22 +124,22 @@ export function useProjectInvoiceView(projectId) {
     staleTime: 60000,
   });
 
-  // Fetch invoice batches
+  // PHASE 1: Fetch ProjectInvoice (forward system) instead of InvoiceBatch
   const { 
-    data: invoiceBatches = [], 
-    isLoading: loadingBatches,
-    refetch: refetchBatches
+    data: projectInvoices = [], 
+    isLoading: loadingInvoices,
+    refetch: refetchInvoices
   } = useQuery({
-    queryKey: ['projectInvoiceBatches', projectId],
+    queryKey: ['projectInvoices', projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      return base44.entities.InvoiceBatch.filter({ project_id: projectId }, '-created_date');
+      return base44.entities.ProjectInvoice.filter({ project_id: projectId }, '-created_date');
     },
     enabled: !!projectId,
     staleTime: 30000,
   });
 
-  // PHASE 4: Fetch credit ledger and allocations
+  // Fetch credit ledger and allocations
   const { data: creditLedgers = [], isLoading: loadingCredits } = useQuery({
     queryKey: ['projectCreditLedger', projectId],
     queryFn: async () => {
@@ -234,52 +160,39 @@ export function useProjectInvoiceView(projectId) {
     staleTime: 30000,
   });
 
-  // Fetch batch lines for mapping
-  const batchIds = invoiceBatches.map(b => b.id);
-  const { data: batchLines = [], isLoading: loadingLines } = useQuery({
-    queryKey: ['invoiceBatchLines', batchIds.sort().join(',')],
+  // Fetch invoice lines for mapping
+  const invoiceIds = projectInvoices.map(inv => inv.id);
+  const { data: invoiceLines = [], isLoading: loadingLines } = useQuery({
+    queryKey: ['projectInvoiceLines', invoiceIds.sort().join(',')],
     queryFn: async () => {
-      if (batchIds.length === 0) return [];
-      const allLines = await base44.entities.InvoiceBatchLine.list();
-      return allLines.filter(l => batchIds.includes(l.invoice_batch_id));
+      if (invoiceIds.length === 0) return [];
+      const allLines = await base44.entities.ProjectInvoiceLine.list();
+      return allLines.filter(l => invoiceIds.includes(l.invoice_id));
     },
-    enabled: batchIds.length > 0,
+    enabled: invoiceIds.length > 0,
     staleTime: 30000,
   });
 
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
-  const batchesMap = Object.fromEntries(invoiceBatches.map(b => [b.id, b]));
+  const invoicesMap = Object.fromEntries(projectInvoices.map(inv => [inv.id, inv]));
   
-  // Map commitment_id to batch info via batch lines
-  const commitmentToBatch = {};
-  for (const line of batchLines) {
-    if (line.commitment_id) {
-      const batch = batchesMap[line.invoice_batch_id];
-      if (batch) {
-        commitmentToBatch[line.commitment_id] = {
-          batch_id: batch.id,
-          batch_status: batch.status,
-          invoice_number: batch.invoice_number,
+  // Map commitment_id to invoice info via invoice lines
+  const commitmentToInvoice = {};
+  for (const line of invoiceLines) {
+    if (line.part_commitment_id) {
+      const invoice = invoicesMap[line.invoice_id];
+      if (invoice) {
+        commitmentToInvoice[line.part_commitment_id] = {
+          invoice_id: invoice.id,
+          invoice_status: invoice.status,
+          invoice_number: invoice.qb_invoice_number,
         };
       }
     }
   }
 
-  // PHASE 10: Dev mode drift warning for non-canonical billing_status
-  if (process.env.NODE_ENV === 'development' && rawCommitments.length > 0) {
-    const nonCanonical = rawCommitments.filter(c => 
-      c.billing_status && !['unbilled', 'invoiced', 'paid'].includes(c.billing_status.toLowerCase())
-    );
-    if (nonCanonical.length > 0) {
-      console.warn(
-        `[BILLING_DRIFT_WARNING] ${nonCanonical.length} commitments have non-canonical billing_status:`,
-        nonCanonical.map(c => ({ id: c.id, status: c.billing_status }))
-      );
-    }
-  }
-
-  // PHASE 5: Build credit allocation map by commitment
+  // Build credit allocation map by commitment
   const creditByCommitmentLocal = {};
   for (const alloc of creditAllocations) {
     if (alloc.commitment_id) {
@@ -291,28 +204,22 @@ export function useProjectInvoiceView(projectId) {
   }
 
   // Transform commitments to view models
-  // PHASE 5: Include gross/credit/net exposure from backend - NO FRONTEND MATH
   const commitments = rawCommitments
     .filter(c => !c.cancellation_type && c.cancellation_type !== 'full_cancel')
     .map(c => {
       const part = partsMap[c.part_id];
-      const batchInfo = commitmentToBatch[c.id] || {};
+      const invoiceInfo = commitmentToInvoice[c.id] || {};
       
       // Derive canonical billing status
       const canonicalStatus = normalizeCommitmentBillingStatus(
-        c.billing_status, 
-        { 
-          invoice_batch_id: batchInfo.batch_id,
-          invoice_batch_status: batchInfo.batch_status 
-        }
+        c.billing_status || invoiceInfo.invoice_status
       );
       
-      const unitRetail = c.unit_retail_snapshot ?? c.unit_retail ?? 0;
-      const unitCost = c.unit_cost_snapshot ?? c.unit_cost ?? 0;
+      const unitRetail = c.unit_retail_snapshot ?? 0;
+      const unitCost = c.unit_cost_snapshot ?? 0;
       const requiredTotal = c.required_total ?? 1;
       
-      // PHASE 5: Calculate gross and net exposure - this is display ONLY
-      // The canonical source is getBillingAndProcurementStates
+      // Calculate exposure
       const grossExposure = unitRetail * requiredTotal;
       const creditAppliedLine = creditByCommitmentLocal[c.id] || 0;
       const netExposure = Math.max(0, grossExposure - creditAppliedLine);
@@ -321,25 +228,23 @@ export function useProjectInvoiceView(projectId) {
         id: c.id,
         part_id: c.part_id,
         part_name: part?.part_name || 'Unknown Part',
+        part_number: part?.vendor_part_number,
         project_id: c.project_id,
         billing_status: canonicalStatus,
+        invoice_status: canonicalStatus,
         unit_cost: unitCost,
         unit_retail: unitRetail,
         required_total: requiredTotal,
-        extended_retail: grossExposure, // DEPRECATED: Use gross_exposure
-        extended_cost: unitCost * requiredTotal,
-        // PHASE 5: Canonical exposure fields
+        extended_retail: grossExposure,
         gross_exposure: grossExposure,
         credit_applied: creditAppliedLine,
         net_exposure: netExposure,
-        invoice_batch_id: batchInfo.batch_id || null,
-        invoice_number: batchInfo.invoice_number || null,
-        // Raw for debugging
-        _raw_billing_status: c.billing_status,
+        invoice_id: invoiceInfo.invoice_id,
+        invoice_number: invoiceInfo.invoice_number,
       };
     });
 
-  // Compute summary
+  // Calculate summary
   const summary = {
     unbilled_count: 0,
     unbilled_total: 0,
@@ -352,70 +257,55 @@ export function useProjectInvoiceView(projectId) {
   };
 
   for (const c of commitments) {
-    summary.total_billable += c.extended_retail;
+    const amount = c.extended_retail || 0;
+    summary.total_billable += amount;
     
     switch (c.billing_status) {
       case CANONICAL_BILLING_STATUS.UNBILLED:
         summary.unbilled_count++;
-        summary.unbilled_total += c.extended_retail;
+        summary.unbilled_total += amount;
         break;
       case CANONICAL_BILLING_STATUS.INVOICED:
         summary.invoiced_count++;
-        summary.invoiced_total += c.extended_retail;
+        summary.invoiced_total += amount;
+        summary.outstanding_total += amount;
         break;
       case CANONICAL_BILLING_STATUS.PAID:
         summary.paid_count++;
-        summary.paid_total += c.extended_retail;
+        summary.paid_total += amount;
         break;
     }
   }
-  
-  // Outstanding = invoiced but not paid
-  summary.outstanding_total = summary.invoiced_total;
 
-  // PHASE 4: Calculate credit summary
-  const creditAvailable = creditLedgers.reduce((sum, l) => sum + (l.remaining_amount || 0), 0);
-  const creditApplied = creditAllocations.reduce((sum, a) => sum + (a.amount_applied || 0), 0);
-  const grossExposure = summary.unbilled_total + summary.invoiced_total;
-  const netExposure = Math.max(0, grossExposure - creditApplied);
-
-  // Build credit allocation map by commitment
-  const creditByCommitment = {};
-  for (const alloc of creditAllocations) {
-    if (alloc.commitment_id) {
-      if (!creditByCommitment[alloc.commitment_id]) {
-        creditByCommitment[alloc.commitment_id] = 0;
-      }
-      creditByCommitment[alloc.commitment_id] += alloc.amount_applied || 0;
-    }
-  }
-
-  // Enrich commitments with credit info
-  const enrichedCommitments = commitments.map(c => ({
-    ...c,
-    credit_applied_line: creditByCommitment[c.id] || 0,
-    gross_line_total: c.extended_retail,
-    net_line_total: Math.max(0, c.extended_retail - (creditByCommitment[c.id] || 0)),
-  }));
+  // Calculate credit summary
+  const totalCreditAvailable = creditLedgers.reduce((sum, c) => sum + (c.remaining_amount || 0), 0);
+  const totalCreditApplied = creditAllocations.reduce((sum, a) => sum + (a.amount_applied || 0), 0);
+  const grossExposureTotal = summary.unbilled_total + summary.invoiced_total;
+  const netExposureTotal = Math.max(0, grossExposureTotal - totalCreditApplied);
 
   const creditSummary = {
-    credit_available: creditAvailable,
-    credit_applied: creditApplied,
-    gross_exposure: grossExposure,
-    net_exposure: netExposure,
+    total_credit_available: totalCreditAvailable,
+    total_credit_applied: totalCreditApplied,
+    gross_exposure: grossExposureTotal,
+    net_exposure: netExposureTotal,
+  };
+
+  const isLoading = loadingCommitments || loadingParts || loadingInvoices || loadingCredits || loadingAllocations || loadingLines;
+
+  const refetch = async () => {
+    await Promise.all([
+      refetchCommitments(),
+      refetchInvoices(),
+    ]);
   };
 
   return {
-    commitments: enrichedCommitments,
+    commitments,
     summary,
+    invoiceBatches: projectInvoices, // Alias for compatibility
+    projectInvoices,
     creditSummary,
-    invoiceBatches: invoiceBatches.filter(b => b.status !== 'voided'),
-    isLoading: loadingCommitments || loadingParts || loadingBatches || loadingLines || loadingCredits || loadingAllocations,
-    refetch: () => {
-      refetchCommitments();
-      refetchBatches();
-    },
+    isLoading,
+    refetch,
   };
 }
-
-export default useProjectInvoiceView;

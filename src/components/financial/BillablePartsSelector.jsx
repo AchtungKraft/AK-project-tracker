@@ -17,28 +17,77 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 
 /**
- * PHASE 3 — Billable Parts Selector with Vendor → Category Hierarchy
+ * PHASE 3 — Billable Parts Selector with Vendor → Category → Parts Hierarchy
  * 
  * CANONICAL data source: getBillingAndProcurementStates(projectId)
  * 
  * GROUPING HIERARCHY:
- *   Vendor
- *     └── Category
- *           └── Parts
+ *   Vendor (alphabetical, "Unknown Vendor" last)
+ *     └── Category (alphabetical, "Uncategorized" last)
+ *           └── Parts (by part_name, then commitment_id for stability)
  * 
- * FILTER: net_exposure > 0 AND is_archived !== true
+ * SELECTION PAYLOAD CONTRACT:
+ *   {
+ *     part_commitment_id,
+ *     part_id,
+ *     part_name,
+ *     vendor_id, vendor_name,
+ *     category_id, category_name,
+ *     qty: qty_remaining_to_bill,
+ *     unit_price: unit_retail_snapshot,
+ *     gross_exposure,
+ *     credit_applied,
+ *     net_exposure
+ *   }
  */
+
+// Contract drift detection
+function validateItemContract(item, index) {
+  const required = ['id', 'part_id', 'part_name'];
+  const groupingFields = ['vendor_id', 'vendor_name', 'category_id', 'category_name'];
+  const missing = [];
+  
+  for (const field of required) {
+    if (!item[field]) missing.push(field);
+  }
+  
+  // Warn about missing grouping fields in dev
+  if (process.env.NODE_ENV === 'development') {
+    const missingGrouping = groupingFields.filter(f => !item[f]);
+    if (missingGrouping.length > 0) {
+      console.warn(
+        `[BillablePartsSelector] Item ${item.id || index} missing grouping fields:`,
+        missingGrouping
+      );
+    }
+  }
+  
+  return missing.length === 0;
+}
 
 function groupByVendorThenCategory(items) {
   const vendorMap = {};
   
-  for (const item of items) {
-    const vendorKey = item.vendor_name || 'Unassigned Vendor';
-    const categoryKey = item.category_name || 'Uncategorized';
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    
+    // Validate contract
+    if (!validateItemContract(item, i)) continue;
+    
+    // Get vendor info with fallbacks
+    const vendorId = item.vendor_id || item.default_vendor_id || 'unknown';
+    const vendorName = item.vendor_name || 'Unknown Vendor';
+    const vendorKey = `${vendorId}::${vendorName}`;
+    
+    // Get category info with fallbacks  
+    const categoryId = item.category_id || item.part_category_id || 'uncategorized';
+    const categoryName = item.category_name || 'Uncategorized';
+    const categoryKey = `${categoryId}::${categoryName}`;
     
     if (!vendorMap[vendorKey]) {
       vendorMap[vendorKey] = {
-        vendor_name: vendorKey,
+        vendor_id: vendorId,
+        vendor_name: vendorName,
         vendor_total: 0,
         categories: {},
       };
@@ -46,30 +95,33 @@ function groupByVendorThenCategory(items) {
     
     if (!vendorMap[vendorKey].categories[categoryKey]) {
       vendorMap[vendorKey].categories[categoryKey] = {
-        category_name: categoryKey,
+        category_id: categoryId,
+        category_name: categoryName,
         category_total: 0,
         items: [],
       };
     }
     
+    // Extract canonical financial values
     const netExposure = item.net_exposure ?? item.net_line_total ?? 0;
     const grossExposure = item.gross_exposure ?? item.gross_line_total ?? 0;
     const creditApplied = item.credit_applied ?? item.credit_applied_line ?? 0;
-    const qty = item.required_total ?? item.assigned_qty ?? 1;
+    const qty = item.qty_remaining_to_bill ?? item.required_total ?? item.assigned_qty ?? 1;
     const unitPrice = item.unit_retail_snapshot ?? item.unit_retail ?? 0;
     
     const formattedItem = {
       part_commitment_id: item.id,
-      part_name: item.part_name || 'Unknown Part',
       part_id: item.part_id,
+      part_name: item.part_name || 'Unknown Part',
+      vendor_id: vendorId,
+      vendor_name: vendorName,
+      category_id: categoryId,
+      category_name: categoryName,
       qty_remaining_to_bill: qty,
       unit_price: unitPrice,
-      remaining_to_bill: netExposure,
       gross_exposure: grossExposure,
       credit_applied: creditApplied,
       net_exposure: netExposure,
-      vendor_name: vendorKey,
-      category_name: categoryKey,
     };
     
     vendorMap[vendorKey].categories[categoryKey].items.push(formattedItem);
@@ -77,15 +129,36 @@ function groupByVendorThenCategory(items) {
     vendorMap[vendorKey].vendor_total += netExposure;
   }
   
+  // Sort vendors: alphabetical, "Unknown Vendor" last
+  const sortVendors = (a, b) => {
+    if (a.vendor_name === 'Unknown Vendor') return 1;
+    if (b.vendor_name === 'Unknown Vendor') return -1;
+    return a.vendor_name.localeCompare(b.vendor_name);
+  };
+  
+  // Sort categories: alphabetical, "Uncategorized" last
+  const sortCategories = (a, b) => {
+    if (a.category_name === 'Uncategorized') return 1;
+    if (b.category_name === 'Uncategorized') return -1;
+    return a.category_name.localeCompare(b.category_name);
+  };
+  
+  // Sort items: by part_name, then commitment_id for stability
+  const sortItems = (a, b) => {
+    const nameCompare = (a.part_name || '').localeCompare(b.part_name || '');
+    if (nameCompare !== 0) return nameCompare;
+    return (a.part_commitment_id || '').localeCompare(b.part_commitment_id || '');
+  };
+  
   return Object.values(vendorMap)
-    .sort((a, b) => a.vendor_name.localeCompare(b.vendor_name))
+    .sort(sortVendors)
     .map(vendor => ({
       ...vendor,
       categories: Object.values(vendor.categories)
-        .sort((a, b) => a.category_name.localeCompare(b.category_name))
+        .sort(sortCategories)
         .map(cat => ({
           ...cat,
-          items: cat.items.sort((a, b) => (a.part_name || '').localeCompare(b.part_name || '')),
+          items: cat.items.sort(sortItems),
         })),
     }));
 }
@@ -98,6 +171,7 @@ export default function BillablePartsSelector({
 }) {
   const [expandedVendors, setExpandedVendors] = useState({});
   const [expandedCategories, setExpandedCategories] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
 
   const { data: billingData, isLoading, error } = useBillingAndProcurementStates(projectId);
   
@@ -107,13 +181,17 @@ export default function BillablePartsSelector({
     const commitments = billingData.commitments || [];
     let warning = null;
     
+    // Filter to unbilled items with positive exposure
     const unbilledItems = commitments.filter(c => {
       if (c.is_archived === true) return false;
       
       const netExposure = c.net_exposure ?? c.net_line_total ?? 0;
       const grossExposure = c.gross_exposure ?? c.gross_line_total ?? 0;
+      
+      // Only include items with exposure
       if (netExposure <= 0 && grossExposure <= 0) return false;
       
+      // Check billing status - allow multiple formats
       const invoiceStatus = c.invoice_status;
       const billingStatus = c.billing_status || c.client_billing_status;
       
@@ -121,6 +199,7 @@ export default function BillablePartsSelector({
         invoiceStatus === 'unbilled' || 
         billingStatus === 'NOT_INVOICED' ||
         billingStatus === 'not_invoiced' ||
+        billingStatus === 'unbilled' ||
         (!invoiceStatus && !billingStatus);
       
       return isUnbilled;
@@ -142,61 +221,67 @@ export default function BillablePartsSelector({
     };
   }, [billingData]);
   
+  // Auto-expand first vendor
   useEffect(() => {
     if (vendorGroups.length > 0 && Object.keys(expandedVendors).length === 0) {
-      setExpandedVendors({ [vendorGroups[0].vendor_name]: true });
+      const firstVendorKey = `${vendorGroups[0].vendor_id}::${vendorGroups[0].vendor_name}`;
+      setExpandedVendors({ [firstVendorKey]: true });
+      
+      // Also expand first category
+      if (vendorGroups[0].categories.length > 0) {
+        const firstCatKey = `${firstVendorKey}::${vendorGroups[0].categories[0].category_id}`;
+        setExpandedCategories({ [firstCatKey]: true });
+      }
     }
   }, [vendorGroups]);
 
-  const toggleVendor = (vendorName) => {
-    setExpandedVendors(prev => ({ ...prev, [vendorName]: !prev[vendorName] }));
+  const toggleVendor = (vendorId, vendorName) => {
+    const key = `${vendorId}::${vendorName}`;
+    setExpandedVendors(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const toggleCategory = (vendorName, categoryName) => {
-    const key = `${vendorName}::${categoryName}`;
+  const toggleCategory = (vendorId, vendorName, categoryId) => {
+    const key = `${vendorId}::${vendorName}::${categoryId}`;
     setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Selection handlers - emit canonical payload
   const handleToggleItem = (item, checked) => {
+    const payload = {
+      part_commitment_id: item.part_commitment_id,
+      part_id: item.part_id,
+      part_name: item.part_name,
+      vendor_id: item.vendor_id,
+      vendor_name: item.vendor_name,
+      category_id: item.category_id,
+      category_name: item.category_name,
+      qty: item.qty_remaining_to_bill,
+      unit_price: item.unit_price,
+      line_total: item.net_exposure,
+      gross_exposure: item.gross_exposure,
+      credit_applied: item.credit_applied,
+      net_exposure: item.net_exposure,
+    };
+    
     if (checked) {
-      onSelectionChange([
-        ...selectedItems,
-        {
-          part_commitment_id: item.part_commitment_id,
-          part_name: item.part_name,
-          qty: item.qty_remaining_to_bill,
-          unit_price: item.unit_price,
-          line_total: item.net_exposure,
-          gross_exposure: item.gross_exposure,
-          credit_applied: item.credit_applied,
-          net_exposure: item.net_exposure,
-        },
-      ]);
+      onSelectionChange([...selectedItems, payload]);
     } else {
-      onSelectionChange(
-        selectedItems.filter((s) => s.part_commitment_id !== item.part_commitment_id)
-      );
+      onSelectionChange(selectedItems.filter(s => s.part_commitment_id !== item.part_commitment_id));
     }
   };
 
-  const handleUpdateQty = (commitmentId, qty) => {
-    const numQty = parseFloat(qty) || 0;
-    onSelectionChange(
-      selectedItems.map((s) =>
-        s.part_commitment_id === commitmentId
-          ? { ...s, qty: numQty, line_total: numQty * s.unit_price }
-          : s
-      )
-    );
-  };
-
   const handleSelectCategory = (categoryItems) => {
-    const currentIds = new Set(selectedItems.map((s) => s.part_commitment_id));
+    const currentIds = new Set(selectedItems.map(s => s.part_commitment_id));
     const newItems = categoryItems
-      .filter((item) => !currentIds.has(item.part_commitment_id))
-      .map((item) => ({
+      .filter(item => !currentIds.has(item.part_commitment_id))
+      .map(item => ({
         part_commitment_id: item.part_commitment_id,
+        part_id: item.part_id,
         part_name: item.part_name,
+        vendor_id: item.vendor_id,
+        vendor_name: item.vendor_name,
+        category_id: item.category_id,
+        category_name: item.category_name,
         qty: item.qty_remaining_to_bill,
         unit_price: item.unit_price,
         line_total: item.net_exposure,
@@ -208,8 +293,8 @@ export default function BillablePartsSelector({
   };
 
   const handleDeselectCategory = (categoryItems) => {
-    const catIds = new Set(categoryItems.map((item) => item.part_commitment_id));
-    onSelectionChange(selectedItems.filter((s) => !catIds.has(s.part_commitment_id)));
+    const catIds = new Set(categoryItems.map(item => item.part_commitment_id));
+    onSelectionChange(selectedItems.filter(s => !catIds.has(s.part_commitment_id)));
   };
 
   const handleSelectVendor = (vendor) => {
@@ -227,13 +312,44 @@ export default function BillablePartsSelector({
   };
 
   const isCategoryFullySelected = (categoryItems) => {
-    return categoryItems.every(item => isItemSelected(item.part_commitment_id));
+    return categoryItems.length > 0 && categoryItems.every(item => isItemSelected(item.part_commitment_id));
   };
 
   const isCategoryPartiallySelected = (categoryItems) => {
     const selected = categoryItems.filter(item => isItemSelected(item.part_commitment_id));
     return selected.length > 0 && selected.length < categoryItems.length;
   };
+
+  const isVendorFullySelected = (vendor) => {
+    const allItems = vendor.categories.flatMap(c => c.items);
+    return allItems.length > 0 && allItems.every(item => isItemSelected(item.part_commitment_id));
+  };
+
+  const isVendorPartiallySelected = (vendor) => {
+    const allItems = vendor.categories.flatMap(c => c.items);
+    const selected = allItems.filter(item => isItemSelected(item.part_commitment_id));
+    return selected.length > 0 && selected.length < allItems.length;
+  };
+
+  // Filter by search
+  const filteredVendorGroups = useMemo(() => {
+    if (!searchTerm) return vendorGroups;
+    
+    const search = searchTerm.toLowerCase();
+    return vendorGroups
+      .map(vendor => ({
+        ...vendor,
+        categories: vendor.categories
+          .map(cat => ({
+            ...cat,
+            items: cat.items.filter(item => 
+              item.part_name?.toLowerCase().includes(search)
+            ),
+          }))
+          .filter(cat => cat.items.length > 0),
+      }))
+      .filter(vendor => vendor.categories.length > 0);
+  }, [vendorGroups, searchTerm]);
 
   if (!projectId) {
     return (
@@ -254,170 +370,166 @@ export default function BillablePartsSelector({
   if (error) {
     return (
       <div className="flex items-center justify-center h-40 text-red-400">
+        <AlertTriangle className="w-5 h-5 mr-2" />
         Failed to load billable parts
       </div>
     );
   }
 
-  if (vendorGroups.length === 0) {
+  if (contractWarning) {
     return (
       <div className="flex flex-col items-center justify-center h-40 text-gray-500">
-        <Package className="w-8 h-8 mb-2 opacity-50" />
-        <p>No parts remaining to bill</p>
-        {contractWarning && (
-          <div className="mt-2 flex items-center gap-1 text-amber-400 text-xs">
-            <AlertTriangle className="w-3 h-3" />
-            {contractWarning}
-          </div>
-        )}
+        <Package className="w-8 h-8 mb-2 text-gray-600" />
+        <p>{contractWarning}</p>
+      </div>
+    );
+  }
+
+  if (filteredVendorGroups.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 text-gray-500">
+        <Package className="w-8 h-8 mb-2 text-gray-600" />
+        <p>No billable parts available</p>
+        {searchTerm && <p className="text-xs mt-1">Try adjusting your search</p>}
       </div>
     );
   }
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Summary Header */}
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-400">
-          {summary?.total_items || 0} items • {formatCurrencyUSD(summary?.total_remaining_to_bill || 0)} total
-        </span>
-        <Badge variant="outline" className="text-xs">
-          Vendor → Category
-        </Badge>
-      </div>
+      {/* Summary */}
+      {summary && (
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
+          <span className="text-gray-400">
+            {summary.total_items} items available
+          </span>
+          <span className="text-green-400 font-medium">
+            {formatCurrencyUSD(summary.total_remaining_to_bill)}
+          </span>
+        </div>
+      )}
 
-      {/* Vendor → Category → Parts Hierarchy */}
-      <ScrollArea className="h-[400px] pr-2">
-        <div className="space-y-2">
-          {vendorGroups.map((vendor) => {
-            const vendorExpanded = expandedVendors[vendor.vendor_name] ?? false;
-            const allVendorItems = vendor.categories.flatMap(c => c.items);
-            const vendorFullySelected = allVendorItems.every(i => isItemSelected(i.part_commitment_id));
-            const vendorPartiallySelected = !vendorFullySelected && allVendorItems.some(i => isItemSelected(i.part_commitment_id));
+      {/* Search */}
+      <Input
+        placeholder="Search parts..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="bg-gray-800 border-gray-700"
+      />
 
+      {/* Vendor > Category > Parts Tree */}
+      <ScrollArea className="h-[400px]">
+        <div className="space-y-2 pr-3">
+          {filteredVendorGroups.map((vendor) => {
+            const vendorKey = `${vendor.vendor_id}::${vendor.vendor_name}`;
+            const isExpanded = expandedVendors[vendorKey];
+            
             return (
-              <div key={vendor.vendor_name} className="border border-gray-700 rounded-lg overflow-hidden">
+              <div key={vendorKey} className="border border-gray-700 rounded-lg overflow-hidden">
                 {/* Vendor Header */}
-                <div
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 bg-gray-800/50 cursor-pointer hover:bg-gray-800",
-                    vendorExpanded && "border-b border-gray-700"
-                  )}
-                  onClick={() => toggleVendor(vendor.vendor_name)}
+                <div 
+                  className="flex items-center gap-2 p-3 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
+                  onClick={() => toggleVendor(vendor.vendor_id, vendor.vendor_name)}
                 >
-                  {vendorExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
-                  )}
                   <Checkbox
-                    checked={vendorFullySelected}
+                    checked={isVendorFullySelected(vendor)}
+                    ref={el => {
+                      if (el) el.indeterminate = isVendorPartiallySelected(vendor);
+                    }}
                     onCheckedChange={(checked) => {
                       if (checked) handleSelectVendor(vendor);
                       else handleDeselectVendor(vendor);
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  )}
                   <Building2 className="w-4 h-4 text-blue-400" />
                   <span className="font-medium text-white flex-1">{vendor.vendor_name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {vendor.categories.reduce((sum, c) => sum + c.items.length, 0)} parts
+                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
+                    {vendor.categories.reduce((sum, c) => sum + c.items.length, 0)} items
                   </Badge>
-                  <span className="text-sm font-medium text-emerald-400">
+                  <span className="text-green-400 text-sm font-medium">
                     {formatCurrencyUSD(vendor.vendor_total)}
                   </span>
                 </div>
 
-                {/* Categories within Vendor */}
-                {vendorExpanded && (
-                  <div className="bg-gray-900/30">
+                {/* Categories */}
+                {isExpanded && (
+                  <div className="border-t border-gray-700">
                     {vendor.categories.map((category) => {
-                      const catKey = `${vendor.vendor_name}::${category.category_name}`;
-                      const catExpanded = expandedCategories[catKey] ?? true;
-                      const catFullySelected = isCategoryFullySelected(category.items);
-                      const catPartiallySelected = isCategoryPartiallySelected(category.items);
-
+                      const categoryKey = `${vendorKey}::${category.category_id}`;
+                      const isCatExpanded = expandedCategories[categoryKey];
+                      
                       return (
-                        <div key={catKey} className="border-t border-gray-800 first:border-t-0">
+                        <div key={categoryKey}>
                           {/* Category Header */}
-                          <div
-                            className="flex items-center gap-2 px-6 py-1.5 bg-gray-800/30 cursor-pointer hover:bg-gray-800/50"
-                            onClick={() => toggleCategory(vendor.vendor_name, category.category_name)}
+                          <div 
+                            className="flex items-center gap-2 px-3 py-2 pl-8 bg-gray-900/50 cursor-pointer hover:bg-gray-900/80"
+                            onClick={() => toggleCategory(vendor.vendor_id, vendor.vendor_name, category.category_id)}
                           >
-                            {catExpanded ? (
-                              <ChevronDown className="w-3 h-3 text-gray-500" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3 text-gray-500" />
-                            )}
                             <Checkbox
-                              checked={catFullySelected}
+                              checked={isCategoryFullySelected(category.items)}
+                              ref={el => {
+                                if (el) el.indeterminate = isCategoryPartiallySelected(category.items);
+                              }}
                               onCheckedChange={(checked) => {
                                 if (checked) handleSelectCategory(category.items);
                                 else handleDeselectCategory(category.items);
                               }}
                               onClick={(e) => e.stopPropagation()}
-                              className="h-3.5 w-3.5"
                             />
+                            {isCatExpanded ? (
+                              <ChevronDown className="w-3 h-3 text-gray-500" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3 text-gray-500" />
+                            )}
                             <Layers className="w-3 h-3 text-purple-400" />
-                            <span className="text-sm text-gray-300 flex-1">{category.category_name}</span>
-                            <span className="text-xs text-gray-500">{category.items.length}</span>
-                            <span className="text-xs text-emerald-400/70">
+                            <span className="text-gray-300 text-sm flex-1">{category.category_name}</span>
+                            <Badge variant="outline" className="text-xs border-gray-700 text-gray-500">
+                              {category.items.length}
+                            </Badge>
+                            <span className="text-green-400/80 text-xs">
                               {formatCurrencyUSD(category.category_total)}
                             </span>
                           </div>
 
-                          {/* Parts within Category */}
-                          {catExpanded && (
-                            <div className="divide-y divide-gray-800/50">
-                              {category.items.map((item) => {
-                                const selected = isItemSelected(item.part_commitment_id);
-                                const selectedItem = selectedItems.find(
-                                  (s) => s.part_commitment_id === item.part_commitment_id
-                                );
-
-                                return (
-                                  <div
-                                    key={item.part_commitment_id}
-                                    className={cn(
-                                      "flex items-center gap-3 px-8 py-2 transition-colors",
-                                      selected ? "bg-blue-900/20" : "hover:bg-gray-800/30"
-                                    )}
-                                  >
-                                    <Checkbox
-                                      checked={selected}
-                                      onCheckedChange={(checked) => handleToggleItem(item, checked)}
-                                    />
-                                    <Package className="w-4 h-4 text-gray-500" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-white truncate">{item.part_name}</p>
-                                      <p className="text-xs text-gray-500">
-                                        {item.qty_remaining_to_bill} × {formatCurrencyUSD(item.unit_price)}
-                                      </p>
+                          {/* Parts */}
+                          {isCatExpanded && (
+                            <div className="border-t border-gray-800">
+                              {category.items.map((item) => (
+                                <div 
+                                  key={item.part_commitment_id}
+                                  className="flex items-center gap-2 px-3 py-2 pl-14 hover:bg-gray-800/50"
+                                >
+                                  <Checkbox
+                                    checked={isItemSelected(item.part_commitment_id)}
+                                    onCheckedChange={(checked) => handleToggleItem(item, checked)}
+                                  />
+                                  <Package className="w-3 h-3 text-gray-500" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white truncate">{item.part_name}</p>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                      <span>Qty: {item.qty_remaining_to_bill}</span>
+                                      <span>×</span>
+                                      <span>{formatCurrencyUSD(item.unit_price)}</span>
                                     </div>
-                                    {selected && (
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        value={selectedItem?.qty || item.qty_remaining_to_bill}
-                                        onChange={(e) =>
-                                          handleUpdateQty(item.part_commitment_id, e.target.value)
-                                        }
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="w-20 h-7 text-sm text-center bg-gray-800 border-gray-700"
-                                      />
-                                    )}
-                                    <span
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        selected ? "text-emerald-400" : "text-gray-400"
-                                      )}
-                                    >
-                                      {formatCurrencyUSD(item.net_exposure)}
-                                    </span>
                                   </div>
-                                );
-                              })}
+                                  <div className="text-right">
+                                    {item.credit_applied > 0 && (
+                                      <p className="text-xs text-yellow-400 line-through">
+                                        {formatCurrencyUSD(item.gross_exposure)}
+                                      </p>
+                                    )}
+                                    <p className="text-sm text-green-400 font-medium">
+                                      {formatCurrencyUSD(item.net_exposure)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -430,6 +542,18 @@ export default function BillablePartsSelector({
           })}
         </div>
       </ScrollArea>
+
+      {/* Selection Summary */}
+      {selectedItems.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 bg-green-900/20 border border-green-800/30 rounded-lg">
+          <span className="text-green-400 text-sm">
+            {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
+          </span>
+          <span className="text-green-400 font-medium">
+            {formatCurrencyUSD(selectedItems.reduce((sum, s) => sum + (s.net_exposure || s.line_total || 0), 0))}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
