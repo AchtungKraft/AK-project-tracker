@@ -139,7 +139,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     base44.entities.PartPurchaseLineItem.filter({}),
     base44.entities.InstalledPart.filter({}),
     base44.entities.VendorInvoice.filter({}),
-    base44.entities.InvoiceBatchLine.filter({ qb_status: 'queued' }),
+    base44.entities.ProjectInvoiceLine.filter({}), // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
     base44.entities.CreditAllocation.filter({ is_reversed: false }),
     base44.entities.ProjectCreditLedger.filter({}),
   ]);
