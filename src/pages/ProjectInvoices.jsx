@@ -30,6 +30,7 @@ import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function ProjectInvoices() {
   const queryClient = useQueryClient();
@@ -87,13 +88,14 @@ export default function ProjectInvoices() {
     });
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["projectInvoicesView"] });
+  const handleRefresh = async () => {
+    // PHASE 17: Deterministic refresh
+    await forceAppRefresh(queryClient, {});
   };
 
-  const handleInvoiceCreated = () => {
+  const handleInvoiceCreated = async () => {
     setShowCreateModal(false);
-    handleRefresh();
+    await handleRefresh();
   };
 
   const getInvoiceTypeBadge = (type) => {
