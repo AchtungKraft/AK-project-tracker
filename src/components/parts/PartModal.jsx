@@ -368,18 +368,30 @@ export default function PartModal({ part, partId, onClose }) {
       )}
 
       {/* Pricing Summary (View Only) */}
-      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">Pricing</span>
+          <Badge variant="outline" className={`text-xs ${formData.pricing_mode === 'manual' ? 'border-purple-500 text-purple-400' : 'border-blue-500 text-blue-400'}`}>
+            {formData.pricing_mode === 'manual' ? 'Manual' : 'Matrix'}
+          </Badge>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <p className="text-xs text-gray-400 mb-1">Cost</p>
-            <p className="text-white font-semibold">${formData.cost || 0}</p>
+            <p className="text-white font-semibold">${(formData.cost || 0).toFixed(2)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">Retail</p>
             <p className="text-white font-semibold">
-              ${formData.retail_override || formData.retail_matrix_price || 0}
+              ${(formData.retail_override || formData.retail_matrix_price || 0).toFixed(2)}
             </p>
           </div>
+          {formData.applied_markup_pct != null && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Markup</p>
+              <p className="text-white font-semibold">{(formData.applied_markup_pct * 100).toFixed(0)}%</p>
+            </div>
+          )}
         </div>
       </div>
 
