@@ -1,10 +1,23 @@
 /**
- * queryKeyFactories.js - Centralized Query Key Factories
+ * queryKeyFactories.jsx - Centralized Query Key Factories
+ * 
+ * ============================================================
+ * ARCHITECTURAL RULE (PERMANENT - DO NOT MODIFY):
+ * ============================================================
+ * - All React Query keys must contain ONLY primitive segments.
+ * - Filters must be serialized inside factories using serializeFilters().
+ * - Hooks must NEVER stringify filters.
+ * - Dev guard (assertPrimitiveQueryKey) enforces this permanently.
+ * 
+ * ALLOWED KEY SEGMENTS:
+ * - string, number, boolean, null
+ * 
+ * FORBIDDEN KEY SEGMENTS:
+ * - object, array, function, undefined, symbol
+ * ============================================================
  * 
  * SINGLE SOURCE OF TRUTH for ALL domain query keys.
  * All useQuery calls MUST use these factories to prevent key drift.
- * 
- * CANONICAL ARCHITECTURE LOCK - Phase 1
  * 
  * RULES:
  * - Keys are always string arrays (no object keys)
