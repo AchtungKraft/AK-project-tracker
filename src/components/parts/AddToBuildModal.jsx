@@ -75,19 +75,30 @@ export default function AddToBuildModal({ part, onClose }) {
 
       const qtyNeeded = Number(formData.qty_needed) || 1;
 
+      // PHASE 2: Find existing commitment (non-archived) to reuse
+      const existing = existingCommitments.find(
+        c => !c.is_archived && c.project_id === formData.project_id
+      );
+
+      const commitmentIds = existing ? [existing.id] : [];
+      const requiredTotalSet = existing
+        ? (existing.required_total || 0) + qtyNeeded
+        : qtyNeeded;
+
       // CANONICAL: Use executeSupplyAction with ADJUST_REQUIRED
-      // This is the ONLY way to create/update commitments
+      // This reuses existing commitment or creates new one
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'ADJUST_REQUIRED',
-        commitment_ids: [], // Empty = create new commitment
+        commitment_ids: commitmentIds,
         payload: {
           project_id: formData.project_id,
           part_id: part.id,
-          required_total_set: qtyNeeded, // CANONICAL: required_total, NOT qty_committed
-          source_type: 'SHOP_PURCHASED', // Default source type
+          required_total_set: requiredTotalSet,
+          reopen_if_closed: true, // Reopen closed/cancelled commitments
+          source_type: 'SHOP_PURCHASED',
           notes: formData.notes || null,
           source_surface: 'AddToBuildModal',
-          requires_prepay: requiresPrepay, // FIX C: Pass prepay gating choice
+          requires_prepay: requiresPrepay,
         },
         dry_run: false
       });
@@ -245,11 +256,10 @@ export default function AddToBuildModal({ part, onClose }) {
                             <SelectItem 
                               key={project.id} 
                               value={project.id}
-                              disabled={alreadyAdded}
                             >
-                              <span className={alreadyAdded ? 'text-gray-500' : ''}>
+                              <span>
                                 {project.name}
-                                {alreadyAdded && ' (already added)'}
+                                {alreadyAdded && <span className="text-gray-500 ml-1">(will update existing)</span>}
                               </span>
                             </SelectItem>
                           );

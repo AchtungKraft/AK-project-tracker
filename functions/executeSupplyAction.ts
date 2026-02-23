@@ -192,7 +192,8 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     new_required_total, // legacy param - maps to required_total_set
     source_type = 'SHOP_PURCHASED',
     project_id,
-    part_id
+    part_id,
+    reopen_if_closed = false // PHASE 3: Support reopening closed/cancelled commitments
   } = payload;
 
   // Support legacy param name
@@ -207,6 +208,20 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   let commitment = null;
   let part = null;
   let isNewCommitment = false;
+  let wasReopened = false;
+
+  // If commitment_id provided, fetch it (including closed/cancelled if reopen_if_closed)
+  if (commitmentId) {
+    const commitments = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
+    commitment = commitments[0];
+    if (!commitment) throw new Error('Commitment not found');
+
+    // PHASE 3: Reopen closed/cancelled commitments if requested
+    if (reopen_if_closed && ['closed', 'cancelled'].includes(commitment.commitment_status)) {
+      wasReopened = true;
+      // Will be updated below after part fetch
+    }
+  }
 
   // If no commitment_id, try to find or create by project_id + part_id
   if (!commitmentId) {
@@ -214,16 +229,24 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       throw new Error('Either commitment_id OR (project_id + part_id) required');
     }
 
-    // Check if commitment already exists
+    // Check if commitment already exists (exclude archived, include closed/cancelled if reopen enabled)
     const existingCommitments = await ctx.base44.entities.PartCommitment.filter({
       project_id,
       part_id,
-      commitment_status: { $nin: ['cancelled', 'closed'] }
+      is_archived: { $ne: true }
     });
 
-    if (existingCommitments.length > 0) {
-      commitment = existingCommitments[0];
+    // Prefer active commitments, then closed/cancelled if reopen_if_closed
+    const activeCommitment = existingCommitments.find(c => !['cancelled', 'closed'].includes(c.commitment_status));
+    const closedCommitment = existingCommitments.find(c => ['cancelled', 'closed'].includes(c.commitment_status));
+
+    if (activeCommitment) {
+      commitment = activeCommitment;
       commitmentId = commitment.id;
+    } else if (reopen_if_closed && closedCommitment) {
+      commitment = closedCommitment;
+      commitmentId = commitment.id;
+      wasReopened = true;
     } else {
       // Need to create - fetch part for pricing
       const parts = await ctx.base44.entities.Part.filter({ id: part_id });
