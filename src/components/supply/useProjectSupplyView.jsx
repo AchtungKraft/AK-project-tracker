@@ -206,6 +206,8 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   });
   
   // PHASE 2: DEV DRIFT GUARD - Use shared validation function
+  // DIAGNOSTIC: Full diagnostic report for GNO
+  let diagnosticReport = null;
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
     const sample = items[0];
     console.log('[DEV] Ops Supply View - Sample commitment shape:', sample);
@@ -219,6 +221,10 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     
     // Use shared drift validation
     validateSupplyModelDrift(items, 'useOpsSupplyView');
+    
+    // DIAGNOSTIC: Run full diagnostic and store for cross-view comparison
+    diagnosticReport = diagnoseSupplyItems(items, 'useOpsSupplyView');
+    storeGNODiagnostics(items);
   }
   
   return {
@@ -230,6 +236,8 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     error: query.error,
     refetch: query.refetch,
     invalidate,
+    // DIAGNOSTIC: Expose diagnostic data in dev mode only
+    _diagnostics: process.env.NODE_ENV === 'development' ? diagnosticReport : null,
   };
 }
 
