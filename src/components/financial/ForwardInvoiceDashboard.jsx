@@ -252,6 +252,19 @@ export default function ForwardInvoiceDashboard({ projectId }) {
 
   return (
     <div className="space-y-4">
+      {/* PHASE 4: Credit Summary Strip */}
+      {creditSummary && (creditSummary.credit_available > 0 || creditSummary.credit_applied > 0) && (
+        <CreditSummaryStrip
+          grossExposure={creditSummary.gross_exposure || summary.unbilled_total + summary.invoiced_total}
+          creditAvailable={creditSummary.credit_available || 0}
+          creditApplied={creditSummary.credit_applied || 0}
+          netExposure={creditSummary.net_exposure || (summary.unbilled_total + summary.invoiced_total - (creditSummary.credit_applied || 0))}
+          selectedCount={selectedCommitmentIds.size}
+          onApplyCredit={() => setShowCreditModal(true)}
+          isLoading={isLoading}
+        />
+      )}
+
       {/* KPI Summary - PHASE 5: Canonical colors */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Unbilled - Gray */}
