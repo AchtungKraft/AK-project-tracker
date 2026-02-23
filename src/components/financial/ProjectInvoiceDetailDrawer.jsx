@@ -1,3 +1,10 @@
+/**
+ * ProjectInvoiceDetailDrawer - CANONICAL INVOICE STATUS TRANSITION SURFACE
+ * 
+ * ARCHITECTURE LOCK:
+ * - This is the ONLY component allowed to call markInvoiceSent/markInvoicePaid
+ * - Uses queryKeyFactories for all queries
+ */
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -35,6 +42,8 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { invoiceKeys, billingKeys } from "@/components/financial/queryKeyFactories";
+import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 
@@ -129,6 +138,11 @@ export default function ProjectInvoiceDetailDrawer({
 
     setIsSubmitting(true);
     try {
+      // DEV GUARDRAIL: Track canonical mutation call
+      if (process.env.NODE_ENV === 'development') {
+        guardInvoiceMutation('markInvoiceSent', 'ProjectInvoiceDetailDrawer');
+      }
+
       const response = await base44.functions.invoke("markInvoiceSent", {
         invoice_id: invoiceId,
         qb_invoice_number: qbInvoiceNumber,
@@ -139,12 +153,13 @@ export default function ProjectInvoiceDetailDrawer({
       if (response.data?.success) {
         toast.success("Invoice marked as sent");
         setShowMarkSentModal(false);
-        // DETERMINISTIC: Invalidate exact keys only
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["projectInvoice", normalizedInvoiceId] }),
-          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
-        ]);
+        
+        // Use forceAppRefresh for complete cache sync
+        const normalizedProjectId = invoice?.project_id || null;
+        await forceAppRefresh(queryClient, {
+          projectIds: normalizedProjectId ? [normalizedProjectId] : [],
+        });
+        
         onUpdated?.();
       } else {
         toast.error(response.data?.error || "Failed to mark as sent");
@@ -164,6 +179,11 @@ export default function ProjectInvoiceDetailDrawer({
 
     setIsSubmitting(true);
     try {
+      // DEV GUARDRAIL: Track canonical mutation call
+      if (process.env.NODE_ENV === 'development') {
+        guardInvoiceMutation('markInvoicePaid', 'ProjectInvoiceDetailDrawer');
+      }
+
       const response = await base44.functions.invoke("markInvoicePaid", {
         invoice_id: invoiceId,
         payment_date: paymentDate,
