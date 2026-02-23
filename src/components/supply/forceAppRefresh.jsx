@@ -79,8 +79,17 @@ export async function forceAppRefresh(queryClient, options = {}) {
     // Financial domain
     queryClient.invalidateQueries({ queryKey: ['projectFinancials'] }),
     queryClient.invalidateQueries({ queryKey: ['billingPools'] }),
+    queryClient.invalidateQueries({ queryKey: ['billingPool'] }),
+    queryClient.invalidateQueries({ queryKey: ['poolAllocations'] }),
+    queryClient.invalidateQueries({ queryKey: ['poolCharges'] }),
     queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] }),
     queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectInvoicesView'] }),
+    queryClient.invalidateQueries({ queryKey: ['financialProjectsView'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectRevenueSummary'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectCostSummary'] }),
+    queryClient.invalidateQueries({ queryKey: ['creditLedger'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectCreditBalance'] }),
     
     // Pricing domain
     queryClient.invalidateQueries({ queryKey: ['pricingAudit'] }),
