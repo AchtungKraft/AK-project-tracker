@@ -496,9 +496,10 @@ function BatchBuilderPanel({
 // ============================================
 
 function BatchHistoryPanel({ onBatchClick }) {
+  // PHASE 1: Use ProjectInvoice instead of InvoiceBatch
   const { data: batches = [], isLoading } = useQuery({
-    queryKey: ['invoiceBatches'],
-    queryFn: () => base44.entities.InvoiceBatch.list('-created_date', 15),
+    queryKey: ['projectInvoicesRecent'],
+    queryFn: () => base44.entities.ProjectInvoice.list('-created_date', 15),
   });
 
   const statusColors = {
@@ -531,14 +532,14 @@ function BatchHistoryPanel({ onBatchClick }) {
             className="w-full text-left p-2 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-white font-medium text-xs truncate">{batch.batch_name}</span>
+              <span className="text-white font-medium text-xs truncate">{batch.qb_invoice_number || `Invoice #${batch.id.slice(0,6)}`}</span>
               <Badge className={cn("text-xs", statusColors[batch.status] || 'bg-gray-600')}>
                 {batch.status}
               </Badge>
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>{batch.line_count || 0} items</span>
-              <span>${(batch.total_amount || 0).toFixed(0)}</span>
+              <span>{batch.invoice_type || 'progress'}</span>
+              <span>${(batch.total || batch.subtotal || 0).toFixed(0)}</span>
             </div>
           </button>
         ))}
@@ -554,21 +555,22 @@ function BatchHistoryPanel({ onBatchClick }) {
 function BatchDetailModal({ batch, isOpen, onClose }) {
   const queryClient = useQueryClient();
   
+  // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
   const { data: lines = [], isLoading } = useQuery({
-    queryKey: ['batchLines', batch?.id],
-    queryFn: () => base44.entities.InvoiceBatchLine.filter({ batch_id: batch.id }),
+    queryKey: ['invoiceLines', batch?.id],
+    queryFn: () => base44.entities.ProjectInvoiceLine.filter({ invoice_id: batch.id }),
     enabled: isOpen && !!batch?.id,
   });
 
   const exportMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke('exportInvoiceBatchToQuickBooks', { batch_id: batch.id });
+      const response = await base44.functions.invoke('exportProjectInvoicesToQB', { invoice_id: batch.id });
       return response.data;
     },
     onSuccess: () => {
-      toast.success('Batch exported successfully');
-      queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLines', batch?.id] });
+      toast.success('Invoice exported successfully');
+      queryClient.invalidateQueries({ queryKey: ['projectInvoicesRecent'] });
+      queryClient.invalidateQueries({ queryKey: ['invoiceLines', batch?.id] });
     },
     onError: (error) => {
       toast.error(error.message || 'Export failed');
@@ -695,29 +697,36 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
     queryFn: () => base44.entities.Project.list(),
   });
 
-  // Phase 6.2: Fetch existing draft batches for accumulation
+  // Phase 1: Fetch existing draft invoices for accumulation
   const { data: draftBatches = [] } = useQuery({
-    queryKey: ['draftInvoiceBatches', projectFilter],
+    queryKey: ['draftProjectInvoices', projectFilter],
     queryFn: async () => {
-      const filter = { status: 'draft', is_locked: false };
+      const filter = { status: 'draft' };
       if (projectFilter !== 'all') filter.project_id = projectFilter;
-      return base44.entities.InvoiceBatch.filter(filter, '-created_date');
+      return base44.entities.ProjectInvoice.filter(filter, '-created_date');
     },
     staleTime: 30000,
   });
 
-  // Create batch mutation
+  // PHASE 1: Create invoice using forward system
   const createBatchMutation = useMutation({
     mutationFn: async (items) => {
-      console.log("Create Invoice Batch clicked");
+      console.log("Create Invoice clicked (forward system)");
       console.log("Selected items:", items.length);
-      console.log("Target draft batch:", targetDraftBatchId);
       
-      const response = await base44.functions.invoke('createInvoiceBatch', {
-        items,
-        batch_mode: batchMode,
-        // Phase 6.2: Pass target draft batch for accumulation
-        target_batch_id: targetDraftBatchId !== 'new' ? targetDraftBatchId : null,
+      // Build lines for createProjectInvoiceDraft
+      const lines = items.map(item => ({
+        type: 'part',
+        part_commitment_id: item.commitment_id,
+        description: item.part_name || 'Unknown Part',
+        qty: item.assigned_qty || item.required_total || 1,
+        unit_price: item.unit_retail || item.unit_price || 0,
+      }));
+      
+      const response = await base44.functions.invoke('createProjectInvoiceDraft', {
+        project_id: projectFilter !== 'all' ? projectFilter : items[0]?.project_id,
+        invoice_type: 'progress',
+        lines,
       });
       return response.data;
     },
