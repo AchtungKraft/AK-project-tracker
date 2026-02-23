@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
@@ -30,18 +30,21 @@ import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
 import BillablePartsSelector from "./BillablePartsSelector";
-import { useFinancialProjectsView } from "./useFinancialProjectsView";
+import { useFinancialProjectsView, useBillingAndProcurementStates } from "./useFinancialProjectsView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import CreditSummaryStrip from "./CreditSummaryStrip";
 
 const STEPS = ["project", "type", "lines", "review"];
 
 /**
- * PHASE 5 — Invoice Builder Flow
+ * PHASE 1 REFACTOR — Invoice Builder Flow
+ * 
+ * NOW USES getBillingAndProcurementStates as CANONICAL exposure engine.
  * 
  * Step 1: Select Project (grouped by type, only eligible shown)
  * Step 2: Select Billing Type (deposit, progress, final)
- * Step 3: Select Parts / Add Lines (grouped by vendor/category)
- * Step 4: Review Summary
+ * Step 3: Select Parts / Add Lines (uses canonical commitments from getBillingAndProcurementStates)
+ * Step 4: Review Summary (displays gross, credit applied, net from canonical source)
  */
 export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) {
   const queryClient = useQueryClient();
@@ -54,13 +57,25 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get financial projects data for credit info
+  // Get financial projects data for project dropdown
   const { data: financialData } = useFinancialProjectsView();
   const selectedProjectFinancials = financialData?.projects?.find(
     (p) => p.project_id === selectedProjectId
   );
 
-  const availableCredit = selectedProjectFinancials?.available_credit || 0;
+  // PHASE 1 CANONICAL: Use getBillingAndProcurementStates as single source of truth
+  const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(
+    selectedProjectId,
+    { enabled: !!selectedProjectId && open }
+  );
+
+  // PHASE 1: Extract canonical totals from billing data
+  const canonicalTotals = billingData?.totals || {};
+  const canonicalCreditSummary = billingData?.credit_summary || {};
+  const availableCredit = canonicalCreditSummary.total_credit_available || 0;
+  const creditAppliedTotal = canonicalCreditSummary.total_credit_applied || 0;
+  const grossExposure = canonicalTotals.gross_exposure || 0;
+  const netExposure = canonicalTotals.net_exposure || 0;
 
   // Calculate totals
   const partsTotal = useMemo(() => {
