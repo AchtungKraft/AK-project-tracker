@@ -422,14 +422,14 @@ export default function GlobalNeedToOrder() {
           {/* Pricing Integrity */}
           <div className="w-24 hidden xl:block">
             <PricingIntegrityBadge status={item.pricing_integrity_status} />
-        </div>
+          </div>
 
-        {/* Next Action */}
-        <NextActionBadge 
-          nextAction={item.next_action} 
-          blockReason={item.block_reason_code}
-          compact
-        />
+          {/* Next Action */}
+          <NextActionBadge 
+            nextAction={item.next_action} 
+            blockReason={item.block_reason_code}
+            compact
+          />
 
         {/* Actions Dropdown */}
         <DropdownMenu>
