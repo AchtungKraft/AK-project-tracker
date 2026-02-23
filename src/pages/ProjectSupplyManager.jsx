@@ -70,7 +70,9 @@ export default function ProjectSupplyManager() {
   const queryClient = useQueryClient();
   const audit = useWiringAudit('ProjectSupplyManager');
   const urlParams = new URLSearchParams(window.location.search);
-  const projectId = urlParams.get('project_id');
+  const rawProjectId = urlParams.get('project_id');
+  // DETERMINISTIC: Normalize projectId once
+  const projectId = rawProjectId ? String(rawProjectId) : "";
   
   // =====================================================================
   // CANONICAL TAB ROUTING - Financial model determines allowed tabs
