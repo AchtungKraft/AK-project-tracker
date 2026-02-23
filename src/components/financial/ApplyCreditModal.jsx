@@ -47,6 +47,9 @@ export default function ApplyCreditModal({
   const [previewData, setPreviewData] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
 
+  // DETERMINISTIC: Normalize project ID
+  const normalizedProjectId = projectId ? String(projectId) : "";
+
   const hasSelectedCommitments = selectedCommitmentIds.length > 0;
   const mode = 'auto'; // Always auto for now
 
@@ -54,7 +57,7 @@ export default function ApplyCreditModal({
   const previewMutation = useMutation({
     mutationFn: async () => {
       const response = await base44.functions.invoke('applyProjectCreditToCommitments', {
-        project_id: projectId,
+        project_id: normalizedProjectId,
         commitment_ids: hasSelectedCommitments ? selectedCommitmentIds : undefined,
         mode,
         dry_run: true,
@@ -77,7 +80,7 @@ export default function ApplyCreditModal({
   const executeMutation = useMutation({
     mutationFn: async () => {
       const response = await base44.functions.invoke('applyProjectCreditToCommitments', {
-        project_id: projectId,
+        project_id: normalizedProjectId,
         commitment_ids: hasSelectedCommitments ? selectedCommitmentIds : undefined,
         mode,
         dry_run: false,
@@ -88,8 +91,12 @@ export default function ApplyCreditModal({
       if (data.success) {
         toast.success(`Applied ${formatCurrencyUSD(data.summary.credit_applied_now)} credit`);
         
-        // PHASE 1 UNIFIED: Deterministic refresh - ensures both surfaces update
-        await forceAppRefresh(queryClient, { projectIds: [projectId] });
+        // DETERMINISTIC: Invalidate exact keys only
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
+        ]);
         
         onSuccess?.();
         handleClose();
