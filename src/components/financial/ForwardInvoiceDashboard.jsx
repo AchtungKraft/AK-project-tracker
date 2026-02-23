@@ -47,6 +47,7 @@ import {
   CANONICAL_BILLING_STATUS,
   getBillingStatusConfig 
 } from "./useProjectInvoiceView";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
@@ -152,7 +153,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         toast.success('CSV downloaded');
       } else if (action === 'mark_exported') {
         toast.success('Marked as exported');
-        queryClient.invalidateQueries({ queryKey: ['projectInvoiceBatches', projectId] });
+        await forceAppRefresh(queryClient, { projectIds: [projectId] });
       }
       audit.trackSuccess('qb_export', { action });
     } catch (error) {
@@ -197,7 +198,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       toast.success('Payment recorded');
       setShowPaymentModal(false);
       setPaymentBatch(null);
-      refetch();
+      await forceAppRefresh(queryClient, { projectIds: [projectId] });
     } catch (error) {
       audit.trackError('record_payment', error);
       toast.error(error.message || 'Failed to record payment');
