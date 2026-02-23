@@ -249,22 +249,44 @@ export const financialProjectKeys = {
  * Parts catalog and inventory query keys
  */
 export const partsKeys = {
-  all: () => ['parts'],
-  list: () => ['parts'],
+  all: () => {
+    const key = ['parts'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  list: () => {
+    const key = ['parts'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   detail: (partId) => {
     const normalized = normalizeId(partId);
-    return ['part', normalized];
+    const key = ['part', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  inventory: () => ['partsInventoryView'],
+  inventory: () => {
+    const key = ['partsInventoryView'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   inventoryForPart: (partId) => {
     const normalized = normalizeId(partId);
-    return ['partsInventoryView', normalized];
+    const key = ['partsInventoryView', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   supplyUsage: (partId) => {
     const normalized = normalizeId(partId);
-    return ['partSupplyUsage', normalized];
+    const key = ['partSupplyUsage', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  categories: () => ['partCategories'],
+  categories: () => {
+    const key = ['partCategories'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
 };
 
 // ============================================
@@ -326,22 +348,34 @@ export const supplyKeys = {
  * Commitment query keys
  */
 export const commitmentKeys = {
-  all: () => ['partCommitments'],
+  all: () => {
+    const key = ['partCommitments'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   forProject: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectCommitments', normalized];
+    const key = ['projectCommitments', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   forPart: (partId) => {
     const normalized = normalizeId(partId);
-    return ['partCommitments', normalized];
+    const key = ['partCommitments', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   detail: (commitmentId) => {
     const normalized = normalizeId(commitmentId);
-    return ['commitmentDetails', normalized];
+    const key = ['commitmentDetails', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   state: (commitmentId) => {
     const normalized = normalizeId(commitmentId);
-    return ['commitmentState', normalized];
+    const key = ['commitmentState', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
