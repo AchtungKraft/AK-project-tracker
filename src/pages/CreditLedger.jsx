@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { creditKeys, invoiceKeys, projectKeys } from "@/components/financial/queryKeyFactories";
 
 /**
  * PHASE 8 — Credit Ledger Page
@@ -36,30 +37,30 @@ export default function CreditLedger() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // Fetch credit ledger entries
+  // Fetch credit ledger entries - uses factory key
   const { data: credits = [], isLoading, refetch } = useQuery({
-    queryKey: ["creditLedger"],
+    queryKey: creditKeys.ledger(),
     queryFn: () => base44.entities.ProjectCreditLedger.list(),
     staleTime: 30000,
   });
 
-  // Fetch projects for names
+  // Fetch projects for names - uses factory key
   const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
+    queryKey: projectKeys.list(),
     queryFn: () => base44.entities.Project.list(),
     staleTime: 60000,
   });
 
-  // Fetch invoices for source/applied invoice info
+  // Fetch invoices for source/applied invoice info - uses factory key
   const { data: invoices = [] } = useQuery({
-    queryKey: ["projectInvoices"],
+    queryKey: invoiceKeys.all(),
     queryFn: () => base44.entities.ProjectInvoice.list(),
     staleTime: 30000,
   });
   
-  // PHASE 6: Fetch credit allocations
+  // PHASE 6: Fetch credit allocations - uses factory key
   const { data: allocations = [] } = useQuery({
-    queryKey: ["creditAllocations"],
+    queryKey: creditKeys.all(),
     queryFn: () => base44.entities.CreditAllocation.filter({ is_reversed: false }),
     staleTime: 30000,
   });
@@ -141,9 +142,9 @@ export default function CreditLedger() {
   }, [credits, enrichedCredits]);
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["creditLedger"] });
-    queryClient.invalidateQueries({ queryKey: ["projectInvoices"] });
-    queryClient.invalidateQueries({ queryKey: ["creditAllocations"] });
+    queryClient.invalidateQueries({ queryKey: creditKeys.ledger() });
+    queryClient.invalidateQueries({ queryKey: invoiceKeys.all() });
+    queryClient.invalidateQueries({ queryKey: creditKeys.all() });
   };
 
   const getStatusBadge = (status) => {
