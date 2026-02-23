@@ -84,9 +84,8 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   const [paymentBatch, setPaymentBatch] = useState(null);
   const [showInvoiceWorkbench, setShowInvoiceWorkbench] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  // PHASE 4: Credit allocation modal and selection state
+  // Credit allocation modal
   const [showCreditModal, setShowCreditModal] = useState(false);
-  const [selectedCommitmentIds, setSelectedCommitmentIds] = useState(new Set());
   // PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
