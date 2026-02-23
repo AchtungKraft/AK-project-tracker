@@ -135,10 +135,16 @@ export const logQueryKeyUsage = (component, keyName, key, dataUpdatedAt, canonic
  * SOURCE: getBillingAndProcurementStates (CANONICAL exposure source)
  */
 export const billingKeys = {
-  all: () => ['billingProcurementStates'],
+  all: () => {
+    const key = ['billingProcurementStates'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   states: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['billingProcurementStates', normalized];
+    const key = ['billingProcurementStates', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -151,22 +157,34 @@ export const billingKeys = {
  * SOURCE: getProjectInvoicesView (HISTORY ONLY - NOT for exposure)
  */
 export const invoiceKeys = {
-  all: () => ['projectInvoicesView'],
+  all: () => {
+    const key = ['projectInvoicesView'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   view: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectInvoicesView', normalized];
+    const key = ['projectInvoicesView', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   lines: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectInvoiceLines', normalized];
+    const key = ['projectInvoiceLines', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   commitments: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectInvoiceCommitments', normalized];
+    const key = ['projectInvoiceCommitments', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   detail: (invoiceId) => {
     const normalized = normalizeId(invoiceId);
-    return ['projectInvoice', normalized];
+    const key = ['projectInvoice', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -178,19 +196,33 @@ export const invoiceKeys = {
  * Credit allocation query keys
  */
 export const creditKeys = {
-  all: () => ['creditAllocations'],
+  all: () => {
+    const key = ['creditAllocations'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   allocations: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['creditAllocations', normalized];
+    const key = ['creditAllocations', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  ledger: () => ['creditLedger'],
+  ledger: () => {
+    const key = ['creditLedger'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   projectLedger: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectCreditLedger', normalized];
+    const key = ['projectCreditLedger', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
   projectBalance: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectCreditBalance', normalized];
+    const key = ['projectCreditBalance', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -202,7 +234,11 @@ export const creditKeys = {
  * Financial projects view (global list)
  */
 export const financialProjectKeys = {
-  all: () => ['financialProjectsView'],
+  all: () => {
+    const key = ['financialProjectsView'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
 };
 
 // ============================================
