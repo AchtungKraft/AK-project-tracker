@@ -45,17 +45,28 @@ import { cn } from "@/lib/utils";
  * Opens as a drawer from ProjectSupplyManager header.
  */
 
+/**
+ * Normalize projectId to string format
+ */
+const normalizeProjectId = (id) => {
+  if (id === null || id === undefined || id === 'all') return '';
+  return String(id);
+};
+
 export function CoverageDiagnosticsPanel({ projectId, onOpenCommitment }) {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [showRepairConfirm, setShowRepairConfirm] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
 
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedProjectId = normalizeProjectId(projectId);
+
   const { data: diagnostics, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['coverageDiagnostics', projectId],
+    queryKey: ['coverageDiagnostics', normalizedProjectId],
     queryFn: async () => {
       const response = await base44.functions.invoke('runCommitmentQtyDriftCheck', {
-        project_id: projectId || undefined,
+        project_id: normalizedProjectId || undefined,
         limit: 200,
         repair_safe: false
       });
