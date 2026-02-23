@@ -76,22 +76,18 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.invalidateQueries({ queryKey: ['poReceivingView'] }),
     queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] }),
     
-    // Financial domain
+    // Financial domain - PHASE 1: Forward model only (ProjectInvoice)
     queryClient.invalidateQueries({ queryKey: ['projectFinancials'] }),
-    queryClient.invalidateQueries({ queryKey: ['billingPools'] }),
-    queryClient.invalidateQueries({ queryKey: ['billingPool'] }),
-    queryClient.invalidateQueries({ queryKey: ['poolAllocations'] }),
-    queryClient.invalidateQueries({ queryKey: ['poolCharges'] }),
-    queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] }),
     queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] }),
     queryClient.invalidateQueries({ queryKey: ['projectInvoicesView'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectInvoices'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectInvoiceLines'] }),
     queryClient.invalidateQueries({ queryKey: ['financialProjectsView'] }),
     queryClient.invalidateQueries({ queryKey: ['projectRevenueSummary'] }),
     queryClient.invalidateQueries({ queryKey: ['projectCostSummary'] }),
     queryClient.invalidateQueries({ queryKey: ['creditLedger'] }),
     queryClient.invalidateQueries({ queryKey: ['projectCreditBalance'] }),
     queryClient.invalidateQueries({ queryKey: ['creditAllocations'] }),
-    queryClient.invalidateQueries({ queryKey: ['invoiceReadyItems'] }),
     
     // Pricing domain
     queryClient.invalidateQueries({ queryKey: ['pricingAudit'] }),
@@ -115,9 +111,9 @@ export async function forceAppRefresh(queryClient, options = {}) {
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectFinancials', id] }));
-    // PHASE 4: Invoice and credit queries
+    // PHASE 5: Invoice and credit queries - Forward model
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceCommitments', id] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceBatches', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoices', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditLedger', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditAllocations', id] }));
     // PHASE 1 UNIFIED: Scoped billing/invoice views
