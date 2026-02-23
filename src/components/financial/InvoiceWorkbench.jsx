@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import CreditSummaryStrip from "./CreditSummaryStrip";
+import ApplyCreditModal from "./ApplyCreditModal";
 
 // ============================================
 // CONSTANTS
