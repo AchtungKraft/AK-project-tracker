@@ -59,17 +59,52 @@ export default function PartModal({ part, partId, onClose }) {
   const [formData, setFormData] = useState(null);
 
   // Initialize formData when part is loaded
+  // PHASE 1: Only include editable fields, NOT derived inventory fields
   useEffect(() => {
     if (activePart) {
       setFormData({
-        ...activePart,
+        part_name: activePart.part_name || '',
+        vendor_part_number: activePart.vendor_part_number || '',
+        part_category_id: activePart.part_category_id || '',
+        default_vendor_id: activePart.default_vendor_id || '',
+        car_make_id: activePart.car_make_id || '',
+        car_model_id: activePart.car_model_id || '',
+        car_year_id: activePart.car_year_id || '',
+        // Pricing fields (editable)
+        pricing_mode: activePart.pricing_mode || 'matrix',
+        cost: activePart.cost ?? 0,
+        retail_override: activePart.retail_override ?? null,
+        retail_matrix_price: activePart.retail_matrix_price ?? null,
+        applied_markup_pct: activePart.applied_markup_pct ?? null,
+        // Part type and flags
+        part_type: activePart.part_type || 'PURCHASED_VENDOR',
+        is_active: activePart.is_active ?? true,
+        // Metadata
+        notes: activePart.notes || '',
+        order_url: activePart.order_url || '',
         photos: activePart.photos || [],
         featured_photo: activePart.featured_photo || '',
-        order_url: activePart.order_url || '',
+        // Reorder settings
+        reorder_point: activePart.reorder_point ?? 0,
+        reorder_quantity: activePart.reorder_quantity ?? 1,
+        // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order (derived/canonical)
       });
       setEditing(false);
     }
   }, [activePart?.id]);
+
+  // PHASE 2: Matrix pricing derivation - auto-recalculate retail when in MATRIX mode
+  useEffect(() => {
+    if (formData?.pricing_mode === 'matrix' && formData.cost != null && formData.applied_markup_pct != null) {
+      const computedRetail = formData.cost * (1 + (formData.applied_markup_pct || 0) / 100);
+      if (formData.retail_matrix_price !== computedRetail) {
+        setFormData(prev => ({
+          ...prev,
+          retail_matrix_price: Math.round(computedRetail * 100) / 100
+        }));
+      }
+    }
+  }, [formData?.cost, formData?.applied_markup_pct, formData?.pricing_mode]);
 
   // Fetch reference data
   const { data: categories = [] } = useQuery({
@@ -139,18 +174,15 @@ export default function PartModal({ part, partId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: () => {
-      // Full supply invalidation for consistency
+      // PHASE 4: Full canonical invalidation for consistency
       invalidateSupplyQueries(queryClient, { 
         part_ids: [activePart.id],
-        full_invalidate: true 
+        invalidateAll: true 
       });
+      // Additional explicit invalidations for certainty
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['part', activePart.id] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['locations'] });
-      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
-      queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
-      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
+      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
       toast.success('Part updated');
       setEditing(false);
     },
@@ -288,7 +320,59 @@ export default function PartModal({ part, partId, onClose }) {
       toast.error('Part name is required');
       return;
     }
-    updateMutation.mutate(formData);
+    
+    // PHASE 1: Build safe update payload - ONLY editable fields
+    // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order, reserved_global, reserved_project
+    const updatePayload = {
+      // Core identification
+      part_name: formData.part_name,
+      vendor_part_number: formData.vendor_part_number,
+      part_category_id: formData.part_category_id,
+      default_vendor_id: formData.default_vendor_id,
+      car_make_id: formData.car_make_id,
+      car_model_id: formData.car_model_id,
+      car_year_id: formData.car_year_id,
+      // Pricing fields (safe to update)
+      pricing_mode: formData.pricing_mode,
+      cost: formData.cost,
+      retail_override: formData.pricing_mode === 'manual' ? formData.retail_override : null,
+      retail_matrix_price: formData.pricing_mode === 'matrix' ? formData.retail_matrix_price : null,
+      applied_markup_pct: formData.applied_markup_pct,
+      // Part type and flags
+      part_type: formData.part_type,
+      is_active: formData.is_active,
+      // Metadata
+      notes: formData.notes,
+      order_url: formData.order_url,
+      photos: formData.photos,
+      featured_photo: formData.featured_photo,
+      // Reorder settings
+      reorder_point: formData.reorder_point,
+      reorder_quantity: formData.reorder_quantity,
+    };
+
+    // PHASE 5: Drift detection in development
+    if (process.env.NODE_ENV === 'development') {
+      const prevStock = inventoryMetrics.physical_stock;
+      console.log('[PartModal] Saving with payload (no inventory fields):', Object.keys(updatePayload));
+      
+      // Check after mutation completes
+      updateMutation.mutate(updatePayload, {
+        onSuccess: () => {
+          // Re-fetch to verify no drift
+          setTimeout(() => {
+            const newView = partsInventoryView.find(p => p.part_id === activePart?.id);
+            const newStock = newView?.physical_stock ?? 0;
+            if (prevStock > 0 && newStock === 0) {
+              console.error('[INVENTORY RESET DETECTED] Stock went from', prevStock, 'to', newStock);
+            }
+          }, 1000);
+        }
+      });
+      return;
+    }
+    
+    updateMutation.mutate(updatePayload);
   };
 
   // Loading state
