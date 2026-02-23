@@ -624,7 +624,7 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
                       <TableCell className="text-white text-sm">{line.description}</TableCell>
                       <TableCell className="text-right text-gray-300">{line.qty}</TableCell>
                       <TableCell className="text-right text-green-400">${(line.line_total || 0).toFixed(2)}</TableCell>
-                      <TableCell><Badge className="text-xs">{line.qb_status}</Badge></TableCell>
+                      <TableCell><Badge className="text-xs">{line.type || 'part'}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
