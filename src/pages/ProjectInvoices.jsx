@@ -130,16 +130,16 @@ export default function ProjectInvoices() {
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
   const handleRefresh = async () => {
-    // PHASE 17: Deterministic refresh with scoped keys
+    // PHASE 1 UNIFIED: Deterministic refresh with scoped keys
     await forceAppRefresh(queryClient, {
       projectIds: projectFilter !== "all" ? [projectFilter] : [],
     });
-    // Also explicitly refetch scoped queries
+    // Explicitly refetch the scoped invoice view query
     await refetch();
   };
 
   const handleInvoiceCreated = async () => {
-    // PHASE 2: Deterministic refresh BEFORE closing modal
+    // PHASE 1 UNIFIED: Deterministic refresh AFTER creation, BEFORE closing modal
     await handleRefresh();
     setShowCreateModal(false);
   };
