@@ -374,27 +374,7 @@ export default function PartModal({ part, partId, onClose }) {
       reorder_quantity: formData.reorder_quantity,
     };
 
-    // PHASE 5: Drift detection in development
-    if (process.env.NODE_ENV === 'development') {
-      const prevStock = inventoryMetrics.physical_stock;
-      console.log('[PartModal] Saving with payload (no inventory fields):', Object.keys(updatePayload));
-      
-      // Check after mutation completes
-      updateMutation.mutate(updatePayload, {
-        onSuccess: () => {
-          // Re-fetch to verify no drift
-          setTimeout(() => {
-            const newView = partsInventoryView.find(p => p.part_id === activePart?.id);
-            const newStock = newView?.physical_stock ?? 0;
-            if (prevStock > 0 && newStock === 0) {
-              console.error('[INVENTORY RESET DETECTED] Stock went from', prevStock, 'to', newStock);
-            }
-          }, 1000);
-        }
-      });
-      return;
-    }
-    
+    // PHASE 16: Simplified - drift detection handled by canonical refetch
     updateMutation.mutate(updatePayload);
   };
 
