@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,9 @@ export default function ClosePoolModal({ pool, onClose, onSuccess }) {
             <XCircle className="w-5 h-5 text-red-400" />
             Close Pool
           </DialogTitle>
+          <DialogDescription>
+            Close this billing pool and archive it.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
