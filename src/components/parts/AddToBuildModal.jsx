@@ -75,40 +75,84 @@ export default function AddToBuildModal({ part, onClose }) {
 
       const qtyNeeded = Number(formData.qty_needed) || 1;
 
-      // PHASE 2: Find existing commitment (non-archived) to reuse
+      // SINGLE COMMITMENT RULE: One PartCommitment per (part_id + project_id)
+      // Find ANY existing commitment for this part+project (including archived/closed)
       const existing = existingCommitments.find(
-        c => !c.is_archived && c.project_id === formData.project_id
+        c => c.project_id === formData.project_id
       );
 
-      const commitmentIds = existing ? [existing.id] : [];
-      const requiredTotalSet = existing
-        ? (existing.required_total || 0) + qtyNeeded
-        : qtyNeeded;
-
-      // CANONICAL: Use executeSupplyAction with ADJUST_REQUIRED
-      // This reuses existing commitment or creates new one
-      const response = await base44.functions.invoke('executeSupplyAction', {
-        action_type: 'ADJUST_REQUIRED',
-        commitment_ids: commitmentIds,
-        payload: {
-          project_id: formData.project_id,
-          part_id: part.id,
-          required_total_set: requiredTotalSet,
-          reopen_if_closed: true, // Reopen closed/cancelled commitments
-          source_type: 'SHOP_PURCHASED',
-          notes: formData.notes || null,
-          source_surface: 'AddToBuildModal',
-          requires_prepay: requiresPrepay,
-        },
-        dry_run: false
-      });
-
-      if (response.data?.error) {
-        throw new Error(response.data.error || 'Failed to add part to project');
+      // DEV GUARDRAIL: Check for duplicates - should never happen
+      if (process.env.NODE_ENV === 'development') {
+        const duplicates = existingCommitments.filter(
+          c => c.project_id === formData.project_id
+        );
+        if (duplicates.length > 1) {
+          console.error('[COMMITMENT DUPLICATION DETECTED]', {
+            part_id: part.id,
+            project_id: formData.project_id,
+            duplicates: duplicates.map(c => ({ id: c.id, status: c.commitment_status, archived: c.is_archived }))
+          });
+        }
       }
 
-      const commitment = response.data.commitment;
-      const needsCostReview = response.data.needs_cost_review;
+      let commitment;
+      let needsCostReview = false;
+
+      if (existing) {
+        // CASE A/B/C: Commitment exists - handle lifecycle states
+        const isArchived = existing.is_archived;
+        const isClosed = existing.commitment_status === 'closed' || existing.commitment_status === 'cancelled';
+        
+        // Calculate new required_total (add to existing)
+        const requiredTotalSet = (existing.required_total || 0) + qtyNeeded;
+
+        // ADJUST_REQUIRED handles reopening via reopen_if_closed flag
+        // For archived commitments, the backend should unarchive when adjusting
+        const response = await base44.functions.invoke('executeSupplyAction', {
+          action_type: 'ADJUST_REQUIRED',
+          commitment_ids: [existing.id],
+          payload: {
+            required_total_set: requiredTotalSet,
+            reopen_if_closed: true, // Reopen closed/cancelled commitments
+            unarchive_if_archived: isArchived, // Signal to unarchive
+            source_surface: 'AddToBuildModal',
+            requires_prepay: requiresPrepay,
+            notes: formData.notes || null,
+          },
+          dry_run: false
+        });
+
+        if (response.data?.error) {
+          throw new Error(response.data.error || 'Failed to update commitment');
+        }
+
+        commitment = response.data.commitment;
+        needsCostReview = response.data.needs_cost_review;
+        
+      } else {
+        // CASE D: No commitment exists - create new one
+        const response = await base44.functions.invoke('executeSupplyAction', {
+          action_type: 'ADJUST_REQUIRED',
+          commitment_ids: [], // Empty = create new
+          payload: {
+            project_id: formData.project_id,
+            part_id: part.id,
+            required_total_set: qtyNeeded,
+            source_type: 'SHOP_PURCHASED',
+            notes: formData.notes || null,
+            source_surface: 'AddToBuildModal',
+            requires_prepay: requiresPrepay,
+          },
+          dry_run: false
+        });
+
+        if (response.data?.error) {
+          throw new Error(response.data.error || 'Failed to add part to project');
+        }
+
+        commitment = response.data.commitment;
+        needsCostReview = response.data.needs_cost_review;
+      }
 
       // Handle immediate inventory allocation if requested
       // CANONICAL: Route through executeSupplyAction for AUTO_RESERVE
@@ -141,10 +185,11 @@ export default function AddToBuildModal({ part, onClose }) {
         qtyAllocated, 
         needs_cost_review: needsCostReview,
         project_id: formData.project_id,
-        part_id: part.id
+        part_id: part.id,
+        wasUpdate: !!existing
       };
     },
-    onSuccess: ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id }) => {
+    onSuccess: ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
       // CANONICAL: Use unified invalidation helper
       invalidateSupplyQueries(queryClient, {
         part_ids: [part_id],
@@ -153,7 +198,10 @@ export default function AddToBuildModal({ part, onClose }) {
         invalidateAll: true, // Ensure GlobalNeedToOrder and all views update
       });
       
-      let message = 'Part added to build';
+      // Also explicitly invalidate partCommitments for this part
+      queryClient.invalidateQueries({ queryKey: ['partCommitments', 'forPart', part_id] });
+      
+      let message = wasUpdate ? 'Commitment updated' : 'Part added to build';
       if (qtyAllocated > 0) {
         message += ` (${qtyAllocated} allocated from stock)`;
       }
@@ -176,9 +224,8 @@ export default function AddToBuildModal({ part, onClose }) {
   // Filter to active projects only
   const activeProjects = projects.filter(p => p.status_id !== 'completed' && p.status_id !== 'cancelled');
 
-  // CANONICAL: A project is "already added" ONLY if PartCommitment exists AND is not archived
+  // Track projects that already have a commitment (for UI hint only - not for disabling)
   const projectsWithPart = existingCommitments
-    .filter(c => !c.is_archived)
     .map(c => c.project_id)
     .filter((id, idx, arr) => arr.indexOf(id) === idx); // unique
   
