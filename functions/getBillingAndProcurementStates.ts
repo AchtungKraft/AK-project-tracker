@@ -190,8 +190,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     }
   });
 
-  // Track already-queued items
-  const queuedSourceIds = new Set(batchLines.map(bl => bl.source_id));
+  // PHASE 1: Track already-invoiced items via ProjectInvoiceLine (part_commitment_id)
+  const queuedSourceIds = new Set(batchLines.map(bl => bl.part_commitment_id).filter(Boolean));
 
   // Result categories
   const results = {
