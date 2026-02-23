@@ -236,14 +236,22 @@ export const partsKeys = {
  * SOURCE: getProjectSupplyView, getOpsSupplyView
  */
 export const supplyKeys = {
-  projectView: (projectId, filters = {}) => {
+  // FIX: filters param should already be serialized string for key stability
+  // If object passed, serialize it to prevent new object identity on each call
+  projectView: (projectId, filters = '{}') => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectSupplyView', normalized, filters];
+    // Accept either string (serialized) or object (legacy) - normalize to string
+    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
+    return ['projectSupplyView', normalized, filtersKey];
   },
-  opsView: (mode, filters = {}) => ['opsSupplyView', mode, filters],
+  opsView: (mode, filters = {}) => {
+    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
+    return ['opsSupplyView', mode, filtersKey];
+  },
   poReceiving: (orderId, filters = {}) => {
     const normalized = normalizeId(orderId);
-    return ['poReceivingView', normalized, filters];
+    const filtersKey = typeof filters === 'string' ? filters : JSON.stringify(filters ?? {});
+    return ['poReceivingView', normalized, filtersKey];
   },
   portfolio: () => ['portfolioSupplyState'],
   globalQueues: () => ['globalSupplyQueues'],

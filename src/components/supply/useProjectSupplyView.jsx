@@ -32,7 +32,10 @@ export function useProjectSupplyView(projectId, filters = {}) {
   // DETERMINISTIC: Normalize projectId once
   const normalizedId = normalizeProjectId(projectId);
 
-  const queryKey = supplyKeys.projectView(normalizedId, filters);
+  // FIX: Serialize filters to ensure query key stability across renders
+  // Without this, filters = {} creates a NEW object each render → cache miss
+  const filtersKey = JSON.stringify(filters ?? {});
+  const queryKey = supplyKeys.projectView(normalizedId, filtersKey);
   
   // DIAGNOSTIC: Log query configuration
   if (process.env.NODE_ENV === 'development') {
@@ -41,7 +44,7 @@ export function useProjectSupplyView(projectId, filters = {}) {
       normalizedId,
       enabled: Boolean(normalizedId),
       queryKey,
-      filters,
+      filtersKey,
     });
   }
   
@@ -53,12 +56,20 @@ export function useProjectSupplyView(projectId, filters = {}) {
         project_id: normalizedId,
         filters,
       });
-      console.log('[useProjectSupplyView] queryFn RESPONSE:', {
-        hasData: !!response.data,
-        itemsCount: response.data?.items?.length ?? 0,
-        projectName: response.data?.project?.name ?? 'null',
-        error: response.data?.error ?? null,
-      });
+      
+      // AUDIT: Log raw invoke envelope structure
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[useProjectSupplyView] RAW INVOKE ENVELOPE:', {
+          'Object.keys(response)': Object.keys(response),
+          'Object.keys(response.data)': Object.keys(response?.data ?? {}),
+          'response.data.success': response?.data?.success,
+          'response.data.items?.length': response?.data?.items?.length ?? 'undefined',
+          'response.data.project?.name': response?.data?.project?.name ?? 'undefined',
+        });
+      }
+      
+      // The invoke returns { data: { success, project, items, ... } }
+      // So query.data will be the inner object with items, project, etc.
       return response.data;
     },
     enabled: Boolean(normalizedId),
