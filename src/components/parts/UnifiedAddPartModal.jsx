@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartTypeSelector from "./PartTypeSelector";
 import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
@@ -107,11 +108,14 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const createPartMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
     onSuccess: async (newPart) => {
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      const partIds = newPart?.id ? [newPart.id] : [];
+      const projectIds = [];
+      const commitmentIds = [];
       
       // CANONICAL SUPPLY FLOW ENFORCED
       // If projectId is provided, create commitment via CommitmentService
       if (projectId) {
+        projectIds.push(projectId);
         try {
           const response = await base44.functions.invoke('commitmentService', {
             action: 'addPartToProject',
@@ -123,13 +127,16 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
             requested_by: 'user'
           });
 
-          if (response.data?.success) {
-            queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
+          if (response.data?.success && response.data.commitment_id) {
+            commitmentIds.push(response.data.commitment_id);
           }
         } catch (error) {
           console.error('Failed to create commitment:', error);
         }
       }
+      
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, { partIds, projectIds, commitmentIds });
       
       toast.success('Part created successfully');
       onClose();
