@@ -211,8 +211,10 @@ export default function ProjectSupplyManager() {
         console.error(`[CANONICAL VIOLATION] Missing coverage_status for commitment ${item.commitment_id}`);
       }
       
-      // PHASE 7: DEV GUARD - Validate inventory consistency
+      // PHASE 2: DEV GUARD - Use shared drift validation
       if (process.env.NODE_ENV === 'development') {
+        validateSupplyModelDrift([item], 'ProjectSupplyManager');
+        
         const displayed = {
           in_stock: item.inventory_snapshot?.physical ?? 0,
           reserved: item.inventory_snapshot?.reserved ?? 0,
