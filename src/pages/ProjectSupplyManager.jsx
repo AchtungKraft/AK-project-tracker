@@ -1537,6 +1537,30 @@ export default function ProjectSupplyManager() {
             </TabsContent>
 
             <TabsContent value="report" className="mt-4 space-y-4">
+              {/* Lifecycle Progress Bar - Report Tab Only */}
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">Lifecycle Progress</span>
+                    <span className="text-sm text-gray-500">{metrics.byStatus.installed} / {metrics.totalCommitments} installed</span>
+                  </div>
+                  <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
+                    <div className="bg-gray-600" style={{ width: `${(metrics.byStatus.planned / metrics.totalCommitments) * 100}%` }} title="Planned" />
+                    <div className="bg-purple-600" style={{ width: `${((metrics.byStatus.ordered + metrics.byStatus.partiallyReceived) / metrics.totalCommitments) * 100}%` }} title="Ordered" />
+                    <div className="bg-blue-600" style={{ width: `${(metrics.byStatus.received / metrics.totalCommitments) * 100}%` }} title="Received" />
+                    <div className="bg-cyan-600" style={{ width: `${(metrics.byStatus.allocated / metrics.totalCommitments) * 100}%` }} title="Allocated" />
+                    <div className="bg-green-600" style={{ width: `${(metrics.byStatus.installed / metrics.totalCommitments) * 100}%` }} title="Installed" />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Plan: {metrics.byStatus.planned}</span>
+                    <span>Order: {metrics.byStatus.ordered}</span>
+                    <span>Recv: {metrics.byStatus.received}</span>
+                    <span>Alloc: {metrics.byStatus.allocated}</span>
+                    <span>Inst: {metrics.byStatus.installed}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Report Summary - FORWARD MODEL */}
               <Card className="bg-black/40 border-gray-800">
                 <CardHeader className="p-4 pb-2">
@@ -1616,6 +1640,15 @@ export default function ProjectSupplyManager() {
           </Tabs>
         </div>
       </div>
+
+      {/* Floating Action Bar for batch operations */}
+      <PSMFloatingActionBar
+        selectedCount={selectedItems.size}
+        onClear={() => setSelectedItems(new Set())}
+        onBatchPO={handleBulkPOPreview}
+        isLoading={isBulkPOLoading}
+        tab={activeTab}
+      />
 
       {/* Modals - FORWARD MODEL (no pool modals) */}
       {deltaOrderCommitment && (
