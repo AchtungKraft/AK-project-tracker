@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 // ============================================
 // CONSTANTS
@@ -702,7 +703,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
       });
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.success) {
         toast.success(data.message || `Created ${data.batches_created} batch(es) with ${data.lines_created} lines`);
         
@@ -714,9 +715,11 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         }
         
         setSelectedIds(new Set());
-        queryClient.invalidateQueries({ queryKey: ['billingProcurementStates'] });
-        queryClient.invalidateQueries({ queryKey: ['invoiceBatches'] });
-        queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+        
+        // PHASE 17: Deterministic refresh
+        const commitmentIds = selectedItems.map(i => i.commitment_id).filter(Boolean);
+        const projectIds = [...new Set(selectedItems.map(i => i.project_id).filter(Boolean))];
+        await forceAppRefresh(queryClient, { projectIds, commitmentIds });
         
         // Call onSuccess prop if modal usage
         if (onSuccess) {
