@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Package, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { CommitmentActions } from "@/components/financial/financialMutationGuard";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 const REVERSAL_TYPES = [
   { value: 'scope_reduction', label: 'Scope Reduction', description: 'Part no longer needed in project scope' },
@@ -50,12 +51,13 @@ export default function ReverseInstallationModal({
         reversal_type: reversalType,
       });
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['installedParts'] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['lifecycleEvents'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+    onSuccess: async (data) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: part?.id ? [part.id] : [],
+        commitmentIds: commitment?.id ? [commitment.id] : [],
+        projectIds: commitment?.project_id ? [commitment.project_id] : [],
+      });
       
       if (data.alreadyReversed) {
         toast.info('Installation was already reversed');

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Plus, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import UnifiedAddPartModal from "../parts/UnifiedAddPartModal";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function AddPartToProjectModal({ projectId, onClose, onSuccess, onError }) {
   const queryClient = useQueryClient();
@@ -100,12 +101,13 @@ export default function AddPartToProjectModal({ projectId, onClose, onSuccess, o
         return { ...result, was_increment: false };
       }
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
-      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: selectedPartId ? [selectedPartId] : [],
+        projectIds: [projectId],
+        commitmentIds: result.commitment_id ? [result.commitment_id] : [],
+      });
       
       // Call external success handler if provided (AddPartButton uses this for audit)
       if (onSuccess) {
