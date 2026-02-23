@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Package, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * CancelCommitmentModal - Handle commitment cancellation with validation
@@ -50,13 +51,13 @@ export default function CancelCommitmentModal({
       
       return response.data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
-      queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
+    onSuccess: async (data) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: commitment?.part_id ? [commitment.part_id] : [],
+        projectIds: commitment?.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       
       if (data.creditCreated) {
         toast.success('Commitment cancelled - credit pool created for scope reduction');
@@ -92,11 +93,13 @@ export default function CancelCommitmentModal({
       
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: commitment?.part_id ? [commitment.part_id] : [],
+        projectIds: commitment?.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       toast.success('Commitment quantity reduced');
       onSuccess?.();
       onClose();

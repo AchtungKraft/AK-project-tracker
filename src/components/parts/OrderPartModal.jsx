@@ -11,7 +11,7 @@ import { Loader2, Plus, ShoppingCart, AlertTriangle } from "lucide-react";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * CANONICAL SUPPLY FLOW ENFORCED - PHASE 10B
@@ -119,12 +119,11 @@ export default function OrderPartModal({
         commitment_id: part.commitment_id
       };
     },
-    onSuccess: ({ orderId, part_id }) => {
-      // CANONICAL: Use unified invalidation helper
-      invalidateSupplyQueries(queryClient, {
-        part_ids: [part_id],
-        order_ids: orderId ? [orderId] : [],
-        invalidateAll: true, // Ensure all supply views update
+    onSuccess: async ({ orderId, part_id }) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [part_id],
+        orderIds: orderId ? [orderId] : [],
       });
       
       toast.success('Part added to order');
