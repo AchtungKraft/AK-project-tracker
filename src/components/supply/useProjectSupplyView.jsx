@@ -7,9 +7,13 @@ import { normalizeProjectId } from "@/components/financial/queryKeyFactories";
 
 /**
  * Query key factories for supply views
+ * NOTE: All factories use normalizeProjectId which returns null for invalid inputs
  */
 export const supplyKeys = {
-  projectView: (projectId, filters = {}) => ['projectSupplyView', normalizeProjectId(projectId), filters],
+  projectView: (projectId, filters = {}) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['projectSupplyView', normalized, filters];
+  },
   opsView: (mode, filters = {}) => ['opsSupplyView', mode, filters],
   poReceiving: (orderId, filters = {}) => ['poReceivingView', orderId ?? null, filters],
 };
