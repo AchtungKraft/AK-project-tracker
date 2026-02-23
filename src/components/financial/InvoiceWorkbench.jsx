@@ -651,6 +651,8 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Phase 6.2: Draft invoice accumulation
   const [targetDraftBatchId, setTargetDraftBatchId] = useState('new');
+  // PHASE 4: Credit allocation modal state
+  const [showCreditModal, setShowCreditModal] = useState(false);
 
   // Fetch lifecycle data
   // Override project filter if projectId prop provided
