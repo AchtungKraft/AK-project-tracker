@@ -772,10 +772,10 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         setSelectedIds(new Set());
         
         // DETERMINISTIC: Invalidate using factory keys
-        const projectIds = [...new Set(selectedItems.map(i => normalizeProjectId(i.project_id)).filter(Boolean))];
+        const projectIds = [...new Set(selectedItems.map(i => normalizeProjectId(i.project_id)).filter(id => id !== null))];
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter] }),
-          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter || 'all'] }),
+          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter ?? 'all'] }),
           ...projectIds.map(pid => queryClient.invalidateQueries({ queryKey: invoiceKeys.view(pid) })),
         ]);
         
