@@ -300,6 +300,48 @@ export default function GlobalNeedToOrder() {
     return filteredItems.filter(item => selectedItems.has(item.commitment_id));
   };
 
+  // PHASE 6: GNO Execution Data Block - same format as PSM
+  const GNOExecutionDataBlock = ({ item }) => {
+    const inv = item.inventory_snapshot || {};
+    const physical = inv.physical_stock_global ?? inv.physical ?? 0;
+    const reservedGlobal = inv.reserved_global_active ?? inv.reserved ?? 0;
+    const reservedProject = inv.reserved_this_project ?? item.reserved_from_stock ?? 0;
+    const requiredTotal = item.required_total ?? 0;
+    const toOrder = item.to_order ?? 0;
+    const onOrderQty = item.on_order_qty ?? item.covered_from_po ?? 0;
+    const availableToInstall = item.available_to_install ?? 
+      Math.min(physical - reservedGlobal + reservedProject, requiredTotal - (item.qty_installed ?? 0));
+    
+    return (
+      <div className="bg-gray-900/50 rounded px-2 py-1.5 text-[10px] font-mono text-gray-400 space-y-0.5">
+        <div className="flex justify-between gap-4">
+          <span>Stock:</span>
+          <span className="text-gray-300">{physical}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Reserved (G|P):</span>
+          <span className="text-gray-300">{reservedGlobal} | {reservedProject}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Needed:</span>
+          <span className="text-gray-300">{requiredTotal}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>To Order:</span>
+          <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>On Order:</span>
+          <span className={onOrderQty > 0 ? "text-blue-400" : "text-gray-500"}>{onOrderQty}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Avail Install:</span>
+          <span className={availableToInstall > 0 ? "text-emerald-400" : "text-gray-500"}>{availableToInstall}</span>
+        </div>
+      </div>
+    );
+  };
+
   const renderItem = (item) => {
     // PHASE 9K: Use ONLY backend is_orderable - NO local gating logic
     const isOrderable = item.is_orderable === true;
@@ -320,104 +362,59 @@ export default function GlobalNeedToOrder() {
       <div 
         key={item.commitment_id}
         className={cn(
-          "p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
+          "p-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
           !isOrderable && "opacity-60"
         )}
       >
-        {/* Checkbox */}
-        <Checkbox
-          checked={selectedItems.has(item.commitment_id)}
-          onCheckedChange={() => toggleItemSelection(item.commitment_id)}
-          disabled={!isOrderable}
-        />
+        {/* Main Row */}
+        <div className="flex items-center gap-3">
+          {/* Checkbox */}
+          <Checkbox
+            checked={selectedItems.has(item.commitment_id)}
+            onCheckedChange={() => toggleItemSelection(item.commitment_id)}
+            disabled={!isOrderable}
+          />
 
-        {/* Part Info */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {item.featured_photo && (
-            <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-              <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
-              {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
+          {/* Part Info */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {item.featured_photo && (
+              <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
+                <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
+                {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
+                <span>· {vendorDisplay.name}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Category */}
-        <div className="text-center w-20 hidden lg:block">
-          <p className="text-xs text-gray-500">Category</p>
-          <p className="text-gray-300 text-xs truncate">{categoryDisplay.name}</p>
-        </div>
+          {/* Coverage Badge (canonical: coverage_status) */}
+          <div className="w-24 hidden md:block">
+            <CoverageBadgeInline coverage={{
+              coverage_status: item.coverage_status,
+              gap_qty: toOrder,
+              qty_needed: needed,
+              qty_reserved: reservedProject,
+              qty_ordered: item.covered_from_po ?? 0,
+              qty_installed: item.qty_installed ?? 0,
+            }} />
+          </div>
 
-        {/* In Stock (canonical: physical_stock_global) */}
-        <div className="text-center w-14">
-          <p className="text-xs text-gray-500">Stock</p>
-          <p className={cn("font-medium", inStock > 0 ? "text-green-400" : "text-gray-500")}>{inStock}</p>
-        </div>
+          {/* Payment/Prepay Status */}
+          <div className="w-20 hidden lg:block">
+            <PrepayStatusBadge 
+              requiresPrepay={item.requires_prepay}
+              billingStatus={item.billing_status}
+            />
+          </div>
 
-        {/* Reserved (G|P format like PSM) */}
-        <div className="text-center w-16 hidden md:block">
-          <p className="text-xs text-gray-500">Rsrvd</p>
-          <p className="text-amber-400 text-xs font-mono">{reservedGlobal}|{reservedProject}</p>
-        </div>
-
-        {/* Needed */}
-        <div className="text-center w-14">
-          <p className="text-xs text-gray-500">Need</p>
-          <p className={cn("font-medium", needed > 0 ? "text-cyan-400" : "text-gray-500")}>{needed}</p>
-        </div>
-
-        {/* To Order (canonical: to_order from read model) */}
-        <div className="text-center w-14">
-          <p className="text-xs text-gray-500">Order</p>
-          <p className={cn("font-bold", toOrder > 0 ? "text-red-400" : "text-gray-500")}>{toOrder}</p>
-        </div>
-
-        {/* Cost (canonical: unit_cost) */}
-        <div className="text-center w-20 hidden lg:block">
-          <p className="text-xs text-gray-500">Cost</p>
-          <p className="text-gray-300 font-mono text-xs">{formatCurrencyUSD(item.unit_cost ?? 0)}</p>
-        </div>
-
-        {/* Retail (canonical: unit_retail) */}
-        <div className="text-center w-20 hidden lg:block">
-          <p className="text-xs text-gray-500">Retail</p>
-          <p className="text-gray-300 font-mono text-xs">{formatCurrencyUSD(item.unit_retail ?? 0)}</p>
-        </div>
-
-        {/* Vendor (resolved name, not ID) */}
-        <div className="text-center w-24 hidden xl:block">
-          <p className="text-xs text-gray-500">Vendor</p>
-          <p className="text-gray-300 text-xs truncate">{vendorDisplay.name}</p>
-        </div>
-
-        {/* Payment/Prepay Status */}
-        <div className="w-20">
-          <PrepayStatusBadge 
-            requiresPrepay={item.requires_prepay}
-            billingStatus={item.billing_status}
-          />
-        </div>
-
-        {/* Coverage Badge (canonical: coverage_status) */}
-        <div className="w-20">
-          <CoverageBadgeInline coverage={{
-            coverage_status: item.coverage_status,
-            gap_qty: toOrder,
-            qty_needed: needed,
-            qty_reserved: reservedProject,
-            qty_ordered: item.covered_from_po ?? 0,
-            qty_installed: item.qty_installed ?? 0,
-          }} />
-        </div>
-
-        {/* Pricing Integrity */}
-        <div className="w-24 hidden xl:block">
-          <PricingIntegrityBadge status={item.pricing_integrity_status} />
+          {/* Pricing Integrity */}
+          <div className="w-24 hidden xl:block">
+            <PricingIntegrityBadge status={item.pricing_integrity_status} />
         </div>
 
         {/* Next Action */}
