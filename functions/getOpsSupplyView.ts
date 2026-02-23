@@ -203,14 +203,42 @@ Deno.serve(async (req) => {
       
       const is_funding_blocked = block_reason_code === 'PREPAY_REQUIRED';
 
-      // Inventory snapshot
-      const physical_stock = part?.physical_stock ?? 0;
+      // ============================================================================
+      // PHASE 2B: CANONICAL INVENTORY SNAPSHOT (same as getProjectSupplyView)
+      // Use pre-computed global inventory map
+      // ============================================================================
+      const partInv = partInventoryMap.get(c.part_id) || {
+        physical_stock: 0,
+        reserved_global: 0,
+        on_order_global: 0,
+        to_order_global: 0,
+        available: 0,
+      };
+      
       const inventory_snapshot = {
-        physical_stock,
-        reserved_total: 0, // Would need aggregation across all commitments
-        available: physical_stock,
-        on_order_total: part?.on_order ?? 0,
-        to_order_total: to_order,
+        // CANONICAL: Part-level physical stock (GLOBAL)
+        physical_stock_global: partInv.physical_stock,
+        physical: partInv.physical_stock,
+        physical_stock: partInv.physical_stock,
+        
+        // CANONICAL: GLOBAL reserved across ALL active commitments
+        reserved_global_active: partInv.reserved_global,
+        reserved: partInv.reserved_global,
+        reserved_total: partInv.reserved_global,
+        
+        // CANONICAL: THIS commitment's reserved allocation
+        reserved_this_project: reserved_from_stock,
+        
+        // CANONICAL: Available = physical - global reserved
+        available_global_active: partInv.available,
+        available: partInv.available,
+        
+        // CANONICAL: Global aggregates
+        on_order_total: partInv.on_order_global,
+        to_order_total: partInv.to_order_global,
+        
+        // CANONICAL: "Needed" for this commitment = required - installed
+        needed: Math.max(0, required_total - qty_installed),
       };
 
       return {
