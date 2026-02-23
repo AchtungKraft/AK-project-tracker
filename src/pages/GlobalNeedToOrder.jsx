@@ -307,47 +307,8 @@ export default function GlobalNeedToOrder() {
     return filteredItems.filter(item => selectedItems.has(item.commitment_id));
   };
 
-  // PHASE 6: GNO Execution Data Block - same format as PSM
-  const GNOExecutionDataBlock = ({ item }) => {
-    const inv = item.inventory_snapshot || {};
-    const physical = inv.physical_stock_global ?? inv.physical ?? 0;
-    const reservedGlobal = inv.reserved_global_active ?? inv.reserved ?? 0;
-    const reservedProject = inv.reserved_this_project ?? item.reserved_from_stock ?? 0;
-    const requiredTotal = item.required_total ?? 0;
-    const toOrder = item.to_order ?? 0;
-    const onOrderQty = item.on_order_qty ?? item.covered_from_po ?? 0;
-    const availableToInstall = item.available_to_install ?? 
-      Math.min(physical - reservedGlobal + reservedProject, requiredTotal - (item.qty_installed ?? 0));
-    
-    return (
-      <div className="bg-gray-900/50 rounded px-2 py-1.5 text-[10px] font-mono text-gray-400 space-y-0.5">
-        <div className="flex justify-between gap-4">
-          <span>Stock:</span>
-          <span className="text-gray-300">{physical}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span>Reserved (G|P):</span>
-          <span className="text-gray-300">{reservedGlobal} | {reservedProject}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span>Needed:</span>
-          <span className="text-gray-300">{requiredTotal}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span>To Order:</span>
-          <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span>On Order:</span>
-          <span className={onOrderQty > 0 ? "text-blue-400" : "text-gray-500"}>{onOrderQty}</span>
-        </div>
-        <div className="flex justify-between gap-4">
-          <span>Avail Install:</span>
-          <span className={availableToInstall > 0 ? "text-emerald-400" : "text-gray-500"}>{availableToInstall}</span>
-        </div>
-      </div>
-    );
-  };
+  // PHASE 4: Import shared ExecutionDataBlock - NO local definition
+  // Uses ExecutionDataBlock from @/components/supply/ExecutionDataBlock
 
   const renderItem = (item) => {
     // PHASE 9K: Use ONLY backend is_orderable - NO local gating logic
