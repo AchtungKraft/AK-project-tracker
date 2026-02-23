@@ -210,18 +210,15 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
       
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast.success(`Requirement updated to ${data.required_total}`);
       
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['commitmentState'] });
-      queryClient.invalidateQueries({ queryKey: ['commitmentStates'] });
-      queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
-      queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] });
-      queryClient.invalidateQueries({ queryKey: ['globalOrderQueue'] });
-      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
-      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
-      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: commitment?.part_id ? [commitment.part_id] : [],
+        projectIds: commitment?.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       onMutationSuccess?.();
       
       setShowConfirmModal(false);
