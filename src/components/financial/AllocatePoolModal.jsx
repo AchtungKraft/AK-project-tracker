@@ -15,6 +15,7 @@ import {
   Package, TrendingDown, AlertCircle, Ban 
 } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * AllocatePoolModal - Allocate pool funds to a commitment
@@ -187,16 +188,12 @@ export default function AllocatePoolModal({
         notes: notes || undefined
       });
     },
-    onSuccess: (data) => {
-      // Invalidate all relevant queries
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
-      queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['projectCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['portfolioSupplyState'] });
-      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
-      queryClient.invalidateQueries({ queryKey: ['projectSupplyState'] });
+    onSuccess: async (data) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: [projectId],
+        commitmentIds: commitment?.id ? [commitment.id] : [],
+      });
 
       if (data.overdraw) {
         toast.warning(`Allocated $${parsedAmount.toFixed(2)} - pool is now overdrawn`);
