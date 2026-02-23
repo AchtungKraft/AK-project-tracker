@@ -294,7 +294,13 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     // Get pricing
     const unitRetail = commitment.unit_retail_snapshot || part.default_retail || 0;
     const unitCost = commitment.unit_cost_snapshot || part.default_cost || 0;
-    const assignedQty = commitment.qty_committed || 1;
+    const assignedQty = commitment.qty_committed || commitment.required_total || 1;
+
+    // PHASE 3: Calculate gross and net exposure with credit
+    const grossLineTotal = assignedQty * unitRetail;
+    const invoicedAmount = commitment.invoiced_amount || 0;
+    const creditAppliedLine = creditByCommitment[commitment.id] || 0;
+    const netLineTotal = Math.max(0, grossLineTotal - invoicedAmount - creditAppliedLine);
 
     // Build row object
     const row = {
@@ -320,7 +326,11 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       installed_qty: installedQty,
       unit_retail: unitRetail,
       unit_cost: unitCost,
-      line_total: assignedQty * unitRetail,
+      line_total: grossLineTotal,
+      gross_line_total: grossLineTotal,
+      invoiced_amount: invoicedAmount,
+      credit_applied_line: creditAppliedLine,
+      net_line_total: netLineTotal,
       cost_total: assignedQty * unitCost,
       ordering_safety: orderingSafety,
       ordering_allowed: isOrderingAllowed(clientPaymentStatus, effectivePartType),
