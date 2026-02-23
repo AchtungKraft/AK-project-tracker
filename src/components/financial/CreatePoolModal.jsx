@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DollarSign, Plus, Loader2, Ban } from "lucide-react";
 import { CommitmentActions } from "./financialMutationGuard";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * CreatePoolModal - Create a new billing pool for a project
@@ -95,8 +96,11 @@ export default function CreatePoolModal({ projectId, project, onClose, onSuccess
         notes: notes.trim() || undefined,
       });
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: [projectId],
+      });
       toast.success(`Pool "${poolName}" created successfully`);
       onSuccess?.(result);
       onClose();
