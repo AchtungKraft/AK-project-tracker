@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, GitBranch, Package } from "lucide-react";
 import { toast } from "sonner";
 import { calculateCommitmentState } from "../inventory/commitmentStateEngine";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * SplitCommitmentModal - Split commitment quantity to new or different project
@@ -145,9 +146,13 @@ export default function SplitCommitmentModal({
 
       return newCommitment;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+    onSuccess: async (newCommitment) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [part.id],
+        projectIds: [commitment.project_id, targetProjectId].filter(Boolean),
+        commitmentIds: [commitment.id, newCommitment?.id].filter(Boolean),
+      });
       toast.success('Commitment split successfully');
       onClose();
     },
