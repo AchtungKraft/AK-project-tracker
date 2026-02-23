@@ -100,8 +100,11 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
-  // DETERMINISTIC: Normalize projectId once using factory
-  const normalizedProjectId = projectId ? String(projectId) : "";
+  // DETERMINISTIC: Normalize projectId once - null if invalid
+  const normalizedProjectId = 
+    projectId !== undefined && projectId !== null && projectId !== ""
+      ? String(projectId)
+      : null;
 
   // PHASE 6: Use canonical read model for invoice history
   const { 
@@ -115,7 +118,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
   // This ensures ForwardInvoiceDashboard matches BillablePartsSelector exactly
-  const { data: billingData, isLoading: billingLoading, dataUpdatedAt } = useBillingAndProcurementStates(normalizedProjectId);
+  const { data: billingData, isLoading: billingLoading, isFetching: billingFetching, dataUpdatedAt } = useBillingAndProcurementStates(normalizedProjectId);
   
   // Merge loading states
   const isLoading = invoiceLoading || billingLoading;
@@ -131,10 +134,13 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   };
 
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === "development" && billingData) {
+  if (process.env.NODE_ENV === "development") {
     console.log("[ForwardInvoiceDashboard] Query State:", {
-      projectId: normalizedProjectId,
-      queryKey: ["billingProcurementStates", normalizedProjectId],
+      normalizedProjectId,
+      queryKey: billingKeys.states(normalizedProjectId),
+      billingData: billingData ? "loaded" : "null",
+      isLoading,
+      billingFetching,
       dataUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null,
       netExposure: canonicalTotals.net_exposure ?? "N/A",
     });
