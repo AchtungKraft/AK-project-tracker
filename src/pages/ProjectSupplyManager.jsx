@@ -1332,92 +1332,72 @@ export default function ProjectSupplyManager() {
               <ForwardInvoiceDashboard projectId={projectId} />
             </TabsContent>
 
-            <TabsContent value="buy" className="mt-4">
-              <Card className="bg-black/40 border-gray-800">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-white">Ready to Order</CardTitle>
-                        <CardDescription>Items gated by coverage and prepay requirements</CardDescription>
-                      </div>
-                      {selectedItems.size > 0 && (
-                        <MutationButton 
-                          className="bg-green-600 hover:bg-green-700 gap-1"
-                          onClick={handleBulkPOPreview}
-                          loadingText="Loading..."
-                        >
-                          <ShoppingCart className="w-4 h-4" />
-                          Create PO ({selectedItems.size})
-                        </MutationButton>
-                      )}
-                    </div>
-                    <div className="flex flex-col md:flex-row gap-3">
-                      <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                        <Input
-                          placeholder="Search parts..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
-                        />
-                      </div>
-                      <SupplyGroupingControls
-                        onGroupChange={setGroupConfig}
-                        onSortChange={setSortBy}
-                        onShowClosedChange={setShowClosedCancelled}
-                        showProjectOption={false}
-                        projectId={projectId}
-                        tabId="buy"
-                        className="flex-1"
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {isMobile ? (
-                    <div className="p-3">
-                      {getFilteredCommitments('buy').length === 0 ? (
-                        <p className="text-center py-8 text-gray-500">No items need ordering</p>
-                      ) : (
-                        renderMobileGroupedCommitments('buy')
-                      )}
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-gray-800 hover:bg-transparent">
-                          <TableHead className="w-10"></TableHead>
-                          <TableHead className="text-gray-400">Part</TableHead>
-                          <TableHead className="text-gray-400">Category</TableHead>
-                          <TableHead className="text-gray-400 text-center">In Stock</TableHead>
-                          <TableHead className="text-gray-400 text-center">Reserved</TableHead>
-                          <TableHead className="text-gray-400 text-center">Needed</TableHead>
-                          <TableHead className="text-gray-400 text-right">Cost</TableHead>
-                          <TableHead className="text-gray-400 text-right">Retail</TableHead>
-                          <TableHead className="text-gray-400">Status</TableHead>
-                          <TableHead className="text-gray-400">Vendor</TableHead>
-                          <TableHead className="text-gray-400">Payment</TableHead>
-                          <TableHead className="text-gray-400">Coverage</TableHead>
-                          <TableHead className="text-gray-400">Pricing</TableHead>
-                          <TableHead className="w-10"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {getFilteredCommitments('buy').length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
-                              No items need ordering
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          renderGroupedCommitments('buy')
-                        )}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+            <TabsContent value="buy" className="mt-4 space-y-4">
+              {/* Tab Header */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Ready to Order</h2>
+                  <p className="text-xs text-gray-500">Items gated by coverage and prepay requirements</p>
+                </div>
+              </div>
+
+              {/* Controls Row */}
+              <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search parts..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
+                  />
+                </div>
+                <Select value={groupMode} onValueChange={setGroupMode}>
+                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white h-8">
+                    <SelectValue placeholder="Group by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="category">By Category</SelectItem>
+                    <SelectItem value="vendor">By Vendor</SelectItem>
+                    <SelectItem value="coverage">By Coverage</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-32 bg-gray-900/50 border-gray-700 text-white h-8">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Recent</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="qty">Quantity</SelectItem>
+                    <SelectItem value="cost">Cost</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Summary Strip */}
+              <PSMSummaryStrip items={getFilteredCommitments('buy')} tab="buy" />
+
+              {/* Grouped Cards */}
+              <PSMGroupedView
+                items={applySorting(filterActiveCommitments(getFilteredCommitments('buy'), showClosedCancelled), sortBy)}
+                groupMode={groupMode}
+                selectedItems={selectedItems}
+                setSelectedItems={setSelectedItems}
+                onPartClick={handlePartClick}
+                onCreatePO={handleSinglePOCreate}
+                onReceive={setReceiveModal}
+                onInstall={setInstallModal}
+                onReverseInstall={setReverseInstallModal}
+                onDeltaOrder={setDeltaOrderCommitment}
+                onManageQty={setQtyManagerDrawer}
+                onCancel={setCancelModal}
+                onBatchPO={handleBulkPOPreview}
+                actionsEnabled={actionsEnabled}
+                categoriesMap={categoriesMap}
+                vendorsMap={vendorsMap}
+                tab="buy"
+              />
             </TabsContent>
 
             <TabsContent value="receive" className="mt-4">
