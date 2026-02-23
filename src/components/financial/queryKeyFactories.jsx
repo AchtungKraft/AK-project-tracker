@@ -6,28 +6,40 @@
  * 
  * RULES:
  * - Keys are always string arrays (no object keys)
- * - projectId is always normalized to String
- * - Empty/null projectId normalizes to empty string
+ * - projectId is always normalized to String OR null (never empty string)
+ * - Empty string keys broke loading because useQuery enabled: Boolean("") is false
+ *   but the query key still contained "" which caused cache key mismatches
  */
 
 /**
- * Normalize projectId to string format
+ * Normalize projectId to string format OR null
+ * 
+ * IMPORTANT: Returns null (not empty string) for invalid inputs.
+ * This ensures:
+ * - enabled: Boolean(normalizedProjectId) works correctly
+ * - Query keys never contain empty strings
+ * - Cache invalidation matches correctly
+ * 
  * @param {string|number|null|undefined} projectId 
- * @returns {string}
+ * @returns {string|null}
  */
 export const normalizeProjectId = (projectId) => {
-  if (projectId === null || projectId === undefined || projectId === 'all') {
-    return '';
+  if (projectId === null || projectId === undefined || projectId === '' || projectId === 'all') {
+    return null;
   }
   return String(projectId);
 };
 
 /**
  * Billing/Procurement state query keys
+ * NOTE: Returns key with null if projectId is invalid - callers must check enabled
  */
 export const billingKeys = {
   all: () => ['billingProcurementStates'],
-  states: (projectId) => ['billingProcurementStates', normalizeProjectId(projectId)],
+  states: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['billingProcurementStates', normalized];
+  },
 };
 
 /**
@@ -35,8 +47,14 @@ export const billingKeys = {
  */
 export const invoiceKeys = {
   all: () => ['projectInvoicesView'],
-  view: (projectId) => ['projectInvoicesView', normalizeProjectId(projectId)],
-  lines: (projectId) => ['projectInvoiceLines', normalizeProjectId(projectId)],
+  view: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['projectInvoicesView', normalized];
+  },
+  lines: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['projectInvoiceLines', normalized];
+  },
 };
 
 /**
@@ -44,9 +62,15 @@ export const invoiceKeys = {
  */
 export const creditKeys = {
   all: () => ['creditAllocations'],
-  allocations: (projectId) => ['creditAllocations', normalizeProjectId(projectId)],
+  allocations: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['creditAllocations', normalized];
+  },
   ledger: () => ['creditLedger'],
-  projectBalance: (projectId) => ['projectCreditBalance', normalizeProjectId(projectId)],
+  projectBalance: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    return ['projectCreditBalance', normalized];
+  },
 };
 
 /**
