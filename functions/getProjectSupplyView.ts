@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
       buy: viewModels.filter(vm => vm.to_order > 0 || vm.next_action === 'CREATE_PO').length,
       receive: viewModels.filter(vm => vm.on_order_qty > 0 || vm.next_action === 'RECEIVE').length,
       install: viewModels.filter(vm => vm.available_to_install > 0 || vm.next_action === 'INSTALL').length,
-      invoice: invoiceBatches.filter(ib => ib.status !== 'void').length,
+      invoice: projectInvoices.filter(inv => inv.status !== 'void').length,
     };
 
     // Summary statistics (FORWARD MODEL - invoice-based)
