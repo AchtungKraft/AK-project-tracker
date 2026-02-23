@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   DollarSign,
   ExternalLink,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -31,6 +32,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 
 export default function ProjectInvoices() {
   const queryClient = useQueryClient();
