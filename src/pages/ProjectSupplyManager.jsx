@@ -71,8 +71,11 @@ export default function ProjectSupplyManager() {
   const audit = useWiringAudit('ProjectSupplyManager');
   const urlParams = new URLSearchParams(window.location.search);
   const rawProjectId = urlParams.get('project_id');
-  // DETERMINISTIC: Normalize projectId once
-  const projectId = rawProjectId ? String(rawProjectId) : "";
+  // DETERMINISTIC: Normalize projectId once - null if invalid
+  const projectId = 
+    rawProjectId !== undefined && rawProjectId !== null && rawProjectId !== ""
+      ? String(rawProjectId)
+      : null;
   
   // =====================================================================
   // CANONICAL TAB ROUTING - Financial model determines allowed tabs
@@ -85,9 +88,22 @@ export default function ProjectSupplyManager() {
     categories,
     project,
     isLoading: supplyLoading, 
+    isFetching: supplyFetching,
     refetch: refetchSupply,
     invalidate: invalidateSupply
   } = useProjectSupplyView(projectId);
+  
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === "development") {
+    console.log("[ProjectSupplyManager] Query State:", {
+      normalizedProjectId: projectId,
+      queryKey: ['projectSupplyView', projectId],
+      supplyItems: supplyItems?.length ?? 0,
+      isLoading: supplyLoading,
+      isFetching: supplyFetching,
+      project: project?.name ?? "null",
+    });
+  }
 
   // FORWARD MODEL ONLY - No legacy support
   const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'report'];
