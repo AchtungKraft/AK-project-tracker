@@ -134,33 +134,33 @@ export function useProjectInvoiceView(projectId) {
     isLoading: loadingInvoices,
     refetch: refetchInvoices
   } = useQuery({
-    queryKey: ['projectInvoices', projectId],
+    queryKey: ['projectInvoices', normalizedId],
     queryFn: async () => {
-      if (!projectId) return [];
-      return base44.entities.ProjectInvoice.filter({ project_id: projectId }, '-created_date');
+      if (!normalizedId) return [];
+      return base44.entities.ProjectInvoice.filter({ project_id: normalizedId }, '-created_date');
     },
-    enabled: !!projectId,
+    enabled: Boolean(normalizedId),
     staleTime: 30000,
   });
 
   // Fetch credit ledger and allocations
   const { data: creditLedgers = [], isLoading: loadingCredits } = useQuery({
-    queryKey: ['projectCreditLedger', projectId],
+    queryKey: ['projectCreditLedger', normalizedId],
     queryFn: async () => {
-      if (!projectId) return [];
-      return base44.entities.ProjectCreditLedger.filter({ project_id: projectId });
+      if (!normalizedId) return [];
+      return base44.entities.ProjectCreditLedger.filter({ project_id: normalizedId });
     },
-    enabled: !!projectId,
+    enabled: Boolean(normalizedId),
     staleTime: 30000,
   });
 
   const { data: creditAllocations = [], isLoading: loadingAllocations } = useQuery({
-    queryKey: ['projectCreditAllocations', projectId],
+    queryKey: ['creditAllocations', normalizedId],
     queryFn: async () => {
-      if (!projectId) return [];
-      return base44.entities.CreditAllocation.filter({ project_id: projectId, is_reversed: false });
+      if (!normalizedId) return [];
+      return base44.entities.CreditAllocation.filter({ project_id: normalizedId, is_reversed: false });
     },
-    enabled: !!projectId,
+    enabled: Boolean(normalizedId),
     staleTime: 30000,
   });
 
