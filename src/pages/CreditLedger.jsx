@@ -67,6 +67,19 @@ export default function CreditLedger() {
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p]));
   const invoiceMap = Object.fromEntries(invoices.map((i) => [i.id, i]));
 
+  // Build allocation count by ledger
+  const allocationsByLedger = useMemo(() => {
+    const map = {};
+    for (const alloc of allocations) {
+      if (!map[alloc.credit_ledger_id]) {
+        map[alloc.credit_ledger_id] = { count: 0, total: 0 };
+      }
+      map[alloc.credit_ledger_id].count += 1;
+      map[alloc.credit_ledger_id].total += alloc.amount_applied || 0;
+    }
+    return map;
+  }, [allocations]);
+
   // Enrich credits with project and invoice names
   const enrichedCredits = useMemo(() => {
     return credits.map((credit) => {
@@ -75,12 +88,15 @@ export default function CreditLedger() {
       const appliedInvoice = credit.applied_to_invoice_id
         ? invoiceMap[credit.applied_to_invoice_id]
         : null;
+      const allocationInfo = allocationsByLedger[credit.id] || { count: 0, total: 0 };
 
       return {
         ...credit,
         project_name: project?.name || "Unknown Project",
         source_invoice_number: sourceInvoice?.qb_invoice_number || "—",
         applied_invoice_number: appliedInvoice?.qb_invoice_number || null,
+        allocation_count: allocationInfo.count,
+        allocation_total: allocationInfo.total,
         status:
           credit.remaining_amount === 0
             ? "applied"
@@ -89,7 +105,7 @@ export default function CreditLedger() {
             : "available",
       };
     });
-  }, [credits, projectMap, invoiceMap]);
+  }, [credits, projectMap, invoiceMap, allocationsByLedger]);
 
   // Filter credits
   const filteredCredits = useMemo(() => {
