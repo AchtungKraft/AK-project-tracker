@@ -61,6 +61,18 @@ Deno.serve(async (req) => {
       throw new Error('No invoices returned from read model');
     }
 
+    // DEBUG: Log raw invoice structure
+    console.log('[EXPORT DEBUG] Raw invoices count:', data.invoices.length);
+    if (data.invoices.length > 0) {
+      console.log('[EXPORT DEBUG] First invoice structure:', JSON.stringify({
+        id: data.invoices[0].id,
+        status: data.invoices[0].status,
+        line_count: data.invoices[0].line_count,
+        lines_array_length: data.invoices[0].lines?.length ?? 'NO LINES PROPERTY',
+        first_line: data.invoices[0].lines?.[0] ?? 'NO LINES',
+      }, null, 2));
+    }
+
     // ============================================
     // STEP 2: Mode-Based Filtering
     // ============================================
