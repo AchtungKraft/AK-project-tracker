@@ -52,6 +52,7 @@ import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
+import CreateProjectInvoiceModal from "./CreateProjectInvoiceModal";
 import { Checkbox } from "@/components/ui/checkbox";
 
 /**
@@ -82,6 +83,8 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // PHASE 4: Credit allocation modal and selection state
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [selectedCommitmentIds, setSelectedCommitmentIds] = useState(new Set());
+  // PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
   // PHASE 6: Use canonical read model for invoice history
   const { 
