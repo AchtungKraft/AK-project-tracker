@@ -161,6 +161,15 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['projectSupplyView'],
       type: refetchActive ? 'active' : 'all'
     }),
+    // PHASE 5: Add billing states to critical refetches
+    queryClient.refetchQueries({ 
+      queryKey: ['billingProcurementStates'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['creditLedger'],
+      type: refetchActive ? 'active' : 'all'
+    }),
   );
   
   // Scoped refetches for affected parts
