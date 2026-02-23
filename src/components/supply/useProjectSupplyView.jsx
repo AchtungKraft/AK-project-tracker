@@ -98,6 +98,8 @@ export function useProjectSupplyView(projectId, filters = {}) {
   });
   
   // PHASE 2: DEV DRIFT GUARD - Use shared validation function
+  // DIAGNOSTIC: Full diagnostic report for PSM
+  let diagnosticReport = null;
   if (process.env.NODE_ENV === 'development' && items.length > 0) {
     const sample = items[0];
     console.log('[DEV] Project Supply View - Sample commitment shape:', sample);
@@ -111,6 +113,10 @@ export function useProjectSupplyView(projectId, filters = {}) {
     
     // Use shared drift validation
     validateSupplyModelDrift(items, 'useProjectSupplyView');
+    
+    // DIAGNOSTIC: Run full diagnostic and store for cross-view comparison
+    diagnosticReport = diagnoseSupplyItems(items, 'useProjectSupplyView');
+    storePSMDiagnostics(projectId, items);
   }
   
   return {
@@ -124,6 +130,8 @@ export function useProjectSupplyView(projectId, filters = {}) {
     error: query.error,
     refetch: query.refetch,
     invalidate,
+    // DIAGNOSTIC: Expose diagnostic data in dev mode only
+    _diagnostics: process.env.NODE_ENV === 'development' ? diagnosticReport : null,
   };
 }
 
