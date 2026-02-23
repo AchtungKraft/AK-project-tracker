@@ -545,9 +545,9 @@ export default function PartsActionWorkbench() {
   // Lifecycle action hook
   const { executeActionAsync, isExecuting } = useLifecycleAction();
 
-  // Fetch action queue data
+  // Fetch action queue data - uses factory key
   const { data: queueData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['lifecycleActionQueue', projectFilter, showClosed, showArchived, showNonBillable],
+    queryKey: [...lifecycleKeys.actionQueue(), projectFilter, showClosed, showArchived, showNonBillable],
     queryFn: async () => {
       const filters = {
         include_closed: showClosed,
@@ -562,13 +562,14 @@ export default function PartsActionWorkbench() {
     staleTime: 30000,
   });
 
-  // Fetch projects for filter
+  // Fetch projects for filter - uses factory key
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
   });
   
   // CANONICAL: Fetch billingProcurementStates for invoiceable parts when project is selected
+  // Uses billingKeys factory imported via lifecycleKeys
   const { data: billingData } = useQuery({
     queryKey: ['billingProcurementStates', projectFilter],
     queryFn: async () => {
