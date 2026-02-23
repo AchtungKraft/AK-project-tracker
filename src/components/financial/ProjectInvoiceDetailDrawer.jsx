@@ -153,9 +153,9 @@ export default function ProjectInvoiceDetailDrawer({
         setShowMarkSentModal(false);
         
         // Use forceAppRefresh for complete cache sync
-        const normalizedProjectId = invoice?.project_id || null;
+        const projectIdForRefresh = invoice?.project_id || null;
         await forceAppRefresh(queryClient, {
-          projectIds: normalizedProjectId ? [normalizedProjectId] : [],
+          projectIds: projectIdForRefresh ? [projectIdForRefresh] : [],
         });
         
         onUpdated?.();
@@ -197,9 +197,9 @@ export default function ProjectInvoiceDetailDrawer({
         setShowMarkPaidModal(false);
         
         // Use forceAppRefresh for complete cache sync
-        const normalizedProjectId = invoice?.project_id || null;
+        const projectIdForRefresh = invoice?.project_id || null;
         await forceAppRefresh(queryClient, {
-          projectIds: normalizedProjectId ? [normalizedProjectId] : [],
+          projectIds: projectIdForRefresh ? [projectIdForRefresh] : [],
         });
         
         onUpdated?.();
@@ -216,28 +216,23 @@ export default function ProjectInvoiceDetailDrawer({
   const handleExportCSV = () => {
     if (!invoice || !lines) return;
 
-    // Build CSV content
-    const headers = ["Line Type", "Description", "Qty", "Unit Price", "Line Total"];
-    const rows = lines.map((line) => [
-      line.type,
-      line.description,
-      line.qty ?? "",
-      line.unit_price ?? 0,
-      line.line_total ?? 0,
-    ]);
+    const csvLines = [
+      ["Description", "Qty", "Unit Price", "Line Total"],
+      ...lines.map((line) => [
+        line.description || "",
+        line.qty || "",
+        line.unit_price || "",
+        line.line_total || "",
+      ]),
+      [],
+      ["", "", "Subtotal", invoice.subtotal || 0],
+      ["", "", "Credit Applied", invoice.credit_applied || 0],
+      ["", "", "Total", invoice.total || 0],
+    ];
 
-    // Add summary rows
-    rows.push([]);
-    rows.push(["", "Subtotal", "", "", invoice.subtotal ?? 0]);
-    if (invoice.credit_applied > 0) {
-      rows.push(["", "Credit Applied", "", "", -invoice.credit_applied]);
-    }
-    rows.push(["", "Balance Due", "", "", invoice.balance_due ?? 0]);
-
-    const csvContent =
-      headers.join(",") +
-      "\n" +
-      rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const csvContent = csvLines
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -246,192 +241,188 @@ export default function ProjectInvoiceDetailDrawer({
     a.download = `invoice-${invoice.qb_invoice_number || invoice.id}.csv`;
     document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    a.remove();
-
-    toast.success("CSV exported");
   };
 
   return (
     <>
       <Sheet open={open} onOpenChange={onClose}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
+          <SheetHeader className="mb-6">
+            <SheetTitle className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-purple-400" />
               Invoice Details
             </SheetTitle>
           </SheetHeader>
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : !invoice ? (
-            <div className="text-center py-12 text-gray-500">Invoice not found</div>
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <AlertTriangle className="w-8 h-8 mb-2" />
+              <p>Invoice not found</p>
+            </div>
           ) : (
-            <div className="space-y-6 py-6">
+            <div className="space-y-6">
               {/* Header Info */}
-              <div className="space-y-3">
+              <div className="p-4 bg-gray-800/50 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Status</span>
                   {getStatusBadge(invoice.status)}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Type</span>
                   {getInvoiceTypeBadge(invoice.invoice_type)}
                 </div>
-
-                <div className="p-4 bg-gray-800/50 rounded-lg space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Project</span>
-                    <span className="text-white">{project?.name || "—"}</span>
+                {invoice.qb_invoice_number && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">QB Invoice #</span>
+                    <span className="font-mono text-white">{invoice.qb_invoice_number}</span>
                   </div>
-                  {project?.client_name && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Client</span>
-                      <span className="text-gray-300">{project.client_name}</span>
-                    </div>
-                  )}
-                  {invoice.qb_invoice_number && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">QB Invoice #</span>
-                      <span className="text-white font-mono">{invoice.qb_invoice_number}</span>
-                    </div>
-                  )}
-                  {invoice.issue_date && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Issue Date</span>
-                      <span className="text-gray-300">
-                        {format(parseISO(invoice.issue_date), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                  )}
-                  {invoice.due_date && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Due Date</span>
-                      <span className="text-gray-300">
-                        {format(parseISO(invoice.due_date), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                  )}
-                  {invoice.payment_date && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Payment Date</span>
-                      <span className="text-green-400">
-                        {format(parseISO(invoice.payment_date), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                  )}
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Project</span>
+                  <span className="text-white">{project?.name || "—"}</span>
                 </div>
               </div>
 
-              <Separator className="bg-gray-700" />
+              {/* Dates */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-800/30 rounded-lg">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Created</p>
+                  <p className="text-sm text-white">
+                    {invoice.created_date
+                      ? format(parseISO(invoice.created_date), "MMM d, yyyy")
+                      : "—"}
+                  </p>
+                </div>
+                {invoice.issue_date && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Issued</p>
+                    <p className="text-sm text-white">
+                      {format(parseISO(invoice.issue_date), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                )}
+                {invoice.due_date && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Due</p>
+                    <p className="text-sm text-white">
+                      {format(parseISO(invoice.due_date), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                )}
+                {invoice.payment_date && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Paid</p>
+                    <p className="text-sm text-green-400">
+                      {format(parseISO(invoice.payment_date), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Line Items */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-400">Line Items</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Description</TableHead>
-                      <TableHead className="text-gray-400 text-right">Qty</TableHead>
-                      <TableHead className="text-gray-400 text-right">Price</TableHead>
-                      <TableHead className="text-gray-400 text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lines.map((line) => (
-                      <TableRow key={line.id} className="border-gray-800">
-                        <TableCell>
-                          <div>
-                            <p className="text-white">{line.description}</p>
-                            <p className="text-xs text-gray-500 capitalize">{line.type}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-gray-300">
-                          {line.qty ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-gray-300">
-                          {formatCurrencyUSD(line.unit_price ?? 0)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-white">
-                          {formatCurrencyUSD(line.line_total ?? 0)}
-                        </TableCell>
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-3">Line Items</h3>
+                <div className="border border-gray-700 rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-700">
+                        <TableHead className="text-gray-400">Description</TableHead>
+                        <TableHead className="text-gray-400 text-right">Qty</TableHead>
+                        <TableHead className="text-gray-400 text-right">Price</TableHead>
+                        <TableHead className="text-gray-400 text-right">Total</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {lines.map((line, idx) => (
+                        <TableRow key={idx} className="border-gray-700">
+                          <TableCell className="text-white">{line.description}</TableCell>
+                          <TableCell className="text-right text-gray-300">
+                            {line.qty || "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-gray-300">
+                            {line.unit_price ? formatCurrencyUSD(line.unit_price) : "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-white">
+                            {formatCurrencyUSD(line.line_total || 0)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
-              <Separator className="bg-gray-700" />
-
               {/* Totals */}
-              <div className="space-y-2">
-                <div className="flex justify-between">
+              <div className="p-4 bg-gray-800/50 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Subtotal</span>
-                  <span className="text-white font-mono">
-                    {formatCurrencyUSD(invoice.subtotal ?? 0)}
+                  <span className="font-mono text-white">
+                    {formatCurrencyUSD(invoice.subtotal || 0)}
                   </span>
                 </div>
-                {invoice.credit_applied > 0 && (
-                  <div className="flex justify-between">
+                {(invoice.credit_applied || 0) > 0 && (
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Credit Applied</span>
-                    <span className="text-green-400 font-mono">
+                    <span className="font-mono text-green-400">
                       -{formatCurrencyUSD(invoice.credit_applied)}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between pt-2 border-t border-gray-700">
-                  <span className="text-white font-medium">Balance Due</span>
-                  <span className="text-white font-mono font-bold text-lg">
-                    {formatCurrencyUSD(invoice.balance_due ?? 0)}
+                <Separator className="bg-gray-700 my-2" />
+                <div className="flex justify-between text-lg font-bold">
+                  <span className="text-white">Total</span>
+                  <span className="font-mono text-white">
+                    {formatCurrencyUSD(invoice.total || 0)}
                   </span>
                 </div>
-                {invoice.paid_amount > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Amount Paid</span>
-                    <span className="text-green-400 font-mono">
-                      {formatCurrencyUSD(invoice.paid_amount)}
+                {invoice.status === "paid" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Paid Amount</span>
+                    <span className="font-mono text-green-400">
+                      {formatCurrencyUSD(invoice.paid_amount || invoice.total || 0)}
                     </span>
                   </div>
                 )}
               </div>
 
+              {/* Notes */}
               {invoice.notes && (
-                <>
-                  <Separator className="bg-gray-700" />
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-2">Notes</h3>
-                    <p className="text-gray-300 text-sm">{invoice.notes}</p>
-                  </div>
-                </>
+                <div className="p-4 bg-gray-800/30 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Notes</h4>
+                  <p className="text-sm text-gray-400 whitespace-pre-wrap">{invoice.notes}</p>
+                </div>
               )}
 
-              <Separator className="bg-gray-700" />
-
               {/* Actions */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-700">
+                {invoice.status === "draft" && (
+                  <Button
+                    onClick={() => setShowMarkSentModal(true)}
+                    className="gap-2 bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Send className="w-4 h-4" />
+                    Mark as Sent
+                  </Button>
+                )}
+                {invoice.status === "sent" && (
+                  <Button
+                    onClick={() => setShowMarkPaidModal(true)}
+                    className="gap-2 bg-green-600 hover:bg-green-700"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    Mark as Paid
+                  </Button>
+                )}
                 <Button variant="outline" onClick={handleExportCSV} className="gap-2">
                   <Download className="w-4 h-4" />
                   Export CSV
                 </Button>
-
-                {invoice.status === "draft" && (
-                  <Button onClick={() => setShowMarkSentModal(true)} className="gap-2">
-                    <Send className="w-4 h-4" />
-                    Mark Sent
-                  </Button>
-                )}
-
-                {invoice.status === "sent" && (
-                  <Button
-                    onClick={() => {
-                      setPaidAmount(invoice.balance_due?.toString() || "");
-                      setShowMarkPaidModal(true);
-                    }}
-                    className="gap-2 bg-green-600 hover:bg-green-700"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    Mark Paid
-                  </Button>
-                )}
               </div>
             </div>
           )}
@@ -442,48 +433,45 @@ export default function ProjectInvoiceDetailDrawer({
       <Dialog open={showMarkSentModal} onOpenChange={setShowMarkSentModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="w-5 h-5" />
-              Mark Invoice as Sent
-            </DialogTitle>
+            <DialogTitle>Mark Invoice as Sent</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>QuickBooks Invoice # *</Label>
+              <Label>QuickBooks Invoice Number *</Label>
               <Input
-                placeholder="e.g., INV-2024-001"
                 value={qbInvoiceNumber}
                 onChange={(e) => setQbInvoiceNumber(e.target.value)}
+                placeholder="e.g., INV-001234"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Issue Date *</Label>
-                <Input
-                  type="date"
-                  value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Due Date *</Label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Issue Date *</Label>
+              <Input
+                type="date"
+                value={issueDate}
+                onChange={(e) => setIssueDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Due Date *</Label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMarkSentModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleMarkSent} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Mark Sent
+            <Button
+              onClick={handleMarkSent}
+              disabled={isSubmitting}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Sent
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -493,22 +481,17 @@ export default function ProjectInvoiceDetailDrawer({
       <Dialog open={showMarkPaidModal} onOpenChange={setShowMarkPaidModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
-              Record Payment
-            </DialogTitle>
+            <DialogTitle>Mark Invoice as Paid</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div className="p-3 bg-gray-800/50 rounded-lg">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Balance Due</span>
-                <span className="text-white font-mono font-bold">
-                  {formatCurrencyUSD(invoice?.balance_due ?? 0)}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Invoice Total</span>
+                <span className="font-mono text-white">
+                  {formatCurrencyUSD(invoice?.total || 0)}
                 </span>
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>Payment Date *</Label>
               <Input
@@ -517,28 +500,23 @@ export default function ProjectInvoiceDetailDrawer({
                 onChange={(e) => setPaymentDate(e.target.value)}
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Amount Paid (leave blank for full amount)</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400">$</span>
-                <Input
-                  type="number"
-                  placeholder={invoice?.balance_due?.toString() || "0.00"}
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                />
-              </div>
-              {paidAmount && parseFloat(paidAmount) > (invoice?.balance_due ?? 0) && (
-                <p className="text-sm text-amber-400 flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" />
-                  Overpayment will create{" "}
-                  {formatCurrencyUSD(parseFloat(paidAmount) - (invoice?.balance_due ?? 0))} credit
-                </p>
-              )}
+              <Label>
+                Paid Amount{" "}
+                <span className="text-gray-400">(leave blank for full amount)</span>
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={paidAmount}
+                onChange={(e) => setPaidAmount(e.target.value)}
+                placeholder={invoice?.total?.toString() || "0.00"}
+              />
+              <p className="text-xs text-gray-400">
+                If paid amount exceeds invoice total, credit will be created.
+              </p>
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMarkPaidModal(false)}>
               Cancel
@@ -548,8 +526,8 @@ export default function ProjectInvoiceDetailDrawer({
               disabled={isSubmitting}
               className="bg-green-600 hover:bg-green-700"
             >
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Record Payment
+              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Payment
             </Button>
           </DialogFooter>
         </DialogContent>
