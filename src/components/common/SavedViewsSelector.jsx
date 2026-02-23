@@ -14,6 +14,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { 
@@ -186,6 +187,9 @@ export default function SavedViewsSelector({
         <DialogContent className="bg-gray-900 border-gray-700">
           <DialogHeader>
             <DialogTitle className="text-white">Save View</DialogTitle>
+            <DialogDescription>
+              Save the current filter configuration as a reusable view.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -223,6 +227,9 @@ export default function SavedViewsSelector({
         <DialogContent className="bg-gray-900 border-gray-700">
           <DialogHeader>
             <DialogTitle className="text-white">Rename View</DialogTitle>
+            <DialogDescription>
+              Enter a new name for this saved view.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
