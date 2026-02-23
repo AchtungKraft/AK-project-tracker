@@ -498,26 +498,27 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
                 </span>
               </div>
               <Separator className="bg-gray-700" />
-              <div className="flex justify-between text-lg">
-                <span className="text-gray-400">Subtotal</span>
-                <span className="font-mono text-white">{formatCurrencyUSD(subtotal)}</span>
+              {/* PHASE 1: Show gross/credit/net breakdown from canonical backend */}
+              <div className="flex justify-between">
+                <span className="text-gray-400">Gross Total</span>
+                <span className="font-mono text-gray-300">{formatCurrencyUSD(grossSubtotal)}</span>
               </div>
-              {creditPreview > 0 && (
+              {partsCreditApplied > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Credit Preview</span>
-                  <span className="font-mono text-green-400">-{formatCurrencyUSD(creditPreview)}</span>
+                  <span className="text-gray-400">Credit Applied</span>
+                  <span className="font-mono text-green-400">-{formatCurrencyUSD(partsCreditApplied)}</span>
                 </div>
               )}
               <div className="flex justify-between text-xl font-bold">
-                <span className="text-white">Balance Due</span>
+                <span className="text-white">Net Balance Due</span>
                 <span className="font-mono text-white">{formatCurrencyUSD(balanceDue)}</span>
               </div>
             </div>
 
-            {creditPreview > 0 && (
+            {partsCreditApplied > 0 && (
               <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg">
                 <p className="text-sm text-green-300">
-                  <strong>Credit Preview:</strong> {formatCurrencyUSD(creditPreview)} credit will be applied when this invoice is marked as paid.
+                  <strong>Credit Applied:</strong> {formatCurrencyUSD(partsCreditApplied)} credit has been pre-applied to these commitments.
                 </p>
               </div>
             )}
