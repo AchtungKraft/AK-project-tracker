@@ -726,10 +726,11 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
 
   // Phase 1: Fetch existing draft invoices for accumulation
   const { data: draftBatches = [] } = useQuery({
-    queryKey: ['draftProjectInvoices', normalizedProjectFilter || 'all'],
+    queryKey: ['draftProjectInvoices', normalizedProjectFilter ?? 'all'],
     queryFn: async () => {
       const filter = { status: 'draft' };
-      if (normalizedProjectFilter !== 'all') filter.project_id = normalizedProjectFilter;
+      // Only add project_id filter if we have a valid normalized value
+      if (normalizedProjectFilter) filter.project_id = normalizedProjectFilter;
       return base44.entities.ProjectInvoice.filter(filter, '-created_date');
     },
     staleTime: 30000,
