@@ -261,20 +261,11 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // PHASE 2: Deterministic refresh - await ALL refetches before callback
+        // PHASE 1 UNIFIED: Deterministic refresh - await ALL refetches before callback
+        // This ensures BOTH ProjectInvoices page AND ForwardInvoiceDashboard update
         await forceAppRefresh(queryClient, {
           projectIds: [selectedProjectId],
           commitmentIds: selectedParts.map(p => p.part_commitment_id).filter(Boolean),
-        });
-        
-        // Explicitly refetch scoped billing states to ensure UI consistency
-        await queryClient.refetchQueries({ 
-          queryKey: ['billingProcurementStates', selectedProjectId],
-          type: 'all'
-        });
-        await queryClient.refetchQueries({ 
-          queryKey: ['projectInvoicesView'],
-          type: 'all'
         });
         
         onSuccess?.();
