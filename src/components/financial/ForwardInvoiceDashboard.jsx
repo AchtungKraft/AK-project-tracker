@@ -195,25 +195,45 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     };
   }, [invoices]);
 
-  // Export to QB handler - PHASE 1: Uses ProjectInvoice system
+  // Export to QB handler - CANONICAL: Uses exportProjectInvoicesToQuickBooks
   const handleExport = async (invoiceId, action) => {
     setIsExporting(true);
     try {
       audit.trackClick('qb_export', { invoiceId, action });
-      const response = await base44.functions.invoke('exportProjectInvoicesToQB', {
-        invoice_id: invoiceId,
-        action: action,
-      });
       
-      if (action === 'csv' && response.data?.csv_url) {
-        const link = document.createElement('a');
-        link.href = response.data.csv_url;
-        link.download = `invoice_${invoiceId}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+      if (action === 'csv') {
+        // CANONICAL: Single invoice export via backend function
+        const result = await base44.functions.invoke('exportProjectInvoicesToQuickBooks', {
+          project_id: normalizedProjectId,
+          mode: 'single',
+          invoice_ids: [invoiceId],
+        });
+
+        if (!result.data?.success) {
+          toast.error(result.data?.error || 'Export failed');
+          return;
+        }
+
+        // DEV Log
+        console.log('[QB EXPORT]', {
+          mode: 'single',
+          invoice_count: result.data.invoice_count,
+          line_count: result.data.line_count,
+        });
+
+        const blob = new Blob([result.data.content], { type: result.data.mime_type });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.data.file_name;
+        a.click();
+
+        URL.revokeObjectURL(url);
         toast.success('CSV downloaded');
       } else if (action === 'mark_exported') {
+        // Mark as exported - update entity directly
+        await base44.entities.ProjectInvoice.update(invoiceId, { qb_exported: true });
         toast.success('Marked as exported');
         await forceAppRefresh(queryClient, { projectIds: [projectId] });
       }
