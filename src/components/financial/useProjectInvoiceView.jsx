@@ -97,8 +97,17 @@ export function getBillingStatusConfig(status) {
  * For exposure/credit data, use useBillingAndProcurementStates.
  */
 export function useProjectInvoiceView(projectId) {
-  // DETERMINISTIC: Normalize projectId once
+  // DETERMINISTIC: Normalize projectId once - null if invalid
   const normalizedId = normalizeProjectId(projectId);
+  
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === "development") {
+    console.log("[useProjectInvoiceView] Init:", {
+      rawProjectId: projectId,
+      normalizedId,
+      enabled: Boolean(normalizedId),
+    });
+  }
   
   // Fetch commitments for this project
   const { 
