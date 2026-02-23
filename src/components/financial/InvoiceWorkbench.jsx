@@ -746,7 +746,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   });
 
   // Get current tab config
-  const currentTabConfig = Object.values(LIFECYCLE_TABS).find(t => t.key === activeTab) || LIFECYCLE_TABS.ASSIGNED_NEEDS_BILLING;
+  const currentTabConfig = Object.values(LIFECYCLE_TABS).find(t => t.key === activeTab) || LIFECYCLE_TABS.UNBILLED;
 
   // Filter items for current tab
   const currentItems = useMemo(() => {
