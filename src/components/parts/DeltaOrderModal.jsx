@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Package, Plus, AlertTriangle, Loader2 } from "lucide-react";
 import { CommitmentActions } from "../financial/financialMutationGuard";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * DeltaOrderModal - Create additional orders for existing commitments
@@ -68,10 +69,14 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
         notes: notes || `Delta order for additional ${deltaQty} units`,
       });
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: part?.id ? [part.id] : [],
+        projectIds: commitment?.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+        orderIds: result?.order_id ? [result.order_id] : [],
+      });
       toast.success(`Delta order created for ${deltaQty} unit(s)`, {
         description: `New PO line item added with is_delta_order = true`,
       });
