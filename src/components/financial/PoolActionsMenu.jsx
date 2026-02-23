@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import EditPoolModal from "./EditPoolModal";
 import TransferPoolBalanceModal from "./TransferPoolBalanceModal";
 import ClosePoolModal from "./ClosePoolModal";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * PoolActionsMenu - Actions dropdown for billing pools
@@ -41,9 +42,11 @@ export default function PoolActionsMenu({
     mutationFn: async () => {
       return CommitmentActions.recalculatePoolBalance({ pool_id: pool.id });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPools'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Pool balance recalculated');
       onRefresh?.();
     },
