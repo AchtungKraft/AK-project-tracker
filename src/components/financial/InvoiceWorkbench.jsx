@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
+import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
 
 // ============================================
 // CONSTANTS
@@ -677,8 +678,8 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   // PHASE 4: Credit allocation modal state
   const [showCreditModal, setShowCreditModal] = useState(false);
 
-  // DETERMINISTIC: Normalize project ID
-  const normalizedProjectId = projectId ? String(projectId) : "";
+  // DETERMINISTIC: Normalize project ID using factory
+  const normalizedProjectId = normalizeProjectId(projectId);
 
   // Fetch lifecycle data
   // Override project filter if projectId prop provided
@@ -688,11 +689,11 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
     }
   }, [normalizedProjectId]);
 
-  // DETERMINISTIC: Normalize project filter for query key
-  const normalizedProjectFilter = projectFilter === 'all' ? 'all' : String(projectFilter);
+  // DETERMINISTIC: Normalize project filter for query key using factory
+  const normalizedProjectFilter = normalizeProjectId(projectFilter);
 
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['billingProcurementStates', normalizedProjectFilter, financialRoleFilter],
+    queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter],
     queryFn: async () => {
       const filters = {};
       if (normalizedProjectFilter !== 'all') filters.project_id = normalizedProjectFilter;
@@ -712,7 +713,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
 
   // Phase 1: Fetch existing draft invoices for accumulation
   const { data: draftBatches = [] } = useQuery({
-    queryKey: ['draftProjectInvoices', normalizedProjectFilter],
+    queryKey: ['draftProjectInvoices', normalizedProjectFilter || 'all'],
     queryFn: async () => {
       const filter = { status: 'draft' };
       if (normalizedProjectFilter !== 'all') filter.project_id = normalizedProjectFilter;
@@ -756,12 +757,12 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         
         setSelectedIds(new Set());
         
-        // DETERMINISTIC: Invalidate exact keys only
-        const projectIds = [...new Set(selectedItems.map(i => String(i.project_id)).filter(Boolean))];
+        // DETERMINISTIC: Invalidate using factory keys
+        const projectIds = [...new Set(selectedItems.map(i => normalizeProjectId(i.project_id)).filter(Boolean))];
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['billingProcurementStates', normalizedProjectFilter, financialRoleFilter] }),
-          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter] }),
-          ...projectIds.map(pid => queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', pid] })),
+          queryClient.invalidateQueries({ queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter] }),
+          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter || 'all'] }),
+          ...projectIds.map(pid => queryClient.invalidateQueries({ queryKey: invoiceKeys.view(pid) })),
         ]);
         
         // Call onSuccess prop if modal usage
