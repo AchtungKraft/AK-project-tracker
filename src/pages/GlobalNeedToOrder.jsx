@@ -393,7 +393,14 @@ export default function GlobalNeedToOrder() {
 
         {/* Coverage Badge (canonical: coverage_status) */}
         <div className="w-20">
-          <CoverageBadgeInline coverageStatus={item.coverage_status} />
+          <CoverageBadgeInline coverage={{
+            coverage_status: item.coverage_status,
+            gap_qty: toOrder,
+            qty_needed: needed,
+            qty_reserved: reservedProject,
+            qty_ordered: item.covered_from_po ?? 0,
+            qty_installed: item.qty_installed ?? 0,
+          }} />
         </div>
 
         {/* Pricing Integrity */}
