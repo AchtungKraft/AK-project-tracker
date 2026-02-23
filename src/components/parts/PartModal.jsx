@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1088,9 +1089,14 @@ export default function PartModal({ part, partId, onClose }) {
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-gray-900 border-red-900/30 p-0">
           <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-red-900/30">
-            <div className="flex items-center gap-3">
-              <Package className="w-5 h-5 text-red-500" />
-              <DialogTitle className="text-white">{formData.part_name}</DialogTitle>
+            <div className="flex items-center gap-3 flex-col items-start">
+              <div className="flex items-center gap-3">
+                <Package className="w-5 h-5 text-red-500" />
+                <DialogTitle className="text-white">{formData.part_name}</DialogTitle>
+              </div>
+              <DialogDescription className="text-gray-400 text-sm">
+                View and edit part details, pricing, and inventory.
+              </DialogDescription>
             </div>
             <div className="flex gap-2">
               {editing && (

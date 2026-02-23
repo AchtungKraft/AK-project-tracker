@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -160,6 +160,9 @@ export default function EditProjectModal({ project, onClose }) {
       {!isMobile && (
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
+          <DialogDescription>
+            Update the project details and settings.
+          </DialogDescription>
         </DialogHeader>
       )}
       {/* Basic Info */}
