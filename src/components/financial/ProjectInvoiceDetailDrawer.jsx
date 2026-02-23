@@ -213,36 +213,46 @@ export default function ProjectInvoiceDetailDrawer({
     }
   };
 
-  const handleExportCSV = () => {
-    if (!invoice || !lines) return;
+  const [isExporting, setIsExporting] = useState(false);
 
-    const csvLines = [
-      ["Description", "Qty", "Unit Price", "Line Total"],
-      ...lines.map((line) => [
-        line.description || "",
-        line.qty || "",
-        line.unit_price || "",
-        line.line_total || "",
-      ]),
-      [],
-      ["", "", "Subtotal", invoice.subtotal || 0],
-      ["", "", "Credit Applied", invoice.credit_applied || 0],
-      ["", "", "Total", invoice.total || 0],
-    ];
+  const handleExportCSV = async () => {
+    if (!invoice) return;
 
-    const csvContent = csvLines
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
+    setIsExporting(true);
+    try {
+      const result = await base44.functions.invoke('exportProjectInvoicesToQuickBooks', {
+        project_id: normalizedProjectId,
+        mode: 'single',
+        invoice_ids: [invoice.id],
+      });
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `invoice-${invoice.qb_invoice_number || invoice.id}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      if (!result.data?.success) {
+        toast.error(result.data?.error || 'Export failed');
+        return;
+      }
+
+      // DEV Log
+      console.log('[QB EXPORT]', {
+        mode: 'single',
+        invoice_count: result.data.invoice_count,
+        line_count: result.data.line_count,
+      });
+
+      const blob = new Blob([result.data.content], { type: result.data.mime_type });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.data.file_name;
+      a.click();
+
+      URL.revokeObjectURL(url);
+      toast.success('Invoice exported');
+    } catch (error) {
+      toast.error(error.message || 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
