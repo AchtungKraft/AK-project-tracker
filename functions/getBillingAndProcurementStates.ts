@@ -119,7 +119,7 @@ function isOrderingAllowed(paymentStatus, effectivePartType) {
 // ============================================
 
 async function getBillingAndProcurementStates(base44, filters = {}) {
-  // Batch fetch all required data
+  // Batch fetch all required data including credit allocations
   const [
     commitments,
     parts,
@@ -129,6 +129,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     installedParts,
     vendorInvoices,
     batchLines,
+    creditAllocations,
+    creditLedgers,
   ] = await Promise.all([
     base44.entities.PartCommitment.filter({}),
     base44.entities.Part.filter({}),
@@ -138,11 +140,33 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     base44.entities.InstalledPart.filter({}),
     base44.entities.VendorInvoice.filter({}),
     base44.entities.InvoiceBatchLine.filter({ qb_status: 'queued' }),
+    base44.entities.CreditAllocation.filter({ is_reversed: false }),
+    base44.entities.ProjectCreditLedger.filter({}),
   ]);
 
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
   const projectsMap = Object.fromEntries(projects.map(p => [p.id, p]));
+  
+  // PHASE 3: Build credit allocation map by commitment
+  const creditByCommitment = {};
+  for (const alloc of creditAllocations) {
+    if (alloc.commitment_id) {
+      if (!creditByCommitment[alloc.commitment_id]) {
+        creditByCommitment[alloc.commitment_id] = 0;
+      }
+      creditByCommitment[alloc.commitment_id] += alloc.amount_applied || 0;
+    }
+  }
+  
+  // PHASE 3: Build credit available by project
+  const creditAvailableByProject = {};
+  for (const ledger of creditLedgers) {
+    if (!creditAvailableByProject[ledger.project_id]) {
+      creditAvailableByProject[ledger.project_id] = 0;
+    }
+    creditAvailableByProject[ledger.project_id] += ledger.remaining_amount || 0;
+  }
   const ordersMap = Object.fromEntries(orders.map(o => [o.id, o]));
   
   // Build line items by commitment
