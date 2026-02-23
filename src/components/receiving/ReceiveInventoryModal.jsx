@@ -15,7 +15,7 @@ import { Package, MapPin, AlertTriangle, Plus, Archive } from "lucide-react";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
-import { invalidateSupplyQueries } from "@/components/supply/supplyInvalidation";
+import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
  * ReceiveInventoryModal - PHASE 12R CONTROLLED HYBRID
@@ -131,12 +131,10 @@ export default function ReceiveInventoryModal({
       
       return response.data;
     },
-    onSuccess: (result) => {
-      // CANONICAL: Use unified invalidation helper with context from dispatcher
-      invalidateSupplyQueries(queryClient, result.invalidation_context || {
-        part_ids: [result.part_id],
-        invalidateAll: true
-      });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      const context = extractRefreshContext(result, { part_id: result.part_id });
+      await forceAppRefresh(queryClient, context);
       
       toast.success(`${formData.quantity} units added to inventory (auto-allocated to open needs)`);
       setShowConfirmModal(false);
