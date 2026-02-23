@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     // ============================================
     // STEP 1: Fetch Canonical Invoice View
     // ============================================
-    const { data } = await base44.functions.invoke('getProjectInvoicesView', {
+    const { data } = await base44.asServiceRole.functions.invoke('getProjectInvoicesView', {
       project_id,
     });
 
