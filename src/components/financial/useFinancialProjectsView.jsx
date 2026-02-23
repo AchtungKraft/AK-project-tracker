@@ -41,6 +41,16 @@ export function useBillingAndProcurementStates(projectId, options = {}) {
   const normalizedId = normalizeProjectId(projectId);
   const queryKey = billingKeys.states(normalizedId);
   
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === 'development') {
+    console.log("[useBillingAndProcurementStates] Init:", {
+      rawProjectId: projectId,
+      normalizedId,
+      queryKey,
+      enabled: Boolean(normalizedId) && options.enabled !== false,
+    });
+  }
+  
   const query = useQuery({
     queryKey,
     queryFn: async () => {
