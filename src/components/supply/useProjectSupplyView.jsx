@@ -27,8 +27,10 @@ export function useProjectSupplyView(projectId, filters = {}) {
   // DETERMINISTIC: Normalize projectId once
   const normalizedId = normalizeProjectId(projectId);
 
+  const queryKey = supplyKeys.projectView(normalizedId, filters);
+  
   const query = useQuery({
-    queryKey: ['projectSupplyView', normalizedId, filters],
+    queryKey,
     queryFn: async () => {
       const response = await base44.functions.invoke('getProjectSupplyView', {
         project_id: normalizedId,
@@ -42,7 +44,7 @@ export function useProjectSupplyView(projectId, filters = {}) {
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['projectSupplyView', normalizedId] });
+    queryClient.invalidateQueries({ queryKey: supplyKeys.projectView(normalizedId) });
   };
 
   const rawItems = query.data?.items || [];
