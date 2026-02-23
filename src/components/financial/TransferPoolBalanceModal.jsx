@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -77,6 +77,9 @@ export default function TransferPoolBalanceModal({ pool, onClose }) {
             <ArrowRight className="w-5 h-5 text-blue-400" />
             Transfer Pool Balance
           </DialogTitle>
+          <DialogDescription>
+            Transfer funds from this pool to another pool.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
