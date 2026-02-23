@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +91,9 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
       <DialogContent className="bg-gray-900 text-white max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create Task from Approval</DialogTitle>
+          <DialogDescription>
+            Create a task from this client-approved feedback request.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
