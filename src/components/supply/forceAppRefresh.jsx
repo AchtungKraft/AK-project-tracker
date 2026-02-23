@@ -31,10 +31,13 @@
  */
 
 /**
- * Normalize projectId to string format (matches queryKeyFactories.js)
+ * Normalize projectId to string format OR null (matches queryKeyFactories.js)
+ * 
+ * CRITICAL: Returns null (not empty string) for invalid inputs.
+ * Empty strings in query keys caused cache mismatches and data not loading.
  */
 const normalizeId = (id) => {
-  if (id === null || id === undefined || id === 'all') return '';
+  if (id === null || id === undefined || id === '' || id === 'all') return null;
   return String(id);
 };
 
@@ -58,8 +61,8 @@ export async function forceAppRefresh(queryClient, options = {}) {
     refetchActive = true,
   } = options;
 
-  // Normalize project IDs to strings
-  const normalizedProjectIds = projectIds.map(normalizeId).filter(Boolean);
+  // Normalize project IDs to strings - filter out null/undefined/empty
+  const normalizedProjectIds = projectIds.map(normalizeId).filter(id => id !== null && id !== undefined);
 
   // === PHASE 1: Invalidate all related queries ===
   // This marks queries as stale so they'll refetch on next access
