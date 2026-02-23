@@ -97,6 +97,7 @@ export default function BillablePartsSelector({
     }));
   };
 
+  // PHASE 2: Include canonical exposure fields in selection
   const handleToggleItem = (item, checked) => {
     if (checked) {
       onSelectionChange([
@@ -106,7 +107,10 @@ export default function BillablePartsSelector({
           part_name: item.part_name,
           qty: item.qty_remaining_to_bill,
           unit_price: item.unit_price,
-          line_total: item.remaining_to_bill,
+          line_total: item.net_exposure, // Use net exposure
+          gross_exposure: item.gross_exposure,
+          credit_applied: item.credit_applied,
+          net_exposure: item.net_exposure,
         },
       ]);
     } else {
@@ -127,6 +131,7 @@ export default function BillablePartsSelector({
     );
   };
 
+  // PHASE 2: Include canonical exposure fields in bulk selection
   const handleSelectAll = (groupItems) => {
     const currentIds = selectedItems.map((s) => s.part_commitment_id);
     const newItems = groupItems
@@ -136,7 +141,10 @@ export default function BillablePartsSelector({
         part_name: item.part_name,
         qty: item.qty_remaining_to_bill,
         unit_price: item.unit_price,
-        line_total: item.remaining_to_bill,
+        line_total: item.net_exposure,
+        gross_exposure: item.gross_exposure,
+        credit_applied: item.credit_applied,
+        net_exposure: item.net_exposure,
       }));
     onSelectionChange([...selectedItems, ...newItems]);
   };
