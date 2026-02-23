@@ -129,7 +129,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // Get selected commitment IDs as array
   const selectedIdsArray = useMemo(() => [...selectedCommitmentIds], [selectedCommitmentIds]);
 
-  // Compute InvoiceBatch-level KPIs (separate from commitment summary)
+  // Compute ProjectInvoice-level KPIs (separate from commitment summary)
   const batchKpis = useMemo(() => {
     const nonVoided = invoiceBatches.filter(b => b.status !== 'voided');
     const drafts = nonVoided.filter(b => b.status === 'draft');
