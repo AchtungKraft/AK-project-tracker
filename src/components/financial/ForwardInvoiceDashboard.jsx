@@ -1,6 +1,15 @@
+/**
+ * INVOICEBATCH IS REMOVED. Do not import or use InvoiceBatch* components or functions.
+ * Use ProjectInvoice + CreateProjectInvoiceModal.
+ */
 import React, { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+
+// DEV guardrail
+if (process.env.NODE_ENV === "development") {
+  window.__INVOICEBATCH_REMOVED__ = true;
+}
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
