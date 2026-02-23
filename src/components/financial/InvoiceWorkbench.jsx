@@ -678,7 +678,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   // PHASE 4: Credit allocation modal state
   const [showCreditModal, setShowCreditModal] = useState(false);
 
-  // DETERMINISTIC: Normalize project ID using factory
+  // DETERMINISTIC: Normalize project ID using factory - null if invalid
   const normalizedProjectId = normalizeProjectId(projectId);
 
   // Fetch lifecycle data
@@ -690,13 +690,26 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   }, [normalizedProjectId]);
 
   // DETERMINISTIC: Normalize project filter for query key using factory
+  // Note: 'all' becomes null, meaning global scope
   const normalizedProjectFilter = normalizeProjectId(projectFilter);
+  
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === "development") {
+    console.log("[InvoiceWorkbench] Query State:", {
+      rawProjectId: projectId,
+      normalizedProjectId,
+      projectFilter,
+      normalizedProjectFilter,
+      queryKey: billingKeys.states(normalizedProjectFilter),
+    });
+  }
 
   const { data: lifecycleData, isLoading, refetch, isFetching } = useQuery({
     queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter],
     queryFn: async () => {
       const filters = {};
-      if (normalizedProjectFilter !== 'all') filters.project_id = normalizedProjectFilter;
+      // Only add project_id filter if we have a valid normalized value
+      if (normalizedProjectFilter) filters.project_id = normalizedProjectFilter;
       if (financialRoleFilter !== 'all') filters.financial_role = financialRoleFilter;
       
       const response = await base44.functions.invoke('getBillingAndProcurementStates', { filters });
