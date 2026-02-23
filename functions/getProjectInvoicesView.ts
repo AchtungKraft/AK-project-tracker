@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
       success: true,
       invoices: invoicesWithFlags,
       credit_balances: creditBalanceMap,
+      credit_applied: creditAppliedMap,
       summary,
     });
 
