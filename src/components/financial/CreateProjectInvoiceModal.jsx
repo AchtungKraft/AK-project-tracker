@@ -289,17 +289,20 @@ export default function CreateProjectInvoiceModal({
         notes,
       };
 
+      // DEV GUARDRAIL: Log canonical invoice creation
+      if (process.env.NODE_ENV === 'development') {
+        guardInvoiceMutation('createProjectInvoiceDraft', 'CreateProjectInvoiceModal');
+      }
+
       const response = await base44.functions.invoke("createProjectInvoiceDraft", payload);
 
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // DETERMINISTIC: Invalidate exact keys only
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["billingProcurementStates", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["projectInvoicesView", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["creditAllocations", normalizedProjectId] }),
-        ]);
+        // DETERMINISTIC: Use forceAppRefresh for complete cache sync
+        await forceAppRefresh(queryClient, {
+          projectIds: [normalizedProjectId],
+        });
         
         onSuccess?.();
       } else {
