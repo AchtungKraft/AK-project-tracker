@@ -98,6 +98,8 @@ export function usePartInventoryStates(partIds, options = {}) {
 /**
  * Hook for supply action dispatcher
  * This is the ONLY way to mutate supply state from UI
+ * 
+ * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh.
  */
 export function useSupplyAction(options = {}) {
   const queryClient = useQueryClient();
@@ -122,23 +124,13 @@ export function useSupplyAction(options = {}) {
       
       return response.data;
     },
-    onSuccess: (data, variables) => {
-      // PHASE 14E-VERIFY: Use unified invalidation helper for consistency
+    onSuccess: async (data, variables) => {
+      // PHASE 17: Use forceAppRefresh for deterministic refresh
       // Import must be dynamic to avoid circular dependency
-      import('@/components/supply/supplyInvalidation').then(({ invalidateSupplyQueries }) => {
-        invalidateSupplyQueries(queryClient, {
-          part_ids: data.part_id ? [data.part_id] : [],
-          project_ids: data.project_id ? [data.project_id] : [],
-          commitment_ids: data.commitment_id ? [data.commitment_id] : (variables.commitment_ids || []),
-          invalidateAll: true
-        });
-      });
-      
-      // Additional keys not covered by supplyInvalidation
-      queryClient.invalidateQueries({ queryKey: ['projectPools'] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['globalOrderQueue'] });
-      queryClient.invalidateQueries({ queryKey: ['projectLineItems'] });
+      const { forceAppRefresh, extractRefreshContext } = await import('@/components/supply/forceAppRefresh');
+      const context = extractRefreshContext(data, variables.payload);
+      context.commitmentIds = [...(context.commitmentIds || []), ...(variables.commitment_ids || [])];
+      await forceAppRefresh(queryClient, context);
       
       if (!variables.dry_run && options.showSuccessToast !== false) {
         const actionLabels = {
