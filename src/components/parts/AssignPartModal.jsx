@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Plus, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import AddPartModal from "./AddPartModal";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 const getCategoryPath = (categoryId, categories) => {
   if (!categoryId) return null;
@@ -51,8 +52,12 @@ export default function AssignPartModal({ projectId, onClose }) {
 
   const assignPartMutation = useMutation({
     mutationFn: (data) => base44.entities.PartBuildAssignment.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partBuildAssignments'] });
+    onSuccess: async (_, variables) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: variables.part_id ? [variables.part_id] : [],
+        projectIds: [projectId],
+      });
       toast.success('Part assigned to build');
     },
   });

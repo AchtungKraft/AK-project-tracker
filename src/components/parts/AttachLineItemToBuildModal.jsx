@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Link2, Package, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { calculateCommitmentState } from "../inventory/commitmentStateEngine";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * AttachLineItemToBuildModal - Create commitment from existing PO line item
@@ -105,9 +106,14 @@ export default function AttachLineItemToBuildModal({
 
       return commitment;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+    onSuccess: async (commitment) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [part.id],
+        projectIds: [selectedProjectId],
+        commitmentIds: commitment?.id ? [commitment.id] : [],
+        orderIds: lineItem?.order_id ? [lineItem.order_id] : [],
+      });
       toast.success('Line item attached to build');
       onClose();
     },
