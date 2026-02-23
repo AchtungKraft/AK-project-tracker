@@ -78,11 +78,18 @@ export default function CreateProjectInvoiceModal({
     if (open && preselectedProjectId) {
       setSelectedProjectId(preselectedProjectId);
       setStep(1); // Skip project selection
+      
+      // PHASE 2: Pre-populate selected parts if initialSelectedItems provided
+      if (initialSelectedItems && initialSelectedItems.length > 0) {
+        setSelectedParts(initialSelectedItems);
+        setStep(2); // Skip to lines step if items provided
+      }
     } else if (open && !preselectedProjectId) {
       setStep(0);
       setSelectedProjectId("");
+      setSelectedParts([]);
     }
-  }, [open, preselectedProjectId]);
+  }, [open, preselectedProjectId, initialSelectedItems]);
 
   // Get financial projects data for project dropdown
   const { data: financialData } = useFinancialProjectsView();
