@@ -210,6 +210,27 @@ export async function forceAppRefresh(queryClient, options = {}) {
         queryKey: ['projectSupplyView', id],
         type: refetchActive ? 'active' : 'all'
       }),
+      // PHASE 4: Project-scoped billing refetches
+      queryClient.refetchQueries({ 
+        queryKey: ['billingProcurementStates', id],
+        type: refetchActive ? 'active' : 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['projectInvoiceCommitments', id],
+        type: refetchActive ? 'active' : 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['projectInvoiceBatches', id],
+        type: refetchActive ? 'active' : 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['projectCreditLedger', id],
+        type: refetchActive ? 'active' : 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['projectCreditAllocations', id],
+        type: refetchActive ? 'active' : 'all'
+      }),
     );
   });
   
