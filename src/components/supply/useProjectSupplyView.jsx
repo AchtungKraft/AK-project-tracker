@@ -34,12 +34,30 @@ export function useProjectSupplyView(projectId, filters = {}) {
 
   const queryKey = supplyKeys.projectView(normalizedId, filters);
   
+  // DIAGNOSTIC: Log query configuration
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[useProjectSupplyView] DIAGNOSTIC:', {
+      rawProjectId: projectId,
+      normalizedId,
+      enabled: Boolean(normalizedId),
+      queryKey,
+      filters,
+    });
+  }
+  
   const query = useQuery({
     queryKey,
     queryFn: async () => {
+      console.log('[useProjectSupplyView] queryFn EXECUTING for projectId:', normalizedId);
       const response = await base44.functions.invoke('getProjectSupplyView', {
         project_id: normalizedId,
         filters,
+      });
+      console.log('[useProjectSupplyView] queryFn RESPONSE:', {
+        hasData: !!response.data,
+        itemsCount: response.data?.items?.length ?? 0,
+        projectName: response.data?.project?.name ?? 'null',
+        error: response.data?.error ?? null,
       });
       return response.data;
     },
