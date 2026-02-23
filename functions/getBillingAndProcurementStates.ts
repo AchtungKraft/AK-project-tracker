@@ -408,9 +408,48 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     }
   }
 
+  // PHASE 3: Calculate project-level credit summary
+  const allItems = [
+    ...results.assigned_needs_billing,
+    ...results.billed_not_paid,
+    ...results.paid_ready_to_order,
+    ...results.ordered_waiting_receipt,
+    ...results.installed_ready_to_bill,
+  ];
+  
+  // Group by project
+  const projectSummaries = {};
+  for (const item of allItems) {
+    if (!projectSummaries[item.project_id]) {
+      projectSummaries[item.project_id] = {
+        project_id: item.project_id,
+        project_name: item.project_name,
+        gross_exposure: 0,
+        invoiced_total: 0,
+        credit_applied_total: 0,
+        net_exposure: 0,
+        credit_available: creditAvailableByProject[item.project_id] || 0,
+      };
+    }
+    projectSummaries[item.project_id].gross_exposure += item.gross_line_total || item.line_total || 0;
+    projectSummaries[item.project_id].invoiced_total += item.invoiced_amount || 0;
+    projectSummaries[item.project_id].credit_applied_total += item.credit_applied_line || 0;
+    projectSummaries[item.project_id].net_exposure += item.net_line_total || item.line_total || 0;
+  }
+
+  // Calculate global credit summary
+  const creditSummary = {
+    total_credit_available: creditLedgers.reduce((sum, l) => sum + (l.remaining_amount || 0), 0),
+    total_credit_applied: creditAllocations.reduce((sum, a) => sum + (a.amount_applied || 0), 0),
+    gross_exposure_global: allItems.reduce((sum, i) => sum + (i.gross_line_total || i.line_total || 0), 0),
+    net_exposure_global: allItems.reduce((sum, i) => sum + (i.net_line_total || i.line_total || 0), 0),
+  };
+
   return {
     ...results,
     kpis,
+    credit_summary: creditSummary,
+    project_summaries: Object.values(projectSummaries),
     last_scan_at: new Date().toISOString(),
   };
 }
