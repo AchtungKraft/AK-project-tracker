@@ -289,7 +289,7 @@ export function PSMItemRow({
       {/* PHASE 4: Execution Data Block - Always visible on Plan + Buy tabs */}
       {(tab === 'plan' || tab === 'buy') && (
         <div className="mt-2 ml-6 max-w-xs">
-          <ExecutionDataBlock commitment={commitment} tab={tab} />
+          <ExecutionDataBlock item={commitment} showCoveredBadge={tab === 'plan'} />
         </div>
       )}
     </div>
