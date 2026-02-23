@@ -14,6 +14,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { normalizeProjectId, logQueryKeyUsage } from "./queryKeyFactories";
 
 // ============================================
 // CANONICAL BILLING STATUS ENUM
@@ -96,18 +97,21 @@ export function getBillingStatusConfig(status) {
  * For exposure/credit data, use useBillingAndProcurementStates.
  */
 export function useProjectInvoiceView(projectId) {
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedId = normalizeProjectId(projectId);
+  
   // Fetch commitments for this project
   const { 
     data: rawCommitments = [], 
     isLoading: loadingCommitments,
     refetch: refetchCommitments
   } = useQuery({
-    queryKey: ['projectInvoiceCommitments', projectId],
+    queryKey: ['projectInvoiceCommitments', normalizedId],
     queryFn: async () => {
-      if (!projectId) return [];
-      return base44.entities.PartCommitment.filter({ project_id: projectId });
+      if (!normalizedId) return [];
+      return base44.entities.PartCommitment.filter({ project_id: normalizedId });
     },
-    enabled: !!projectId,
+    enabled: Boolean(normalizedId),
     staleTime: 30000,
   });
 
