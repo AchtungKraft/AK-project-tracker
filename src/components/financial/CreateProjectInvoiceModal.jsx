@@ -294,25 +294,44 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
               onValueChange={setSelectedProjectId}
               className="w-full"
             />
-            {selectedProjectFinancials && (
-              <div className="p-4 bg-gray-800/50 rounded-lg space-y-2">
-                <p className="text-white font-medium">{selectedProjectFinancials.project_name}</p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-gray-400">Remaining to Bill:</span>
-                    <span className="ml-2 font-mono text-amber-400">
-                      {formatCurrencyUSD(selectedProjectFinancials.remaining_to_bill)}
-                    </span>
+            {/* PHASE 1: Show canonical exposure data from getBillingAndProcurementStates */}
+            {selectedProjectId && (
+              <div className="space-y-3">
+                {billingLoading ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
                   </div>
-                  {availableCredit > 0 && (
-                    <div>
-                      <span className="text-gray-400">Available Credit:</span>
-                      <span className="ml-2 font-mono text-green-400">
-                        {formatCurrencyUSD(availableCredit)}
-                      </span>
+                ) : (
+                  <>
+                    <div className="p-4 bg-gray-800/50 rounded-lg space-y-2">
+                      <p className="text-white font-medium">{selectedProjectFinancials?.project_name || 'Selected Project'}</p>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-gray-400">Unbilled Items:</span>
+                          <span className="ml-2 font-mono text-amber-400">
+                            {canonicalTotals.unbilled_count || 0}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Net to Bill:</span>
+                          <span className="ml-2 font-mono text-amber-400">
+                            {formatCurrencyUSD(canonicalTotals.unbilled_total || 0)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                    {/* PHASE 1: Credit summary from canonical source */}
+                    {(availableCredit > 0 || creditAppliedTotal > 0) && (
+                      <CreditSummaryStrip
+                        grossExposure={grossExposure}
+                        creditAvailable={availableCredit}
+                        creditApplied={creditAppliedTotal}
+                        netExposure={netExposure}
+                        isLoading={billingLoading}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
