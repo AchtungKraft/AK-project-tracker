@@ -103,7 +103,7 @@ export default function ProjectSupplyManager() {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [groupConfig, setGroupConfig] = useState({ primary: 'category', sub: 'none' });
+  const [groupMode, setGroupMode] = useState('category'); // 'category' | 'vendor' | 'coverage'
   const [sortBy, setSortBy] = useState('recent');
   const [showClosedCancelled, setShowClosedCancelled] = useState(false);
   const [selectedItems, setSelectedItems] = useState(new Set());
