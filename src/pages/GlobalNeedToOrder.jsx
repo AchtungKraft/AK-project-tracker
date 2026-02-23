@@ -434,9 +434,9 @@ export default function GlobalNeedToOrder() {
           </DropdownMenu>
         </div>
 
-        {/* PHASE 6: Execution Data Block - same as PSM */}
+        {/* PHASE 4: Shared Execution Data Block - same component as PSM */}
         <div className="mt-2 ml-6 max-w-xs">
-          <GNOExecutionDataBlock item={item} />
+          <ExecutionDataBlock item={item} showCoveredBadge={false} />
         </div>
       </div>
     );
