@@ -126,7 +126,7 @@ export function useProjectSupplyView(projectId, filters = {}) {
     
     // DIAGNOSTIC: Run full diagnostic and store for cross-view comparison
     diagnosticReport = diagnoseSupplyItems(items, 'useProjectSupplyView');
-    storePSMDiagnostics(projectId, items);
+    storePSMDiagnostics(normalizedId, items);
   }
   
   return {
