@@ -217,6 +217,9 @@ export default function AllocatePoolModal({
             <DollarSign className="w-5 h-5 text-green-400" />
             Allocate Pool Funds
           </DialogTitle>
+          <DialogDescription>
+            Allocate funds from a billing pool to cover this commitment.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
