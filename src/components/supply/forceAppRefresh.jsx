@@ -166,13 +166,25 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['projectSupplyView'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 5: Add billing states to critical refetches
+    // PHASE 4: Deterministic refetch for billing & invoice queries
     queryClient.refetchQueries({ 
       queryKey: ['billingProcurementStates'],
       type: refetchActive ? 'active' : 'all'
     }),
     queryClient.refetchQueries({ 
       queryKey: ['creditLedger'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['projectInvoicesView'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['financialProjectsView'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['billablePartsView'],
       type: refetchActive ? 'active' : 'all'
     }),
   );
