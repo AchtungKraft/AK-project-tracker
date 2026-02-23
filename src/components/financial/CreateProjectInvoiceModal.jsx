@@ -46,16 +46,33 @@ const STEPS = ["project", "type", "lines", "review"];
  * Step 3: Select Parts / Add Lines (uses canonical commitments from getBillingAndProcurementStates)
  * Step 4: Review Summary (displays gross, credit applied, net from canonical source)
  */
-export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) {
+export default function CreateProjectInvoiceModal({ 
+  open, 
+  onClose, 
+  onSuccess,
+  preselectedProjectId = null, // PHASE 1: Allow pre-selection from ForwardInvoiceDashboard
+}) {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState(0);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
+  // If project is preselected, skip to step 1 (type selection)
+  const [step, setStep] = useState(preselectedProjectId ? 1 : 0);
+  const [selectedProjectId, setSelectedProjectId] = useState(preselectedProjectId || "");
   const [invoiceType, setInvoiceType] = useState("progress");
   const [depositAmount, setDepositAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedParts, setSelectedParts] = useState([]);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Reset state when modal opens with preselected project
+  React.useEffect(() => {
+    if (open && preselectedProjectId) {
+      setSelectedProjectId(preselectedProjectId);
+      setStep(1); // Skip project selection
+    } else if (open && !preselectedProjectId) {
+      setStep(0);
+      setSelectedProjectId("");
+    }
+  }, [open, preselectedProjectId]);
 
   // Get financial projects data for project dropdown
   const { data: financialData } = useFinancialProjectsView();
