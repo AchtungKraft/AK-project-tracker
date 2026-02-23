@@ -431,45 +431,45 @@ export default function GlobalNeedToOrder() {
             compact
           />
 
-        {/* Actions Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-            {isOrderable && (
-              <DropdownMenuItem onClick={() => setOrderModalPart({
-                commitment_id: item.commitment_id,
-                part_id: item.part_id,
-                part_name: item.part_name,
-                vendor_id: item.vendor_id,
-                vendor_name: vendorDisplay.name,
-                qty_to_order: toOrder,
-                estimated_cost: item.estimated_cost,
-                default_cost: item.unit_cost,
-                default_retail: item.unit_retail
-              })} className="text-green-400">
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Create PO
+          {/* Actions Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+              {isOrderable && (
+                <DropdownMenuItem onClick={() => setOrderModalPart({
+                  commitment_id: item.commitment_id,
+                  part_id: item.part_id,
+                  part_name: item.part_name,
+                  vendor_id: item.vendor_id,
+                  vendor_name: vendorDisplay.name,
+                  qty_to_order: toOrder,
+                  estimated_cost: item.estimated_cost,
+                  default_cost: item.unit_cost,
+                  default_retail: item.unit_retail
+                })} className="text-green-400">
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Create PO
+                </DropdownMenuItem>
+              )}
+              {item.covered_from_po > 0 && (
+                <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Additional Order
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
+              >
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Go to Project
               </DropdownMenuItem>
-            )}
-            {item.covered_from_po > 0 && (
-              <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
-                <Plus className="w-4 h-4 mr-2" />
-                Additional Order
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem 
-              onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
-            >
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Go to Project
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-gray-700" />
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuSeparator className="bg-gray-700" />
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* PHASE 6: Execution Data Block - same as PSM */}
