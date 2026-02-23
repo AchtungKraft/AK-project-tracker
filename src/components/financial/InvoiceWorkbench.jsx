@@ -705,10 +705,10 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
 
   // Phase 1: Fetch existing draft invoices for accumulation
   const { data: draftBatches = [] } = useQuery({
-    queryKey: ['draftProjectInvoices', projectFilter],
+    queryKey: ['draftProjectInvoices', normalizedProjectFilter],
     queryFn: async () => {
       const filter = { status: 'draft' };
-      if (projectFilter !== 'all') filter.project_id = projectFilter;
+      if (normalizedProjectFilter !== 'all') filter.project_id = normalizedProjectFilter;
       return base44.entities.ProjectInvoice.filter(filter, '-created_date');
     },
     staleTime: 30000,
@@ -749,10 +749,13 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         
         setSelectedIds(new Set());
         
-        // PHASE 17: Deterministic refresh
-        const commitmentIds = selectedItems.map(i => i.commitment_id).filter(Boolean);
-        const projectIds = [...new Set(selectedItems.map(i => i.project_id).filter(Boolean))];
-        await forceAppRefresh(queryClient, { projectIds, commitmentIds });
+        // DETERMINISTIC: Invalidate exact keys only
+        const projectIds = [...new Set(selectedItems.map(i => String(i.project_id)).filter(Boolean))];
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['billingProcurementStates', normalizedProjectFilter, financialRoleFilter] }),
+          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter] }),
+          ...projectIds.map(pid => queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', pid] })),
+        ]);
         
         // Call onSuccess prop if modal usage
         if (onSuccess) {
