@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,6 +68,9 @@ export default function VendorInvoiceModal({
               <Ban className="w-5 h-5 text-red-400" />
               Not Available
             </DialogTitle>
+            <DialogDescription>
+              This feature is not available for forward model projects.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-6 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">

@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,6 +182,9 @@ export default function AssignPartModal({ projectId, onClose }) {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30">
           <DialogHeader>
             <DialogTitle className="text-white">Assign Parts to Build</DialogTitle>
+            <DialogDescription>
+              Search and assign parts to this project build.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
