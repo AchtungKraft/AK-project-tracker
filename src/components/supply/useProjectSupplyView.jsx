@@ -3,20 +3,21 @@ import { base44 } from "@/api/base44Client";
 import { forceAppRefresh, extractRefreshContext } from "./forceAppRefresh";
 import { validateSupplyModelDrift } from "./ExecutionDataBlock";
 import { diagnoseSupplyItems, storePSMDiagnostics, storeGNODiagnostics } from "./supplyDiagnostics";
-import { normalizeProjectId } from "@/components/financial/queryKeyFactories";
+import { 
+  normalizeProjectId, 
+  normalizeId,
+  supplyKeys,
+  partsKeys,
+  commitmentKeys,
+  orderKeys,
+  receivingKeys,
+  inventoryKeys,
+  lifecycleKeys,
+  validateQueryKeyFactory,
+} from "@/components/financial/queryKeyFactories";
 
-/**
- * Query key factories for supply views
- * NOTE: All factories use normalizeProjectId which returns null for invalid inputs
- */
-export const supplyKeys = {
-  projectView: (projectId, filters = {}) => {
-    const normalized = normalizeProjectId(projectId);
-    return ['projectSupplyView', normalized, filters];
-  },
-  opsView: (mode, filters = {}) => ['opsSupplyView', mode, filters],
-  poReceiving: (orderId, filters = {}) => ['poReceivingView', orderId ?? null, filters],
-};
+// Re-export supplyKeys for backwards compatibility
+export { supplyKeys };
 
 /**
  * useProjectSupplyView - Hook for consuming project supply read model
