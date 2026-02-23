@@ -463,6 +463,12 @@ export default function GlobalNeedToOrder() {
             <DropdownMenuSeparator className="bg-gray-700" />
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
+
+        {/* PHASE 6: Execution Data Block - same as PSM */}
+        <div className="mt-2 ml-6 max-w-xs">
+          <GNOExecutionDataBlock item={item} />
+        </div>
       </div>
     );
   };
