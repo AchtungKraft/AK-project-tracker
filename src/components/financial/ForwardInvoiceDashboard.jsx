@@ -557,6 +557,21 @@ export default function ForwardInvoiceDashboard({ projectId }) {
           }}
         />
       )}
+
+      {/* PHASE 4: Credit Allocation Modal */}
+      <ApplyCreditModal
+        open={showCreditModal}
+        onClose={() => setShowCreditModal(false)}
+        projectId={projectId}
+        projectName={summary?.project_name || 'Project'}
+        selectedCommitmentIds={selectedIdsArray}
+        creditSummary={creditSummary}
+        onSuccess={async () => {
+          setSelectedCommitmentIds(new Set());
+          await forceAppRefresh(queryClient, { projectIds: [projectId] });
+          refetch();
+        }}
+      />
     </div>
   );
 }
