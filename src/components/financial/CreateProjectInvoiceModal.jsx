@@ -45,6 +45,7 @@ import { useFinancialProjectsView, useBillingAndProcurementStates } from "./useF
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
+import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
 
 // DEV guardrails
 if (process.env.NODE_ENV === "development") {
@@ -73,8 +74,8 @@ export default function CreateProjectInvoiceModal({
   initialSelectedItems = [], // PHASE 2: Allow pre-selection from PartsActionWorkbench
 }) {
   const queryClient = useQueryClient();
-  // DETERMINISTIC: Normalize preselected project ID
-  const normalizedPreselectedId = preselectedProjectId ? String(preselectedProjectId) : "";
+  // DETERMINISTIC: Normalize preselected project ID using factory helper
+  const normalizedPreselectedId = normalizeProjectId(preselectedProjectId) || "";
   
   // If project is preselected, skip to step 1 (type selection)
   const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
@@ -86,8 +87,8 @@ export default function CreateProjectInvoiceModal({
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Normalized ID for queries
-  const normalizedProjectId = selectedProjectId ? String(selectedProjectId) : "";
+  // Normalized ID for queries - use factory helper
+  const normalizedProjectId = normalizeProjectId(selectedProjectId) || "";
   
   // Reset state when modal opens with preselected project
   React.useEffect(() => {
@@ -299,10 +300,12 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // DETERMINISTIC: Use forceAppRefresh for complete cache sync
-        await forceAppRefresh(queryClient, {
-          projectIds: [normalizedProjectId],
-        });
+        // DETERMINISTIC: Invalidate specific keys using factories
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+          queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+          queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
+        ]);
         
         onSuccess?.();
       } else {
