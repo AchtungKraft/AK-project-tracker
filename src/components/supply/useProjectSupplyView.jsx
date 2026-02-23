@@ -264,9 +264,10 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
  */
 export function usePOReceivingView(orderId = null, filters = {}) {
   const queryClient = useQueryClient();
+  const queryKey = supplyKeys.poReceiving(orderId, filters);
 
   const query = useQuery({
-    queryKey: ['poReceivingView', orderId, filters],
+    queryKey,
     queryFn: async () => {
       const response = await base44.functions.invoke('getPOReceivingView', {
         order_id: orderId,
@@ -279,7 +280,7 @@ export function usePOReceivingView(orderId = null, filters = {}) {
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['poReceivingView'] });
+    queryClient.invalidateQueries({ queryKey: supplyKeys.poReceiving(orderId) });
   };
 
   // For single PO detail
