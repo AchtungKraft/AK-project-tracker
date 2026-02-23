@@ -509,7 +509,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                               <DropdownMenuItem
                                 onClick={async () => {
                                   if (confirm('Unlock this invoice? This allows edits.')) {
-                                    await base44.entities.InvoiceBatch.update(batch.id, { is_locked: false });
+                                    await base44.entities.ProjectInvoice.update(batch.id, { is_locked: false });
                                     refetch();
                                   }
                                 }}
