@@ -35,6 +35,7 @@ import {
   Unlock,
   Send,
   CreditCard,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -48,6 +49,9 @@ import {
   getBillingStatusConfig 
 } from "./useProjectInvoiceView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import CreditSummaryStrip from "./CreditSummaryStrip";
+import ApplyCreditModal from "./ApplyCreditModal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
@@ -74,6 +78,9 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   const [paymentBatch, setPaymentBatch] = useState(null);
   const [showInvoiceWorkbench, setShowInvoiceWorkbench] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // PHASE 4: Credit allocation modal and selection state
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [selectedCommitmentIds, setSelectedCommitmentIds] = useState(new Set());
 
   // PHASE 6: Use canonical read model
   const { 
@@ -81,8 +88,25 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     summary, 
     invoiceBatches, 
     isLoading, 
-    refetch 
+    refetch,
+    creditSummary,
   } = useProjectInvoiceView(projectId);
+
+  // Toggle commitment selection
+  const toggleCommitmentSelection = (commitmentId, checked) => {
+    setSelectedCommitmentIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(commitmentId);
+      } else {
+        next.delete(commitmentId);
+      }
+      return next;
+    });
+  };
+
+  // Get selected commitment IDs as array
+  const selectedIdsArray = useMemo(() => [...selectedCommitmentIds], [selectedCommitmentIds]);
 
   // Compute InvoiceBatch-level KPIs (separate from commitment summary)
   const batchKpis = useMemo(() => {
