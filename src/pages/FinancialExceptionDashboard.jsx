@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import InvoiceWorkbench from "@/components/financial/InvoiceWorkbench";
+import { projectKeys } from "@/components/financial/queryKeyFactories";
 
 // ============================================
 // CONSTANTS
@@ -299,9 +300,9 @@ export default function FinancialExceptionDashboard() {
     staleTime: 60000, // 1 minute
   });
 
-  // Fetch projects for filter dropdown
+  // Fetch projects for filter dropdown - uses factory key
   const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
+    queryKey: projectKeys.list(),
     queryFn: () => base44.entities.Project.list(),
   });
 
