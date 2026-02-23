@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Package, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function AllocatePartModal({ requirement, onClose }) {
   const queryClient = useQueryClient();
@@ -64,9 +65,12 @@ export default function AllocatePartModal({ requirement, onClose }) {
 
       await Promise.all(updates);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
-      queryClient.invalidateQueries({ queryKey: ['partProjectRequirements'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [requirement.part_id],
+        projectIds: requirement.project_id ? [requirement.project_id] : [],
+      });
       toast.success('Parts allocated successfully');
       onClose();
     },

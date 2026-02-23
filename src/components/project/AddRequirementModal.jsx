@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Archive, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 
 /**
@@ -69,8 +70,13 @@ export default function AddRequirementModal({ projectId, onClose }) {
 
       return commitmentData;
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['partCommitments', projectId] });
+    onSuccess: async (result) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: formData.part_id ? [formData.part_id] : [],
+        projectIds: [projectId],
+        commitmentIds: result.commitment_id ? [result.commitment_id] : [],
+      });
       
       let message = 'Part added to project';
       if (result.needs_cost_review) {
