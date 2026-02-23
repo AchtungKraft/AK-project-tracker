@@ -156,9 +156,10 @@ export function useProjectSupplyView(projectId, filters = {}) {
  */
 export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   const queryClient = useQueryClient();
+  const queryKey = supplyKeys.opsView(mode, filters);
 
   const query = useQuery({
-    queryKey: ['opsSupplyView', mode, filters],
+    queryKey,
     queryFn: async () => {
       const response = await base44.functions.invoke('getOpsSupplyView', {
         mode,
@@ -171,7 +172,7 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
+    queryClient.invalidateQueries({ queryKey: supplyKeys.opsView(mode) });
   };
 
   // Normalize filter_options to always have array properties
