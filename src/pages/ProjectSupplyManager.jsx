@@ -342,9 +342,12 @@ export default function ProjectSupplyManager() {
         filtered = filtered.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
         break;
       case 'buy':
-        // Items with to_order > 0 OR coverage_status indicates gap
+        // PHASE 3: Buy filter uses coverage.gap_qty > 0 OR coverage_status === 'PARTIAL'
+        // NEVER show items where coverage_status === 'FULL'
         filtered = filtered.filter(c => {
-          return c.to_order > 0 || c.coverage_status === 'NONE' || c.coverage_status === 'PARTIAL';
+          if (c.coverage_status === 'FULL') return false;
+          const gapQty = c.coverage?.gap_qty ?? c.gap_qty ?? c.to_order ?? 0;
+          return gapQty > 0 || c.coverage_status === 'PARTIAL';
         });
         break;
       case 'receive':

@@ -125,7 +125,61 @@ export function PSMSummaryStrip({ items, tab }) {
 }
 
 /**
+ * PHASE 4: Compact Execution Data Block
+ * Shows full inventory breakdown in monospace compact format
+ */
+function ExecutionDataBlock({ commitment, tab }) {
+  const inv = commitment.inventory_snapshot || {};
+  const physical = inv.physical_stock_global ?? inv.physical ?? 0;
+  const reservedGlobal = inv.reserved_global_active ?? inv.reserved ?? 0;
+  const reservedProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
+  const requiredTotal = commitment.required_total ?? 0;
+  const toOrder = commitment.to_order ?? 0;
+  const onOrderQty = commitment.on_order_qty ?? commitment.covered_from_po ?? 0;
+  const availableToInstall = commitment.available_to_install ?? 
+    Math.min(physical - reservedGlobal + reservedProject, requiredTotal - (commitment.qty_installed ?? 0));
+  
+  // PHASE 5: Show "Covered" badge for fully covered items
+  const isCovered = commitment.coverage_status === 'FULL';
+  
+  return (
+    <div className="bg-gray-900/50 rounded px-2 py-1.5 text-[10px] font-mono text-gray-400 space-y-0.5">
+      <div className="flex justify-between">
+        <span>Stock:</span>
+        <span className="text-gray-300">{physical}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Reserved (G|P):</span>
+        <span className="text-gray-300">{reservedGlobal} | {reservedProject}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Needed:</span>
+        <span className="text-gray-300">{requiredTotal}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>To Order:</span>
+        <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>On Order:</span>
+        <span className={onOrderQty > 0 ? "text-blue-400" : "text-gray-500"}>{onOrderQty}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Avail Install:</span>
+        <span className={availableToInstall > 0 ? "text-emerald-400" : "text-gray-500"}>{availableToInstall}</span>
+      </div>
+      {isCovered && (tab === 'plan') && (
+        <div className="mt-1 pt-1 border-t border-gray-700">
+          <span className="text-emerald-500 text-[9px]">✓ Covered</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * PSMItemRow - Compact horizontal item row within a group
+ * PHASE 4: Now includes ExecutionDataBlock for full inventory transparency
  */
 export function PSMItemRow({
   commitment,
@@ -142,6 +196,7 @@ export function PSMItemRow({
   actionsEnabled = true,
   categoriesMap,
   vendorsMap,
+  tab = 'plan',
 }) {
   const { part, vendor, allowed, categoryObj } = commitment;
   const displayStatus = getDisplayStatus(commitment.commitment_status);
@@ -168,152 +223,125 @@ export function PSMItemRow({
     categoriesMap
   );
 
-  const canOrder = allowed?.canCreatePO && toOrder > 0 && available === 0;
+  const canOrder = allowed?.canCreatePO && toOrder > 0;
 
   return (
     <div className={cn(
-      "p-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
+      "p-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
       commitment.block_reason_code && "opacity-60"
     )}>
-      {/* Checkbox */}
-      <Checkbox
-        checked={isSelected}
-        onCheckedChange={onSelect}
-        disabled={!allowed?.canCreatePO}
-      />
+      {/* Main Row */}
+      <div className="flex items-center gap-3">
+        {/* Checkbox */}
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={onSelect}
+          disabled={!allowed?.canCreatePO}
+        />
 
-      {/* Thumbnail */}
-      {part?.featured_photo && (
-        <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-          <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
+        {/* Thumbnail */}
+        {part?.featured_photo && (
+          <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
+            <img src={part.featured_photo} alt="" className="w-full h-full object-contain" />
+          </div>
+        )}
+
+        {/* Part Info */}
+        <button
+          onClick={() => onPartClick?.(part, commitment)}
+          className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
+        >
+          <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
+            <span>· {resolvedCategory.name}</span>
+            <span>· {resolvedVendor.name}</span>
+          </div>
+        </button>
+
+        {/* Coverage Badge */}
+        <div className="w-24 hidden md:block">
+          <CoverageBadgeInline coverage={{
+            coverage_status: commitment.coverage_status,
+            gap_qty: toOrder,
+            qty_needed: needed,
+            qty_reserved: reservedProject,
+            qty_ordered: commitment.covered_from_po ?? 0,
+            qty_installed: commitment.qty_installed ?? 0,
+          }} />
+        </div>
+
+        {/* Lifecycle Status */}
+        <div className="hidden lg:block">
+          <span className={cn(
+            "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
+            statusColor
+          )}>
+            {displayStatus}
+          </span>
+        </div>
+
+        {/* Actions Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={!actionsEnabled}>
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+            {canOrder && (
+              <DropdownMenuItem onClick={() => onCreatePO?.(commitment)} className="text-green-400">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Create PO
+              </DropdownMenuItem>
+            )}
+            {allowed?.canCreateDeltaOrder && (
+              <DropdownMenuItem onClick={() => onDeltaOrder?.(commitment)} className="text-purple-400">
+                <Plus className="w-4 h-4 mr-2" />
+                Additional Order
+              </DropdownMenuItem>
+            )}
+            {allowed?.canReceive && (
+              <DropdownMenuItem onClick={() => onReceive?.(commitment)} className="text-blue-400">
+                <Package className="w-4 h-4 mr-2" />
+                Receive
+              </DropdownMenuItem>
+            )}
+            {allowed?.canInstall && (
+              <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
+                <Wrench className="w-4 h-4 mr-2" />
+                Install
+              </DropdownMenuItem>
+            )}
+            {allowed?.canReverseInstall && (
+              <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)} className="text-orange-400">
+                <X className="w-4 h-4 mr-2" />
+                Reverse Install
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => onManageQty?.(commitment)} className="text-cyan-400">
+              <Edit className="w-4 h-4 mr-2" />
+              Manage Qty / Move
+            </DropdownMenuItem>
+            {allowed?.canCancel && (
+              <>
+                <DropdownMenuSeparator className="bg-gray-700" />
+                <DropdownMenuItem onClick={() => onCancel?.(commitment)} className="text-red-400">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* PHASE 4: Execution Data Block - Always visible on Plan + Buy tabs */}
+      {(tab === 'plan' || tab === 'buy') && (
+        <div className="mt-2 ml-6 max-w-xs">
+          <ExecutionDataBlock commitment={commitment} tab={tab} />
         </div>
       )}
-
-      {/* Part Info */}
-      <button
-        onClick={() => onPartClick?.(part, commitment)}
-        className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
-      >
-        <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
-          <span>· {resolvedCategory.name}</span>
-        </div>
-      </button>
-
-      {/* Order Qty */}
-      <div className="text-center w-14">
-        <p className="text-xs text-gray-500">Order</p>
-        <p className={cn("font-bold", toOrder > 0 ? "text-red-400" : "text-gray-500")}>{toOrder}</p>
-      </div>
-
-      {/* Exposure */}
-      <div className="text-center w-20 hidden md:block">
-        <p className="text-xs text-gray-500">Exposure</p>
-        <p className={cn(
-          "font-mono text-xs",
-          (commitment.exposure_gap ?? 0) > 0 ? "text-amber-400" : "text-gray-500"
-        )}>
-          {formatCurrencyUSD(commitment.exposure_gap ?? 0)}
-        </p>
-      </div>
-
-      {/* Pool/Covered */}
-      <div className="text-center w-20 hidden lg:block">
-        <p className="text-xs text-gray-500">Covered</p>
-        <p className="font-mono text-xs text-gray-400">
-          {formatCurrencyUSD(commitment.covered_retail_total ?? 0)}
-        </p>
-      </div>
-
-      {/* Coverage Badge */}
-      <div className="w-20 hidden md:block">
-        <CoverageBadgeInline coverage={{
-          coverage_status: commitment.coverage_status,
-          gap_qty: toOrder,
-          qty_needed: needed,
-          qty_reserved: reservedProject,
-          qty_ordered: commitment.covered_from_po ?? 0,
-          qty_installed: commitment.qty_installed ?? 0,
-        }} />
-      </div>
-
-      {/* Prepay Badge */}
-      <div className="w-20 hidden lg:block">
-        <PrepayStatusBadge 
-          requiresPrepay={commitment.requires_prepay}
-          billingStatus={commitment.billing_status}
-        />
-      </div>
-
-      {/* Lifecycle Status */}
-      <div className="hidden xl:block">
-        <span className={cn(
-          "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
-          statusColor
-        )}>
-          {displayStatus}
-        </span>
-      </div>
-
-      {/* Pricing Warning */}
-      <div className="hidden xl:block">
-        <PricingIntegrityBadge commitment={commitment} />
-      </div>
-
-      {/* Actions Dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={!actionsEnabled}>
-            <MoreVertical className="w-4 h-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-          {canOrder && (
-            <DropdownMenuItem onClick={() => onCreatePO?.(commitment)} className="text-green-400">
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Create PO
-            </DropdownMenuItem>
-          )}
-          {allowed?.canCreateDeltaOrder && (
-            <DropdownMenuItem onClick={() => onDeltaOrder?.(commitment)} className="text-purple-400">
-              <Plus className="w-4 h-4 mr-2" />
-              Additional Order
-            </DropdownMenuItem>
-          )}
-          {allowed?.canReceive && (
-            <DropdownMenuItem onClick={() => onReceive?.(commitment)} className="text-blue-400">
-              <Package className="w-4 h-4 mr-2" />
-              Receive
-            </DropdownMenuItem>
-          )}
-          {allowed?.canInstall && (
-            <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
-              <Wrench className="w-4 h-4 mr-2" />
-              Install
-            </DropdownMenuItem>
-          )}
-          {allowed?.canReverseInstall && (
-            <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)} className="text-orange-400">
-              <X className="w-4 h-4 mr-2" />
-              Reverse Install
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onClick={() => onManageQty?.(commitment)} className="text-cyan-400">
-            <Edit className="w-4 h-4 mr-2" />
-            Manage Qty / Move
-          </DropdownMenuItem>
-          {allowed?.canCancel && (
-            <>
-              <DropdownMenuSeparator className="bg-gray-700" />
-              <DropdownMenuItem onClick={() => onCancel?.(commitment)} className="text-red-400">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Remove
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }
