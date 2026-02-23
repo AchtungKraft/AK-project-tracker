@@ -279,7 +279,19 @@ export function useProjectInvoiceView(projectId) {
     }
   }
 
+  // PHASE 5: Build credit allocation map by commitment
+  const creditByCommitmentLocal = {};
+  for (const alloc of creditAllocations) {
+    if (alloc.commitment_id) {
+      if (!creditByCommitmentLocal[alloc.commitment_id]) {
+        creditByCommitmentLocal[alloc.commitment_id] = 0;
+      }
+      creditByCommitmentLocal[alloc.commitment_id] += alloc.amount_applied || 0;
+    }
+  }
+
   // Transform commitments to view models
+  // PHASE 5: Include gross/credit/net exposure from backend - NO FRONTEND MATH
   const commitments = rawCommitments
     .filter(c => !c.cancellation_type && c.cancellation_type !== 'full_cancel')
     .map(c => {
@@ -299,6 +311,12 @@ export function useProjectInvoiceView(projectId) {
       const unitCost = c.unit_cost_snapshot ?? c.unit_cost ?? 0;
       const requiredTotal = c.required_total ?? 1;
       
+      // PHASE 5: Calculate gross and net exposure - this is display ONLY
+      // The canonical source is getBillingAndProcurementStates
+      const grossExposure = unitRetail * requiredTotal;
+      const creditAppliedLine = creditByCommitmentLocal[c.id] || 0;
+      const netExposure = Math.max(0, grossExposure - creditAppliedLine);
+      
       return {
         id: c.id,
         part_id: c.part_id,
@@ -308,8 +326,12 @@ export function useProjectInvoiceView(projectId) {
         unit_cost: unitCost,
         unit_retail: unitRetail,
         required_total: requiredTotal,
-        extended_retail: unitRetail * requiredTotal,
+        extended_retail: grossExposure, // DEPRECATED: Use gross_exposure
         extended_cost: unitCost * requiredTotal,
+        // PHASE 5: Canonical exposure fields
+        gross_exposure: grossExposure,
+        credit_applied: creditAppliedLine,
+        net_exposure: netExposure,
         invoice_batch_id: batchInfo.batch_id || null,
         invoice_number: batchInfo.invoice_number || null,
         // Raw for debugging
