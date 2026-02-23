@@ -1534,32 +1534,6 @@ export default function ProjectSupplyManager() {
                 vendorsMap={vendorsMap}
                 tab="install"
               />
-                          <TableHead className="text-gray-400 text-center">Needed</TableHead>
-                          <TableHead className="text-gray-400 text-right">Cost</TableHead>
-                          <TableHead className="text-gray-400 text-right">Retail</TableHead>
-                          <TableHead className="text-gray-400">Status</TableHead>
-                          <TableHead className="text-gray-400">Vendor</TableHead>
-                          <TableHead className="text-gray-400">Payment</TableHead>
-                          <TableHead className="text-gray-400">Coverage</TableHead>
-                          <TableHead className="text-gray-400">Pricing</TableHead>
-                          <TableHead className="w-10"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {getFilteredCommitments('install').length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={DESKTOP_COL_COUNT} className="text-center py-8 text-gray-500">
-                              No items ready to install
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          renderGroupedCommitments('install')
-                        )}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
             </TabsContent>
 
             <TabsContent value="report" className="mt-4 space-y-4">
