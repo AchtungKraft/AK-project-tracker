@@ -1327,11 +1327,10 @@ export default function ProjectSupplyManager() {
         />
       )}
       
-      {/* Edit Part Drawer - Opens when part name clicked */}
+      {/* PartModal - Opens when part name clicked */}
       {selectedPartId && (
-        <EditPartDrawer
+        <PartModal
           partId={selectedPartId}
-          open={!!selectedPartId}
           onClose={() => setSelectedPartId(null)}
         />
       )}
