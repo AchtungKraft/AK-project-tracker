@@ -205,13 +205,17 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['creditAllocations'],
       type: refetchActive ? 'active' : 'all'
     }),
-    // PHASE 2: Invoice view internal keys used by ForwardInvoiceDashboard
+    // PHASE 5: Invoice view internal keys used by ForwardInvoiceDashboard
     queryClient.refetchQueries({ 
       queryKey: ['projectInvoiceCommitments'],
       type: refetchActive ? 'active' : 'all'
     }),
     queryClient.refetchQueries({ 
-      queryKey: ['projectInvoiceBatches'],
+      queryKey: ['projectInvoices'],
+      type: refetchActive ? 'active' : 'all'
+    }),
+    queryClient.refetchQueries({ 
+      queryKey: ['projectInvoiceLines'],
       type: refetchActive ? 'active' : 'all'
     }),
     queryClient.refetchQueries({ 
@@ -255,7 +259,7 @@ export async function forceAppRefresh(queryClient, options = {}) {
         type: refetchActive ? 'active' : 'all'
       }),
       queryClient.refetchQueries({ 
-        queryKey: ['projectInvoiceBatches', id],
+        queryKey: ['projectInvoices', id],
         type: refetchActive ? 'active' : 'all'
       }),
       queryClient.refetchQueries({ 
