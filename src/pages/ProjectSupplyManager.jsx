@@ -45,7 +45,6 @@ import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
-import { Receipt } from "lucide-react";
 import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
@@ -56,8 +55,8 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import { applySorting } from "@/components/supply/SupplyGroupingControls";
 import { Progress } from "@/components/ui/progress";
-import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Receipt, Download } from "lucide-react";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
