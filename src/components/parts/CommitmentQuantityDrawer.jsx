@@ -19,6 +19,11 @@ export default function CommitmentQuantityDrawer({
   part,
   onSuccess 
 }) {
+  // Don't render if no commitment
+  if (!commitment) {
+    return null;
+  }
+
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose?.()}>
       <SheetContent className="bg-gray-900 border-gray-700 w-full sm:max-w-lg overflow-y-auto">
