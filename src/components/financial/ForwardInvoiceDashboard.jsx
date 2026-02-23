@@ -437,7 +437,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
             <div className="p-8 text-center">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-500" />
             </div>
-          ) : invoiceBatches.length === 0 ? (
+          ) : invoices.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No invoices yet</p>
@@ -461,37 +461,37 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoiceBatches.map(batch => (
-                  <TableRow key={batch.id} className="border-gray-800 hover:bg-gray-800/30">
+                {invoices.map(inv => (
+                  <TableRow key={inv.id} className="border-gray-800 hover:bg-gray-800/30">
                     <TableCell className="text-white font-medium">
                       <div className="flex items-center gap-2">
-                        {batch.is_locked && <Lock className="w-3 h-3 text-purple-400" />}
-                        {batch.invoice_number || batch.batch_name || 'Draft'}
+                        {inv.is_locked && <Lock className="w-3 h-3 text-purple-400" />}
+                        {inv.qb_invoice_number || inv.invoice_number || 'Draft'}
                       </div>
                     </TableCell>
                     <TableCell className="text-gray-400 text-sm">
-                      {batch.invoice_type || 'progress'}
+                      {inv.invoice_type || 'progress'}
                     </TableCell>
                     <TableCell className="text-gray-400 text-sm">
-                      {batch.invoice_date || '-'}
+                      {inv.issue_date || inv.invoice_date || '-'}
                     </TableCell>
                     <TableCell className="text-gray-400 text-sm">
-                      {batch.due_date || '-'}
+                      {inv.due_date || '-'}
                     </TableCell>
-                    {/* PHASE 5: Use formatCurrencyUSD, color by status */}
+                    {/* Use formatCurrencyUSD, color by status */}
                     <TableCell className={cn(
                       "text-right font-medium",
-                      batch.status === 'paid' ? "text-green-400" :
-                      ['sent', 'invoiced'].includes(batch.status) ? "text-purple-400" :
+                      inv.status === 'paid' ? "text-green-400" :
+                      ['sent', 'invoiced'].includes(inv.status) ? "text-purple-400" :
                       "text-gray-400"
                     )}>
-                      {formatCurrencyUSD(batch.total_amount || 0)}
+                      {formatCurrencyUSD(inv.total_amount || inv.total || 0)}
                     </TableCell>
-                    <TableCell>{getStatusBadge(batch)}</TableCell>
+                    <TableCell>{getStatusBadge(inv)}</TableCell>
                     <TableCell>
-                      {batch.qb_exported ? (
+                      {inv.qb_exported ? (
                         <Badge className="bg-blue-600 text-xs">Exported</Badge>
-                      ) : batch.qb_sync_status === 'failed' ? (
+                      ) : inv.qb_sync_status === 'failed' ? (
                         <Badge className="bg-red-600 text-xs">Failed</Badge>
                       ) : (
                         <Badge variant="outline" className="border-gray-600 text-gray-400 text-xs">
@@ -500,7 +500,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                       )}
                     </TableCell>
                     <TableCell className="text-gray-400 text-sm">
-                      {batch.paid_date ? format(parseISO(batch.paid_date), 'MMM d') : '-'}
+                      {inv.payment_date ? format(parseISO(inv.payment_date), 'MMM d') : '-'}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -510,18 +510,18 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                          {batch.status === 'draft' && (
+                          {inv.status === 'draft' && (
                             <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(batch.id, 'sent')}
+                              onClick={() => handleStatusUpdate(inv.id, 'sent')}
                               className="text-purple-400"
                             >
                               <Send className="w-4 h-4 mr-2" />
                               Mark Sent
                             </DropdownMenuItem>
                           )}
-                          {['sent', 'invoiced'].includes(batch.status) && (
+                          {['sent', 'invoiced'].includes(inv.status) && (
                             <DropdownMenuItem
-                              onClick={() => handleRecordPayment(batch)}
+                              onClick={() => handleRecordPayment(inv)}
                               className="text-green-400"
                             >
                               <CreditCard className="w-4 h-4 mr-2" />
@@ -530,16 +530,16 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                           )}
                           <DropdownMenuSeparator className="bg-gray-700" />
                           <DropdownMenuItem
-                            onClick={() => handleExport(batch.id, 'csv')}
+                            onClick={() => handleExport(inv.id, 'csv')}
                             disabled={isExporting}
                             className="text-blue-400"
                           >
                             <Download className="w-4 h-4 mr-2" />
                             Download CSV
                           </DropdownMenuItem>
-                          {!batch.qb_exported && batch.status !== 'draft' && (
+                          {!inv.qb_exported && inv.status !== 'draft' && (
                             <DropdownMenuItem
-                              onClick={() => handleExport(batch.id, 'mark_exported')}
+                              onClick={() => handleExport(inv.id, 'mark_exported')}
                               disabled={isExporting}
                               className="text-amber-400"
                             >
@@ -547,13 +547,13 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                               Mark Exported
                             </DropdownMenuItem>
                           )}
-                          {batch.is_locked && (
+                          {inv.is_locked && (
                             <>
                               <DropdownMenuSeparator className="bg-gray-700" />
                               <DropdownMenuItem
                                 onClick={async () => {
                                   if (confirm('Unlock this invoice? This allows edits.')) {
-                                    await base44.entities.ProjectInvoice.update(batch.id, { is_locked: false });
+                                    await base44.entities.ProjectInvoice.update(inv.id, { is_locked: false });
                                     refetch();
                                   }
                                 }}
