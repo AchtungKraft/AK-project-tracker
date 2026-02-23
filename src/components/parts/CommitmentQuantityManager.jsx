@@ -53,6 +53,9 @@ const ACTION_TYPES = {
 // Quantity State Matrix Display
 // Quantity State Matrix Display - uses canonical field names
 const QuantityStateMatrix = ({ commitment }) => {
+  // Guard against undefined commitment
+  if (!commitment) return null;
+  
   // Use canonical fields with fallback to legacy
   const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
   const reserved_from_stock = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
@@ -173,6 +176,9 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const queryClient = useQueryClient();
+  
+  // Guard against undefined commitment
+  if (!commitment) return null;
 
   // Use canonical supply action dispatcher
   const mutation = useMutation({
@@ -386,6 +392,15 @@ export default function CommitmentQuantityManager({
   onClose, 
   onSuccess 
 }) {
+  // Guard against undefined commitment
+  if (!commitment) {
+    return (
+      <div className="p-4 text-center text-gray-400">
+        No commitment selected
+      </div>
+    );
+  }
+  
   const [activeAction, setActiveAction] = useState(null);
   const [qtyInput, setQtyInput] = useState(1);
   const [targetProjectId, setTargetProjectId] = useState('');
