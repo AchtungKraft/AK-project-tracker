@@ -1019,6 +1019,22 @@ export default function PartModal({ part, partId, onClose }) {
           }}
         />
       )}
+      
+      {/* Add Inventory Modal */}
+      {showAddInventoryModal && activePart && (
+        <AddInventoryModal
+          part={activePart}
+          onClose={() => setShowAddInventoryModal(false)}
+        />
+      )}
+      
+      {/* Add to Build Modal */}
+      {showAddToBuildModal && activePart && (
+        <AddToBuildModal
+          part={activePart}
+          onClose={() => setShowAddToBuildModal(false)}
+        />
+      )}
     </>
   );
 }
