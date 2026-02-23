@@ -23,6 +23,7 @@ import { Archive, AlertTriangle } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ARCHIVE_CONTEXT_OPTIONS } from "./partTypeBehavior";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * ArchivePartModal
@@ -66,8 +67,11 @@ export default function ArchivePartModal({
         performed_at: new Date().toISOString(),
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["parts"] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: [part.id],
+      });
       onSuccess?.();
       onClose();
     },

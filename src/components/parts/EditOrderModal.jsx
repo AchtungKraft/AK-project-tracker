@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, FileText, Save, DollarSign, ExternalLink } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * EditOrderModal - Edit order-level metadata (PO#, date, notes, URL)
@@ -42,8 +43,11 @@ export default function EditOrderModal({ order, onClose }) {
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Order.update(order.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        orderIds: [order.id],
+      });
       toast.success('Order updated');
       onClose();
     },
