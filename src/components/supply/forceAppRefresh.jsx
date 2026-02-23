@@ -90,6 +90,8 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.invalidateQueries({ queryKey: ['projectCostSummary'] }),
     queryClient.invalidateQueries({ queryKey: ['creditLedger'] }),
     queryClient.invalidateQueries({ queryKey: ['projectCreditBalance'] }),
+    queryClient.invalidateQueries({ queryKey: ['creditAllocations'] }),
+    queryClient.invalidateQueries({ queryKey: ['invoiceReadyItems'] }),
     
     // Pricing domain
     queryClient.invalidateQueries({ queryKey: ['pricingAudit'] }),
