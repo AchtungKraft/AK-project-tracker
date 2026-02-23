@@ -88,8 +88,8 @@ export default function ApplyCreditModal({
       if (data.success) {
         toast.success(`Applied ${formatCurrencyUSD(data.summary.credit_applied_now)} credit`);
         
-        // PHASE 5: Force refresh all related queries
-        await forceAppRefresh(queryClient, { project_ids: [projectId] });
+        // PHASE 1 UNIFIED: Deterministic refresh - ensures both surfaces update
+        await forceAppRefresh(queryClient, { projectIds: [projectId] });
         
         onSuccess?.();
         handleClose();
