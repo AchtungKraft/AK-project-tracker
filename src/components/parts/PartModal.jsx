@@ -120,14 +120,37 @@ export default function PartModal({ part, partId, onClose }) {
     },
   });
 
+  // Fetch inventory view data for canonical inventory metrics
+  const { data: partsInventoryView = [] } = useQuery({
+    queryKey: ['partsInventoryView'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      return res.data?.parts || [];
+    },
+  });
+
+  // Fetch inventory items for location summary
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems', activePart?.id],
+    queryFn: () => base44.entities.InventoryItem.filter({ part_id: activePart?.id }),
+    enabled: !!activePart?.id,
+  });
+
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: () => {
+      // Full supply invalidation for consistency
+      invalidateSupplyQueries(queryClient, { 
+        part_ids: [activePart.id],
+        full_invalidate: true 
+      });
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['part', activePart.id] });
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
+      queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
       toast.success('Part updated');
       setEditing(false);
     },
