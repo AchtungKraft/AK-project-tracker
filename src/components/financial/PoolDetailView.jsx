@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { CommitmentActions } from "./financialMutationGuard";
 import ClosePoolModal from "./ClosePoolModal";
 import TransferPoolBalanceModal from "./TransferPoolBalanceModal";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 /**
  * PoolDetailView - Detailed view of a billing pool with audit trail
@@ -137,10 +138,11 @@ export default function PoolDetailView({ poolId, onClose }) {
     mutationFn: async ({ allocation_id, reason }) => {
       return await CommitmentActions.reversePoolAllocation({ allocation_id, reason });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['poolAllocations'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPool'] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Allocation reversed successfully');
       setShowReversalModal(null);
       setReversalReason('');
@@ -155,9 +157,11 @@ export default function PoolDetailView({ poolId, onClose }) {
     mutationFn: async ({ charge_id, reason }) => {
       return await CommitmentActions.reversePoolCharge({ charge_id, reason });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['poolCharges'] });
-      queryClient.invalidateQueries({ queryKey: ['billingPool'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Charge reversed successfully');
       setShowReversalModal(null);
       setReversalReason('');
@@ -172,8 +176,11 @@ export default function PoolDetailView({ poolId, onClose }) {
     mutationFn: async () => {
       return await CommitmentActions.recalculatePoolBalance({ pool_id: poolId });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billingPool'] });
+    onSuccess: async () => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        projectIds: pool?.project_id ? [pool.project_id] : [],
+      });
       toast.success('Pool recalculated');
     },
     onError: (error) => {
