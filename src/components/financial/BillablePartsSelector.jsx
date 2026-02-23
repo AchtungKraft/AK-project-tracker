@@ -484,60 +484,6 @@ export default function BillablePartsSelector({
     </div>
   );
 }
-                        {selectedCount > 0 && (
-                          <Badge className="bg-red-600/20 text-red-400 text-xs">
-                            {selectedCount} selected
-                          </Badge>
-                        )}
-                        <span className="text-sm font-mono text-gray-400">
-                          {formatCurrencyUSD(group.group_total)}
-                        </span>
-                      </div>
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="border-t border-gray-700">
-                      {/* Group Actions */}
-                      <div className="flex items-center justify-end gap-2 p-2 bg-gray-900/50">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSelectAll(group.items)}
-                          disabled={allSelected}
-                          className="h-7 text-xs"
-                        >
-                          Select All
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeselectAll(group.items)}
-                          disabled={selectedCount === 0}
-                          className="h-7 text-xs"
-                        >
-                          Deselect All
-                        </Button>
-                      </div>
-                      {/* Items */}
-                      {group.items.map((item) => {
-                        const isSelected = selectedItems.some(
-                          (s) => s.part_commitment_id === item.part_commitment_id
-                        );
-                        const selectedData = selectedItems.find(
-                          (s) => s.part_commitment_id === item.part_commitment_id
-                        );
-
-                        return (
-                          <div
-                            key={item.part_commitment_id}
-                            className={cn(
-                              "flex items-center gap-3 p-3 border-t border-gray-800",
-                              isSelected && "bg-red-900/10"
-                            )}
-                          >
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={(checked) => handleToggleItem(item, checked)}
                             />
                             <div className="flex-1 min-w-0">
                               <p className="text-white text-sm truncate">{item.part_name}</p>
