@@ -77,9 +77,19 @@ export default function CreateProjectInvoiceModal({ open, onClose, onSuccess }) 
   const grossExposure = canonicalTotals.gross_exposure || 0;
   const netExposure = canonicalTotals.net_exposure || 0;
 
-  // Calculate totals
+  // PHASE 5: Remove frontend exposure math - use canonical values from backend
+  // Calculate totals - these are for the invoice being CREATED, not exposure calculation
   const partsTotal = useMemo(() => {
-    return selectedParts.reduce((sum, p) => sum + (p.line_total || 0), 0);
+    // Use net_exposure from selected parts (already credit-adjusted from backend)
+    return selectedParts.reduce((sum, p) => sum + (p.net_exposure || p.line_total || 0), 0);
+  }, [selectedParts]);
+
+  const partsGrossTotal = useMemo(() => {
+    return selectedParts.reduce((sum, p) => sum + (p.gross_exposure || p.line_total || 0), 0);
+  }, [selectedParts]);
+
+  const partsCreditApplied = useMemo(() => {
+    return selectedParts.reduce((sum, p) => sum + (p.credit_applied || 0), 0);
   }, [selectedParts]);
 
   const manualTotal = useMemo(() => {
