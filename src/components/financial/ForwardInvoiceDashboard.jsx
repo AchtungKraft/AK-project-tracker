@@ -100,8 +100,8 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
-  // DETERMINISTIC: Normalize projectId once
-  const normalizedProjectId = String(projectId ?? "");
+  // DETERMINISTIC: Normalize projectId once using factory
+  const normalizedProjectId = projectId ? String(projectId) : "";
 
   // PHASE 6: Use canonical read model for invoice history
   const { 
