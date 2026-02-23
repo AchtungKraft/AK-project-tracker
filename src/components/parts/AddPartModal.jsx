@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import PartPricingFields from "./PartPricingFields";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function AddPartModal({ onClose }) {
   const queryClient = useQueryClient();
@@ -64,8 +65,11 @@ export default function AddPartModal({ onClose }) {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
+    onSuccess: async (newPart) => {
+      // PHASE 17: Deterministic refresh
+      await forceAppRefresh(queryClient, {
+        partIds: newPart?.id ? [newPart.id] : [],
+      });
       toast.success('Part created successfully');
       onClose();
     },
