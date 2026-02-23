@@ -115,6 +115,11 @@ export async function forceAppRefresh(queryClient, options = {}) {
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectFinancials', id] }));
+    // PHASE 4: Invoice and credit queries
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceCommitments', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceBatches', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditLedger', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditAllocations', id] }));
   });
   
   // Scoped commitment invalidations
