@@ -4,20 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -25,13 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -42,9 +25,8 @@ import {
 import { Label } from "@/components/ui/label";
 import {
   ShoppingCart, Package, Truck, AlertTriangle,
-  ArrowLeft, Plus, MoreVertical, RefreshCw, Search,
-  Wrench, X, FileText, Edit, Trash2, Download,
-  AlertCircle
+  ArrowLeft, RefreshCw, Search,
+  Wrench, FileText, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -58,10 +40,7 @@ import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
-import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
-import CoverageControlsPopover from "@/components/parts/CoverageControlsPopover";
-import { InventoryStateBadge, StockAvailableHelper, CoverageDriftBadge } from "@/components/supply/InventoryStateBadge";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
@@ -69,23 +48,13 @@ import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { Receipt } from "lucide-react";
 import EditPartDrawer from "@/components/parts/EditPartDrawer";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { getDisplayStatus, getDisplayStatusColor, filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
-import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
+import { filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx";
 import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
-
-/**
- * DESKTOP TABLE COLUMN COUNT
- * Shared constant for colSpan calculations.
- * Column order: [Checkbox] Part | Category | In Stock | Reserved | Needed | Cost | Retail | Status | Vendor | Payment | Coverage | Pricing | [Actions]
- * Total: 14 columns (13 data + 1 checkbox/action)
- */
-const DESKTOP_COL_COUNT = 14;
-import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
-import SupplyGroupingControls, { applyGrouping, applySorting } from "@/components/supply/SupplyGroupingControls";
-import { MobileSupplyCard } from "@/components/supply/SupplyRowData";
-import MutationButton from "@/components/supply/MutationButton";
+import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
+import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
+import { applySorting } from "@/components/supply/SupplyGroupingControls";
 import { cn } from "@/lib/utils";
 
 /**
