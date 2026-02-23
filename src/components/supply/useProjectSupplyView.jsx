@@ -300,7 +300,7 @@ export function usePOReceivingView(orderId = null, filters = {}) {
  * All supply mutations MUST go through this hook.
  * Components MUST NOT write to commitment/inventory entities directly.
  * 
- * Uses unified invalidation helper to ensure all views stay in sync.
+ * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh.
  */
 export function useSupplyAction() {
   const queryClient = useQueryClient();
@@ -318,15 +318,11 @@ export function useSupplyAction() {
       }
       return { ...response.data, _action_type: action_type, _payload: payload };
     },
-    onSuccess: (data, variables) => {
-      // Use unified invalidation helper for consistent cache management
+    onSuccess: async (data, variables) => {
+      // PHASE 17: Use forceAppRefresh for deterministic refresh
       if (!variables.dry_run) {
-        const context = extractInvalidationContext(data, variables.payload);
-        // Always do full invalidation for supply actions to ensure consistency
-        invalidateSupplyQueries(queryClient, {
-          ...context,
-          invalidateAll: true,
-        });
+        const context = extractRefreshContext(data, variables.payload);
+        await forceAppRefresh(queryClient, context);
         
         // PHASE 9I: Show toast for auto-reservation
         if (data.toast_notification) {
