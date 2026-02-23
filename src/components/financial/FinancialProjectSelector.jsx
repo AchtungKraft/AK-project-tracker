@@ -58,8 +58,14 @@ export default function FinancialProjectSelector({
   // Find currently selected project for display
   const selectedProject = data?.projects?.find((p) => p.project_id === value);
 
+  // HARD FIX: Prevent selector from writing empty string
+  const handleValueChange = (val) => {
+    if (!val) return; // Never pass empty string to parent
+    onValueChange(val);
+  };
+
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value || ""} onValueChange={handleValueChange}>
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder}>
           {selectedProject && (

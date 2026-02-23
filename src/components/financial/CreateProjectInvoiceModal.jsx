@@ -76,7 +76,8 @@ export default function CreateProjectInvoiceModal({
 }) {
   const queryClient = useQueryClient();
   // DETERMINISTIC: Normalize preselected project ID using factory helper
-  const normalizedPreselectedId = normalizeProjectId(preselectedProjectId) || "";
+  // HARD FIX: Never use empty string - use null for "no project"
+  const normalizedPreselectedId = normalizeProjectId(preselectedProjectId);
   
   // If project is preselected, skip to step 1 (type selection)
   const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
@@ -88,8 +89,16 @@ export default function CreateProjectInvoiceModal({
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // HARD FIX: Dev log for debugging project state
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log("[CREATE_INVOICE_MODAL] selectedProjectId:", selectedProjectId);
+    }
+  }, [selectedProjectId]);
+
   // Normalized ID for queries - use factory helper
-  const normalizedProjectId = normalizeProjectId(selectedProjectId) || "";
+  // HARD FIX: Do not fallback to empty string - keep as null
+  const normalizedProjectId = normalizeProjectId(selectedProjectId);
   
   // Reset state when modal opens with preselected project
   React.useEffect(() => {
@@ -104,7 +113,8 @@ export default function CreateProjectInvoiceModal({
       }
     } else if (open && !normalizedPreselectedId) {
       setStep(0);
-      setSelectedProjectId("");
+      // HARD FIX: Use null, never empty string
+      setSelectedProjectId(null);
       setSelectedParts([]);
     }
   }, [open, normalizedPreselectedId, initialSelectedItems]);
@@ -116,6 +126,7 @@ export default function CreateProjectInvoiceModal({
   );
 
   // PHASE 1 CANONICAL: Use getBillingAndProcurementStates as single source of truth
+  // HARD FIX: Hard guard - billing query MUST NOT run if projectId is null/empty
   const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(
     normalizedProjectId,
     { enabled: Boolean(normalizedProjectId) && open }
