@@ -71,6 +71,9 @@ export default function EditPoolModal({ pool, onClose, onSuccess }) {
             <Edit className="w-5 h-5 text-blue-400" />
             Edit Pool
           </DialogTitle>
+          <DialogDescription>
+            Update billing pool details and amounts.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
