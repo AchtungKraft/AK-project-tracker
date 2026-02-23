@@ -111,15 +111,16 @@ export async function forceAppRefresh(queryClient, options = {}) {
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectFinancials', id] }));
-    // PHASE 5: Invoice and credit queries - Forward model
+    // PHASE 5: Invoice and credit queries - Forward model (ProjectInvoice only)
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceCommitments', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoices', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditLedger', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCreditAllocations', id] }));
-    // PHASE 1 UNIFIED: Scoped billing/invoice views
+    // PHASE 1 UNIFIED: Scoped billing/invoice views - CANONICAL
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['billingProcurementStates', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', id] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['creditAllocations', id] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectInvoiceLines', id] }));
   });
   
   // Scoped commitment invalidations
