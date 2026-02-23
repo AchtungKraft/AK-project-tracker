@@ -132,9 +132,13 @@ export default function GlobalNeedToOrder() {
     filteredItems.forEach(item => {
       let groupKey, groupLabel, groupColor;
 
+      // CANONICAL: Resolve vendor/category names via resolvers - never display IDs
+      const vendorDisplay = resolveVendorDisplay(item.vendor_id, item.vendor_name);
+      const categoryDisplay = resolveCategoryDisplay(item.category_id, item.category_name);
+
       if (groupMode === 'vendor') {
         groupKey = item.vendor_id || 'unassigned';
-        groupLabel = item.vendor_name || 'No Vendor Assigned';
+        groupLabel = vendorDisplay.name;
         groupColor = '#3B82F6';
       } else if (groupMode === 'project') {
         groupKey = item.project_id || 'general';
@@ -165,10 +169,12 @@ export default function GlobalNeedToOrder() {
       }
 
       groups[groupKey].items.push(item);
-      // Use canonical to_order from read model - NO local derivation
+      // CANONICAL: Use to_order from read model - NO local derivation
+      // Group totals use canonical fields only
       groups[groupKey].totalQty += item.to_order ?? 0;
       groups[groupKey].totalExposure += item.exposure_gap ?? 0;
-      groups[groupKey].totalCost += item.estimated_cost ?? 0;
+      // Use planned_cost_total if available, otherwise estimated_cost
+      groups[groupKey].totalCost += item.planned_cost_total ?? item.estimated_cost ?? 0;
       if (item.is_orderable) groups[groupKey].canOrderCount++;
     });
 
