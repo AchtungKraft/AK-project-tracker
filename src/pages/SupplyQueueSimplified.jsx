@@ -26,7 +26,7 @@ import { getDisplayStatus, filterActiveCommitments } from "@/components/supply/l
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
-import EditPartDrawer from "@/components/parts/EditPartDrawer";
+import PartModal from "@/components/parts/PartModal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
