@@ -129,11 +129,7 @@ const ACTION_TAB_CONFIG = {
   },
 };
 
-const BATCH_MODES = {
-  MANUAL: { label: 'Single Batch', icon: ListChecks },
-  BY_PROJECT: { label: 'By Project', icon: FolderOpen },
-  BY_CLIENT: { label: 'By Client', icon: Users },
-};
+// BATCH_MODES removed - single ProjectInvoice flow only
 
 // ============================================
 // COVERAGE HEALTH KPI
