@@ -58,7 +58,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 /**
  * ForwardInvoiceDashboard - Invoice-Based Funding UI for Forward Model Projects
  * 
- * PHASE 6 REFACTOR: Uses canonical financial read model
+ * PHASE 1 UNIFIED: Uses SAME modal and data sources as ProjectInvoices page.
+ * 
+ * DATA SOURCES:
+ * - useProjectInvoiceView: Invoice history (ProjectInvoice entities)
+ * - useBillingAndProcurementStates: Canonical exposure/credit calculations
  * 
  * CANONICAL INVOICE STATES ONLY:
  * - UNBILLED (Ready to Bill) - Gray
@@ -71,7 +75,7 @@ import { Checkbox } from "@/components/ui/checkbox";
  * - Does NOT inspect inventory
  * - Does NOT inspect to_order / install progress
  * 
- * Uses InvoiceBatch as single source of client billing truth
+ * Uses ProjectInvoice as single source of client billing truth.
  */
 export default function ForwardInvoiceDashboard({ projectId }) {
   const queryClient = useQueryClient();
