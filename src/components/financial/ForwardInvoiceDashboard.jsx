@@ -99,6 +99,9 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   // PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
+  // DETERMINISTIC: Normalize projectId once
+  const normalizedProjectId = String(projectId ?? "");
+
   // PHASE 6: Use canonical read model for invoice history
   const { 
     commitments,
@@ -107,24 +110,34 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     isLoading: invoiceLoading, 
     refetch,
     creditSummary: invoiceCreditSummary,
-  } = useProjectInvoiceView(projectId);
+  } = useProjectInvoiceView(normalizedProjectId);
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
   // This ensures ForwardInvoiceDashboard matches BillablePartsSelector exactly
-  const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(projectId);
+  const { data: billingData, isLoading: billingLoading, dataUpdatedAt } = useBillingAndProcurementStates(normalizedProjectId);
   
   // Merge loading states
   const isLoading = invoiceLoading || billingLoading;
   
-  // CANONICAL: Use billing data for exposure/credit, fallback to invoice view
+  // CANONICAL: Use billing data for exposure/credit ONLY - no UI math
   const canonicalTotals = billingData?.totals || {};
   const canonicalCreditSummary = billingData?.credit_summary || {};
   const creditSummary = {
-    total_credit_available: canonicalCreditSummary.total_credit_available ?? invoiceCreditSummary?.total_credit_available ?? 0,
-    total_credit_applied: canonicalCreditSummary.total_credit_applied ?? invoiceCreditSummary?.total_credit_applied ?? 0,
-    gross_exposure: canonicalTotals.gross_exposure ?? invoiceCreditSummary?.gross_exposure ?? 0,
-    net_exposure: canonicalTotals.net_exposure ?? invoiceCreditSummary?.net_exposure ?? 0,
+    total_credit_available: canonicalCreditSummary.total_credit_available ?? 0,
+    total_credit_applied: canonicalCreditSummary.total_credit_applied ?? 0,
+    gross_exposure: canonicalTotals.gross_exposure ?? 0,
+    net_exposure: canonicalTotals.net_exposure ?? 0,
   };
+
+  // DEV diagnostic logging
+  if (process.env.NODE_ENV === "development" && billingData) {
+    console.log("[ForwardInvoiceDashboard] Query State:", {
+      projectId: normalizedProjectId,
+      queryKey: ["billingProcurementStates", normalizedProjectId],
+      dataUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null,
+      netExposure: canonicalTotals.net_exposure ?? "N/A",
+    });
+  }
 
   // Toggle commitment selection
   const toggleCommitmentSelection = (commitmentId, checked) => {
