@@ -387,16 +387,32 @@ export const commitmentKeys = {
  * Order/PO query keys
  */
 export const orderKeys = {
-  all: () => ['orders'],
-  list: () => ['orders'],
+  all: () => {
+    const key = ['orders'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  list: () => {
+    const key = ['orders'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   detail: (orderId) => {
     const normalized = normalizeId(orderId);
-    return ['order', normalized];
+    const key = ['order', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  lineItems: () => ['partPurchaseLineItems'],
+  lineItems: () => {
+    const key = ['partPurchaseLineItems'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   forOrder: (orderId) => {
     const normalized = normalizeId(orderId);
-    return ['orderLineItems', normalized];
+    const key = ['orderLineItems', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -408,10 +424,18 @@ export const orderKeys = {
  * Receiving/inventory query keys
  */
 export const receivingKeys = {
-  poList: (filters = {}) => ['poReceivingView', null, filters],
+  poList: (filters = {}) => {
+    const filtersKey = serializeFilters(filters);
+    const key = ['poReceivingView', null, filtersKey];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   poDetail: (orderId, filters = {}) => {
     const normalized = normalizeId(orderId);
-    return ['poReceivingView', normalized, filters];
+    const filtersKey = serializeFilters(filters);
+    const key = ['poReceivingView', normalized, filtersKey];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -423,11 +447,21 @@ export const receivingKeys = {
  * Vendor query keys
  */
 export const vendorKeys = {
-  all: () => ['vendors'],
-  list: () => ['vendors'],
+  all: () => {
+    const key = ['vendors'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  list: () => {
+    const key = ['vendors'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   detail: (vendorId) => {
     const normalized = normalizeId(vendorId);
-    return ['vendor', normalized];
+    const key = ['vendor', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -439,15 +473,27 @@ export const vendorKeys = {
  * Inventory query keys
  */
 export const inventoryKeys = {
-  items: () => ['inventoryItems'],
+  items: () => {
+    const key = ['inventoryItems'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   forPart: (partId) => {
     const normalized = normalizeId(partId);
-    return ['inventoryItems', 'forPart', normalized];
+    const key = ['inventoryItems', 'forPart', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  locations: () => ['locations'],
+  locations: () => {
+    const key = ['locations'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   partLocations: (partId) => {
     const normalized = normalizeId(partId);
-    return ['inventoryLocations', normalized];
+    const key = ['inventoryLocations', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -459,11 +505,21 @@ export const inventoryKeys = {
  * Lifecycle action queue query keys
  */
 export const lifecycleKeys = {
-  actionQueue: () => ['lifecycleActionQueue'],
-  diagnostics: () => ['coverageDiagnostics'],
+  actionQueue: () => {
+    const key = ['lifecycleActionQueue'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  diagnostics: () => {
+    const key = ['coverageDiagnostics'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   timeline: (partId) => {
     const normalized = normalizeId(partId);
-    return ['partLifecycleTimeline', normalized];
+    const key = ['partLifecycleTimeline', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
@@ -475,16 +531,32 @@ export const lifecycleKeys = {
  * Project query keys
  */
 export const projectKeys = {
-  all: () => ['projects'],
-  list: () => ['projects'],
+  all: () => {
+    const key = ['projects'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  list: () => {
+    const key = ['projects'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   detail: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['project', normalized];
+    const key = ['project', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
-  types: () => ['projectTypes'],
+  types: () => {
+    const key = ['projectTypes'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
   financials: (projectId) => {
     const normalized = normalizeProjectId(projectId);
-    return ['projectFinancials', normalized];
+    const key = ['projectFinancials', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
   },
 };
 
