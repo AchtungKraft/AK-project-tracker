@@ -308,6 +308,15 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     const creditAppliedLine = creditByCommitment[commitment.id] || 0;
     const netLineTotal = Math.max(0, grossLineTotal - invoicedAmount - creditAppliedLine);
 
+    // PHASE 3: Resolve vendor and category names for grouping
+    const vendorId = part.default_vendor_id || null;
+    const vendor = vendorId ? vendorsMap[vendorId] : null;
+    const vendorName = vendor?.vendor_name || 'Unknown Vendor';
+    
+    const categoryId = part.part_category_id || null;
+    const category = categoryId ? categoriesMap[categoryId] : null;
+    const categoryName = category?.name || 'Uncategorized';
+
     // Build row object
     const row = {
       id: commitment.id,
@@ -345,6 +354,14 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       billing_source: billingSource,
       source_type: 'commitment',
       source_id: commitment.id,
+      // PHASE 3: Grouping fields for BillablePartsSelector
+      vendor_id: vendorId,
+      vendor_name: vendorName,
+      default_vendor_id: vendorId,
+      category_id: categoryId,
+      category_name: categoryName,
+      part_category_id: categoryId,
+      is_archived: part.is_archived || false,
     };
 
     // Categorize based on lifecycle state
