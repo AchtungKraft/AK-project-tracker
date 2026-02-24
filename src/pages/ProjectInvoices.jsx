@@ -229,14 +229,11 @@ export default function ProjectInvoices() {
         </div>
       </div>
 
-      {/* PHASE 6: Credit Summary - always show when project selected */}
-      {/* STABILIZATION FIX: Always pass onApplyCredit so button renders (disabled state handled in strip) */}
+      {/* PHASE 6 REFACTORED: Credit Summary uses canonical snapshot when project selected */}
+      {/* Pass projectId to enable canonical financial snapshot loading */}
       {projectFilter !== "all" && (
         <CreditSummaryStrip
-          grossExposure={grossExposure}
-          creditAvailable={totalCreditAvailable}
-          creditApplied={totalCreditApplied}
-          netExposure={netExposure}
+          projectId={normalizedProjectId}
           isLoading={isLoading || billingFetching}
           onApplyCredit={() => setShowApplyCreditModal(true)}
         />
