@@ -695,18 +695,23 @@ export default function CreateProjectInvoiceModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Create Invoice</DialogTitle>
           <DialogDescription>
             Create a new invoice for the selected project.
           </DialogDescription>
         </DialogHeader>
 
-        {renderStepIndicator()}
-        {renderStepContent()}
+        <div className="flex-shrink-0">
+          {renderStepIndicator()}
+        </div>
+        
+        <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+          {renderStepContent()}
+        </div>
 
-        <DialogFooter className="flex justify-between">
+        <DialogFooter className="flex justify-between flex-shrink-0 border-t border-gray-700 pt-4 mt-2">
           <div>
             {step > 0 && (
               <Button variant="outline" onClick={handleBack} disabled={isSubmitting}>
