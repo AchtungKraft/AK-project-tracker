@@ -416,6 +416,11 @@ Deno.serve(async (req) => {
           // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
           billing_state: normalizeBillingState(c.billing_status),
           
+          // CANONICAL: invoiced_qty for invoice eligibility (Phase 7)
+          // Invoice eligibility = required_total - invoiced_qty > 0
+          invoiced_qty: c.invoiced_qty ?? 0,
+          invoiced_amount: c.invoiced_amount ?? 0,
+          
           // PART 3: Inventory location for expanded detail view
           inventory_location: c.inventory_location || null,
 
