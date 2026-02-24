@@ -82,6 +82,13 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
           {inventoryLocation || '—'}
         </span>
       </div>
+      {/* Lifecycle Status (shown in detail view) */}
+      {item.commitment_status && (
+        <div className="flex justify-between gap-4">
+          <span>Status:</span>
+          <span className="text-gray-300 uppercase">{item.commitment_status}</span>
+        </div>
+      )}
       {isCovered && showCoveredBadge && (
         <div className="mt-1 pt-1 border-t border-gray-700">
           <span className="text-emerald-500 text-[9px]">✓ Covered</span>
