@@ -73,22 +73,7 @@ export default function PartsListView({
     return map;
   }, [partsInventoryView]);
 
-  // Batch resolve financial status for displayed parts
-  const financialContexts = useMemo(() => {
-    return parts.map(p => ({ part_id: p.id }));
-  }, [parts]);
-  
-  const { data: financialStatuses = [] } = useFinancialStatusBatch(financialContexts, {
-    enabled: parts.length > 0,
-  });
-  
-  const financialStatusMap = useMemo(() => {
-    const map = new Map();
-    financialStatuses.forEach(fs => {
-      map.set(fs.part_id, fs);
-    });
-    return map;
-  }, [financialStatuses]);
+
 
   /**
    * getInventoryStats - CANONICAL: Returns stats from read model only
