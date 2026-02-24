@@ -254,6 +254,7 @@ export default function ProjectSupplyManager() {
       
       // Derive allowed actions from CANONICAL fields (read model) ONLY
       // NO _raw fallback - read model is the single source of truth
+      // Phase 7: invoiced_qty from read model for invoice eligibility
       const allowed = getAllowedCommitmentActions({
         required_total: item.required_total,
         reserved_from_stock: item.reserved_from_stock,
@@ -263,6 +264,7 @@ export default function ProjectSupplyManager() {
         commitment_status: item._raw?.commitment_status || 'planned',
         billing_status: item.billing_status || 'billable',
         received_qty: item.received_qty || 0,
+        invoiced_qty: item.invoiced_qty ?? 0, // Phase 7: for invoice eligibility
         unit_retail_snapshot: item.unit_retail,
       });
 
