@@ -26,6 +26,8 @@
 /**
  * Build a part-level inventory map from all commitments
  * 
+ * PHASE 5/7: Use null for unresolved values, not zero
+ * 
  * @param {Array} parts - All Part entities
  * @param {Array} commitments - All PartCommitment entities (active only)
  * @returns {Map} partId -> { physical_stock, reserved_global, available, on_order }
@@ -33,14 +35,21 @@
 export function buildPartInventoryMap(parts, commitments) {
   const map = new Map();
   
+  // PHASE 7: Check if data is loaded
+  if (!parts || parts.length === 0) {
+    return map; // Return empty map, caller must check
+  }
+  
   // Initialize with part data
   for (const part of parts) {
+    // PHASE 5: Use null fallback for unresolved, preserve explicit zeros
+    const physicalStock = part.physical_stock;
     map.set(part.id, {
-      physical_stock: part.physical_stock ?? 0,
+      physical_stock: physicalStock !== undefined ? physicalStock : null,
       reserved_global: 0,
       on_order_global: 0,
       to_order_global: 0,
-      available: part.physical_stock ?? 0,
+      available: physicalStock !== undefined ? physicalStock : null,
     });
   }
   
