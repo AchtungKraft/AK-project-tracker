@@ -528,6 +528,23 @@ export default function PartModal({ part, partId, onClose }) {
             </Badge>
           </div>
         )}
+        {formData.part_type && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Part Type</p>
+            <Badge 
+              variant="outline" 
+              className={`text-xs ${
+                formData.part_type === 'PURCHASED_VENDOR' ? 'border-blue-500 text-blue-400' :
+                formData.part_type === 'AK_MANUFACTURED' ? 'border-purple-500 text-purple-400' :
+                formData.part_type === 'CLIENT_SUPPLIED' ? 'border-amber-500 text-amber-400' :
+                formData.part_type === 'TAKE_OFF' ? 'border-teal-500 text-teal-400' :
+                'border-gray-500 text-gray-400'
+              }`}
+            >
+              {formData.part_type.replace(/_/g, ' ')}
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* Car Info */}
@@ -603,15 +620,52 @@ export default function PartModal({ part, partId, onClose }) {
             <div className="h-3 w-10 bg-gray-700 rounded" />
           </div>
         ) : (
-          <div className="flex items-center gap-1 max-w-[280px] font-mono text-[11px] bg-gray-900/60 px-2 py-1.5 rounded">
-            <span className="text-white">Stock <span className="font-bold">{inventoryMetrics.physical_stock}</span></span>
-            <span className="text-gray-500">•</span>
-            <span className="text-amber-400">Res <span className="font-bold">{inventoryMetrics.reserved_global}</span></span>
-            <span className="text-gray-500">•</span>
-            <span className="text-green-400">Avail <span className="font-bold">{inventoryMetrics.available_to_allocate}</span></span>
-            <span className="text-gray-500">•</span>
-            <span className="text-blue-400">Ord <span className="font-bold">{inventoryMetrics.on_order}</span></span>
-          </div>
+          <>
+            {/* Primary metrics row */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] bg-gray-900/60 px-2 py-1.5 rounded">
+              <span className="text-white">Stock <span className="font-bold">{inventoryMetrics.physical_stock}</span></span>
+              <span className="text-gray-500">•</span>
+              <span className="text-amber-400">Res <span className="font-bold">{inventoryMetrics.reserved_global}</span></span>
+              <span className="text-gray-500">•</span>
+              <span className="text-green-400">Avail <span className="font-bold">{inventoryMetrics.available_to_allocate}</span></span>
+              <span className="text-gray-500">•</span>
+              <span className="text-blue-400">Ord <span className="font-bold">{inventoryMetrics.on_order}</span></span>
+              {inventoryMetrics.to_order > 0 && (
+                <>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-blue-400 font-semibold">ToOrd <span className="font-bold">{inventoryMetrics.to_order}</span></span>
+                </>
+              )}
+            </div>
+            
+            {/* Secondary metrics row - demand & reorder */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-gray-400 px-2">
+              {inventoryMetrics.required_total > 0 && (
+                <span>Req <span className="text-white font-bold">{inventoryMetrics.required_total}</span></span>
+              )}
+              {(formData.reorder_point > 0 || formData.reorder_quantity > 0) && (
+                <>
+                  {inventoryMetrics.required_total > 0 && <span className="text-gray-600">|</span>}
+                  <span>ROP <span className="text-white">{formData.reorder_point}</span></span>
+                  <span>ROQ <span className="text-white">{formData.reorder_quantity}</span></span>
+                </>
+              )}
+            </div>
+
+            {/* Reorder warning badge */}
+            {formData.reorder_quantity > 0 && inventoryMetrics.available_to_allocate <= formData.reorder_point && (
+              <Badge 
+                variant="outline" 
+                className={`text-[10px] ${
+                  inventoryMetrics.available_to_allocate < formData.reorder_point 
+                    ? 'border-red-500 text-red-400 bg-red-900/20' 
+                    : 'border-amber-500 text-amber-400 bg-amber-900/20'
+                }`}
+              >
+                Below Reorder Point
+              </Badge>
+            )}
+          </>
         )}
 
         {/* Location Breakdown - DISPLAY ONLY (not used for totals) */}
