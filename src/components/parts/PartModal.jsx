@@ -1347,22 +1347,28 @@ export default function PartModal({ part, partId, onClose }) {
         <CollapsibleContent>
           <div className="pt-2 space-y-3">
             <div className="flex gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-                <Button type="button" disabled={uploading} className="bg-red-600 hover:bg-red-700 gap-2" size="sm">
-                  {uploading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" />Uploading...</>
-                  ) : (
-                    <><Upload className="w-4 h-4" />Upload</>
-                  )}
-                </Button>
-              </label>
+              {/* Hidden file input with ref for robust triggering */}
+              <input
+                ref={photoInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="hidden"
+              />
+              <Button 
+                type="button" 
+                disabled={uploading} 
+                className="bg-red-600 hover:bg-red-700 gap-2" 
+                size="sm"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />Uploading...</>
+                ) : (
+                  <><Upload className="w-4 h-4" />Upload</>
+                )}
+              </Button>
               
               <label className="cursor-pointer md:hidden">
                 <input
