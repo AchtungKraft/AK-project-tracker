@@ -1,23 +1,32 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * PHASE 2 — Apply Project Credit to Commitments
+ * PHASE 3 — Apply Project Credit to Commitments (Settle Parts Without Invoice)
  * 
  * Canonical credit allocation function that:
  * - Allocates credits from ProjectCreditLedger to PartCommitments
  * - Creates CreditAllocation records
  * - Updates ProjectCreditLedger.remaining_amount
+ * - PHASE 3 NEW: Marks commitments as PAID when fully settled by credit
  * - Supports dry_run for preview
  * - Is idempotent via allocation_key
  * 
  * INPUT:
  * {
  *   project_id: string,
- *   commitment_ids?: string[],   // optional - limit to selected
+ *   commitment_ids?: string[],   // optional - limit to selected (user's chosen parts)
  *   mode: "auto" | "manual",
  *   allocations?: [{ credit_ledger_id, commitment_id, amount }],
- *   dry_run: boolean
+ *   dry_run: boolean,
+ *   settle_parts: boolean,      // PHASE 3: If true, mark fully-covered parts as PAID
  * }
+ * 
+ * PHASE 3 BUSINESS RULES:
+ * - When settle_parts=true and a commitment's outstanding is fully covered by credit:
+ *   - Set commitment.billing_status = 'paid'
+ *   - The commitment becomes PAID without ever creating an invoice
+ * - Credit is applied in the order commitments are provided
+ * - If credit runs out mid-way, remaining commitments stay NOT_INVOICED
  */
 
 // Generate deterministic allocation key for idempotency
