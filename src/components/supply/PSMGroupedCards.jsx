@@ -58,7 +58,6 @@ const SORT_OPTIONS = [
   { value: 'retail_desc', label: 'Retail (High → Low)' },
   { value: 'required_desc', label: 'Qty Required (High → Low)' },
   { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'to_order_desc', label: 'To Order (High → Low)' },
 ];
 
 // Apply sorting to items
@@ -71,8 +70,6 @@ function applySorting(items, sortMode) {
       return sorted.sort((a, b) => (b.planned_retail_total ?? 0) - (a.planned_retail_total ?? 0));
     case 'required_desc':
       return sorted.sort((a, b) => (b.required_total ?? 0) - (a.required_total ?? 0));
-    case 'to_order_desc':
-      return sorted.sort((a, b) => (b.to_order ?? 0) - (a.to_order ?? 0));
     case 'alphabetical':
       return sorted.sort((a, b) => (a.part?.part_name || '').localeCompare(b.part?.part_name || ''));
     default:
