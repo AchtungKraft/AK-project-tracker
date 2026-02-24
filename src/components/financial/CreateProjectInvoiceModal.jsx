@@ -672,23 +672,62 @@ export default function CreateProjectInvoiceModal({
               </div>
             </div>
 
-            {/* PART 4: Helper text about credit behavior */}
+            {/* PART 4: Helper text about credit behavior with line-order preview */}
             {effectiveCreditToApply > 0 && (
               <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
                 <p className="text-sm text-green-300">
                   <strong>Credit will be applied:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is created.
                 </p>
                 <p className="text-xs text-green-400/80">
-                  Credit applied here settles commitments immediately if fully covered.
+                  Credit is applied in line order (top-to-bottom). Parts fully covered become PAID immediately.
                 </p>
-                {effectiveCreditToApply >= subtotal && subtotal > 0 && (
-                  <div className="flex items-center gap-2 mt-2 p-2 bg-emerald-900/30 rounded border border-emerald-700/50">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm text-emerald-300 font-medium">
-                      These items will be marked PAID immediately.
-                    </span>
-                  </div>
-                )}
+                
+                {/* PART 1 COMPLIANCE: Show line-by-line credit allocation preview */}
+                {(() => {
+                  // Calculate which items will be PAID vs INVOICED in line order
+                  const partLines = invoiceType === "deposit" 
+                    ? [] 
+                    : selectedParts.map((p, idx) => ({
+                        name: p.part_name || 'Part',
+                        total: p.line_total || (p.qty * p.unit_retail) || 0,
+                        order: idx,
+                      }));
+                  
+                  let remainingCredit = effectiveCreditToApply;
+                  const lineStatuses = partLines.map(line => {
+                    const willBePaid = remainingCredit >= line.total && line.total > 0;
+                    if (willBePaid) {
+                      remainingCredit -= line.total;
+                    }
+                    return { ...line, willBePaid };
+                  });
+                  
+                  const paidCount = lineStatuses.filter(l => l.willBePaid).length;
+                  const invoicedCount = lineStatuses.filter(l => !l.willBePaid && l.total > 0).length;
+                  
+                  if (partLines.length === 0) return null;
+                  
+                  return (
+                    <div className="mt-2 space-y-1.5">
+                      {paidCount > 0 && (
+                        <div className="flex items-center gap-2 p-2 bg-emerald-900/30 rounded border border-emerald-700/50">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          <span className="text-sm text-emerald-300">
+                            <strong>{paidCount}</strong> item{paidCount !== 1 ? 's' : ''} will be <strong>PAID</strong> immediately
+                          </span>
+                        </div>
+                      )}
+                      {invoicedCount > 0 && (
+                        <div className="flex items-center gap-2 p-2 bg-blue-900/30 rounded border border-blue-700/50">
+                          <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                          <span className="text-sm text-blue-300">
+                            <strong>{invoicedCount}</strong> item{invoicedCount !== 1 ? 's' : ''} will remain <strong>INVOICED</strong> (awaiting payment)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
