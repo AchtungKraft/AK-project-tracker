@@ -240,6 +240,34 @@ export const creditKeys = {
 };
 
 // ============================================
+// FINANCIAL SNAPSHOT KEYS
+// ============================================
+
+/**
+ * Canonical financial snapshot query keys
+ * SOURCE: getProjectFinancialSnapshot (SINGLE SOURCE OF TRUTH)
+ */
+export const financialSnapshotKeys = {
+  all: () => {
+    const key = ['financialSnapshot'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  project: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    const key = ['financialSnapshot', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+  projectWithDiagnostics: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    const key = ['financialSnapshot', normalized, 'diagnostics'];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
+};
+
+// ============================================
 // FINANCIAL PROJECTS KEYS
 // ============================================
 
