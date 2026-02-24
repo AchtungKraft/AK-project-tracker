@@ -600,9 +600,9 @@ export default function PartsActionWorkbench() {
   });
   
   // CANONICAL: Fetch billingProcurementStates for invoiceable parts when project is selected
-  // Uses billingKeys factory imported via lifecycleKeys
+  // Uses billingKeys factory for consistent cache keys
   const { data: billingData } = useQuery({
-    queryKey: ['billingProcurementStates', projectFilter],
+    queryKey: billingKeys.states(projectFilter),
     queryFn: async () => {
       if (projectFilter === 'all') return null;
       const response = await base44.functions.invoke('getBillingAndProcurementStates', {
