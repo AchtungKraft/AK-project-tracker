@@ -88,79 +88,9 @@ Deno.serve(async (req) => {
 
     const reversalIdempotencyKey = generateReversalIdempotencyKey(invoice_id);
     const creditApplied = invoice.credit_applied ?? 0;
-    let creditReversed = 0;
-    const creditReversalDetail = [];
 
-    // ===== PHASE 1: Reverse credit if applied =====
-    if (creditApplied > 0) {
-      // Check if reversal already done (idempotency)
-      const existingReversals = await base44.entities.ProjectCreditLedger.filter({
-        project_id: invoice.project_id,
-      });
-      
-      const alreadyReversed = existingReversals.some(
-        c => c.reversal_idempotency_key === reversalIdempotencyKey
-      );
-
-      if (alreadyReversed) {
-        console.log(`Credit reversal already done for invoice ${invoice_id}`);
-      } else {
-        // Find credits that were applied to this invoice (by credit_idempotency_key)
-        const creditIdempotencyKey = invoice.credit_idempotency_key;
-        
-        if (creditIdempotencyKey) {
-          // Find all ledger entries modified by this invoice creation
-          const modifiedCredits = existingReversals.filter(
-            c => c.credit_idempotency_key === creditIdempotencyKey
-          );
-
-          // Strategy: Create a NEW credit entry representing the reversal
-          // This is cleaner than trying to restore exact original amounts
-          if (creditApplied > 0) {
-            const reversalCredit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
-              project_id: invoice.project_id,
-              source_invoice_id: invoice_id,
-              credit_amount: creditApplied,
-              remaining_amount: creditApplied,
-              notes: `Credit reversal from cancelled invoice ${invoice.qb_invoice_number || invoice_id}`,
-              reversed_from_invoice_id: invoice_id,
-              reversal_idempotency_key: reversalIdempotencyKey,
-            });
-
-            creditReversed = creditApplied;
-            creditReversalDetail.push({
-              reversal_credit_id: reversalCredit.id,
-              amount_reversed: creditApplied,
-              reversal_idempotency_key: reversalIdempotencyKey,
-            });
-          }
-        } else {
-          // No idempotency key - this is a legacy invoice
-          // Still create reversal credit
-          if (creditApplied > 0) {
-            const reversalCredit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
-              project_id: invoice.project_id,
-              source_invoice_id: invoice_id,
-              credit_amount: creditApplied,
-              remaining_amount: creditApplied,
-              notes: `Credit reversal from cancelled invoice ${invoice.qb_invoice_number || invoice_id} (legacy)`,
-              reversed_from_invoice_id: invoice_id,
-              reversal_idempotency_key: reversalIdempotencyKey,
-            });
-
-            creditReversed = creditApplied;
-            creditReversalDetail.push({
-              reversal_credit_id: reversalCredit.id,
-              amount_reversed: creditApplied,
-              reversal_idempotency_key: reversalIdempotencyKey,
-            });
-          }
-        }
-      }
-    }
-
-    // ===== PHASE 2: Revert linked commitments to 'unbilled' (ATOMIC) =====
-    // HARDENING: This phase MUST succeed entirely before credit reversal or invoice update
+    // ===== PHASE 1: Revert linked commitments to 'unbilled' (ATOMIC) =====
+    // HARDENING: This phase MUST succeed entirely BEFORE credit reversal or invoice update
     const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
       invoice_id: invoice_id,
     });
