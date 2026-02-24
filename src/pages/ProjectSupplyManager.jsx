@@ -1013,10 +1013,11 @@ export default function ProjectSupplyManager() {
               {/* Summary Strip */}
               <PSMSummaryStrip items={getFilteredCommitments('install')} tab="install" />
 
-              {/* Grouped Cards */}
+              {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
-                items={applySorting(filterActiveCommitments(getFilteredCommitments('install'), showClosedCancelled), sortBy)}
+                items={filterActiveCommitments(getFilteredCommitments('install'), showClosedCancelled)}
                 groupMode={groupMode}
+                onGroupModeChange={setGroupMode}
                 selectedItems={selectedItems}
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
