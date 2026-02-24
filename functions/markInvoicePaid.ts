@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
         });
       }
     } else if (!creditAlreadyAppliedAtCreation && subtotal > 0 && !shouldApplyCreditAtPayment) {
-      console.log(`Skipping payment-time credit for invoice ${invoice_id} (not legacy, no explicit flag)`);
+      console.log(`Skipping payment-time credit for invoice ${invoice_id} (apply_credit_at_payment !== true)`);
     }
 
     // Calculate actual balance due after credit
