@@ -44,7 +44,7 @@ export function useProjectFinancialSnapshot(projectId, options = {}) {
     ...queryOptions
   } = options;
 
-  const normalizedId = projectId ? String(projectId) : "";
+  const normalizedId = normalizeProjectId(projectId);
 
   const query = useQuery({
     queryKey: includeDiagnostics 
