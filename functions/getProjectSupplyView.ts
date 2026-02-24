@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     
     // Fetch all required data in parallel (FORWARD MODEL - no pools)
     // PERF FIX: Scope lineItems and orders to project's commitments
+    // PERF FIX: Limit parts to 500 max to prevent timeout
     const [
       project,
       commitments,
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
     ] = await Promise.all([
       base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
       base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.Part.list(),
+      base44.entities.Part.list('-created_date', 500),
       base44.entities.Vendor.list(),
       base44.entities.PartCategory.list(),
       base44.entities.ProjectInvoice.filter({ project_id }),
