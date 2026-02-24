@@ -345,8 +345,14 @@ export default function ProjectSupplyManager() {
         exposure_gap: item.exposure_gap,
         billing_status: item.billing_status,
         
+        // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
+        billing_state: item.billing_state || 'NOT_INVOICED',
+        
         // Inventory snapshot from read model
         inventory_snapshot: item.inventory_snapshot,
+        
+        // PART 3: Inventory location for expanded detail view
+        inventory_location: item.inventory_location || item._raw?.inventory_location || null,
       };
     });
   }, [supplyItems, categoriesMap]);
