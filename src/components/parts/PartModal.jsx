@@ -164,6 +164,9 @@ export default function PartModal({ part, partId, onClose }) {
   
   // PERF FIX: Handle part not found - stop dependent queries
   const partNotFound = !partLoading && !activePart && isOpen && partId && !part;
+  
+  // PERF FIX: Handle part error - show error state instead of infinite spinner
+  const partLoadError = partError && isOpen && partId;
 
   const [formData, setFormData] = useState(null);
 
