@@ -674,9 +674,9 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       )}
 
-      {/* Project Usage */}
+      {/* Project Usage - PERF FIX: Pass isOpen to gate query */}
       <div className="pt-4 border-t border-gray-700">
-        <PartProjectUsageSection partId={activePart.id} />
+        <PartProjectUsageSection partId={activePart.id} isOpen={isOpen} />
       </div>
 
       {/* Journal Section (Collapsible) */}
