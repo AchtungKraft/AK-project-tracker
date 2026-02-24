@@ -297,15 +297,17 @@ export function PSMItemRow({
           <InventoryStateBadgeSimple commitment={commitment} />
         </div>
 
-        {/* Lifecycle Status */}
-        <div className="hidden lg:block flex-shrink-0">
-          <span className={cn(
-            "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
-            statusColor
-          )}>
-            {displayStatus}
-          </span>
-        </div>
+        {/* Lifecycle Status - Show only non-PLANNED statuses (PLANNED is redundant with stock badge) */}
+        {displayStatus !== 'PLANNED' && (
+          <div className="hidden lg:block flex-shrink-0">
+            <span className={cn(
+              "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
+              statusColor
+            )}>
+              {displayStatus}
+            </span>
+          </div>
+        )}
         
         {/* CANONICAL: Billing State Badge */}
         <div className="hidden xl:block flex-shrink-0">
