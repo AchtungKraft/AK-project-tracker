@@ -11,6 +11,12 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import ImageModal from "../ui/ImageModal";
 
+/**
+ * PartJournalSection - Shows journal entries for a part
+ * 
+ * PERF FIX: Query only runs when isOpen === true AND partId exists.
+ * If section is collapsed (isOpen=false), query is completely disabled.
+ */
 export default function PartJournalSection({ partId, isOpen = true }) {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -23,10 +29,13 @@ export default function PartJournalSection({ partId, isOpen = true }) {
   });
 
   // PERF FIX: Gate with isOpen + partId, add caching and retry control
-  const { data: entries = [], isLoading } = useQuery({
+  // Query is completely disabled if isOpen is false
+  const queryEnabled = Boolean(isOpen && partId);
+  
+  const { data: entries = [], isLoading, error } = useQuery({
     queryKey: ['partJournalEntries', partId],
     queryFn: () => base44.entities.PartJournalEntry.filter({ part_id: partId }),
-    enabled: Boolean(isOpen && partId),
+    enabled: queryEnabled,
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
@@ -36,6 +45,20 @@ export default function PartJournalSection({ partId, isOpen = true }) {
       return failureCount < 1;
     },
   });
+  
+  // If section is not open, render nothing
+  if (!isOpen) {
+    return null;
+  }
+  
+  // PERF FIX: Handle error state - don't leave spinner forever
+  if (error) {
+    return (
+      <div className="text-sm text-red-400 p-3 bg-red-900/20 rounded-lg">
+        Unable to load journal entries
+      </div>
+    );
+  }
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.PartJournalEntry.create(data),
