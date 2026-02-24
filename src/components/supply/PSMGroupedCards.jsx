@@ -840,7 +840,7 @@ export default function PSMGroupedView({
     });
 
     return sorted;
-  }, [items, groupMode, subgroupMode, categoriesMap, vendorsMap]);
+  }, [filteredItems, groupMode, subgroupMode, categoriesMap, vendorsMap]);
 
   // Toggle group expansion
   const toggleGroup = (groupKey) => {
