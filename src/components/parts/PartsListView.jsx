@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
-import PricingBadge from "./PricingBadge";
 import { getPartRetailEffectiveSafe, formatCurrency } from "@/components/supply/pricingHelpers";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
