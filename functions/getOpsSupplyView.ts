@@ -41,6 +41,7 @@ Deno.serve(async (req) => {
     if (filters.project_id) commitmentFilter.project_id = filters.project_id;
     
     // Fetch core data in parallel - REMOVED pools (deprecated), REMOVED full table scans
+    // PERF FIX: Limit parts to 500 max to prevent timeout
     const [
       commitments,
       parts,
@@ -48,9 +49,9 @@ Deno.serve(async (req) => {
       vendors,
       categories,
     ] = await Promise.all([
-      base44.entities.PartCommitment.filter(commitmentFilter),
-      base44.entities.Part.list(),
-      base44.entities.Project.list(),
+      base44.entities.PartCommitment.filter(commitmentFilter, '-created_date', 1000),
+      base44.entities.Part.list('-created_date', 500),
+      base44.entities.Project.list('-created_date', 100),
       base44.entities.Vendor.list(),
       base44.entities.PartCategory.list(),
     ]);

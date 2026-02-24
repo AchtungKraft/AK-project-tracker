@@ -35,8 +35,12 @@ Deno.serve(async (req) => {
     }
     const { searchTerm, statusFilter } = body;
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+
     // Fetch projects (no server-side text search, filter in memory)
-    const projects = await base44.entities.Project.list();
+    // PERF FIX: Limit to 100 projects max to prevent timeout
+    const projects = await base44.entities.Project.list('-created_date', 100);
     
     // Early text filter to reduce project set
     let filteredProjects = projects;
@@ -226,6 +230,15 @@ Deno.serve(async (req) => {
       projects_with_alerts: finalProjects.filter(p => p.alerts.length > 0).length,
       funding_blocked_count: finalProjects.filter(p => p.is_funding_blocked).length,
     };
+
+    // PERF: Timing log
+    const _perfEnd = Date.now();
+    console.log('[PERF] getPortfolioSupplyState', _perfEnd - _perfStart, 'ms', {
+      counts: {
+        projects: finalProjects.length,
+        commitments: commitments.length,
+      }
+    });
 
     return Response.json({
       success: true,
