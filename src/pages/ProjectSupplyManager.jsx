@@ -702,12 +702,29 @@ export default function ProjectSupplyManager() {
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
+              <Button
+                onClick={() => setShowDiagnostics(!showDiagnostics)}
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "border-gray-700 text-white gap-2",
+                  showDiagnostics && "bg-amber-900/30 border-amber-700"
+                )}
+              >
+                <Wrench className="w-4 h-4" />
+                Diagnostics
+              </Button>
               <CoverageDiagnosticsPanel 
                 projectId={projectId}
                 onOpenCommitment={(c) => setQtyManagerDrawer(c)}
               />
             </div>
           </div>
+
+          {/* Phase 7: Billing Drift Diagnostics Panel */}
+          {showDiagnostics && (
+            <CommitmentBillingDiagnostics projectId={projectId} />
+          )}
 
           {/* Integrity Banner */}
           <SupplyIntegrityBanner 
