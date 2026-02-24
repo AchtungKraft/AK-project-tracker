@@ -562,9 +562,147 @@ export function PSMGroupCard({
   );
 }
 
+// Subgroup options (same list but for secondary grouping)
+const SUBGROUP_OPTIONS = [
+  { value: 'none', label: 'No Sub-group' },
+  { value: 'category', label: 'Category' },
+  { value: 'vendor', label: 'Vendor' },
+  { value: 'inventory', label: 'Inventory State' },
+];
+
+// Helper to get grouping info for an item
+function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
+  if (mode === 'vendor') {
+    const vendorDisplay = resolveVendorDisplay(item.vendor?.id, item.vendor?.vendor_name || item.vendor_name, vendorsMap);
+    return {
+      key: item.vendor?.id || 'unassigned',
+      name: vendorDisplay.name,
+      inventoryState: null,
+    };
+  } else if (mode === 'inventory') {
+    const toOrder = item.to_order ?? 0;
+    const reserved = item.reserved_from_stock ?? 0;
+    
+    if (toOrder === 0) {
+      return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
+    } else if (reserved > 0) {
+      return { key: 'PARTIAL_STOCK', name: '~ Partial Stock', inventoryState: 'PARTIAL_STOCK' };
+    } else {
+      return { key: 'OUT_OF_STOCK', name: '! Out of Stock', inventoryState: 'OUT_OF_STOCK' };
+    }
+  } else {
+    // category (default)
+    const catDisplay = resolveCategoryDisplay(item.categoryId, item.categoryObj || item.categoryName, categoriesMap);
+    return {
+      key: item.categoryId || 'uncategorized',
+      name: catDisplay.name,
+      inventoryState: null,
+    };
+  }
+}
+
+/**
+ * PSMSubGroupCard - Nested subgroup within a primary group
+ */
+function PSMSubGroupCard({
+  subgroup,
+  subgroupMode,
+  sortMode,
+  isExpanded,
+  onToggle,
+  selectedItems,
+  onSelectAll,
+  onItemSelect,
+  onPartClick,
+  onCreatePO,
+  onReceive,
+  onInstall,
+  onReverseInstall,
+  onDeltaOrder,
+  onManageQty,
+  onCancel,
+  actionsEnabled,
+  categoriesMap,
+  vendorsMap,
+  tab,
+}) {
+  const sortedItems = useMemo(() => applySorting(subgroup.items, sortMode), [subgroup.items, sortMode]);
+  
+  // Get subgroup color
+  const subgroupColor = subgroupMode === 'vendor' 
+    ? GROUP_COLORS.vendor 
+    : subgroupMode === 'inventory' 
+      ? GROUP_COLORS.inventory[subgroup.inventoryState] || GROUP_COLORS.category
+      : GROUP_COLORS.category;
+
+  const orderableIds = sortedItems.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+  const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
+  const someSelected = orderableIds.some(id => selectedItems.has(id));
+
+  return (
+    <div className="ml-4 border-l-2 border-gray-700/50">
+      {/* Subgroup Header */}
+      <div 
+        className="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-800/20 transition-colors"
+        onClick={onToggle}
+      >
+        <Checkbox
+          checked={allSelected}
+          indeterminate={someSelected && !allSelected}
+          onCheckedChange={() => onSelectAll?.(sortedItems)}
+          onClick={(e) => e.stopPropagation()}
+          disabled={orderableIds.length === 0}
+        />
+        {isExpanded ? (
+          <ChevronUp className="w-3 h-3 text-gray-500" />
+        ) : (
+          <ChevronDown className="w-3 h-3 text-gray-500" />
+        )}
+        <div 
+          className="w-2 h-2 rounded-full flex-shrink-0" 
+          style={{ backgroundColor: subgroupColor }}
+        />
+        <span className="text-xs font-medium text-gray-300 flex-1 truncate">
+          {subgroup.name}
+        </span>
+        <Badge variant="secondary" className="bg-gray-800/50 text-gray-400 text-[9px]">
+          {sortedItems.length}
+        </Badge>
+      </div>
+
+      {/* Subgroup Items */}
+      {isExpanded && (
+        <div className="ml-2">
+          {sortedItems.map(commitment => (
+            <PSMItemRow
+              key={commitment.id}
+              commitment={commitment}
+              isSelected={selectedItems.has(commitment.id)}
+              onSelect={() => onItemSelect?.(commitment.id)}
+              onPartClick={onPartClick}
+              onCreatePO={onCreatePO}
+              onReceive={onReceive}
+              onInstall={onInstall}
+              onReverseInstall={onReverseInstall}
+              onDeltaOrder={onDeltaOrder}
+              onManageQty={onManageQty}
+              onCancel={onCancel}
+              actionsEnabled={actionsEnabled}
+              categoriesMap={categoriesMap}
+              vendorsMap={vendorsMap}
+              tab={tab}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * PSMGroupedView - Main grouped card view container
  * PHASE 5: Grouping + Sorting Enhancement
+ * PHASE 6: Sub-grouping support
  */
 export default function PSMGroupedView({
   items,
@@ -587,41 +725,29 @@ export default function PSMGroupedView({
   tab,
 }) {
   const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
+  const [expandedSubgroups, setExpandedSubgroups] = useState(new Set());
+  const [subgroupMode, setSubgroupMode] = useState('none');
   const [sortMode, setSortMode] = useState('exposure_desc');
 
-  // Group items by mode
+  // Get available subgroup options (exclude current primary group)
+  const availableSubgroupOptions = useMemo(() => {
+    return SUBGROUP_OPTIONS.filter(opt => opt.value === 'none' || opt.value !== groupMode);
+  }, [groupMode]);
+
+  // Reset subgroup when primary group changes if they match
+  React.useEffect(() => {
+    if (subgroupMode === groupMode) {
+      setSubgroupMode('none');
+    }
+  }, [groupMode, subgroupMode]);
+
+  // Group items by mode, with optional subgrouping
   const groups = useMemo(() => {
     const result = {};
 
     items.forEach(item => {
-      let groupKey, groupName, inventoryState;
-
-      if (groupMode === 'vendor') {
-        groupKey = item.vendor?.id || 'unassigned';
-        const vendorDisplay = resolveVendorDisplay(item.vendor?.id, item.vendor?.vendor_name || item.vendor_name, vendorsMap);
-        groupName = vendorDisplay.name;
-      } else if (groupMode === 'inventory') {
-        // PHASE 5: Group by inventory state
-        const toOrder = item.to_order ?? 0;
-        const reserved = item.reserved_from_stock ?? 0;
-        
-        if (toOrder === 0) {
-          inventoryState = 'IN_STOCK';
-          groupName = '✓ In Stock';
-        } else if (reserved > 0) {
-          inventoryState = 'PARTIAL_STOCK';
-          groupName = '~ Partial Stock';
-        } else {
-          inventoryState = 'OUT_OF_STOCK';
-          groupName = '! Out of Stock';
-        }
-        groupKey = inventoryState;
-      } else {
-        // category (default)
-        groupKey = item.categoryId || 'uncategorized';
-        const catDisplay = resolveCategoryDisplay(item.categoryId, item.categoryObj || item.categoryName, categoriesMap);
-        groupName = catDisplay.name;
-      }
+      const groupInfo = getGroupInfo(item, groupMode, categoriesMap, vendorsMap);
+      const { key: groupKey, name: groupName, inventoryState } = groupInfo;
 
       if (!result[groupKey]) {
         result[groupKey] = {
@@ -629,9 +755,26 @@ export default function PSMGroupedView({
           name: groupName,
           inventoryState,
           items: [],
+          subgroups: {},
         };
       }
       result[groupKey].items.push(item);
+
+      // Handle subgrouping if enabled
+      if (subgroupMode !== 'none') {
+        const subInfo = getGroupInfo(item, subgroupMode, categoriesMap, vendorsMap);
+        const subKey = subInfo.key;
+        
+        if (!result[groupKey].subgroups[subKey]) {
+          result[groupKey].subgroups[subKey] = {
+            key: subKey,
+            name: subInfo.name,
+            inventoryState: subInfo.inventoryState,
+            items: [],
+          };
+        }
+        result[groupKey].subgroups[subKey].items.push(item);
+      }
     });
 
     // Sort groups
@@ -643,8 +786,20 @@ export default function PSMGroupedView({
       sorted.sort((a, b) => a.name.localeCompare(b.name));
     }
 
+    // Sort subgroups within each group
+    sorted.forEach(group => {
+      const subArr = Object.values(group.subgroups);
+      if (subgroupMode === 'inventory') {
+        const order = { OUT_OF_STOCK: 0, PARTIAL_STOCK: 1, IN_STOCK: 2 };
+        subArr.sort((a, b) => (order[a.inventoryState] ?? 3) - (order[b.inventoryState] ?? 3));
+      } else {
+        subArr.sort((a, b) => a.name.localeCompare(b.name));
+      }
+      group.sortedSubgroups = subArr;
+    });
+
     return sorted;
-  }, [items, groupMode, categoriesMap, vendorsMap]);
+  }, [items, groupMode, subgroupMode, categoriesMap, vendorsMap]);
 
   // Toggle group expansion
   const toggleGroup = (groupKey) => {
@@ -652,6 +807,16 @@ export default function PSMGroupedView({
       const next = new Set(prev);
       if (next.has(groupKey)) next.delete(groupKey);
       else next.add(groupKey);
+      return next;
+    });
+  };
+
+  // Toggle subgroup expansion
+  const toggleSubgroup = (subgroupKey) => {
+    setExpandedSubgroups(prev => {
+      const next = new Set(prev);
+      if (next.has(subgroupKey)) next.delete(subgroupKey);
+      else next.add(subgroupKey);
       return next;
     });
   };
@@ -699,6 +864,17 @@ export default function PSMGroupedView({
     }
   }, [groups]);
 
+  // Auto-expand all subgroups when subgrouping is enabled
+  React.useEffect(() => {
+    if (subgroupMode !== 'none') {
+      const allSubKeys = new Set();
+      groups.forEach(g => {
+        g.sortedSubgroups?.forEach(sg => allSubKeys.add(`${g.key}:${sg.key}`));
+      });
+      setExpandedSubgroups(allSubKeys);
+    }
+  }, [subgroupMode, groups]);
+
   if (items.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -709,10 +885,12 @@ export default function PSMGroupedView({
 
   return (
     <div className="space-y-3">
-      {/* PHASE 5: Grouping + Sorting Controls */}
+      {/* Grouping + Sub-grouping + Sorting Controls */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
+        {/* Primary Group */}
+        <div className="flex items-center gap-1.5">
           <Layers className="w-4 h-4 text-gray-500" />
+          <span className="text-[10px] text-gray-500 uppercase">Group</span>
           <Select value={groupMode} onValueChange={onGroupModeChange}>
             <SelectTrigger className="w-32 h-8 text-xs bg-gray-900 border-gray-700">
               <SelectValue />
@@ -724,9 +902,27 @@ export default function PSMGroupedView({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Sub-group */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-600">→</span>
+          <span className="text-[10px] text-gray-500 uppercase">Then</span>
+          <Select value={subgroupMode} onValueChange={setSubgroupMode}>
+            <SelectTrigger className="w-32 h-8 text-xs bg-gray-900 border-gray-700">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSubgroupOptions.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         
-        <div className="flex items-center gap-2">
+        {/* Sort */}
+        <div className="flex items-center gap-1.5 ml-auto">
           <ArrowUpDown className="w-4 h-4 text-gray-500" />
+          <span className="text-[10px] text-gray-500 uppercase">Sort</span>
           <Select value={sortMode} onValueChange={setSortMode}>
             <SelectTrigger className="w-44 h-8 text-xs bg-gray-900 border-gray-700">
               <SelectValue />
@@ -742,13 +938,16 @@ export default function PSMGroupedView({
 
       {/* Groups */}
       {groups.map(group => (
-        <PSMGroupCard
+        <PSMGroupCardWithSubgroups
           key={group.key}
           group={group}
           groupMode={groupMode}
+          subgroupMode={subgroupMode}
           sortMode={sortMode}
           isExpanded={expandedGroups.has(group.key)}
+          expandedSubgroups={expandedSubgroups}
           onToggle={() => toggleGroup(group.key)}
+          onToggleSubgroup={(subKey) => toggleSubgroup(`${group.key}:${subKey}`)}
           selectedItems={selectedItems}
           onSelectAll={selectAllInGroup}
           onItemSelect={selectItem}
@@ -768,5 +967,212 @@ export default function PSMGroupedView({
         />
       ))}
     </div>
+  );
+}
+
+/**
+ * PSMGroupCardWithSubgroups - Enhanced group card with subgroup support
+ */
+function PSMGroupCardWithSubgroups({
+  group,
+  groupMode,
+  subgroupMode,
+  sortMode,
+  isExpanded,
+  expandedSubgroups,
+  onToggle,
+  onToggleSubgroup,
+  selectedItems,
+  onSelectAll,
+  onItemSelect,
+  onPartClick,
+  onCreatePO,
+  onReceive,
+  onInstall,
+  onReverseInstall,
+  onDeltaOrder,
+  onManageQty,
+  onCancel,
+  onGroupOrder,
+  actionsEnabled,
+  categoriesMap,
+  vendorsMap,
+  tab,
+}) {
+  const items = group.items;
+  const hasSubgroups = subgroupMode !== 'none' && group.sortedSubgroups?.length > 0;
+  
+  // Sort items for flat view (when no subgrouping)
+  const sortedItems = useMemo(() => applySorting(items, sortMode), [items, sortMode]);
+
+  // Calculate group stats
+  const groupStats = useMemo(() => {
+    const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
+    const totalCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
+    const readyCount = items.filter(i => {
+      if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
+      if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
+      return true;
+    }).length;
+    const inventoryCounts = getInventoryStateCounts(items);
+    return { totalQty, totalExposure, totalCost, readyCount, ...inventoryCounts };
+  }, [items, tab]);
+
+  // Get group color
+  const groupColor = groupMode === 'vendor' 
+    ? GROUP_COLORS.vendor 
+    : groupMode === 'inventory' 
+      ? GROUP_COLORS.inventory[group.inventoryState] || GROUP_COLORS.category
+      : GROUP_COLORS.category;
+
+  // Check if all orderable items are selected
+  const orderableIds = items.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+  const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
+  const someSelected = orderableIds.some(id => selectedItems.has(id));
+
+  return (
+    <Card className="bg-black/40 border-gray-800 overflow-hidden">
+      {/* Group Header */}
+      <div 
+        className="flex items-center gap-2 p-2 md:p-3 cursor-pointer hover:bg-gray-800/30 transition-colors border-l-4"
+        style={{ borderLeftColor: groupColor }}
+        onClick={onToggle}
+      >
+        {/* Select All Checkbox */}
+        <Checkbox
+          checked={allSelected}
+          indeterminate={someSelected && !allSelected}
+          onCheckedChange={() => onSelectAll?.(items)}
+          onClick={(e) => e.stopPropagation()}
+          disabled={orderableIds.length === 0}
+        />
+
+        {/* Expand/Collapse */}
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        )}
+
+        {/* Color Dot */}
+        <div 
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+          style={{ backgroundColor: groupColor }}
+        />
+
+        {/* Group Name */}
+        <span className="text-sm font-semibold text-white flex-1 truncate">
+          {group.name}
+        </span>
+
+        {/* Item Count */}
+        <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px]">
+          {items.length}
+        </Badge>
+
+        {/* Inventory State Mini Counts */}
+        <div className="hidden md:flex items-center gap-1">
+          {groupStats.inStock > 0 && (
+            <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
+          )}
+          {groupStats.partialStock > 0 && (
+            <span className="text-[10px] text-amber-400 font-mono">{groupStats.partialStock}~</span>
+          )}
+          {groupStats.outOfStock > 0 && (
+            <span className="text-[10px] text-red-400 font-mono">{groupStats.outOfStock}!</span>
+          )}
+        </div>
+
+        {/* Exposure Total */}
+        {groupStats.totalExposure > 0 && (
+          <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            {formatCurrencyUSD(groupStats.totalExposure)}
+          </Badge>
+        )}
+
+        {/* Est Cost */}
+        <span className="text-[10px] text-gray-500 font-mono hidden lg:block">
+          {formatCurrencyUSD(groupStats.totalCost)}
+        </span>
+
+        {/* Order All Button */}
+        {tab === 'buy' && groupStats.readyCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onGroupOrder?.(items);
+            }}
+            className="border-purple-700 text-purple-400 hover:bg-purple-900/30 h-6 text-[10px]"
+          >
+            <ShoppingCart className="w-3 h-3 mr-1" />
+            Order {groupStats.readyCount}
+          </Button>
+        )}
+      </div>
+
+      {/* Group Content (expanded) */}
+      {isExpanded && (
+        <div className="border-t border-gray-800">
+          {items.length === 0 ? (
+            <p className="text-center py-6 text-gray-500">No items in this group</p>
+          ) : hasSubgroups ? (
+            // Render with subgroups
+            <div className="py-1">
+              {group.sortedSubgroups.map(subgroup => (
+                <PSMSubGroupCard
+                  key={subgroup.key}
+                  subgroup={subgroup}
+                  subgroupMode={subgroupMode}
+                  sortMode={sortMode}
+                  isExpanded={expandedSubgroups.has(`${group.key}:${subgroup.key}`)}
+                  onToggle={() => onToggleSubgroup(subgroup.key)}
+                  selectedItems={selectedItems}
+                  onSelectAll={onSelectAll}
+                  onItemSelect={onItemSelect}
+                  onPartClick={onPartClick}
+                  onCreatePO={onCreatePO}
+                  onReceive={onReceive}
+                  onInstall={onInstall}
+                  onReverseInstall={onReverseInstall}
+                  onDeltaOrder={onDeltaOrder}
+                  onManageQty={onManageQty}
+                  onCancel={onCancel}
+                  actionsEnabled={actionsEnabled}
+                  categoriesMap={categoriesMap}
+                  vendorsMap={vendorsMap}
+                  tab={tab}
+                />
+              ))}
+            </div>
+          ) : (
+            // Render flat list (no subgrouping)
+            sortedItems.map(commitment => (
+              <PSMItemRow
+                key={commitment.id}
+                commitment={commitment}
+                isSelected={selectedItems.has(commitment.id)}
+                onSelect={() => onItemSelect?.(commitment.id)}
+                onPartClick={onPartClick}
+                onCreatePO={onCreatePO}
+                onReceive={onReceive}
+                onInstall={onInstall}
+                onReverseInstall={onReverseInstall}
+                onDeltaOrder={onDeltaOrder}
+                onManageQty={onManageQty}
+                onCancel={onCancel}
+                actionsEnabled={actionsEnabled}
+                categoriesMap={categoriesMap}
+                vendorsMap={vendorsMap}
+                tab={tab}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
