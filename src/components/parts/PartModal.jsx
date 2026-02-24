@@ -643,6 +643,15 @@ export default function PartModal({ part, partId, onClose }) {
       reorder_quantity: formData.reorder_quantity,
     };
 
+    // DEV: Phase 1D - Confirm save payload includes photos
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[UPLOAD_DEBUG D] Save payload:', {
+        photosLength: updatePayload.photos?.length || 0,
+        featured_photo: updatePayload.featured_photo,
+        photos: updatePayload.photos,
+      });
+    }
+
     // PHASE 16: Simplified - drift detection handled by canonical refetch
     updateMutation.mutate(updatePayload);
   };
