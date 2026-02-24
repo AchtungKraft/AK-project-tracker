@@ -39,6 +39,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+
     const body = await req.json().catch(() => ({}));
     const { 
       include_archived = false,
@@ -205,6 +208,16 @@ Deno.serve(async (req) => {
         p.vendor_part_number?.toLowerCase().includes(searchLower)
       );
     }
+
+    // PERF: Timing log (dev only)
+    const _perfEnd = Date.now();
+    console.log('[PERF] getPartsInventoryView', _perfEnd - _perfStart, 'ms', {
+      entityCounts: {
+        parts: parts.length,
+        commitments: commitments.length,
+        filtered: filteredParts.length,
+      }
+    });
 
     return Response.json({
       success: true,

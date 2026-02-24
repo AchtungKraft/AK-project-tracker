@@ -24,6 +24,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+
     // Fetch all required data in parallel
     const [projects, projectTypes, commitments, invoices, creditLedger] = await Promise.all([
       base44.entities.Project.filter({ is_system_project: { $ne: true } }),
@@ -138,6 +141,18 @@ Deno.serve(async (req) => {
 
     // Sort by project name
     financialProjects.sort((a, b) => a.project_name.localeCompare(b.project_name));
+
+    // PERF: Timing log (dev only)
+    const _perfEnd = Date.now();
+    console.log('[PERF] getFinancialProjectsView', _perfEnd - _perfStart, 'ms', {
+      entityCounts: {
+        projects: projects.length,
+        commitments: commitments.length,
+        invoices: invoices.length,
+        creditLedger: creditLedger.length,
+        financialProjects: financialProjects.length,
+      }
+    });
 
     return Response.json({
       success: true,

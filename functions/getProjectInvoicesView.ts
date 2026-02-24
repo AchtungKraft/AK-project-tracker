@@ -36,6 +36,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+
     const payload = await req.json().catch(() => ({}));
     const { project_id, status } = payload;
 
@@ -199,6 +202,18 @@ Deno.serve(async (req) => {
         .filter(i => i.status === 'sent')
         .reduce((sum, i) => sum + (i.balance_due ?? 0), 0),
     };
+
+    // PERF: Timing log (dev only)
+    const _perfEnd = Date.now();
+    console.log('[PERF] getProjectInvoicesView', _perfEnd - _perfStart, 'ms', {
+      entityCounts: {
+        invoices: invoices.length,
+        lines: relevantLines.length,
+        commitments: commitments.length,
+        parts: parts.length,
+        credits: credits.length,
+      }
+    });
 
     return Response.json({
       success: true,
