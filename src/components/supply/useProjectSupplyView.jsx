@@ -147,11 +147,14 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   // PERF FIX: Trust backend canonical values - NO frontend re-derivation
   const items = query.data?.items || [];
   
+  // PHASE 3: Detect stuck loading state
+  const effectiveLoading = query.isLoading && !query.isError;
+  
   return {
     items,
     summary: query.data?.summary || {},
     filterOptions,
-    isLoading: query.isLoading,
+    isLoading: effectiveLoading,
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,
