@@ -336,7 +336,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
           creditAvailable={creditSummary.total_credit_available}
           creditApplied={creditSummary.total_credit_applied}
           netExposure={creditSummary.net_exposure}
-          selectedCount={selectedCommitmentIds.size}
+          selectedCount={0}
           onApplyCredit={() => setShowCreditModal(true)}
           isLoading={isLoading}
         />
