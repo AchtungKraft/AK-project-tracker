@@ -214,6 +214,11 @@ export function PSMItemRow({
 
   // PHASE 6: Disable ordering when gap_qty === 0
   const canOrder = allowed?.canCreatePO && toOrder > 0;
+  
+  // CANONICAL: Invoice eligibility from backend
+  const canInvoice = allowed?.canInvoice ?? true;
+  const invoiceBlockReason = commitment.invoice_block_reason_text;
+  const billingState = commitment.billing_state || 'NOT_INVOICED';
 
   return (
     <div className={cn(
@@ -299,6 +304,18 @@ export function PSMItemRow({
             statusColor
           )}>
             {displayStatus}
+          </span>
+        </div>
+        
+        {/* CANONICAL: Billing State Badge */}
+        <div className="hidden xl:block flex-shrink-0">
+          <span className={cn(
+            "text-[9px] font-mono uppercase px-1.5 py-0.5 rounded whitespace-nowrap",
+            billingState === 'PAID' && "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50",
+            billingState === 'INVOICED' && "bg-blue-900/50 text-blue-400 border border-blue-700/50",
+            billingState === 'NOT_INVOICED' && "bg-gray-800/50 text-gray-400 border border-gray-700/50"
+          )}>
+            {billingState.replace('_', ' ')}
           </span>
         </div>
 
