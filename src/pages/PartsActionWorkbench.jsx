@@ -543,6 +543,8 @@ export default function PartsActionWorkbench() {
   const [executingIds, setExecutingIds] = useState(new Set());
   // Forward model: single ProjectInvoice flow via CreateProjectInvoiceModal
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+  // PHASE 3: Settle parts with credit modal
+  const [showSettleCreditModal, setShowSettleCreditModal] = useState(false);
 
   // Lifecycle action hook
   const { executeActionAsync, isExecuting } = useLifecycleAction();
