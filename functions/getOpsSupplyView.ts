@@ -468,47 +468,64 @@ function mapSourceType(legacyType) {
 }
 
 /**
- * PHASE 9K-B: SIMPLIFIED ORDERING GATING
+ * PHASE 10: PREPAY GATING uses commitment-level payment resolution
  * 
  * ORDERING MODE gating is ONLY:
  * - NO_VENDOR: no vendor assigned
- * - PREPAY_REQUIRED: requires_prepay === true AND prepay_ok !== true
+ * - PREPAY_REQUIRED: requires_prepay === true AND prepay NOT satisfied
  * 
- * NO OTHER BILLING CHECKS (no invoice, no pool, no exposure)
+ * Prepay is satisfied when:
+ * 1. Commitment has been invoiced (invoicedRetail > 0)
+ * 2. Paid amount >= invoiced amount (with 0.01 tolerance for rounding)
  */
-function computeNextAction(commitment, partHasVendor, poolBalance, exposureGap) {
+function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
   const {
     required_total = 0,
     reserved_from_stock = 0,
     covered_from_po = 0,
     qty_installed = 0,
     requires_prepay = false,
-    prepay_ok = false,
   } = commitment;
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
 
-  // PHASE 9K-B: ONLY vendor and prepay block ordering - NO invoice/pool checks
-  if (to_order > 0 && !partHasVendor) {
-    return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR' };
-  }
-  if (to_order > 0 && requires_prepay === true && prepay_ok !== true) {
-    return { next_action: 'ALLOCATE_POOL', block_reason_code: 'PREPAY_REQUIRED' };
-  }
-  // REMOVED: exposure_gap / pool balance checks - these do NOT block ordering
-  if (to_order > 0) {
-    return { next_action: 'CREATE_PO', block_reason_code: null };
-  }
-  if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
-    return { next_action: 'RECEIVE', block_reason_code: null };
-  }
-  if (available_to_install > 0 && qty_installed < required_total) {
-    return { next_action: 'INSTALL', block_reason_code: null };
-  }
-  if (qty_installed >= required_total && required_total > 0) {
-    return { next_action: 'COMPLETE', block_reason_code: null };
+  // Build prepay diagnostics
+  let prepay_diagnostics = null;
+  if (requires_prepay) {
+    const invoicedRetail = prepayContext.invoicedRetail ?? 0;
+    const paidRetail = prepayContext.paidRetail ?? 0;
+    const prepaySatisfied = invoicedRetail > 0 && paidRetail >= (invoicedRetail - 0.01);
+    
+    prepay_diagnostics = {
+      prepay_invoiced_retail: invoicedRetail,
+      prepay_paid_retail: paidRetail,
+      prepay_satisfied: prepaySatisfied,
+    };
+    
+    // Block if prepay required but not satisfied
+    if (to_order > 0 && !prepaySatisfied) {
+      return { next_action: 'ALLOCATE_POOL', block_reason_code: 'PREPAY_REQUIRED', prepay_diagnostics };
+    }
   }
 
-  return { next_action: null, block_reason_code: null };
+  // Vendor check
+  if (to_order > 0 && !partHasVendor) {
+    return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR', prepay_diagnostics };
+  }
+  
+  if (to_order > 0) {
+    return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
+  }
+  if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
+    return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
+  }
+  if (available_to_install > 0 && qty_installed < required_total) {
+    return { next_action: 'INSTALL', block_reason_code: null, prepay_diagnostics };
+  }
+  if (qty_installed >= required_total && required_total > 0) {
+    return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
+  }
+
+  return { next_action: null, block_reason_code: null, prepay_diagnostics };
 }
