@@ -133,6 +133,13 @@ function groupByVendorThenCategory(items) {
       gross_exposure: grossExposure,
       credit_applied: creditApplied,
       net_exposure: netExposure,
+      // CANONICAL: Pass through eligibility contract from backend
+      canInvoice: item.allowed?.canInvoice ?? true,
+      invoice_block_reason_code: item.invoice_block_reason_code,
+      invoice_block_reason_text: item.invoice_block_reason_text,
+      invoice_warning_code: item.invoice_warning_code,
+      invoice_warning_text: item.invoice_warning_text,
+      billing_state: item.billing_state,
     };
     
     vendorMap[vendorKey].categories[categoryKey].items.push(formattedItem);
@@ -189,34 +196,18 @@ export default function BillablePartsSelector({
 
   const { data: billingData, isLoading, error } = useBillingAndProcurementStates(normalizedProjectId);
   
-  const { vendorGroups, summary, contractWarning } = useMemo(() => {
-    if (!billingData) return { vendorGroups: [], summary: null, contractWarning: null };
+  const { vendorGroups, summary, contractWarning, allItems } = useMemo(() => {
+    if (!billingData) return { vendorGroups: [], summary: null, contractWarning: null, allItems: [] };
     
     const commitments = billingData.commitments || [];
     let warning = null;
     
-    // Filter to unbilled items with positive exposure
+    // CANONICAL: Filter by billing_state = NOT_INVOICED only (use backend canonical field)
+    // We show all items but mark eligibility via allowed.canInvoice from backend
     const unbilledItems = commitments.filter(c => {
-      if (c.is_archived === true) return false;
-      
-      const netExposure = c.net_exposure ?? c.net_line_total ?? 0;
-      const grossExposure = c.gross_exposure ?? c.gross_line_total ?? 0;
-      
-      // Only include items with exposure
-      if (netExposure <= 0 && grossExposure <= 0) return false;
-      
-      // Check billing status - allow multiple formats
-      const invoiceStatus = c.invoice_status;
-      const billingStatus = c.billing_status || c.client_billing_status;
-      
-      const isUnbilled = 
-        invoiceStatus === 'unbilled' || 
-        billingStatus === 'NOT_INVOICED' ||
-        billingStatus === 'not_invoiced' ||
-        billingStatus === 'unbilled' ||
-        (!invoiceStatus && !billingStatus);
-      
-      return isUnbilled;
+      // Only show items with billing_state = NOT_INVOICED
+      const billingState = c.billing_state || 'NOT_INVOICED';
+      return billingState === 'NOT_INVOICED';
     });
     
     if (commitments.length > 0 && unbilledItems.length === 0) {
@@ -229,9 +220,10 @@ export default function BillablePartsSelector({
       vendorGroups: grouped,
       summary: {
         total_items: unbilledItems.length,
-        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + (i.net_exposure ?? i.net_line_total ?? 0), 0),
+        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + (i.outstanding_retail_amount ?? i.net_exposure ?? i.net_line_total ?? 0), 0),
       },
       contractWarning: warning,
+      allItems: unbilledItems,
     };
   }, [billingData]);
   
