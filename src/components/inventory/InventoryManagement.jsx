@@ -22,11 +22,15 @@ import {
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
 import AddToBuildModal from "../parts/AddToBuildModal";
+import { useReferenceData } from "@/components/common/useReferenceData";
+import { operationalDataConfig } from "@/components/common/queryConfig";
 
 /**
  * InventoryManagement - CANONICAL: Uses getPartsInventoryView read model
  * NO direct InventoryItem.quantity_on_hand/quantity_reserved reads
  * All inventory data from Part.physical_stock + commitment aggregations
+ * 
+ * PHASE 2/3: Uses centralized reference data
  */
 export default function InventoryManagement({ onPartClick }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,45 +43,38 @@ export default function InventoryManagement({ onPartClick }) {
   const [showDemandDetail, setShowDemandDetail] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
 
+  // PHASE 2: Use centralized reference data
+  const { 
+    ready: referenceReady, 
+    categories, 
+    categoriesMap 
+  } = useReferenceData();
+
   // CANONICAL: Use read model for inventory view
-  // PERF FIX: Safe caching - 15s stale, 60s cache, limit initial load to 200 parts
+  // PHASE 1: Extended caching
   const { data: partsInventoryView = [], isLoading } = useQuery({
     queryKey: ['partsInventoryView'],
     queryFn: async () => {
       const res = await base44.functions.invoke('getPartsInventoryView', { limit: 200 });
       return res.data?.parts || [];
     },
-    staleTime: 15000,
-    gcTime: 60000,
+    staleTime: 60000,
+    gcTime: 300000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // PERF FIX: Only fetch reference data - partsInventoryView is canonical source
-  // Removed duplicate Part.list(), PartCommitment.list(), PartPurchaseLineItem.list()
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
     queryFn: () => base44.entities.Part.list(),
-    staleTime: 30000,
-    gcTime: 120000,
+    ...operationalDataConfig,
   });
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list(),
-    staleTime: 60000,
-    gcTime: 300000,
-  });
-
-  // PERF FIX: Removed - partsInventoryView provides aggregated commitment data
-  // const { data: commitments = [] } = ...
-  // const { data: lineItems = [] } = ...
-  // const { data: orders = [] } = ...
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
-    staleTime: 30000,
-    gcTime: 120000,
+    ...operationalDataConfig,
   });
 
   // Get all descendant category IDs
