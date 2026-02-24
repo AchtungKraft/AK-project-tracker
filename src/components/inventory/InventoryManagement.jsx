@@ -40,12 +40,16 @@ export default function InventoryManagement({ onPartClick }) {
   const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
 
   // CANONICAL: Use read model for inventory view
+  // PERF FIX: Safe caching - 15s stale, 60s cache
   const { data: partsInventoryView = [], isLoading } = useQuery({
     queryKey: ['partsInventoryView'],
     queryFn: async () => {
       const res = await base44.functions.invoke('getPartsInventoryView', {});
       return res.data?.parts || [];
     },
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   // PERF FIX: Only fetch reference data - partsInventoryView is canonical source
