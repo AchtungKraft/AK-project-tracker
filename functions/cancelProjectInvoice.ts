@@ -118,12 +118,14 @@ Deno.serve(async (req) => {
 
         const commitment = commitments[0];
         
-        // Only revert if currently 'invoiced' (not if already paid by another invoice)
+        // Revert billing status based on current state
+        // PART 1 FIX: Also revert commitments that were auto-settled to 'paid' via credit
         if (commitment.billing_status === 'invoiced') {
           await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
             billing_status: 'unbilled',
             invoiced_qty: 0,
             invoiced_retail_total: 0,
+            invoiced_amount: 0,
           });
 
           revertedCommitmentIds.push(commitmentId);
@@ -134,12 +136,37 @@ Deno.serve(async (req) => {
             to: 'unbilled',
           });
         } else if (commitment.billing_status === 'paid') {
-          // Already paid - do not revert
-          commitmentRevertResults.push({
-            commitment_id: commitmentId,
-            status: 'skipped',
-            reason: 'already_paid_by_other_mechanism',
-          });
+          // PART 1 STABILIZATION: Check if this commitment was auto-settled by THIS invoice via credit
+          // We can determine this by checking if the commitment's invoiced_amount matches a line on this invoice
+          const matchingLine = invoiceLines.find(l => l.part_commitment_id === commitmentId);
+          const lineTotal = matchingLine?.line_total || 0;
+          
+          // If the commitment was paid via credit on THIS invoice, revert it
+          // We know this because credit_applied > 0 and commitment is 'paid' with matching line total
+          if (creditApplied > 0 && lineTotal > 0) {
+            await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
+              billing_status: 'unbilled',
+              invoiced_qty: 0,
+              invoiced_retail_total: 0,
+              invoiced_amount: 0,
+            });
+
+            revertedCommitmentIds.push(commitmentId);
+            commitmentRevertResults.push({
+              commitment_id: commitmentId,
+              status: 'reverted',
+              from: 'paid',
+              to: 'unbilled',
+              reason: 'credit_auto_settled_reverted',
+            });
+          } else {
+            // Paid by another mechanism (e.g., direct payment on another invoice)
+            commitmentRevertResults.push({
+              commitment_id: commitmentId,
+              status: 'skipped',
+              reason: 'already_paid_by_other_mechanism',
+            });
+          }
         } else {
           commitmentRevertResults.push({
             commitment_id: commitmentId,
