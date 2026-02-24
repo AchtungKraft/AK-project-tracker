@@ -215,10 +215,23 @@ export function PSMItemRow({
   // PHASE 6: Disable ordering when gap_qty === 0
   const canOrder = allowed?.canCreatePO && toOrder > 0;
   
-  // CANONICAL: Invoice eligibility from backend
-  const canInvoice = allowed?.canInvoice ?? true;
+  // CANONICAL: Invoice eligibility from backend (canCreateInvoice, not canInvoice)
+  const canInvoice = allowed?.canCreateInvoice ?? false;
   const invoiceBlockReason = commitment.invoice_block_reason_text;
   const billingState = commitment.billing_state || 'NOT_INVOICED';
+
+  // PHASE 2: Install Eligibility Debug Trace
+  if (process.env.NODE_ENV === 'development') {
+    console.log("INSTALL DEBUG", {
+      part: part?.part_name,
+      reserved: commitment.reserved_from_stock,
+      installed: commitment.qty_installed,
+      available_to_install: commitment.available_to_install,
+      allowedInstall: allowed?.canInstall,
+      block_reason_code: commitment.block_reason_code,
+      actionsEnabled,
+    });
+  }
 
   return (
     <div className={cn(
