@@ -227,6 +227,39 @@ export default function PartsExplorerLayout({ onPartClick }) {
     setCurrentPage(1);
   }, [debouncedSearchTerm, selectedCategoryId]);
 
+  // PHASE 4: Render gate - don't render list until reference data is ready
+  if (!referenceReady) {
+    return (
+      <div className="flex flex-col bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-8rem)] p-6">
+        <div className="space-y-4">
+          <div className="animate-pulse h-8 bg-gray-800 rounded w-1/3" />
+          <div className="animate-pulse h-12 bg-gray-800 rounded" />
+          <div className="animate-pulse h-12 bg-gray-800 rounded" />
+          <div className="animate-pulse h-12 bg-gray-800 rounded" />
+          <div className="animate-pulse h-12 bg-gray-800 rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  // PHASE 8: Fail safe for reference data errors
+  if (referenceError) {
+    return (
+      <div className="flex flex-col bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-8rem)] p-6">
+        <div className="text-center py-12">
+          <p className="text-red-400 mb-2">Reference data unavailable</p>
+          <p className="text-gray-500 text-sm mb-4">Unable to load categories, vendors, or vehicle data</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="flex flex-col bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-8rem)] md:overflow-hidden">
