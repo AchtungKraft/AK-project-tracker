@@ -91,7 +91,8 @@ Deno.serve(async (req) => {
       commitment_ids, 
       mode = 'auto', 
       allocations: manualAllocations,
-      dry_run = true 
+      dry_run = true,
+      settle_parts = false, // PHASE 3: If true, mark fully-covered parts as PAID
     } = payload;
 
     if (!project_id) {
