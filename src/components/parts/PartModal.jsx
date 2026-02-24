@@ -338,7 +338,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
-  // PERF FIX: Gate with isOpen + effectivePartId, safe caching, retry control
+  // PHASE 1: Extended caching to prevent refetch storms
   const {
     data: partInventoryView,
     isLoading: inventoryLoading,
@@ -349,22 +349,17 @@ export default function PartModal({ part, partId, onClose }) {
     queryFn: async () => {
       // Defensive: prevent late resolution into closed modal
       if (!effectivePartId) return null;
-      if (process.env.NODE_ENV === 'development') {
-        console.debug('[PartModal] inventoryQuery start', effectivePartId);
-      }
       const res = await base44.functions.invoke('getPartsInventoryView', { part_id: effectivePartId });
-      if (process.env.NODE_ENV === 'development') {
-        console.debug('[PartModal] inventoryQuery success', effectivePartId);
-      }
       return res.data?.parts?.[0] ?? null;
     },
     enabled: Boolean(isOpen && effectivePartId && !partNotFound),
-    staleTime: 15000,
-    gcTime: 60000,
-    placeholderData: (prev) => prev, // keeps previous data during refetch (replaces keepPreviousData)
-    networkMode: 'always',           // prevents pause in certain states
+    staleTime: 60000,      // PHASE 1: 1 minute
+    gcTime: 300000,        // PHASE 1: 5 minutes
+    placeholderData: (prev) => prev,
+    networkMode: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchOnMount: false, // PHASE 1: Don't refetch on every mount
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
@@ -372,22 +367,21 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   // Location breakdown - ONLY used for location display, NOT for totals
-  // This is a SECONDARY display, NOT a source of truth for inventory metrics
-  // PERF FIX: Gate with isOpen + effectivePartId, add caching and retry control
+  // PHASE 1: Extended caching
   const { data: locationItems = [], isLoading: locationsLoading, error: locationsError } = useQuery({
     queryKey: ['inventoryLocations', effectivePartId],
     queryFn: async () => {
-      // Defensive: prevent late resolution into closed modal
       if (!effectivePartId) return [];
       return base44.entities.InventoryItem.filter({ part_id: effectivePartId });
     },
     enabled: Boolean(isOpen && effectivePartId && !partNotFound),
-    staleTime: 30000,
-    gcTime: 120000,
-    placeholderData: (prev) => prev, // keeps previous data during refetch
+    staleTime: 60000,
+    gcTime: 300000,
+    placeholderData: (prev) => prev,
     networkMode: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchOnMount: false,
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
