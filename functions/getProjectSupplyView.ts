@@ -295,11 +295,18 @@ Deno.serve(async (req) => {
           available: partInv.available,
         };
         
-        const { next_action, block_reason_code } = computeNextAction(
+        // PREPAY GATING: Pass commitment-level payment data
+        const prepayContext = {
+          invoicedRetail: commitmentInvoicedRetailMap.get(c.id) ?? 0,
+          paidRetail: commitmentPaidRetailMap.get(c.id) ?? 0,
+        };
+        
+        const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
           { required_total, reserved_from_stock, covered_from_po, qty_installed },
           !!vendor,
           partInventoryForAction,
-          c // Pass raw commitment for billing flag access
+          c, // Pass raw commitment for billing flag access
+          prepayContext // Pass prepay resolution data
         );
 
         // ============================================================================
