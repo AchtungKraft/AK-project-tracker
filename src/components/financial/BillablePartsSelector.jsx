@@ -278,8 +278,9 @@ export default function BillablePartsSelector({
 
   const handleSelectCategory = (categoryItems) => {
     const currentIds = new Set(selectedItems.map(s => s.part_commitment_id));
+    // CANONICAL: Only select items that are eligible (canInvoice === true)
     const newItems = categoryItems
-      .filter(item => !currentIds.has(item.part_commitment_id))
+      .filter(item => !currentIds.has(item.part_commitment_id) && item.canInvoice !== false)
       .map(item => ({
         part_commitment_id: item.part_commitment_id,
         part_id: item.part_id,
@@ -317,24 +318,31 @@ export default function BillablePartsSelector({
     return selectedItems.some(s => s.part_commitment_id === commitmentId);
   };
 
+  // CANONICAL: Only count eligible items for selection state
+  const getEligibleItems = (items) => items.filter(item => item.canInvoice !== false);
+  
   const isCategoryFullySelected = (categoryItems) => {
-    return categoryItems.length > 0 && categoryItems.every(item => isItemSelected(item.part_commitment_id));
+    const eligible = getEligibleItems(categoryItems);
+    return eligible.length > 0 && eligible.every(item => isItemSelected(item.part_commitment_id));
   };
 
   const isCategoryPartiallySelected = (categoryItems) => {
-    const selected = categoryItems.filter(item => isItemSelected(item.part_commitment_id));
-    return selected.length > 0 && selected.length < categoryItems.length;
+    const eligible = getEligibleItems(categoryItems);
+    const selected = eligible.filter(item => isItemSelected(item.part_commitment_id));
+    return selected.length > 0 && selected.length < eligible.length;
   };
 
   const isVendorFullySelected = (vendor) => {
     const allItems = vendor.categories.flatMap(c => c.items);
-    return allItems.length > 0 && allItems.every(item => isItemSelected(item.part_commitment_id));
+    const eligible = getEligibleItems(allItems);
+    return eligible.length > 0 && eligible.every(item => isItemSelected(item.part_commitment_id));
   };
 
   const isVendorPartiallySelected = (vendor) => {
     const allItems = vendor.categories.flatMap(c => c.items);
-    const selected = allItems.filter(item => isItemSelected(item.part_commitment_id));
-    return selected.length > 0 && selected.length < allItems.length;
+    const eligible = getEligibleItems(allItems);
+    const selected = eligible.filter(item => isItemSelected(item.part_commitment_id));
+    return selected.length > 0 && selected.length < eligible.length;
   };
 
   // Filter by search
@@ -506,36 +514,61 @@ export default function BillablePartsSelector({
                           {/* Parts */}
                           {isCatExpanded && (
                             <div className="border-t border-gray-800">
-                              {category.items.map((item) => (
-                                <div 
-                                  key={item.part_commitment_id}
-                                  className="flex items-center gap-2 px-3 py-2 pl-14 hover:bg-gray-800/50"
-                                >
-                                  <Checkbox
-                                    checked={isItemSelected(item.part_commitment_id)}
-                                    onCheckedChange={(checked) => handleToggleItem(item, checked)}
-                                  />
-                                  <Package className="w-3 h-3 text-gray-500" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-white truncate">{item.part_name}</p>
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                      <span>Qty: {item.qty_remaining_to_bill}</span>
-                                      <span>×</span>
-                                      <span>{formatCurrencyUSD(item.unit_price)}</span>
+                              {category.items.map((item) => {
+                                const isBlocked = item.canInvoice === false;
+                                const hasWarning = item.invoice_warning_code;
+                                
+                                return (
+                                  <div 
+                                    key={item.part_commitment_id}
+                                    className={cn(
+                                      "flex items-center gap-2 px-3 py-2 pl-14 hover:bg-gray-800/50",
+                                      isBlocked && "opacity-60"
+                                    )}
+                                  >
+                                    <Checkbox
+                                      checked={isItemSelected(item.part_commitment_id)}
+                                      onCheckedChange={(checked) => handleToggleItem(item, checked)}
+                                      disabled={isBlocked}
+                                    />
+                                    <Package className="w-3 h-3 text-gray-500" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-white truncate">{item.part_name}</p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <span>Qty: {item.qty_remaining_to_bill}</span>
+                                        <span>×</span>
+                                        <span>{formatCurrencyUSD(item.unit_price)}</span>
+                                      </div>
+                                      {/* CANONICAL: Show block reason if item is blocked */}
+                                      {isBlocked && item.invoice_block_reason_text && (
+                                        <p className="text-xs text-red-400 mt-0.5">
+                                          {item.invoice_block_reason_text}
+                                        </p>
+                                      )}
+                                      {/* CANONICAL: Show warning if present (non-blocking) */}
+                                      {!isBlocked && hasWarning && (
+                                        <div className="flex items-center gap-1 text-xs text-amber-400 mt-0.5">
+                                          <AlertTriangle className="w-3 h-3" />
+                                          <span>{item.invoice_warning_text}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="text-right">
+                                      {item.credit_applied > 0 && (
+                                        <p className="text-xs text-yellow-400 line-through">
+                                          {formatCurrencyUSD(item.gross_exposure)}
+                                        </p>
+                                      )}
+                                      <p className={cn(
+                                        "text-sm font-medium",
+                                        isBlocked ? "text-gray-500" : "text-green-400"
+                                      )}>
+                                        {formatCurrencyUSD(item.net_exposure)}
+                                      </p>
                                     </div>
                                   </div>
-                                  <div className="text-right">
-                                    {item.credit_applied > 0 && (
-                                      <p className="text-xs text-yellow-400 line-through">
-                                        {formatCurrencyUSD(item.gross_exposure)}
-                                      </p>
-                                    )}
-                                    <p className="text-sm text-green-400 font-medium">
-                                      {formatCurrencyUSD(item.net_exposure)}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
