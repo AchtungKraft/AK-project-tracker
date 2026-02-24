@@ -628,13 +628,14 @@ export default function PartModal({ part, partId, onClose }) {
   // --- VIEW MODE ---
   const renderViewMode = () => (
     <div className="space-y-6 p-4 overflow-y-auto max-h-[70vh]">
-      {/* Photos Gallery */}
+      {/* Photos Gallery - Click to view full size */}
       {formData.photos && formData.photos.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
           {formData.photos.slice(0, 4).map((url, idx) => (
             <div 
               key={idx} 
-              className={`aspect-square bg-gray-800 rounded border overflow-hidden ${
+              onClick={() => setViewImageUrl(url)}
+              className={`aspect-square bg-gray-800 rounded border overflow-hidden cursor-pointer hover:opacity-90 transition-opacity ${
                 formData.featured_photo === url ? 'border-yellow-500 border-2' : 'border-gray-700'
               }`}
             >
