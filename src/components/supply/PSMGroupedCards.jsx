@@ -266,13 +266,6 @@ export function PSMItemRow({
             <span className="text-gray-500 block">STOCK</span>
             <span className="text-cyan-400">{reservedProject + available}</span>
           </div>
-          {/* PHASE 2: Only show ORDER if > 0 */}
-          {toOrder > 0 && (
-            <div className="text-center">
-              <span className="text-gray-500 block">ORDER</span>
-              <span className="text-red-400 font-semibold">{toOrder}</span>
-            </div>
-          )}
         </div>
 
         {/* PHASE 3: Inline Financial */}
@@ -699,10 +692,18 @@ function PSMSubGroupCard({
   );
 }
 
+// Billing status filter options
+const BILLING_STATUS_OPTIONS = [
+  { value: 'not_invoiced', label: 'Not Invoiced' },
+  { value: 'invoiced', label: 'Invoiced' },
+  { value: 'paid', label: 'Paid' },
+];
+
 /**
  * PSMGroupedView - Main grouped card view container
  * PHASE 5: Grouping + Sorting Enhancement
  * PHASE 6: Sub-grouping support
+ * PHASE 7: Billing status filters
  */
 export default function PSMGroupedView({
   items,
@@ -728,6 +729,46 @@ export default function PSMGroupedView({
   const [expandedSubgroups, setExpandedSubgroups] = useState(new Set());
   const [subgroupMode, setSubgroupMode] = useState('none');
   const [sortMode, setSortMode] = useState('exposure_desc');
+  // Billing status filter - default all selected
+  const [billingFilters, setBillingFilters] = useState(new Set(['not_invoiced', 'invoiced', 'paid']));
+
+  // Toggle a billing status filter
+  const toggleBillingFilter = (status) => {
+    setBillingFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        // Don't allow deselecting all
+        if (next.size > 1) next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  };
+
+  // Filter items by billing status
+  const filteredItems = useMemo(() => {
+    if (billingFilters.size === 3) return items; // All selected, no filter
+    
+    return items.filter(item => {
+      const billingStatus = item.billing_status || item.commitment_billing_status || 'not_invoiced';
+      
+      // Normalize billing status
+      if (billingFilters.has('not_invoiced') && 
+          (billingStatus === 'not_invoiced' || billingStatus === 'NOT_INVOICED' || !billingStatus)) {
+        return true;
+      }
+      if (billingFilters.has('invoiced') && 
+          (billingStatus === 'invoiced' || billingStatus === 'INVOICED' || billingStatus === 'client_invoiced')) {
+        return true;
+      }
+      if (billingFilters.has('paid') && 
+          (billingStatus === 'paid' || billingStatus === 'PAID' || billingStatus === 'client_paid')) {
+        return true;
+      }
+      return false;
+    });
+  }, [items, billingFilters]);
 
   // Get available subgroup options (exclude current primary group)
   const availableSubgroupOptions = useMemo(() => {
