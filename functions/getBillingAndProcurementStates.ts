@@ -682,7 +682,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     invoice_warning_text: item.invoice_warning_text,
     // CANONICAL: Outstanding amount
     outstanding_retail_amount: item.outstanding_retail_amount || item.net_line_total || 0,
-  }));
+  };
+  });
 
   // PHASE 1 CANONICAL: Build totals object
   const totals = {
