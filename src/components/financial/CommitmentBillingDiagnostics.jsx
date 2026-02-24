@@ -2,8 +2,14 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -12,314 +18,256 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Loader2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AlertTriangle, CheckCircle2, RefreshCw, Bug, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { toast } from "sonner";
 
 /**
- * CommitmentBillingDiagnostics - Phase 7 Diagnostics Overlay
+ * CommitmentBillingDiagnostics - Phase 6 UI Diagnostics Panel
  * 
- * Displays for each commitment:
- * - required, installed, invoiced, paid, balance_due
- * - available_stock, billing_status, derived_status
- * - Highlights rows where billing_status !== derived_status
+ * Admin-only panel showing per-commitment:
+ * - part_name
+ * - required / installed
+ * - available_to_allocate / installable_qty
+ * - invoiced_qty (stored) vs derived_invoiced_qty
+ * - billing_status (stored) vs derived status
+ * - derived_balance_due
+ * 
+ * Highlights drift rows and allows normalization.
  */
-export default function CommitmentBillingDiagnostics({ projectId }) {
-  const queryClient = useQueryClient();
-  const [showAll, setShowAll] = useState(false);
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['commitmentBillingDiagnostics', projectId],
+export default function CommitmentBillingDiagnostics({ projectId }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['commitment-billing-diagnostics', projectId],
     queryFn: async () => {
-      const response = await base44.functions.invoke('diagnoseCommitmentBillingDrift', {
+      const response = await base44.functions.invoke('normalizeProjectCommitmentBilling', {
         project_id: projectId,
         dry_run: true,
-        include_diagnostics: true,
       });
       return response.data;
     },
-    enabled: Boolean(projectId),
+    enabled: isOpen && Boolean(projectId),
     staleTime: 30000,
   });
 
-  const repairMutation = useMutation({
+  const normalizeMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke('diagnoseCommitmentBillingDrift', {
+      const response = await base44.functions.invoke('normalizeProjectCommitmentBilling', {
         project_id: projectId,
         dry_run: false,
-        include_diagnostics: true,
       });
       return response.data;
     },
-    onSuccess: (data) => {
-      toast.success(`Repaired ${data.summary?.corrections_applied || 0} commitments`);
-      queryClient.invalidateQueries({ queryKey: ['commitmentBillingDiagnostics', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
-    },
-    onError: (err) => {
-      toast.error(`Repair failed: ${err.message}`);
+    onSuccess: () => {
+      refetch();
+      // Invalidate supply view to reflect changes
+      queryClient.invalidateQueries({ queryKey: ['supply'] });
     },
   });
 
-  if (isLoading) {
-    return (
-      <Card className="bg-gray-900 border-gray-700">
-        <CardContent className="p-6 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-400">Loading diagnostics...</span>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="bg-red-900/20 border-red-700">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 text-red-400">
-            <AlertTriangle className="w-5 h-5" />
-            <span>Error loading diagnostics: {error.message}</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
+  const facts = data?.commitment_facts || [];
+  const driftCount = data?.counts?.drifted || 0;
   const summary = data?.summary || {};
-  const rows = data?.diagnostic_table || [];
-  const corrections = data?.corrections || [];
-
-  // Filter rows based on showAll toggle
-  const displayRows = showAll ? rows : rows.filter(r => r.has_drift);
 
   return (
-    <Card className="bg-gray-900 border-gray-700">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Wrench className="w-5 h-5" />
-              Billing Drift Diagnostics
-            </CardTitle>
-            <CardDescription>
-              Compares commitment billing_status against derived values from invoices
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              className="text-gray-300"
-            >
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {/* Summary Badges */}
-        <div className="flex flex-wrap gap-2">
-          <Badge variant={summary.billing_drift_detected ? "destructive" : "outline"} className="px-3 py-1">
-            {summary.billing_drift_detected ? (
-              <><AlertTriangle className="w-3 h-3 mr-1" /> Billing Drift</>
-            ) : (
-              <><CheckCircle2 className="w-3 h-3 mr-1" /> No Billing Drift</>
-            )}
-          </Badge>
-          <Badge variant={summary.install_drift_detected ? "destructive" : "outline"} className="px-3 py-1">
-            {summary.install_drift_detected ? (
-              <><AlertTriangle className="w-3 h-3 mr-1" /> Install Gating Issue</>
-            ) : (
-              <><CheckCircle2 className="w-3 h-3 mr-1" /> Install OK</>
-            )}
-          </Badge>
-          <Badge variant="secondary" className="px-3 py-1">
-            {summary.total_commitments} Commitments
-          </Badge>
-          {summary.commitments_with_drift > 0 && (
-            <Badge variant="destructive" className="px-3 py-1">
-              {summary.commitments_with_drift} Need Repair
-            </Badge>
-          )}
-        </div>
-
-        {/* Credit Available */}
-        {data?.credit_available > 0 && (
-          <div className="text-sm text-gray-400">
-            Credit Available: <span className="text-green-400 font-mono">{formatCurrencyUSD(data.credit_available)}</span>
-          </div>
-        )}
-
-        {/* Repair Button */}
-        {summary.commitments_with_drift > 0 && (
-          <div className="flex items-center gap-3 p-3 bg-amber-900/20 rounded-lg border border-amber-700/50">
-            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-amber-300 text-sm font-medium">
-                {summary.commitments_with_drift} commitment(s) have billing status drift
-              </p>
-              <p className="text-amber-400/70 text-xs">
-                This can cause parts to appear unbillable or incorrectly flagged as paid.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => repairMutation.mutate()}
-              disabled={repairMutation.isPending}
-              className="border-amber-600 text-amber-400 hover:bg-amber-900/30"
-            >
-              {repairMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Repairing...</>
-              ) : (
-                <><Wrench className="w-4 h-4 mr-1" /> Repair All</>
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetTrigger asChild>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="text-xs text-gray-400 hover:text-white gap-1"
+        >
+          <Bug className="w-3 h-3" />
+          Billing Diagnostics
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[800px] max-w-full bg-gray-900 border-gray-700 p-0">
+        <SheetHeader className="p-4 border-b border-gray-700">
+          <SheetTitle className="text-white flex items-center justify-between">
+            <span>Commitment Billing Diagnostics</span>
+            <div className="flex items-center gap-2">
+              {driftCount > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  {driftCount} Drift{driftCount !== 1 ? 's' : ''}
+                </Badge>
               )}
-            </Button>
-          </div>
-        )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isLoading}
+                className="text-xs"
+              >
+                <RefreshCw className={cn("w-3 h-3 mr-1", isLoading && "animate-spin")} />
+                Refresh
+              </Button>
+              {driftCount > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => normalizeMutation.mutate()}
+                  disabled={normalizeMutation.isPending}
+                  className="text-xs"
+                >
+                  <Wrench className="w-3 h-3 mr-1" />
+                  Fix {driftCount} Drift{driftCount !== 1 ? 's' : ''}
+                </Button>
+              )}
+            </div>
+          </SheetTitle>
+        </SheetHeader>
 
-        {/* Toggle to show all */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll(!showAll)}
-            className="text-gray-400"
-          >
-            {showAll ? 'Show Only Drift' : 'Show All Commitments'}
-          </Button>
-          <span className="text-xs text-gray-500">
-            Showing {displayRows.length} of {rows.length}
-          </span>
+        {/* Summary Strip */}
+        <div className="p-4 border-b border-gray-700 bg-gray-800/50">
+          <div className="grid grid-cols-4 gap-4 text-xs">
+            <div>
+              <span className="text-gray-400 block">Total Commitments</span>
+              <span className="text-white font-mono">{data?.counts?.total || 0}</span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">Total Invoiced</span>
+              <span className="text-white font-mono">{formatCurrencyUSD(summary.total_derived_invoiced || 0)}</span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">Total Paid</span>
+              <span className="text-emerald-400 font-mono">{formatCurrencyUSD(summary.total_derived_paid || 0)}</span>
+            </div>
+            <div>
+              <span className="text-gray-400 block">Total Installable</span>
+              <span className="text-cyan-400 font-mono">{summary.total_installable || 0}</span>
+            </div>
+          </div>
         </div>
 
-        {/* Diagnostic Table */}
-        {displayRows.length > 0 ? (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-700">
-                  <TableHead className="text-gray-400">Part</TableHead>
-                  <TableHead className="text-gray-400 text-right">Req</TableHead>
-                  <TableHead className="text-gray-400 text-right">Inst</TableHead>
-                  <TableHead className="text-gray-400 text-right">Inv Qty</TableHead>
-                  <TableHead className="text-gray-400 text-right">Inv Amt</TableHead>
-                  <TableHead className="text-gray-400 text-right">Paid</TableHead>
-                  <TableHead className="text-gray-400 text-right">Balance</TableHead>
-                  <TableHead className="text-gray-400">Current Status</TableHead>
-                  <TableHead className="text-gray-400">Derived Status</TableHead>
-                  <TableHead className="text-gray-400">Drift</TableHead>
+        <ScrollArea className="h-[calc(100vh-180px)]">
+          <Table>
+            <TableHeader className="sticky top-0 bg-gray-900 z-10">
+              <TableRow className="border-gray-700 hover:bg-gray-800/50">
+                <TableHead className="text-gray-400 text-[10px]">Part</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-center">REQ/INST</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-center">AVAIL/INSTALLABLE</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-center">INV QTY (stored→derived)</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-center">INV AMT (stored→derived)</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-center">STATUS (stored→derived)</TableHead>
+                <TableHead className="text-gray-400 text-[10px] text-right">BALANCE DUE</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {facts.map((fact) => (
+                <TableRow 
+                  key={fact.commitment_id}
+                  className={cn(
+                    "border-gray-800 hover:bg-gray-800/30",
+                    fact.has_drift && "bg-red-950/20 border-l-2 border-l-red-500"
+                  )}
+                >
+                  <TableCell className="text-white text-xs font-medium max-w-[200px] truncate">
+                    {fact.part_name}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="font-mono text-[10px]">
+                      <span className="text-white">{fact.required_qty}</span>
+                      <span className="text-gray-500">/</span>
+                      <span className="text-emerald-400">{fact.installed_qty}</span>
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="font-mono text-[10px]">
+                      <span className="text-cyan-400">{fact.available_to_allocate}</span>
+                      <span className="text-gray-500">/</span>
+                      <span className={cn(
+                        fact.installable_qty > 0 ? "text-green-400" : "text-gray-500"
+                      )}>
+                        {fact.installable_qty}
+                      </span>
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <DriftCell 
+                      stored={fact.stored_invoiced_qty}
+                      derived={fact.derived_invoiced_qty}
+                      hasDrift={fact.qty_drift}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <DriftCell 
+                      stored={formatCurrencyUSD(fact.stored_invoiced_amount)}
+                      derived={formatCurrencyUSD(fact.derived_invoiced_amount)}
+                      hasDrift={fact.amount_drift}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <DriftCell 
+                      stored={fact.stored_billing_status}
+                      derived={fact.derived_billing_status}
+                      hasDrift={fact.status_drift}
+                      isStatus
+                    />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className={cn(
+                      "font-mono text-[10px]",
+                      fact.derived_balance_due > 0 ? "text-amber-400" : "text-emerald-400"
+                    )}>
+                      {formatCurrencyUSD(fact.derived_balance_due)}
+                    </span>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayRows.map((row) => (
-                  <TableRow 
-                    key={row.commitment_id}
-                    className={cn(
-                      "border-gray-800",
-                      row.has_drift && "bg-red-900/10"
-                    )}
-                  >
-                    <TableCell className="font-medium text-white max-w-[200px] truncate">
-                      {row.part_name}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-gray-300">
-                      {row.quantity_required}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-emerald-400">
-                      {row.quantity_installed}
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right font-mono",
-                      row.invoiced_qty_match ? "text-gray-300" : "text-amber-400"
-                    )}>
-                      {row.invoiced_qty}
-                      {!row.invoiced_qty_match && (
-                        <span className="text-xs text-gray-500"> → {row.derived_invoiced_qty}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right font-mono",
-                      row.invoiced_amount_match ? "text-gray-300" : "text-amber-400"
-                    )}>
-                      {formatCurrencyUSD(row.invoiced_amount)}
-                      {!row.invoiced_amount_match && (
-                        <span className="text-xs text-gray-500 block">
-                          → {formatCurrencyUSD(row.derived_invoiced_amount)}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-green-400">
-                      {formatCurrencyUSD(row.derived_paid_amount)}
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right font-mono",
-                      row.derived_balance_due > 0 ? "text-amber-400" : "text-gray-400"
-                    )}>
-                      {formatCurrencyUSD(row.derived_balance_due)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn(
-                        "text-xs",
-                        row.billing_status === 'paid' && "border-green-600 text-green-400",
-                        row.billing_status === 'invoiced' && "border-amber-600 text-amber-400",
-                        row.billing_status === 'unbilled' && "border-gray-600 text-gray-400"
-                      )}>
-                        {row.billing_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn(
-                        "text-xs",
-                        row.derived_billing_status === 'paid' && "border-green-600 text-green-400",
-                        row.derived_billing_status === 'invoiced' && "border-amber-600 text-amber-400",
-                        row.derived_billing_status === 'unbilled' && "border-gray-600 text-gray-400"
-                      )}>
-                        {row.derived_billing_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {row.has_drift ? (
-                        <AlertTriangle className="w-4 h-4 text-red-400" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            {showAll ? 'No commitments found' : 'No drift detected - all commitments in sync'}
-          </div>
-        )}
-
-        {/* Sample Corrections Preview */}
-        {corrections.length > 0 && (
-          <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Pending Corrections Preview</h4>
-            <div className="space-y-2 text-xs font-mono">
-              {corrections.slice(0, 3).map((c) => (
-                <div key={c.commitment_id} className="flex items-center gap-4">
-                  <span className="text-white truncate max-w-[150px]">{c.part_name}</span>
-                  <span className="text-red-400">{c.before.billing_status}</span>
-                  <span className="text-gray-500">→</span>
-                  <span className="text-green-400">{c.after.billing_status}</span>
-                </div>
               ))}
-              {corrections.length > 3 && (
-                <div className="text-gray-500">...and {corrections.length - 3} more</div>
+              {facts.length === 0 && !isLoading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                    No commitments found
+                  </TableCell>
+                </TableRow>
               )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
   );
+}
+
+function DriftCell({ stored, derived, hasDrift, isStatus = false }) {
+  if (!hasDrift) {
+    return (
+      <span className={cn(
+        "font-mono text-[10px]",
+        isStatus ? getStatusColor(derived) : "text-gray-400"
+      )}>
+        {derived}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <span className={cn(
+        "font-mono text-[10px] line-through",
+        isStatus ? getStatusColor(stored) : "text-red-400"
+      )}>
+        {stored}
+      </span>
+      <span className="text-gray-500 text-[10px]">→</span>
+      <span className={cn(
+        "font-mono text-[10px] font-semibold",
+        isStatus ? getStatusColor(derived) : "text-green-400"
+      )}>
+        {derived}
+      </span>
+    </div>
+  );
+}
+
+function getStatusColor(status) {
+  switch (status) {
+    case 'paid': return 'text-emerald-400';
+    case 'invoiced': return 'text-amber-400';
+    default: return 'text-gray-400';
+  }
 }
