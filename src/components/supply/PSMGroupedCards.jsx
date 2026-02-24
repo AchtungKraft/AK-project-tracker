@@ -692,11 +692,11 @@ function PSMSubGroupCard({
   );
 }
 
-// Billing status filter options
+// CANONICAL: Billing status filter options using 3-state model
 const BILLING_STATUS_OPTIONS = [
-  { value: 'not_invoiced', label: 'Not Invoiced' },
-  { value: 'invoiced', label: 'Invoiced' },
-  { value: 'paid', label: 'Paid' },
+  { value: 'NOT_INVOICED', label: 'Not Invoiced' },
+  { value: 'INVOICED', label: 'Invoiced' },
+  { value: 'PAID', label: 'Paid' },
 ];
 
 /**
@@ -729,8 +729,8 @@ export default function PSMGroupedView({
   const [expandedSubgroups, setExpandedSubgroups] = useState(new Set());
   const [subgroupMode, setSubgroupMode] = useState('none');
   const [sortMode, setSortMode] = useState('exposure_desc');
-  // Billing status filter - default all selected
-  const [billingFilters, setBillingFilters] = useState(new Set(['not_invoiced', 'invoiced', 'paid']));
+  // CANONICAL: Billing status filter using 3-state model - default all selected
+  const [billingFilters, setBillingFilters] = useState(new Set(['NOT_INVOICED', 'INVOICED', 'PAID']));
 
   // Toggle a billing status filter
   const toggleBillingFilter = (status) => {
@@ -746,27 +746,14 @@ export default function PSMGroupedView({
     });
   };
 
-  // Filter items by billing status
+  // CANONICAL: Filter items by billing_state (3-state model from backend)
   const filteredItems = useMemo(() => {
     if (billingFilters.size === 3) return items; // All selected, no filter
     
     return items.filter(item => {
-      const billingStatus = item.billing_status || item.commitment_billing_status || 'not_invoiced';
-      
-      // Normalize billing status
-      if (billingFilters.has('not_invoiced') && 
-          (billingStatus === 'not_invoiced' || billingStatus === 'NOT_INVOICED' || !billingStatus)) {
-        return true;
-      }
-      if (billingFilters.has('invoiced') && 
-          (billingStatus === 'invoiced' || billingStatus === 'INVOICED' || billingStatus === 'client_invoiced')) {
-        return true;
-      }
-      if (billingFilters.has('paid') && 
-          (billingStatus === 'paid' || billingStatus === 'PAID' || billingStatus === 'client_paid')) {
-        return true;
-      }
-      return false;
+      // Use canonical billing_state from backend, fallback to NOT_INVOICED
+      const billingState = item.billing_state || 'NOT_INVOICED';
+      return billingFilters.has(billingState);
     });
   }, [items, billingFilters]);
 
