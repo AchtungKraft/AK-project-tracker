@@ -309,7 +309,9 @@ export function PSMItemRow({
           </div>
         )}
         
-        {/* CANONICAL: Billing State Badge - Only show PAID/INVOICED (NOT_INVOICED = no badge) */}
+        {/* CANONICAL: Billing State Badge - Uses derived_balance_due logic for PAID display
+            Paid badge shows when: derived_balance_due === 0 AND invoiced_amount > 0
+            This prevents relying on potentially drifted billing_status */}
         {billingState !== 'NOT_INVOICED' && (
           <div className="hidden md:block flex-shrink-0">
             <span className={cn(
