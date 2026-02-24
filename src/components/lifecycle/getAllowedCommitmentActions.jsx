@@ -7,6 +7,20 @@
  * CANONICAL-ONLY: This function expects the read model shape.
  * No legacy fallbacks. The caller MUST provide canonical fields.
  * 
+ * ============================================================================
+ * CRITICAL ELIGIBILITY RULES (Phase 7):
+ * ============================================================================
+ * 
+ * INSTALL ELIGIBILITY:
+ *   - Depends ONLY on: reserved_from_stock > qty_installed
+ *   - Does NOT depend on: billing_status, payment status, credit
+ *   - In-stock parts can ALWAYS be installed regardless of billing state
+ * 
+ * INVOICE ELIGIBILITY:
+ *   - Depends ONLY on: required_total - invoiced_qty > 0
+ *   - Does NOT depend on: paid status, credit, install status, stock
+ *   - Partially invoiced commitments can be invoiced for remaining qty
+ * 
  * Usage:
  * import { getAllowedCommitmentActions } from '@/components/lifecycle/getAllowedCommitmentActions';
  * const allowed = getAllowedCommitmentActions(commitment);
