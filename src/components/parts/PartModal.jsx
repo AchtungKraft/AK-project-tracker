@@ -264,18 +264,21 @@ export default function PartModal({ part, partId, onClose }) {
     }
   }, [formData?.cost, formData?.pricing_mode]);
 
-  // Fetch reference data - PERF FIX: Gate with isOpen, long cache, no refetch storms
-  // These queries only fire when modal is open
+  // PHASE 2: Use centralized reference data via useReferenceData hook
+  // This prevents duplicate fetches and provides O(1) lookups
+  // Note: Import moved to top of file, we'll use the data directly
+  // For PartModal we still use local queries but with extended caching from queryConfig
   const refDataOptions = {
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    gcTime: 30 * 60 * 1000,    // 30 minutes
+    staleTime: 300000,  // 5 minutes - aligned with referenceDataConfig
+    gcTime: 600000,     // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchOnMount: false,
     retry: 0, // Reference data: no retry, just use cache
   };
 
   const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
+    queryKey: ['referenceData', 'partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -285,7 +288,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['referenceData', 'vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -295,7 +298,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
+    queryKey: ['referenceData', 'locations'],
     queryFn: async () => {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -305,7 +308,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
+    queryKey: ['referenceData', 'carMakes'],
     queryFn: async () => {
       const list = await base44.entities.CarMake.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -315,7 +318,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
+    queryKey: ['referenceData', 'carModels'],
     queryFn: async () => {
       const list = await base44.entities.CarModel.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -325,7 +328,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
+    queryKey: ['referenceData', 'carYears'],
     queryFn: async () => {
       const list = await base44.entities.CarYear.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
