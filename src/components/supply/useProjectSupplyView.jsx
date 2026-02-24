@@ -146,31 +146,7 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   };
 
   // PERF FIX: Trust backend canonical values - NO frontend re-derivation
-  const rawItems = query.data?.items || [];
-  
-  // Simple passthrough - backend already computed canonical values
-  const items = rawItems.map(item => {
-    // Only add coverage block alias if missing for UI consistency
-    if (finalToOrder === 0 && requiredTotal > 0) {
-      correctedCoverageStatus = 'FULL';
-    } else if (finalToOrder > 0 && finalToOrder < requiredTotal) {
-      correctedCoverageStatus = 'PARTIAL';
-    } else if (finalToOrder === requiredTotal && requiredTotal > 0) {
-      correctedCoverageStatus = 'NONE';
-    }
-    
-    return {
-      ...item,
-      to_order: finalToOrder,
-      coverage_status: correctedCoverageStatus,
-      gap_qty: finalToOrder,
-      coverage: {
-        ...item.coverage,
-        gap_qty: finalToOrder,
-        coverage_status: correctedCoverageStatus,
-      },
-    };
-  });
+  const items = query.data?.items || [];
   
   // PHASE 2: DEV DRIFT GUARD - Use shared validation function
   // DIAGNOSTIC: Full diagnostic report for GNO
