@@ -7,8 +7,7 @@ import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
 import { getPartRetailEffectiveSafe, formatCurrency } from "@/components/supply/pricingHelpers";
-import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
-import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
+
 
 /**
  * PartsListView - CANONICAL: Displays parts in a list format
