@@ -441,6 +441,23 @@ export default function ProjectInvoices() {
           onUpdated={handleRefresh}
         />
       )}
+
+      {/* Apply Credit Modal */}
+      {showApplyCreditModal && normalizedProjectId && (
+        <ApplyCreditModal
+          open={showApplyCreditModal}
+          onClose={() => setShowApplyCreditModal(false)}
+          projectId={normalizedProjectId}
+          projectName={financialProjects.find(p => p.project_id === normalizedProjectId)?.project_name || "Project"}
+          creditSummary={{
+            gross_exposure: grossExposure,
+            credit_available: totalCreditAvailable,
+            credit_applied: totalCreditApplied,
+            net_exposure: netExposure,
+          }}
+          onSuccess={handleRefresh}
+        />
+      )}
     </div>
   );
 }
