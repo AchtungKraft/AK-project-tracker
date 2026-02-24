@@ -28,14 +28,22 @@ import { cn } from "@/lib/utils";
  * - Coverage status per project
  */
 export default function PartProjectUsageSection({ partId }) {
+  // PERF FIX: Add gcTime, refetchOnWindowFocus, and retry control
   const { data, isLoading, error } = useQuery({
     queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
       return response.data;
     },
-    enabled: !!partId,
-    staleTime: 30000 // 30 seconds
+    enabled: Boolean(partId),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      // Stop retrying on rate limit
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   if (isLoading) {

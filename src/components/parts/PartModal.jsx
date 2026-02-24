@@ -46,13 +46,22 @@ export default function PartModal({ part, partId, onClose }) {
   const [showAddToBuildModal, setShowAddToBuildModal] = useState(false);
   
   // Fetch part if only partId provided
+  // PERF FIX: Add caching, retry control, and window focus handling
   const { data: fetchedPart, isLoading: partLoading } = useQuery({
     queryKey: ['part', partId],
     queryFn: async () => {
       const parts = await base44.entities.Part.filter({ id: partId });
       return parts[0];
     },
-    enabled: !!partId && !part,
+    enabled: Boolean(partId && !part),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      // Stop retrying on rate limit or not found
+      if (error?.status === 429 || error?.status === 404) return false;
+      return failureCount < 1;
+    },
   });
 
   const activePart = part || fetchedPart;
@@ -201,10 +210,18 @@ export default function PartModal({ part, partId, onClose }) {
 
   // Location breakdown - ONLY used for location display, NOT for totals
   // This is a SECONDARY display, NOT a source of truth for inventory metrics
+  // PERF FIX: Add caching and retry control to prevent refetch storms
   const { data: locationItems = [], isLoading: locationsLoading } = useQuery({
     queryKey: ['inventoryLocations', activePart?.id],
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: activePart?.id }),
-    enabled: !!activePart?.id,
+    enabled: Boolean(activePart?.id),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   const updateMutation = useMutation({
