@@ -490,6 +490,20 @@ Deno.serve(async (req) => {
       },
     };
 
+    // PERF: Timing log (dev only)
+    if (typeof Deno !== 'undefined') {
+      console.log('[PERF] getProjectSupplyView', Date.now() - _perfStart, 'ms', {
+        entityCounts: {
+          commitments: commitments.length,
+          parts: parts.length,
+          lineItems: lineItems.length,
+          orders: orders.length,
+          invoices: projectInvoices.length,
+          invoiceLines: projectInvoiceLines.length,
+        }
+      });
+    }
+    
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
