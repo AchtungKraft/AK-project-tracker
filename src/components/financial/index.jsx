@@ -7,6 +7,25 @@ export { default as ProjectFinancialWarningBanner } from './ProjectFinancialWarn
 export { default as ProjectFinancialSummaryWidget } from './ProjectFinancialSummaryWidget';
 export { default as InvoiceWorkbench } from './InvoiceWorkbench';
 
+// Canonical Financial Snapshot - SINGLE SOURCE OF TRUTH
+export { 
+  useProjectFinancialSnapshot, 
+  useProjectFinancialDiagnostics, 
+  formatCanonicalValue, 
+  validateTotalsGate 
+} from './useProjectFinancialSnapshot';
+export { CanonicalFinancialDisplay, FinancialDiagnosticsPanel } from './CanonicalFinancialDisplay';
+
+// Query Key Factories - centralized key management
+export { 
+  financialSnapshotKeys, 
+  billingKeys, 
+  invoiceKeys, 
+  creditKeys,
+  normalizeProjectId,
+  normalizeId
+} from './queryKeyFactories';
+
 // Phase 6.2 - Invoice Dashboard + QB Export Status
 export { default as InvoiceDashboard } from './InvoiceDashboard';
 export { default as QBExportStatusCards, QBNeedsExportCard, QBExportFailedCard } from './QBExportStatusCards';
