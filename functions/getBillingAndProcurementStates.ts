@@ -597,10 +597,11 @@ Deno.serve(async (req) => {
       });
     }
     
+    const _perfStart = Date.now();
     const result = await getBillingAndProcurementStates(base44, payload.filters || {});
     
     // PERF: Timing log
-    console.log('[PERF] getBillingAndProcurementStates', {
+    console.log('[PERF] getBillingAndProcurementStates', Date.now() - _perfStart, 'ms', {
       project_id,
       commitmentsCount: result.commitments?.length ?? 0,
       bucketCounts: {
