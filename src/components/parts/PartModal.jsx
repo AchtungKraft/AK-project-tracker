@@ -61,11 +61,17 @@ export default function PartModal({ part, partId, onClose }) {
   // Action modals
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showAddToBuildModal, setShowAddToBuildModal] = useState(false);
+  
+  // Image viewer modal state (view mode only)
+  const [viewImageUrl, setViewImageUrl] = useState(null);
 
   // PERF FIX: Modal is "open" when mounted with a valid partId
   // Use this for gating all queries consistently
   const isOpen = Boolean(partId);
   const effectivePartId = partId || part?.id;
+  
+  // Track which partId we've initialized formData for - prevents overwrites during edits
+  const initializedPartIdRef = useRef(null);
   
   // Dev diagnostic for tracking part switches
   if (process.env.NODE_ENV === 'development') {
