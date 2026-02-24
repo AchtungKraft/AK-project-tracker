@@ -43,6 +43,12 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
   // PHASE 5: Coverage badge for fully covered items
   const isCovered = item.coverage_status === 'FULL';
   
+  // PART 3: Inventory location from commitment or part
+  const inventoryLocation = item.inventory_location 
+    || item.part?.inventory_location 
+    || inv.location_name 
+    || null;
+  
   return (
     <div className="bg-gray-900/50 rounded px-2 py-1.5 text-[10px] font-mono text-gray-400 space-y-0.5">
       <div className="flex justify-between gap-4">
@@ -68,6 +74,13 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
       <div className="flex justify-between gap-4">
         <span>Avail Install:</span>
         <span className={availableToInstall > 0 ? "text-emerald-400" : "text-gray-500"}>{availableToInstall}</span>
+      </div>
+      {/* PART 3: Inventory Location */}
+      <div className="flex justify-between gap-4">
+        <span>Location:</span>
+        <span className={inventoryLocation ? "text-cyan-400" : "text-gray-500"}>
+          {inventoryLocation || '—'}
+        </span>
       </div>
       {isCovered && showCoveredBadge && (
         <div className="mt-1 pt-1 border-t border-gray-700">

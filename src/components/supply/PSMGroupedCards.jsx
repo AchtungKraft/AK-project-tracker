@@ -742,8 +742,9 @@ export default function PSMGroupedView({
   vendorsMap,
   tab,
 }) {
-  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
-  const [expandedSubgroups, setExpandedSubgroups] = useState(new Set());
+  // PART 2: Default ALL groups expanded - use 'all' as marker for "expand everything"
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['__ALL_EXPANDED__']));
+  const [expandedSubgroups, setExpandedSubgroups] = useState(new Set(['__ALL_EXPANDED__']));
   const [subgroupMode, setSubgroupMode] = useState('none');
   const [sortMode, setSortMode] = useState('exposure_desc');
   // CANONICAL: Billing status filter using 3-state model - default all selected
@@ -846,9 +847,26 @@ export default function PSMGroupedView({
     return sorted;
   }, [filteredItems, groupMode, subgroupMode, categoriesMap, vendorsMap]);
 
-  // Toggle group expansion
+  // PART 2: Check if group is expanded (respects __ALL_EXPANDED__ marker)
+  const isGroupExpanded = (groupKey) => {
+    return expandedGroups.has('__ALL_EXPANDED__') || expandedGroups.has(groupKey);
+  };
+
+  // PART 2: Check if subgroup is expanded (respects __ALL_EXPANDED__ marker)
+  const isSubgroupExpanded = (subgroupKey) => {
+    return expandedSubgroups.has('__ALL_EXPANDED__') || expandedSubgroups.has(subgroupKey);
+  };
+
+  // Toggle group expansion - clears __ALL_EXPANDED__ on first manual toggle
   const toggleGroup = (groupKey) => {
     setExpandedGroups(prev => {
+      // If __ALL_EXPANDED__ is set, switch to explicit mode with all groups expanded except clicked one
+      if (prev.has('__ALL_EXPANDED__')) {
+        const next = new Set(groups.map(g => g.key));
+        next.delete(groupKey); // Collapse the clicked group
+        return next;
+      }
+      // Normal toggle
       const next = new Set(prev);
       if (next.has(groupKey)) next.delete(groupKey);
       else next.add(groupKey);
@@ -856,9 +874,19 @@ export default function PSMGroupedView({
     });
   };
 
-  // Toggle subgroup expansion
+  // Toggle subgroup expansion - clears __ALL_EXPANDED__ on first manual toggle
   const toggleSubgroup = (subgroupKey) => {
     setExpandedSubgroups(prev => {
+      // If __ALL_EXPANDED__ is set, switch to explicit mode
+      if (prev.has('__ALL_EXPANDED__')) {
+        const allSubKeys = new Set();
+        groups.forEach(g => {
+          g.sortedSubgroups?.forEach(sg => allSubKeys.add(`${g.key}:${sg.key}`));
+        });
+        allSubKeys.delete(subgroupKey); // Collapse the clicked subgroup
+        return allSubKeys;
+      }
+      // Normal toggle
       const next = new Set(prev);
       if (next.has(subgroupKey)) next.delete(subgroupKey);
       else next.add(subgroupKey);
@@ -902,23 +930,7 @@ export default function PSMGroupedView({
     setTimeout(() => onBatchPO?.(), 100);
   };
 
-  // Auto-expand first group
-  React.useEffect(() => {
-    if (groups.length > 0 && expandedGroups.size === 0) {
-      setExpandedGroups(new Set([groups[0].key]));
-    }
-  }, [groups]);
-
-  // Auto-expand all subgroups when subgrouping is enabled
-  React.useEffect(() => {
-    if (subgroupMode !== 'none') {
-      const allSubKeys = new Set();
-      groups.forEach(g => {
-        g.sortedSubgroups?.forEach(sg => allSubKeys.add(`${g.key}:${sg.key}`));
-      });
-      setExpandedSubgroups(allSubKeys);
-    }
-  }, [subgroupMode, groups]);
+  // PART 2: No auto-expand logic needed - groups default to expanded via __ALL_EXPANDED__
 
   if (filteredItems.length === 0) {
     return (
@@ -1041,7 +1053,7 @@ export default function PSMGroupedView({
           groupMode={groupMode}
           subgroupMode={subgroupMode}
           sortMode={sortMode}
-          isExpanded={expandedGroups.has(group.key)}
+          isExpanded={isGroupExpanded(group.key)}
           expandedSubgroups={expandedSubgroups}
           onToggle={() => toggleGroup(group.key)}
           onToggleSubgroup={(subKey) => toggleSubgroup(`${group.key}:${subKey}`)}
@@ -1225,7 +1237,7 @@ function PSMGroupCardWithSubgroups({
                   subgroup={subgroup}
                   subgroupMode={subgroupMode}
                   sortMode={sortMode}
-                  isExpanded={expandedSubgroups.has(`${group.key}:${subgroup.key}`)}
+                  isExpanded={isSubgroupExpanded(`${group.key}:${subgroup.key}`)}
                   onToggle={() => onToggleSubgroup(subgroup.key)}
                   selectedItems={selectedItems}
                   onSelectAll={onSelectAll}

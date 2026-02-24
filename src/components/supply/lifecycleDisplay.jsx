@@ -8,8 +8,9 @@
 /**
  * Map commitment_status to simplified display_status
  */
+// PART 4: Changed "NEEDS TO ORDER" → "PLANNED" to avoid redundancy with inventory badges
 export const DISPLAY_STATUS_MAP = {
-  planned: 'NEEDS TO ORDER',
+  planned: 'PLANNED',
   ordered: 'ORDERED',
   partially_received: 'IN PROGRESS',
   partially_installed: 'IN PROGRESS',
@@ -25,7 +26,7 @@ export const DISPLAY_STATUS_MAP = {
  * @returns {string}
  */
 export function getDisplayStatus(commitmentStatus) {
-  if (!commitmentStatus) return 'NEEDS TO ORDER';
+  if (!commitmentStatus) return 'PLANNED';
   const normalized = commitmentStatus.toLowerCase().replace(/\s+/g, '_');
   return DISPLAY_STATUS_MAP[normalized] || commitmentStatus.toUpperCase();
 }
@@ -60,7 +61,7 @@ export function filterActiveCommitments(commitments, showClosedCancelled = false
  */
 export function getDisplayStatusColor(displayStatus) {
   switch (displayStatus) {
-    case 'NEEDS TO ORDER':
+    case 'PLANNED':
       return 'text-gray-300 border-l-amber-600';
     case 'ORDERED':
       return 'text-gray-300 border-l-gray-500';
