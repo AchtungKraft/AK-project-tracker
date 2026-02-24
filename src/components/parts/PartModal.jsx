@@ -118,13 +118,16 @@ export default function PartModal({ part, partId, onClose }) {
     }
   }, [formData?.cost, formData?.pricing_mode]);
 
-  // Fetch reference data
+  // Fetch reference data - PERF FIX: Add aggressive caching to prevent refetch on every modal open
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,  // 1 minute - reference data rarely changes
+    gcTime: 300000,    // 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   const { data: vendors = [] } = useQuery({
@@ -133,6 +136,9 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: locations = [] } = useQuery({
@@ -141,6 +147,9 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: makes = [] } = useQuery({
@@ -149,6 +158,9 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarMake.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: models = [] } = useQuery({
@@ -157,6 +169,9 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarModel.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: years = [] } = useQuery({
@@ -165,6 +180,9 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarYear.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only

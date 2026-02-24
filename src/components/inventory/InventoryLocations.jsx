@@ -71,30 +71,46 @@ export default function InventoryLocations({ onPartClick }) {
     } catch (e) {}
   }, [selectedLocationId, expandedLocations, showEmptyLocations, viewMode]);
 
-  // Queries
+  // Queries - PERF FIX: Add caching to prevent refetch storms
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: () => base44.entities.Location.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: inventoryItems = [] } = useQuery({
     queryKey: ['inventoryItems'],
     queryFn: () => base44.entities.InventoryItem.list(),
+    staleTime: 30000,  // 30s - inventory changes more frequently
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
     queryFn: () => base44.entities.Part.list(),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
+  // PERF FIX: Limit to recent line items - full history rarely needed for display
   const { data: lineItems = [] } = useQuery({
     queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list(),
+    queryFn: () => base44.entities.PartPurchaseLineItem.list('-created_date', 500),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   // PHASE 14E: Removed partProjectRequirements and partBuildAssignments queries
@@ -105,11 +121,17 @@ export default function InventoryLocations({ onPartClick }) {
     queryFn: () => base44.entities.PartCommitment.filter({ 
       commitment_status: { $nin: ['cancelled', 'closed'] }
     }),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   // PHASE 14E: Get builds/projects that have reserved inventory (from commitments only)

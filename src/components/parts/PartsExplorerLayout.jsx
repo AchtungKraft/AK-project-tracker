@@ -67,37 +67,56 @@ export default function PartsExplorerLayout({ onPartClick }) {
     } catch (e) {}
   }, [selectedCategoryId, expandedCategories, showLeftPane, viewMode, showGrouping]);
 
+  // PERF FIX: Add caching to all reference data queries
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
     queryFn: () => base44.entities.Part.list('-created_date'),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => base44.entities.Vendor.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: carMakes = [] } = useQuery({
     queryKey: ['carMakes'],
     queryFn: () => base44.entities.CarMake.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: carModels = [] } = useQuery({
     queryKey: ['carModels'],
     queryFn: () => base44.entities.CarModel.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: carYears = [] } = useQuery({
     queryKey: ['carYears'],
     queryFn: () => base44.entities.CarYear.list(),
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   // Build category path
