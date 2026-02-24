@@ -140,12 +140,15 @@ export function getAllowedCommitmentActions(commitment) {
   // It does NOT depend on: paid status, credit, install status, stock
   // The old check (!hasBeenBilled) was too restrictive - it blocked items
   // that were previously billed but have remaining qty to bill
-  const invoicedQty = commitment.invoiced_qty ?? 0;
-  const remainingToBill = Math.max(0, effectiveRequired - invoicedQty);
+  const commitmentInvoicedQty = invoiced_qty;
+  const remainingToBill = Math.max(0, effectiveRequired - commitmentInvoicedQty);
   
   if (remainingToBill > 0) {
     actions.canCreateInvoice = true;
   }
+  
+  // Store remaining for external use
+  actions.remainingToBill = remainingToBill;
 
   // POOL ALLOCATION - only for commitments with retail value
   if (unit_retail_snapshot && remaining > 0) {
