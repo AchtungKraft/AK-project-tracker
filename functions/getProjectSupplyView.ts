@@ -403,6 +403,12 @@ Deno.serve(async (req) => {
           covered_retail_total,
           exposure_gap,
           billing_status: c.billing_status || 'billable',
+          
+          // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
+          billing_state: normalizeBillingState(c.billing_status),
+          
+          // PART 3: Inventory location for expanded detail view
+          inventory_location: c.inventory_location || null,
 
           // Inventory snapshot
           inventory_snapshot,
