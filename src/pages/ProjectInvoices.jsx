@@ -230,6 +230,7 @@ export default function ProjectInvoices() {
       </div>
 
       {/* PHASE 6: Credit Summary - always show when project selected */}
+      {/* STABILIZATION FIX: Always pass onApplyCredit so button renders (disabled state handled in strip) */}
       {projectFilter !== "all" && (
         <CreditSummaryStrip
           grossExposure={grossExposure}
@@ -237,7 +238,7 @@ export default function ProjectInvoices() {
           creditApplied={totalCreditApplied}
           netExposure={netExposure}
           isLoading={isLoading || billingFetching}
-          onApplyCredit={totalCreditAvailable > 0 ? () => setShowApplyCreditModal(true) : undefined}
+          onApplyCredit={() => setShowApplyCreditModal(true)}
         />
       )}
 
