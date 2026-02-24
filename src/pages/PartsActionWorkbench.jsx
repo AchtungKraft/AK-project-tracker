@@ -971,6 +971,21 @@ export default function PartsActionWorkbench() {
         initialSelectedItems={initialSelectedItems}
         onSuccess={handleInvoiceSuccess}
       />
+      
+      {/* PHASE 3: Settle Parts With Credit Modal */}
+      <SettlePartsWithCreditModal
+        open={showSettleCreditModal}
+        onClose={() => setShowSettleCreditModal(false)}
+        projectId={projectFilter !== 'all' ? projectFilter : null}
+        projectName={projects.find(p => p.id === projectFilter)?.name}
+        selectedCommitmentIds={Array.from(selectedIds)}
+        availableCredit={billingData?.credit_summary?.available_credit || 0}
+        onSuccess={async () => {
+          await forceAppRefresh(queryClient, { projectIds: [projectFilter] });
+          setShowSettleCreditModal(false);
+          setSelectedIds(new Set());
+        }}
+      />
     </div>
   );
 }
