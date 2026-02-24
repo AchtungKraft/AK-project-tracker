@@ -504,9 +504,10 @@ Deno.serve(async (req) => {
       ledger_mutated: creditToApply > 0,
       blocked_lines: blockedLines.length > 0 ? blockedLines : null,
       warnings: warnings.length > 0 ? warnings : null,
-      // PART 1: Auto-settle summary
+      // PART 1: Auto-settle summary (deterministic, line-order allocation)
       auto_settled_commitments: autoSettledCommitments,
       auto_settled_count: autoSettledCommitments.length,
+      // CANONICAL: commitment_settlements in invoice line order with clear mapping
       commitment_settlements: commitmentSettlements,
     });
 
