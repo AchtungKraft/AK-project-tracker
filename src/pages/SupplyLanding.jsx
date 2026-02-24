@@ -64,16 +64,30 @@ export default function SupplyLanding() {
   }, [searchTerm]);
 
   // Fetch portfolio state from backend with filters
-  const { data: portfolioData, isLoading, refetch } = useQuery({
+  // PERF FIX: Full query stability settings
+  const { data: portfolioData, isLoading, error: portfolioError, refetch } = useQuery({
     queryKey: ['portfolioSupplyState', debouncedSearch, statusFilter],
     queryFn: async () => {
+      const _start = Date.now();
       const response = await base44.functions.invoke('getPortfolioSupplyState', {
         searchTerm: debouncedSearch,
         statusFilter: statusFilter === 'all' ? null : statusFilter,
       });
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[PERF] getPortfolioSupplyState ${Date.now() - _start}ms`, {
+          projects: response.data?.projects?.length
+        });
+      }
       return response.data;
     },
     staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error) => {
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   const portfolio = portfolioData?.portfolio || {};

@@ -35,6 +35,9 @@ export function useProjectSupplyView(projectId, filters = {}) {
   const query = useQuery({
     queryKey,
     queryFn: async () => {
+      // Defensive: prevent query if no valid projectId
+      if (!normalizedId) return null;
+      const _start = Date.now();
       if (process.env.NODE_ENV === 'development') {
         console.log('[useProjectSupplyView] queryFn EXECUTING for projectId:', normalizedId);
       }
@@ -42,6 +45,12 @@ export function useProjectSupplyView(projectId, filters = {}) {
         project_id: normalizedId,
         filters,
       });
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[PERF] getProjectSupplyView ${Date.now() - _start}ms`, {
+          items: response.data?.items?.length,
+          projectId: normalizedId
+        });
+      }
       return response.data;
     },
     enabled: Boolean(normalizedId),
@@ -49,7 +58,12 @@ export function useProjectSupplyView(projectId, filters = {}) {
     staleTime: 15000,
     gcTime: 60000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchOnMount: 'always',
+    retry: (failureCount, error) => {
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   const invalidate = () => {
@@ -87,17 +101,29 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   const query = useQuery({
     queryKey,
     queryFn: async () => {
+      const _start = Date.now();
       const response = await base44.functions.invoke('getOpsSupplyView', {
         mode,
         filters,
       });
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[PERF] getOpsSupplyView ${Date.now() - _start}ms`, {
+          mode,
+          items: response.data?.items?.length
+        });
+      }
       return response.data;
     },
     // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
     staleTime: 15000,
     gcTime: 60000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchOnMount: 'always',
+    retry: (failureCount, error) => {
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   const invalidate = () => {
