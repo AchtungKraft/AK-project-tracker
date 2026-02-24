@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== PHASE 2: Apply credit (GATED - only for legacy invoices) =====
+    // ===== PHASE 2: Apply credit (HARDENED - explicit flag only) =====
     let creditApplied = invoice.credit_applied ?? 0;
     const creditsAppliedDetail = [];
     const idempotencyKey = generatePaymentIdempotencyKey(invoice_id, Date.now());
@@ -222,18 +222,15 @@ Deno.serve(async (req) => {
     // Check if credit was already applied at invoice creation
     const creditAlreadyAppliedAtCreation = (invoice.credit_applied ?? 0) > 0;
     
-    // STABILIZATION GATE: Payment-time credit application is now DISABLED by default
-    // Only applies if:
-    // 1. invoice.apply_credit_at_payment === true (explicit flag), OR
-    // 2. invoice.credit_idempotency_key is null/undefined (legacy invoice pre-stabilization)
-    const isLegacyInvoice = !invoice.credit_idempotency_key;
-    const explicitPaymentTimeCredit = invoice.apply_credit_at_payment === true;
+    // HARDENING: Payment-time credit application ONLY if explicit flag is set
+    // Legacy heuristic REMOVED - no more checking for missing credit_idempotency_key
+    // This prevents accidental credit application on old invoices
     const shouldApplyCreditAtPayment = !creditAlreadyAppliedAtCreation && 
-                                        (isLegacyInvoice || explicitPaymentTimeCredit);
+                                        invoice.apply_credit_at_payment === true;
     
     if (shouldApplyCreditAtPayment && subtotal > 0) {
-      // Credit not applied at creation AND this is a legacy invoice or explicitly requested
-      console.log(`Applying credit at payment time for ${isLegacyInvoice ? 'legacy' : 'explicit'} invoice ${invoice_id}`);
+      // Credit not applied at creation AND explicitly requested at payment time
+      console.log(`Applying credit at payment time (explicit flag) for invoice ${invoice_id}`);
       
       const credits = await base44.entities.ProjectCreditLedger.filter({
         project_id: invoice.project_id,

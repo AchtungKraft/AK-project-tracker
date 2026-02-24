@@ -159,7 +159,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== PHASE 2: Revert linked commitments to 'unbilled' =====
+    // ===== PHASE 2: Revert linked commitments to 'unbilled' (ATOMIC) =====
+    // HARDENING: This phase MUST succeed entirely before credit reversal or invoice update
     const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
       invoice_id: invoice_id,
     });
@@ -170,11 +171,20 @@ Deno.serve(async (req) => {
 
     const uniqueCommitmentIds = [...new Set(commitmentIds)];
     const commitmentRevertResults = [];
+    const revertFailures = [];
+    const revertedCommitmentIds = []; // Track for rollback if needed
 
     for (const commitmentId of uniqueCommitmentIds) {
       try {
         const commitments = await base44.entities.PartCommitment.filter({ id: commitmentId });
-        if (commitments.length === 0) continue;
+        if (commitments.length === 0) {
+          commitmentRevertResults.push({
+            commitment_id: commitmentId,
+            status: 'skipped',
+            reason: 'not_found',
+          });
+          continue;
+        }
 
         const commitment = commitments[0];
         
@@ -186,6 +196,7 @@ Deno.serve(async (req) => {
             invoiced_retail_total: 0,
           });
 
+          revertedCommitmentIds.push(commitmentId);
           commitmentRevertResults.push({
             commitment_id: commitmentId,
             status: 'reverted',
@@ -208,12 +219,41 @@ Deno.serve(async (req) => {
         }
       } catch (err) {
         console.error(`Failed to revert commitment ${commitmentId}:`, err);
+        revertFailures.push({
+          commitment_id: commitmentId,
+          error: err.message,
+        });
         commitmentRevertResults.push({
           commitment_id: commitmentId,
           status: 'error',
           error: err.message,
         });
       }
+    }
+
+    // ===== ATOMICITY CHECK: If ANY commitment revert failed, abort cancel =====
+    if (revertFailures.length > 0) {
+      // Rollback any commitments we successfully reverted
+      for (const rollbackId of revertedCommitmentIds) {
+        try {
+          await base44.asServiceRole.entities.PartCommitment.update(rollbackId, {
+            billing_status: 'invoiced',
+          });
+          console.log(`Rolled back commitment ${rollbackId} to 'invoiced'`);
+        } catch (rollbackErr) {
+          console.error(`Rollback failed for commitment ${rollbackId}:`, rollbackErr);
+        }
+      }
+
+      return Response.json({
+        success: false,
+        error: 'Cancel aborted - commitment revert failed',
+        message: 'One or more commitments could not be reverted. Invoice was NOT cancelled and credit was NOT reversed.',
+        revert_failures: revertFailures,
+        rolled_back_count: revertedCommitmentIds.length,
+        invoice_id,
+        invoice_status: invoice.status,
+      }, { status: 500 });
     }
 
     // ===== PHASE 3: Update invoice to cancelled =====
