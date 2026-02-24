@@ -28,17 +28,21 @@ import { cn } from "@/lib/utils";
  * - Coverage status per project
  * 
  * PERF FIX: This section is NON-BLOCKING - errors here don't block modal render.
- * Accepts isOpen prop to gate queries when modal is closed.
+ * Accepts isOpen prop to gate queries when modal is closed/collapsed.
+ * Query only runs when isOpen === true AND partId exists.
  */
 export default function PartProjectUsageSection({ partId, isOpen = true }) {
   // PERF FIX: Gate with isOpen + partId, add retry control
-  const { data, isLoading, error } = useQuery({
+  // Query is completely disabled if isOpen is false
+  const queryEnabled = Boolean(isOpen && partId);
+  
+  const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
       return response.data;
     },
-    enabled: Boolean(isOpen && partId),
+    enabled: queryEnabled,
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
@@ -49,6 +53,11 @@ export default function PartProjectUsageSection({ partId, isOpen = true }) {
       return failureCount < 1;
     },
   });
+
+  // If section is not open, render nothing (don't even show skeleton)
+  if (!isOpen) {
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -64,7 +73,7 @@ export default function PartProjectUsageSection({ partId, isOpen = true }) {
   if (error) {
     const errorMessage = error?.status === 429 
       ? 'Rate limited - please wait a moment' 
-      : 'Failed to load project usage';
+      : 'Unable to load project usage';
     return (
       <div className="text-sm text-red-400 p-3 bg-red-900/20 rounded-lg flex items-center gap-2">
         <AlertCircle className="w-4 h-4" />
