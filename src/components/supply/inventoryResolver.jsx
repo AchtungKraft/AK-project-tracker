@@ -85,18 +85,24 @@ export function buildPartInventoryMap(parts, commitments) {
  * 
  * This is the CANONICAL resolver that all UI components MUST use.
  * 
+ * PHASE 7: Returns null values when inventory map not loaded
+ * 
  * @param {Object} commitment - The commitment to resolve
  * @param {Map} partInventoryMap - Pre-computed part inventory map
- * @returns {Object} Resolved inventory state
+ * @returns {Object|null} Resolved inventory state, or null if map not loaded
  */
 export function resolveInventoryForCommitment(commitment, partInventoryMap) {
-  const partInv = partInventoryMap.get(commitment.part_id) || {
-    physical_stock: 0,
-    reserved_global: 0,
-    available: 0,
-    on_order_global: 0,
-    to_order_global: 0,
-  };
+  // PHASE 7: Guard against unloaded inventory
+  if (!partInventoryMap || partInventoryMap.size === 0) {
+    return null;
+  }
+  
+  const partInv = partInventoryMap.get(commitment.part_id);
+  
+  // PHASE 7: If part not in map, return null (don't fabricate zeros)
+  if (!partInv) {
+    return null;
+  }
   
   // Commitment-scoped values
   const reserved_this = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
