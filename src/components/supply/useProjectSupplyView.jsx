@@ -165,8 +165,11 @@ export function usePOReceivingView(orderId = null, filters = {}) {
       });
       return response.data;
     },
-    staleTime: 30000,
-    refetchOnWindowFocus: true,
+    // PHASE 1: Extended caching
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const invalidate = () => {
