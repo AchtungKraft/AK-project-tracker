@@ -215,21 +215,23 @@ export function PSMItemRow({
   // PHASE 6: Disable ordering when gap_qty === 0
   const canOrder = allowed?.canCreatePO && toOrder > 0;
   
-  // CANONICAL: Invoice eligibility from backend (canCreateInvoice, not canInvoice)
+  // CANONICAL: Invoice eligibility - use canCreateInvoice from getAllowedCommitmentActions
   const canInvoice = allowed?.canCreateInvoice ?? false;
   const invoiceBlockReason = commitment.invoice_block_reason_text;
   const billingState = commitment.billing_state || 'NOT_INVOICED';
 
-  // PHASE 2: Install Eligibility Debug Trace
-  if (process.env.NODE_ENV === 'development') {
-    console.log("INSTALL DEBUG", {
+  // PHASE 2: Install Eligibility Debug Trace (dev only)
+  if (process.env.NODE_ENV === 'development' && part?.part_name?.includes('Air Conditioning')) {
+    console.log("INSTALL DEBUG - A/C Part", {
       part: part?.part_name,
-      reserved: commitment.reserved_from_stock,
-      installed: commitment.qty_installed,
+      reserved_from_stock: commitment.reserved_from_stock,
+      qty_installed: commitment.qty_installed,
       available_to_install: commitment.available_to_install,
       allowedInstall: allowed?.canInstall,
+      allowedCreateInvoice: allowed?.canCreateInvoice,
       block_reason_code: commitment.block_reason_code,
       actionsEnabled,
+      inventory_snapshot: commitment.inventory_snapshot,
     });
   }
 
