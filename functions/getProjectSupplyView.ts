@@ -147,6 +147,15 @@ Deno.serve(async (req) => {
         lineItemsByCommitment.get(li.commitment_id).push(li);
       }
     });
+    
+    // PART 1: Normalize billing_status to canonical billing_state (NOT_INVOICED, INVOICED, PAID)
+    function normalizeBillingState(billingStatus) {
+      if (!billingStatus) return 'NOT_INVOICED';
+      const normalized = String(billingStatus).toLowerCase().trim();
+      if (normalized === 'paid') return 'PAID';
+      if (normalized === 'invoiced' || normalized === 'billed') return 'INVOICED';
+      return 'NOT_INVOICED';
+    }
 
     // ============================================================================
     // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP
