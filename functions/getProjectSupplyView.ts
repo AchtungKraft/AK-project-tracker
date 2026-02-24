@@ -401,6 +401,9 @@ Deno.serve(async (req) => {
             prepay_satisfied_at: c.prepay_satisfied_at,
             order_line_item_ids: c.order_line_item_ids,
           },
+
+          // PREPAY DIAGNOSTICS (dev mode only - helps debug prepay gating)
+          ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
         };
       });
 
