@@ -268,16 +268,24 @@ function ProjectCommitmentRow({ commitment }) {
 
 /**
  * Compact version for inline display
+ * PERF FIX: Uses same caching config as main section
  */
-export function PartProjectUsageCompact({ partId }) {
+export function PartProjectUsageCompact({ partId, isOpen = true }) {
   const { data, isLoading } = useQuery({
     queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
       return response.data;
     },
-    enabled: !!partId,
-    staleTime: 30000
+    enabled: Boolean(isOpen && partId),
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error) => {
+      if (error?.status === 429 || error?.status >= 500) return false;
+      return failureCount < 1;
+    },
   });
 
   if (isLoading || !data?.success) {
