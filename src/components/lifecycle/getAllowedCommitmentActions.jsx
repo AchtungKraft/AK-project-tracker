@@ -127,10 +127,16 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // INSTALL - only if has reserved & uninstalled (reserved_from_stock > qty_installed)
-  // CRITICAL: Install eligibility depends ONLY on inventory, NOT billing status
-  // This was a bug where billing_status gated install incorrectly
+  // ============================================================================
+  // CRITICAL (Phase 7): Install eligibility depends ONLY on inventory state
+  // - reserved_from_stock > qty_installed
+  // - Does NOT depend on: billing_status, payment status, credit allocations
+  // - In-stock committed parts can ALWAYS be installed regardless of billing state
+  // - This was a bug where billing_status incorrectly gated install
+  // ============================================================================
   if (uninstalled > 0) {
     actions.canInstall = true;
+    actions.installableQty = uninstalled; // Expose for UI display
   }
 
   // REVERSE INSTALL - only if has installed parts
