@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +32,23 @@ import AddInventoryModal from "../inventory/AddInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
+// Helper to cancel all part-scoped queries for a given partId
+const cancelPartQueries = (queryClient, partId) => {
+  if (!partId) return;
+  queryClient.cancelQueries({ 
+    predicate: (query) => {
+      const key = query.queryKey;
+      return (
+        (key[0] === 'part' && key[1] === partId) ||
+        (key[0] === 'partsInventoryView' && key[1] === partId) ||
+        (key[0] === 'inventoryLocations' && key[1] === partId) ||
+        (key[0] === 'partSupplyUsage' && key[1] === partId) ||
+        (key[0] === 'partJournalEntries' && key[1] === partId)
+      );
+    }
+  });
+};
+
 export default function PartModal({ part, partId, onClose }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -49,29 +66,38 @@ export default function PartModal({ part, partId, onClose }) {
   // Use this for gating all queries consistently
   const isOpen = Boolean(partId);
   const effectivePartId = partId || part?.id;
+  
+  // Track previous partId to cancel in-flight queries on switch
+  const prevPartIdRef = useRef(null);
 
-  // PERF FIX: Cancel inflight queries on partId change or unmount
+  // PERF FIX: Cancel in-flight queries when partId changes OR on unmount
   // This prevents stale data from resolving into UI after switching parts
   useEffect(() => {
+    const prevId = prevPartIdRef.current;
+    
+    // If partId changed (not initial mount), cancel queries for previous part
+    if (prevId && prevId !== effectivePartId) {
+      cancelPartQueries(queryClient, prevId);
+    }
+    
+    // Update ref to current
+    prevPartIdRef.current = effectivePartId;
+    
+    // Cleanup: cancel queries for current part on unmount
     return () => {
-      // On unmount or partId change, cancel all modal-scoped queries
       if (effectivePartId) {
-        queryClient.cancelQueries({ 
-          predicate: (query) => {
-            const key = query.queryKey;
-            // Cancel part-specific queries for this partId
-            return (
-              (key[0] === 'part' && key[1] === effectivePartId) ||
-              (key[0] === 'partsInventoryView' && key[1] === effectivePartId) ||
-              (key[0] === 'inventoryLocations' && key[1] === effectivePartId) ||
-              (key[0] === 'partSupplyUsage' && key[1] === effectivePartId) ||
-              (key[0] === 'partJournalEntries' && key[1] === effectivePartId)
-            );
-          }
-        });
+        cancelPartQueries(queryClient, effectivePartId);
       }
     };
   }, [effectivePartId, queryClient]);
+  
+  // Wrap onClose to ensure queries are canceled before closing
+  const handleClose = () => {
+    if (effectivePartId) {
+      cancelPartQueries(queryClient, effectivePartId);
+    }
+    onClose?.();
+  };
   
   // Fetch part if only partId provided
   // PERF FIX: Add caching, retry control, and window focus handling
