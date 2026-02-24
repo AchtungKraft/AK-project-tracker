@@ -73,8 +73,10 @@ export function getAllowedCommitmentActions(commitment) {
   const unorderedQty = effectiveGap;
   const unreceived = effectiveOnOrder; // Items on order not yet received
   const uninstalled = Math.max(0, effectiveReserved - qty_installed);
-  const hasBeenBilled = billing_status && !['not_billable', 'billable'].includes(billing_status);
-  const isPaidOrInvoiced = ['invoiced', 'paid'].includes(billing_status);
+  
+  // CANONICAL: Edit locking based on invoiced_qty, NOT billing_status enum
+  // billing_status can be stale; invoiced_qty is authoritative
+  const isInvoiceLocked = (invoiced_qty ?? 0) > 0;
 
   // Default all actions to false
   const actions = getDefaultActions();
@@ -96,22 +98,23 @@ export function getAllowedCommitmentActions(commitment) {
   actions.canViewHistory = true;
   actions.canEditNotes = true;
 
-  // Edit commitment (qty, pricing) - only before billing locks
-  if (!hasBeenBilled && !isPaidOrInvoiced) {
+  // CANONICAL: Edit commitment (qty, pricing) - lock when invoiced_qty > 0
+  // Invoiced amounts are committed to client; changing would invalidate invoice
+  if (!isInvoiceLocked) {
     actions.canEdit = true;
     actions.canReduceQty = qty_installed === 0 || effectiveRequired > qty_installed;
   }
 
-  // CREATE PO - only for planned state with unordered qty (gap > 0)
-  // NOT allowed for: ordered, installed, partially_received, received, allocated, cancelled, closed
-  if (commitment_status === 'planned' && unorderedQty > 0) {
+  // CANONICAL: CREATE PO - depends ONLY on to_order > 0
+  // Lifecycle string does NOT block (except cancelled/closed)
+  // A commitment with existing orders but remaining gap can still create POs
+  if (unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status)) {
     actions.canCreatePO = true;
   }
 
-  // DELTA ORDER - only for commitments that already have orders (ordered, partially_received, received)
-  // This creates additional PO lines for existing commitments
-  const canDeltaOrderStates = ['ordered', 'partially_received', 'received'];
-  if (canDeltaOrderStates.includes(commitment_status) && effectiveOnOrder > 0) {
+  // CANONICAL: DELTA ORDER - has existing orders AND still has gap
+  // Lifecycle string does NOT block (except cancelled/closed)
+  if (effectiveOnOrder > 0 && unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status)) {
     actions.canCreateDeltaOrder = true;
   }
 
@@ -300,41 +303,39 @@ export function getActionBlockReason(commitment, action) {
     return null; // Not blocked
   }
 
+  // CANONICAL: Block reasons use canonical fields only, no legacy qty_* fields
   const reasons = {
     canCreatePO: () => {
       if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
       if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
-      if (commitment?.commitment_status !== 'planned') {
-        return `Use "Additional Order" for ${commitment.commitment_status} commitments`;
-      }
-      if ((commitment?.qty_committed || 0) <= (commitment?.qty_ordered || 0)) {
-        return 'All committed quantity already on order';
-      }
+      const toOrder = commitment?.to_order ?? 0;
+      if (toOrder <= 0) return 'All required quantity is covered';
       return 'Cannot create PO in current state';
     },
     canCreateDeltaOrder: () => {
       if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
       if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
-      if (commitment?.commitment_status === 'planned') return 'Use Create PO for planned commitments';
-      if (commitment?.commitment_status === 'installed') return 'Cannot add orders after installation';
-      if ((commitment?.qty_ordered || 0) === 0) return 'No existing orders to add to';
+      const coveredFromPo = commitment?.covered_from_po ?? 0;
+      const toOrder = commitment?.to_order ?? 0;
+      if (coveredFromPo === 0) return 'No existing orders to add to';
+      if (toOrder <= 0) return 'All required quantity is covered';
       return 'Cannot create delta order in current state';
     },
     canCancel: () => {
       if ((commitment?.qty_installed || 0) > 0) return 'Cannot cancel: parts already installed';
-      if ((commitment?.qty_received || 0) > 0) return 'Must return received inventory before cancelling';
+      const receivedQty = commitment?.received_qty ?? 0;
+      if (receivedQty > 0) return 'Must return received inventory before cancelling';
       return 'Cannot cancel in current state';
     },
     canInstall: () => {
-      if ((commitment?.qty_allocated || 0) <= (commitment?.qty_installed || 0)) {
-        return 'No allocated parts available to install';
-      }
+      const availableToInstall = commitment?.available_to_install ?? 
+        Math.max(0, (commitment?.reserved_from_stock ?? 0) - (commitment?.qty_installed ?? 0));
+      if (availableToInstall <= 0) return 'No parts available to install';
       return 'Cannot install in current state';
     },
     canEdit: () => {
-      if (['invoiced', 'paid'].includes(commitment?.billing_status)) {
-        return 'Cannot edit after billing';
-      }
+      const invoicedQty = commitment?.invoiced_qty ?? 0;
+      if (invoicedQty > 0) return 'Cannot edit after invoicing';
       return 'Cannot edit in current state';
     },
   };
