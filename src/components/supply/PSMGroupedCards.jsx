@@ -309,17 +309,18 @@ export function PSMItemRow({
           </div>
         )}
         
-        {/* CANONICAL: Billing State Badge */}
-        <div className="hidden xl:block flex-shrink-0">
-          <span className={cn(
-            "text-[9px] font-mono uppercase px-1.5 py-0.5 rounded whitespace-nowrap",
-            billingState === 'PAID' && "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50",
-            billingState === 'INVOICED' && "bg-blue-900/50 text-blue-400 border border-blue-700/50",
-            billingState === 'NOT_INVOICED' && "bg-gray-800/50 text-gray-400 border border-gray-700/50"
-          )}>
-            {billingState.replace('_', ' ')}
-          </span>
-        </div>
+        {/* CANONICAL: Billing State Badge - Only show PAID/INVOICED (NOT_INVOICED = no badge) */}
+        {billingState !== 'NOT_INVOICED' && (
+          <div className="hidden md:block flex-shrink-0">
+            <span className={cn(
+              "text-[9px] font-mono uppercase px-1.5 py-0.5 rounded whitespace-nowrap",
+              billingState === 'PAID' && "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50",
+              billingState === 'INVOICED' && "bg-amber-900/50 text-amber-400 border border-amber-700/50"
+            )}>
+              {billingState}
+            </span>
+          </div>
+        )}
 
         {/* PHASE 4: Details Toggle */}
         <Button
