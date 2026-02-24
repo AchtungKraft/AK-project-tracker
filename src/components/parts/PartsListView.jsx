@@ -435,7 +435,8 @@ export default function PartsListView({
         {showGrouping && (
           <button
             onClick={() => toggleGroup(groupKey)}
-            className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/30 transition-colors"
+            className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border-2 hover:opacity-90 transition-colors"
+            style={{ borderColor: group.color }}
           >
             {isExpanded ? (
               <ChevronDown className="w-4 h-4 text-gray-400" />
