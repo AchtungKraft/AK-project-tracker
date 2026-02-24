@@ -566,6 +566,28 @@ export default function PartModal({ part, partId, onClose }) {
       </Dialog>
     );
   }
+  
+  // PERF FIX: Part load error - show error state, don't spin forever
+  if (partLoadError) {
+    const errorMessage = partError?.status === 429 
+      ? 'Rate limited - please wait a moment and try again' 
+      : 'Unable to load part details';
+    return (
+      <Dialog open={true} onOpenChange={handleClose}>
+        <DialogContent className="bg-gray-900 border-red-900/30">
+          <DialogHeader>
+            <DialogTitle className="text-white">Error Loading Part</DialogTitle>
+            <DialogDescription className="text-red-400">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" onClick={handleClose}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (!activePart) return null;
 
