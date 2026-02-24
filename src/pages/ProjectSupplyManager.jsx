@@ -917,10 +917,11 @@ export default function ProjectSupplyManager() {
               {/* Summary Strip */}
               <PSMSummaryStrip items={getFilteredCommitments('buy')} tab="buy" />
 
-              {/* Grouped Cards */}
+              {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
-                items={applySorting(filterActiveCommitments(getFilteredCommitments('buy'), showClosedCancelled), sortBy)}
+                items={filterActiveCommitments(getFilteredCommitments('buy'), showClosedCancelled)}
                 groupMode={groupMode}
+                onGroupModeChange={setGroupMode}
                 selectedItems={selectedItems}
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
@@ -959,36 +960,16 @@ export default function ProjectSupplyManager() {
                     className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
                   />
                 </div>
-                <Select value={groupMode} onValueChange={setGroupMode}>
-                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white h-8">
-                    <SelectValue placeholder="Group by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="category">By Category</SelectItem>
-                    <SelectItem value="vendor">By Vendor</SelectItem>
-                    <SelectItem value="coverage">By Coverage</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-32 bg-gray-900/50 border-gray-700 text-white h-8">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="recent">Recent</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="qty">Quantity</SelectItem>
-                    <SelectItem value="cost">Cost</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* Summary Strip */}
               <PSMSummaryStrip items={getFilteredCommitments('receive')} tab="receive" />
 
-              {/* Grouped Cards */}
+              {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
-                items={applySorting(filterActiveCommitments(getFilteredCommitments('receive'), showClosedCancelled), sortBy)}
+                items={filterActiveCommitments(getFilteredCommitments('receive'), showClosedCancelled)}
                 groupMode={groupMode}
+                onGroupModeChange={setGroupMode}
                 selectedItems={selectedItems}
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
@@ -1027,27 +1008,6 @@ export default function ProjectSupplyManager() {
                     className="pl-10 bg-gray-900/50 border-gray-700 text-white h-8 text-sm"
                   />
                 </div>
-                <Select value={groupMode} onValueChange={setGroupMode}>
-                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white h-8">
-                    <SelectValue placeholder="Group by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="category">By Category</SelectItem>
-                    <SelectItem value="vendor">By Vendor</SelectItem>
-                    <SelectItem value="coverage">By Coverage</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-32 bg-gray-900/50 border-gray-700 text-white h-8">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="recent">Recent</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="qty">Quantity</SelectItem>
-                    <SelectItem value="cost">Cost</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* Summary Strip */}
