@@ -49,7 +49,9 @@ function normalizeClientBillingStatus(rawStatus, isBillable = true) {
     'not_invoiced': 'NOT_INVOICED',
     'not invoiced': 'NOT_INVOICED',
     'billable': 'NOT_INVOICED',
+    'unbilled': 'NOT_INVOICED', // Canonical from PartCommitment.billing_status
     'invoiced': 'INVOICED',
+    'billed': 'INVOICED', // Alternative naming
     'client invoiced': 'INVOICED',
     'client_invoiced': 'INVOICED',
     'partially_paid': 'PARTIALLY_PAID',
