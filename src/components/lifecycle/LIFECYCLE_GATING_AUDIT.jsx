@@ -151,6 +151,152 @@ If this part is intentionally non-billable (e.g., client-supplied), the flags ar
 
 ---
 
+# PART-LEVEL BILLING & INVENTORY FLAG AUDIT
+
+## Target Part
+- **Part ID**: `691b33440244c2156b796384`
+- **Part Name**: Electric Air Conditioning for Classic 911 (single condenser)
+- **Project**: `69176d6e3888297089966a36`
+
+---
+
+## PHASE 1 — Part Metadata Snapshot
+
+| Field | Value |
+|-------|-------|
+| part_id | `691b33440244c2156b796384` |
+| part_name | Electric Air Conditioning for Classic 911 (single condenser) |
+| **requires_client_billing** | `false` ⚠️ |
+| **affects_inventory** | `false` ⚠️ |
+| requires_vendor_purchase | `false` |
+| requires_vendor_payment | `false` |
+| affects_margin | `false` |
+| part_type | `PURCHASED_VENDOR` |
+| pricing_mode | `manual` |
+| retail_override | `5628.0` |
+| cost | `5100.0` |
+| physical_stock | `1.0` |
+
+---
+
+## PHASE 2 — Filtering Rules Identified
+
+| File | Filter Condition | Affects Install? | Affects Invoice? | Status |
+|------|------------------|------------------|------------------|--------|
+| `getBillingAndProcurementStates.js:177` | `if (part.requires_client_billing === false) return 'NON_BILLABLE'` | ❌ NO | ✅ **YES** | **BLOCKS INVOICE** |
+| `getBillingAndProcurementStates.js:376` | `if (financialRole === 'NON_BILLABLE') continue;` | N/A | ✅ **YES** | **EXCLUDES FROM INVOICE LIST** |
+| `getProjectSupplyView.js` | No filter on `requires_client_billing` | N/A | N/A | OK |
+| `getProjectSupplyView.js` | No filter on `affects_inventory` | N/A | N/A | OK |
+
+### Root Cause Code (getBillingAndProcurementStates.js lines 175-180):
+
+```javascript
+function getFinancialRole(part, effectivePartType) {
+  if (!part) return 'VENDOR_MARGIN';
+  if (part.requires_client_billing === false) return 'NON_BILLABLE';  // ← THIS LINE
+  // ...
+}
+```
+
+And then at line 376:
+```javascript
+if (financialRole === 'NON_BILLABLE') continue;  // ← SKIPS COMMITMENT ENTIRELY
+```
+
+---
+
+## PHASE 3 — Invoice Eligibility Filtering Audit
+
+### Expected Behavior (Canonical Rule)
+Invoice list inclusion should depend ONLY on:
+```
+remaining_to_bill_qty > 0
+```
+
+### Actual Behavior
+Invoice list inclusion depends on:
+1. `remaining_to_bill_qty > 0` ✅
+2. `part.requires_client_billing !== false` ❌ **OVERRIDE CONDITION**
+
+### Verdict: ❌ FAIL
+The `requires_client_billing === false` flag causes the commitment to be **completely excluded** from the billing and procurement states read model, meaning it never appears in the invoice selection UI.
+
+---
+
+## PHASE 4 — Install Eligibility Filtering Audit
+
+### Expected Behavior (Canonical Rule)
+Install tab inclusion should depend ONLY on:
+```
+available_to_install > 0
+```
+
+### Actual Behavior
+`getProjectSupplyView.js` does NOT filter on `affects_inventory`. The commitment IS included in the supply view.
+
+### Verdict: ✅ PASS
+Install eligibility is correctly gated only by `available_to_install > 0`.
+
+---
+
+## PHASE 5 — Determine Intended Behavior
+
+| Question | Analysis |
+|----------|----------|
+| Should this part be billable? | **YES** - `retail_override = $5,628.00`, indicating client charges are expected |
+| Should this part consume inventory? | **YES** - `physical_stock = 1.0`, indicating tracked inventory |
+| Is the current exclusion intentional? | **LIKELY NO** - The part has meaningful retail and cost values, suggesting client billing is expected |
+
+### Business Context
+This is a $5,628 A/C system. The flags `requires_client_billing: false` and `affects_inventory: false` appear to be **data entry errors** rather than intentional business logic.
+
+---
+
+## PHASE 6 — Correction Plan
+
+### Option A: Fix Part Data (RECOMMENDED)
+
+Update Part `691b33440244c2156b796384`:
+```javascript
+{
+  requires_client_billing: true,
+  affects_inventory: true,
+  affects_margin: true
+}
+```
+
+### Option B: Modify Read Model Logic (NOT RECOMMENDED)
+This would change business rules for ALL parts flagged as non-billable.
+
+---
+
+## Summary Table
+
+| Invariant | Status |
+|-----------|--------|
+| Invoice eligibility gated only on `remaining_to_bill_qty > 0` | ❌ FAIL (blocked by `requires_client_billing`) |
+| Install eligibility gated only on `available_to_install > 0` | ✅ PASS |
+| Part flags correctly set for business intent | ❌ FAIL |
+
+---
+
+## Required Fix
+
+**Update Part record** (one-time data fix):
+```
+Part ID: 691b33440244c2156b796384
+- requires_client_billing: false → true
+- affects_inventory: false → true  
+- affects_margin: false → true
+```
+
+After update, the commitment will appear in:
+- ✅ Invoice selection (BillablePartsSelector)
+- ✅ Install tab (already working)
+- ✅ Supply dashboard (already working)
+
+---
+
 ---
 
 # PHASE 1 — DETECT RULE MISMATCHES
