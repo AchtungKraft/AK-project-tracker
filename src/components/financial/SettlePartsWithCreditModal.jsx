@@ -174,10 +174,10 @@ export default function SettlePartsWithCreditModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Wallet className="w-5 h-5 text-green-400" />
-            Settle Parts With Credit
+            Apply Credit Without Invoice
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            Apply project credit to settle {selectedCommitmentIds.length} selected part(s) as PAID without creating an invoice.
+            This settles selected commitments directly using existing project credit. No invoice will be created.
           </DialogDescription>
         </DialogHeader>
 
@@ -234,16 +234,24 @@ export default function SettlePartsWithCreditModal({
                             key={c.commitment_id}
                             className="flex items-center justify-between p-2 bg-emerald-900/20 border border-emerald-800/30 rounded text-sm"
                           >
-                            <span className="text-gray-300 truncate flex-1">
-                              {c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8)}
-                            </span>
-                            <div className="flex items-center gap-3 text-xs">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-gray-300 truncate block font-medium">
+                                {c.part_name || (c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8))}
+                              </span>
+                              {c.part_number && (
+                                <span className="text-xs text-gray-500">{c.part_number}</span>
+                              )}
+                              {c.description && c.description !== c.part_name && (
+                                <span className="text-xs text-gray-500 block truncate">{c.description}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs flex-shrink-0">
                               <span className="text-gray-500">
-                                {formatCurrencyUSD(c.gross)} gross
+                                {formatCurrencyUSD(c.gross || c.outstanding_retail_amount || 0)}
                               </span>
                               <ArrowRight className="w-3 h-3 text-emerald-500" />
                               <Badge className="bg-emerald-600/20 text-emerald-400 text-xs">
-                                {formatCurrencyUSD(c.credit_applied_new)} credit
+                                PAID
                               </Badge>
                             </div>
                           </div>
@@ -267,19 +275,24 @@ export default function SettlePartsWithCreditModal({
                             key={c.commitment_id}
                             className="flex items-center justify-between p-2 bg-amber-900/20 border border-amber-800/30 rounded text-sm"
                           >
-                            <span className="text-gray-300 truncate flex-1">
-                              {c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8)}
-                            </span>
-                            <div className="flex items-center gap-3 text-xs">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-gray-300 truncate block font-medium">
+                                {c.part_name || (c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8))}
+                              </span>
+                              {c.part_number && (
+                                <span className="text-xs text-gray-500">{c.part_number}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs flex-shrink-0">
                               <span className="text-gray-500">
-                                {formatCurrencyUSD(c.gross)} gross
+                                {formatCurrencyUSD(c.gross || c.outstanding_retail_amount || 0)}
                               </span>
                               <span className="text-amber-400">
                                 -{formatCurrencyUSD(c.credit_applied_new)}
                               </span>
-                              <span className="text-gray-400">
-                                = {formatCurrencyUSD(c.net)} remaining
-                              </span>
+                              <Badge className="bg-amber-600/20 text-amber-400 text-xs">
+                                {formatCurrencyUSD(c.net)} remaining
+                              </Badge>
                             </div>
                           </div>
                         ))}
@@ -305,11 +318,16 @@ export default function SettlePartsWithCreditModal({
                             key={c.commitment_id}
                             className="flex items-center justify-between p-2 bg-gray-800/50 border border-gray-700 rounded text-sm"
                           >
-                            <span className="text-gray-400 truncate flex-1">
-                              {c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8)}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formatCurrencyUSD(c.net)} outstanding
+                            <div className="flex-1 min-w-0">
+                              <span className="text-gray-400 truncate block">
+                                {c.part_name || (c.part_id ? `Part ${c.part_id.slice(-6)}` : c.commitment_id.slice(-8))}
+                              </span>
+                              {c.part_number && (
+                                <span className="text-xs text-gray-500">{c.part_number}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-500 flex-shrink-0">
+                              {formatCurrencyUSD(c.net || c.outstanding_retail_amount || 0)} outstanding
                             </span>
                           </div>
                         ))}
