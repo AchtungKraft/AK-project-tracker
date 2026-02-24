@@ -1682,15 +1682,78 @@ export default function PartModal({ part, partId, onClose }) {
         />
       )}
       
-      {/* Image Viewer Modal (View Mode) */}
-      {viewImageUrl && (
-        <Dialog open={true} onOpenChange={() => setViewImageUrl(null)}>
-          <DialogContent className="max-w-4xl bg-black border-gray-800 p-0">
-            <img
-              src={viewImageUrl}
-              alt="Part photo"
-              className="w-full h-auto max-h-[85vh] object-contain"
-            />
+      {/* Image Viewer Modal with Step-Through Navigation */}
+      {viewerOpen && formData?.photos?.length > 0 && (
+        <Dialog open={true} onOpenChange={closeImageViewer}>
+          <DialogContent className="max-w-5xl bg-black/95 border-gray-800 p-0 overflow-hidden">
+            <div className="relative flex items-center justify-center min-h-[60vh] max-h-[85vh]">
+              {/* Left click zone / prev button */}
+              {formData.photos.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                  className="absolute left-0 top-0 bottom-0 w-1/4 flex items-center justify-start pl-4 opacity-0 hover:opacity-100 transition-opacity z-10 cursor-pointer"
+                  aria-label="Previous image"
+                >
+                  <div className="bg-black/60 rounded-full p-2">
+                    <ChevronLeft className="w-8 h-8 text-white" />
+                  </div>
+                </button>
+              )}
+              
+              {/* Image */}
+              <img
+                src={formData.photos[viewerIndex] || ''}
+                alt={`Part photo ${viewerIndex + 1}`}
+                className="max-w-full max-h-[85vh] object-contain select-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+              
+              {/* Right click zone / next button */}
+              {formData.photos.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                  className="absolute right-0 top-0 bottom-0 w-1/4 flex items-center justify-end pr-4 opacity-0 hover:opacity-100 transition-opacity z-10 cursor-pointer"
+                  aria-label="Next image"
+                >
+                  <div className="bg-black/60 rounded-full p-2">
+                    <ChevronRight className="w-8 h-8 text-white" />
+                  </div>
+                </button>
+              )}
+              
+              {/* Close button */}
+              <button
+                onClick={closeImageViewer}
+                className="absolute top-4 right-4 bg-black/60 rounded-full p-2 hover:bg-black/80 transition-colors z-20"
+                aria-label="Close viewer"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+              
+              {/* Image counter */}
+              {formData.photos.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-full text-white text-sm">
+                  {viewerIndex + 1} / {formData.photos.length}
+                </div>
+              )}
+            </div>
+            
+            {/* Thumbnail strip */}
+            {formData.photos.length > 1 && (
+              <div className="flex gap-2 p-3 bg-black/80 overflow-x-auto justify-center">
+                {formData.photos.map((url, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setViewerIndex(idx)}
+                    className={`flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition-all ${
+                      idx === viewerIndex ? 'border-white opacity-100' : 'border-transparent opacity-50 hover:opacity-75'
+                    }`}
+                  >
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       )}
