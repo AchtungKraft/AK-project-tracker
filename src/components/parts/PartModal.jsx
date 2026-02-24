@@ -228,6 +228,17 @@ export default function PartModal({ part, partId, onClose }) {
       initializedPartIdRef.current = null;
     }
   }, [effectivePartId]);
+  
+  // DEV: Phase 1C - Track state overwrites
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    console.log('[UPLOAD_DEBUG C] formData.photos changed:', {
+      formDataPhotosLength: formData?.photos?.length || 0,
+      activePartPhotosLength: activePart?.photos?.length || 0,
+      editing,
+      initializedPartId: initializedPartIdRef.current,
+    });
+  }, [formData?.photos?.length]);
 
   // PHASE 2: Matrix pricing derivation - fetch from backend when cost changes in MATRIX mode
   // FIXED: Uses backend computeRetailFromMatrix to get correct tier + markup, not stale applied_markup_pct
