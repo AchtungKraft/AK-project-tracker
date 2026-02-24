@@ -359,10 +359,11 @@ export function PSMItemRow({
                 Receive
               </DropdownMenuItem>
             )}
+            {/* CANONICAL: Install depends ONLY on inventory (reserved > installed), NOT billing status */}
             {allowed?.canInstall && (
               <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
                 <Wrench className="w-4 h-4 mr-2" />
-                Install
+                Install ({Math.max(0, reservedProject - (commitment.qty_installed ?? 0))} available)
               </DropdownMenuItem>
             )}
             {allowed?.canReverseInstall && (
