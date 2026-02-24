@@ -150,13 +150,14 @@ export default function CreditSummaryStrip({
         </div>
       )}
 
-      {/* Status indicator */}
-      {creditApplied > 0 && netExposure === 0 && (
-        <Badge className="bg-green-600/20 text-green-400 gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Fully Covered
-        </Badge>
-      )}
+        {/* Status indicator */}
+        {creditApplied > 0 && netExposure === 0 && (
+          <Badge className="bg-green-600/20 text-green-400 gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            Fully Covered
+          </Badge>
+        )}
+      </div>
     </div>
   );
 }
