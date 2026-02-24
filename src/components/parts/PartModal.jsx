@@ -458,6 +458,25 @@ export default function PartModal({ part, partId, onClose }) {
     );
   }
 
+  // PERF FIX: Part not found - show error state, don't spin forever
+  if (partNotFound) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-red-900/30">
+          <DialogHeader>
+            <DialogTitle className="text-white">Part Not Found</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              The requested part could not be loaded. It may have been deleted or you may not have access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (!activePart) return null;
 
   // Derived data
