@@ -54,7 +54,6 @@ import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx"
 import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
-import { applySorting } from "@/components/supply/SupplyGroupingControls";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { Receipt, Download } from "lucide-react";
