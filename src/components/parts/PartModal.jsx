@@ -1580,6 +1580,19 @@ export default function PartModal({ part, partId, onClose }) {
           }}
         />
       )}
+      
+      {/* Image Viewer Modal (View Mode) */}
+      {viewImageUrl && (
+        <Dialog open={true} onOpenChange={() => setViewImageUrl(null)}>
+          <DialogContent className="max-w-4xl bg-black border-gray-800 p-0">
+            <img
+              src={viewImageUrl}
+              alt="Part photo"
+              className="w-full h-auto max-h-[85vh] object-contain"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
