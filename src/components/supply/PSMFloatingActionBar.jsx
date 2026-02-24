@@ -1,12 +1,15 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, X, Package, Wrench, Receipt } from "lucide-react";
+import { ShoppingCart, X, Package, Wrench, Receipt, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 /**
  * PSMFloatingActionBar - Floating action bar for batch operations
  * 
  * Shows when items are selected, with context-aware actions based on tab
+ * 
+ * PHASE 3: Added "Apply Credit" action for settling parts without invoice
  */
 export default function PSMFloatingActionBar({
   selectedCount,
@@ -15,10 +18,14 @@ export default function PSMFloatingActionBar({
   onBatchReceive,
   onBatchInstall,
   onBatchInvoice,
+  onApplyCredit, // PHASE 3: Apply project credit to selected parts
+  availableCredit = 0, // PHASE 3: Show available credit
   isLoading = false,
   tab = 'plan',
 }) {
   if (selectedCount === 0) return null;
+
+  const hasCreditAvailable = availableCredit > 0;
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 md:left-auto md:right-6 md:translate-x-0">
@@ -83,6 +90,18 @@ export default function PSMFloatingActionBar({
           >
             <Receipt className="w-4 h-4" />
             Add to Invoice ({selectedCount})
+          </Button>
+        )}
+
+        {/* PHASE 3: Apply Credit action - available when credit exists */}
+        {tab === 'invoice' && onApplyCredit && hasCreditAvailable && (
+          <Button
+            onClick={onApplyCredit}
+            disabled={isLoading}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+          >
+            <Wallet className="w-4 h-4" />
+            Apply Credit ({formatCurrencyUSD(availableCredit)})
           </Button>
         )}
       </div>
