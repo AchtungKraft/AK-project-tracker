@@ -591,34 +591,97 @@ export default function CreateProjectInvoiceModal({
                 </span>
               </div>
               <Separator className="bg-gray-700" />
-              {/* PHASE 1: Show gross/credit/net breakdown from canonical backend */}
+              
+              {/* Invoice Subtotal */}
               <div className="flex justify-between">
-                <span className="text-gray-400">Gross Total</span>
-                <span className="font-mono text-gray-300">{formatCurrencyUSD(grossSubtotal)}</span>
+                <span className="text-gray-400">Subtotal</span>
+                <span className="font-mono text-gray-300">{formatCurrencyUSD(subtotal)}</span>
               </div>
-              {partsCreditApplied > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Credit Applied</span>
-                  <span className="font-mono text-green-400">-{formatCurrencyUSD(partsCreditApplied)}</span>
+              
+              {/* STABILIZATION: Editable Credit Input */}
+              {availableCredit > 0 && (
+                <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-green-400 text-sm font-medium">Project Credit Available</span>
+                    <span className="font-mono text-green-400">{formatCurrencyUSD(availableCredit)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-green-300 text-sm whitespace-nowrap">Apply Credit:</Label>
+                    <div className="flex items-center gap-1 flex-1">
+                      <span className="text-green-400">$</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={Math.min(availableCredit, subtotal)}
+                        step="0.01"
+                        placeholder={suggestedCredit.toFixed(2)}
+                        value={creditInputValue}
+                        onChange={(e) => {
+                          setCreditInputValue(e.target.value);
+                          const val = parseFloat(e.target.value);
+                          setCreditToApply(isNaN(val) ? null : val);
+                        }}
+                        className={cn(
+                          "font-mono bg-gray-800 border-green-700",
+                          creditValidationError && "border-red-500"
+                        )}
+                      />
+                    </div>
+                    {creditToApply !== null && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setCreditToApply(null);
+                          setCreditInputValue("");
+                        }}
+                        className="text-gray-400 hover:text-white text-xs"
+                      >
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+                  {creditValidationError && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      {creditValidationError}
+                    </p>
+                  )}
+                  {!creditValidationError && effectiveCreditToApply > 0 && (
+                    <p className="text-green-300 text-xs">
+                      {creditToApply === null ? "Suggested amount" : "Custom amount"}: {formatCurrencyUSD(effectiveCreditToApply)} will be applied
+                    </p>
+                  )}
                 </div>
               )}
+              
+              {/* Credit Applied (if any) */}
+              {effectiveCreditToApply > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Credit Applied</span>
+                  <span className="font-mono text-green-400">-{formatCurrencyUSD(effectiveCreditToApply)}</span>
+                </div>
+              )}
+              
+              <Separator className="bg-gray-700" />
+              
               <div className="flex justify-between text-xl font-bold">
-                <span className="text-white">Net Balance Due</span>
+                <span className="text-white">Balance Due</span>
                 <span className="font-mono text-white">{formatCurrencyUSD(balanceDue)}</span>
               </div>
             </div>
 
-            {partsCreditApplied > 0 && (
+            {effectiveCreditToApply > 0 && (
               <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg">
                 <p className="text-sm text-green-300">
-                  <strong>Credit Applied:</strong> {formatCurrencyUSD(partsCreditApplied)} credit has been pre-applied to these commitments.
+                  <strong>Credit will be applied:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is created.
                 </p>
               </div>
             )}
 
             <div className="p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
               <p className="text-sm text-blue-300">
-                This will create a draft invoice. No billing or commitment changes occur until the invoice is sent.
+                This will create a draft invoice. Commitments will be marked as invoiced and credit will be applied.
               </p>
             </div>
           </div>
