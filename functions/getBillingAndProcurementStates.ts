@@ -513,7 +513,6 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       billing_state: billingState,
       // CANONICAL: Invoice eligibility contract
       allowed: {
-        ...row.allowed, // Preserve existing allowed flags if any
         canInvoice: invoiceEligibility.canInvoice,
       },
       invoice_block_reason_code: invoiceEligibility.block_reason_code,
