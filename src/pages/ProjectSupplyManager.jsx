@@ -387,10 +387,9 @@ export default function ProjectSupplyManager() {
         });
         break;
       case 'receive':
-        // Items with on_order_qty > 0 (expecting delivery)
-        filtered = filtered.filter(c => 
-          c.on_order_qty > 0 || ['ordered', 'partially_received'].includes(c.commitment_status)
-        );
+        // CANONICAL: Items with covered_from_po > 0 (expecting delivery)
+        // Lifecycle string does NOT gate - use quantity only
+        filtered = filtered.filter(c => (c.covered_from_po ?? c.on_order_qty ?? 0) > 0);
         break;
       case 'install':
         // PHASE 7: Items with in-stock parts that can be installed
