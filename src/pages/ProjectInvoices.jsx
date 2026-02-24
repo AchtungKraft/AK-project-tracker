@@ -181,6 +181,8 @@ export default function ProjectInvoices() {
     if (normalizedProjectId) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
       invalidations.push(queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }));
+      // PHASE 4: Also invalidate financial snapshot for canonical data refresh
+      invalidations.push(queryClient.invalidateQueries({ queryKey: financialSnapshotKeys.project(normalizedProjectId) }));
     }
     await Promise.all(invalidations);
     await refetch();
