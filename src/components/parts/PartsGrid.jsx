@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight, AlertTriangle, Archive } from "lucide-react";
+import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight, Archive } from "lucide-react";
+import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
+import { getPartRetailEffectiveSafe, formatCurrency } from "@/components/supply/pricingHelpers";
 
 /**
  * PartsGrid - CANONICAL: Displays parts in a card/grid format
