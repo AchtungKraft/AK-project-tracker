@@ -34,7 +34,11 @@ export default function PartJournalSection({ partId, isOpen = true }) {
   
   const { data: entries = [], isLoading, error } = useQuery({
     queryKey: ['partJournalEntries', partId],
-    queryFn: () => base44.entities.PartJournalEntry.filter({ part_id: partId }),
+    queryFn: async () => {
+      // Defensive: prevent late resolution into closed section
+      if (!partId) return [];
+      return base44.entities.PartJournalEntry.filter({ part_id: partId });
+    },
     enabled: queryEnabled,
     staleTime: 30000,
     gcTime: 120000,

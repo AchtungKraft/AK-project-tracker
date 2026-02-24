@@ -39,7 +39,15 @@ export default function PartProjectUsageSection({ partId, isOpen = true }) {
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
+      // Defensive: prevent late resolution into closed section
+      if (!partId) return null;
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[PartProjectUsageSection] query start', partId);
+      }
       const response = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[PartProjectUsageSection] query success', partId);
+      }
       return response.data;
     },
     enabled: queryEnabled,
