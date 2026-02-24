@@ -56,7 +56,7 @@ import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForActio
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import SettlePartsWithCreditModal from "@/components/financial/SettlePartsWithCreditModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
-import { lifecycleKeys } from "@/components/financial/queryKeyFactories";
+import { lifecycleKeys, billingKeys, creditKeys } from "@/components/financial/queryKeyFactories";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 // DEV guardrail
