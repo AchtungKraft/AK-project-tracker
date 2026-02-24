@@ -62,8 +62,12 @@ export default function PartModal({ part, partId, onClose }) {
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showAddToBuildModal, setShowAddToBuildModal] = useState(false);
   
-  // Image viewer modal state (view mode only)
-  const [viewImageUrl, setViewImageUrl] = useState(null);
+  // Image viewer modal state - supports step-through navigation
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  
+  // File input ref for robust upload triggering
+  const photoInputRef = useRef(null);
 
   // PERF FIX: Modal is "open" when mounted with a valid partId
   // Use this for gating all queries consistently
