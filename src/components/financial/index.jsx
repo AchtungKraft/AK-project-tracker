@@ -26,6 +26,9 @@ export {
   normalizeId
 } from './queryKeyFactories';
 
+// Billing Drift Diagnostics (Phase 7)
+export { default as CommitmentBillingDiagnostics } from './CommitmentBillingDiagnostics';
+
 // Phase 6.2 - Invoice Dashboard + QB Export Status
 export { default as InvoiceDashboard } from './InvoiceDashboard';
 export { default as QBExportStatusCards, QBNeedsExportCard, QBExportFailedCard } from './QBExportStatusCards';
