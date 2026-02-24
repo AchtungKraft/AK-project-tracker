@@ -1309,7 +1309,7 @@ export default function PartModal({ part, partId, onClose }) {
   // Desktop layout
   return (
     <>
-      <Dialog open={true} onOpenChange={onClose}>
+      <Dialog open={true} onOpenChange={handleClose}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-gray-900 border-red-900/30 p-0">
           <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-red-900/30">
             <div className="flex items-center gap-3 flex-col items-start">
