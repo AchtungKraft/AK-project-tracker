@@ -93,17 +93,7 @@ export default function PSMFloatingActionBar({
           </Button>
         )}
 
-        {/* PHASE 3: Apply Credit action - available when credit exists */}
-        {tab === 'invoice' && onApplyCredit && hasCreditAvailable && (
-          <Button
-            onClick={onApplyCredit}
-            disabled={isLoading}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-          >
-            <Wallet className="w-4 h-4" />
-            Apply Credit ({formatCurrencyUSD(availableCredit)})
-          </Button>
-        )}
+        {/* PART 4: "Apply Credit Without Invoice" moved to secondary menu. Removed from primary action bar. */}
       </div>
     </div>
   );
