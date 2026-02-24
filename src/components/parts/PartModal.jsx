@@ -772,7 +772,13 @@ export default function PartModal({ part, partId, onClose }) {
             className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-sm"
           >
             <ExternalLink className="w-3 h-3" />
-            {new URL(formData.order_url).hostname}
+            {(() => {
+              try {
+                return new URL(formData.order_url).hostname;
+              } catch {
+                return formData.order_url;
+              }
+            })()}
           </a>
         </div>
       )}
