@@ -450,6 +450,18 @@ Deno.serve(async (req) => {
         .map(id => ({ id, name: categoryMap.get(id)?.name || 'Unknown' })),
     };
 
+    // PERF: Timing log (dev only)
+    console.log('[PERF] getOpsSupplyView', Date.now() - _perfStart, 'ms', {
+      entityCounts: {
+        commitments: commitments.length,
+        parts: parts.length,
+        lineItems: lineItems.length,
+        orders: orders.length,
+        invoices: projectInvoices.length,
+      },
+      filteredCount: filtered.length,
+    });
+    
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
