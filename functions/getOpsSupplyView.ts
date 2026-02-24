@@ -91,6 +91,50 @@ Deno.serve(async (req) => {
     });
 
     // ============================================================================
+    // PREPAY GATING: Build commitment-level invoice & payment maps
+    // This resolves prepay at COMMITMENT level, not project level
+    // ============================================================================
+    
+    // 1. invoiceById map
+    const invoiceById = new Map(projectInvoices.map(inv => [inv.id, inv]));
+    
+    // 2. paidRatioByInvoiceId - proportion of invoice that has been paid
+    const paidRatioByInvoiceId = new Map();
+    for (const inv of projectInvoices) {
+      if (inv.status === 'paid') {
+        paidRatioByInvoiceId.set(inv.id, 1);
+      } else if ((inv.paid_amount || 0) > 0 && (inv.total || 0) > 0) {
+        const ratio = Math.min(1, Math.max(0, inv.paid_amount / inv.total));
+        paidRatioByInvoiceId.set(inv.id, ratio);
+      } else {
+        paidRatioByInvoiceId.set(inv.id, 0);
+      }
+    }
+    
+    // 3. Filter invoice lines that have commitment references
+    const relevantInvoiceLines = projectInvoiceLines.filter(
+      line => line.part_commitment_id
+    );
+    
+    // 4. commitmentInvoicedRetail and commitmentPaidRetail
+    const commitmentInvoicedRetailMap = new Map();
+    const commitmentPaidRetailMap = new Map();
+    
+    for (const line of relevantInvoiceLines) {
+      const commitmentId = line.part_commitment_id;
+      const lineRetail = line.line_total ?? ((line.qty || 0) * (line.unit_price || 0));
+      const paidRatio = paidRatioByInvoiceId.get(line.invoice_id) ?? 0;
+      
+      // Accumulate invoiced retail
+      const currentInvoiced = commitmentInvoicedRetailMap.get(commitmentId) ?? 0;
+      commitmentInvoicedRetailMap.set(commitmentId, currentInvoiced + lineRetail);
+      
+      // Accumulate paid retail (lineRetail * paidRatio)
+      const currentPaid = commitmentPaidRetailMap.get(commitmentId) ?? 0;
+      commitmentPaidRetailMap.set(commitmentId, currentPaid + (lineRetail * paidRatio));
+    }
+
+    // ============================================================================
     // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP (same as getProjectSupplyView)
     // This computes GLOBAL reserved/on_order across ALL active commitments for each part
     // ============================================================================
