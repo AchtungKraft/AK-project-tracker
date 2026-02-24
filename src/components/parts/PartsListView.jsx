@@ -7,12 +7,15 @@ import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";
 import { PartTypeBadge } from "./PartTypeSelector";
 import { getPartRetailEffectiveSafe, formatCurrency } from "@/components/supply/pricingHelpers";
+import { useReferenceData } from "@/components/common/useReferenceData";
 
 
 /**
  * PartsListView - CANONICAL: Displays parts in a list format
  * Uses getPartsInventoryView read model for stock/available calculations
  * NO InventoryItem.list() aggregation. NO local reduce() for stock totals.
+ * 
+ * PHASE 3: Reference data comes from useReferenceData hook
  */
 export default function PartsListView({ 
   parts, 
@@ -32,30 +35,19 @@ export default function PartsListView({
     currentIndex: 0,
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => base44.entities.Location.list(),
-  });
-
-  const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
-  });
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
-  });
-
-  const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
-    queryFn: () => base44.entities.CarYear.list(),
-  });
+  // PHASE 3: Use centralized reference data
+  const { 
+    vendors, 
+    locations, 
+    makes, 
+    models, 
+    years,
+    vendorsMap,
+    locationMap,
+    makeMap,
+    modelMap,
+    yearMap,
+  } = useReferenceData();
 
   // CANONICAL: Use read model for inventory view - NO local InventoryItem math
   const { data: partsInventoryView = [] } = useQuery({
@@ -106,16 +98,16 @@ export default function PartsListView({
       };
     }
     
-    // Read model not loaded yet - return zeros, don't compute locally
-    console.warn('[PartsListView] Read model not loaded for part', part.id);
+    // PHASE 5: Read model not loaded yet - return nulls, not zeros
+    // Null indicates "unresolved", zero indicates "explicitly zero"
     return {
-      onHand: 0,
-      available: 0,
-      need: 0,
-      onOrder: 0,
-      toOrder: 0,
-      reserved: 0,
-      projectCount: 0
+      onHand: null,
+      available: null,
+      need: null,
+      onOrder: null,
+      toOrder: null,
+      reserved: null,
+      projectCount: null
     };
   };
 
