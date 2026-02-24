@@ -20,16 +20,21 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { creditKeys, invoiceKeys, projectKeys } from "@/components/financial/queryKeyFactories";
+import { creditKeys, invoiceKeys, projectKeys, financialSnapshotKeys } from "@/components/financial/queryKeyFactories";
+import { FinancialDiagnosticsPanel } from "@/components/financial/CanonicalFinancialDisplay";
 
 /**
- * PHASE 8 — Credit Ledger Page
+ * PHASE 8 REFACTORED — Credit Ledger Page
  * 
  * Read-only view of project credit balances.
+ * Now includes canonical financial snapshot integration.
  * Shows source invoice, amount, remaining, and application status.
  */
 export default function CreditLedger() {
