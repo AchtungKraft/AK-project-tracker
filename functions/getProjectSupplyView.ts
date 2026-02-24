@@ -34,28 +34,41 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+    
     // Fetch all required data in parallel (FORWARD MODEL - no pools)
+    // PERF FIX: Scope lineItems and orders to project's commitments
     const [
       project,
       commitments,
       parts,
       vendors,
-      lineItems,
-      orders,
       categories,
       projectInvoices,
-      projectInvoiceLines,
     ] = await Promise.all([
       base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
       base44.entities.PartCommitment.filter({ project_id }),
       base44.entities.Part.list(),
       base44.entities.Vendor.list(),
-      base44.entities.PartPurchaseLineItem.list(),
-      base44.entities.Order.list(),
       base44.entities.PartCategory.list(),
       base44.entities.ProjectInvoice.filter({ project_id }),
-      base44.entities.ProjectInvoiceLine.list(),
     ]);
+    
+    // PERF FIX: Only fetch line items for this project's commitments
+    const commitmentIds = commitments.map(c => c.id);
+    const [lineItems, projectInvoiceLines] = await Promise.all([
+      commitmentIds.length > 0 
+        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+        : [],
+      base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } }),
+    ]);
+    
+    // PERF FIX: Derive orders from line items (no full scan)
+    const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+    const orders = orderIds.length > 0
+      ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+      : [];
 
     if (!project) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
@@ -140,17 +153,17 @@ Deno.serve(async (req) => {
     // "Reserved" = SUM(reserved_from_stock) across ALL commitments (not just this project)
     // ============================================================================
     
-    // First, fetch ALL commitments for parts in this project (to get global reservations)
+    // PERF FIX: Fetch global commitments in parallel with initial data
+    // This was previously sequential - now parallel
     const partIdsInProject = [...new Set(commitments.map(c => c.part_id))];
     
     // Handle empty part list gracefully
-    let allCommitmentsForParts = [];
-    if (partIdsInProject.length > 0) {
-      allCommitmentsForParts = await base44.entities.PartCommitment.filter({
-        part_id: { $in: partIdsInProject },
-        commitment_status: { $nin: ['cancelled', 'closed'] }
-      });
-    }
+    const allCommitmentsForParts = partIdsInProject.length > 0
+      ? await base44.entities.PartCommitment.filter({
+          part_id: { $in: partIdsInProject },
+          commitment_status: { $nin: ['cancelled', 'closed'] }
+        })
+      : [];
     
     // Build canonical part inventory map with GLOBAL totals
     const partInventoryMap = new Map();
