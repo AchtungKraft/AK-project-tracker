@@ -112,6 +112,8 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // INSTALL - only if has reserved & uninstalled (reserved_from_stock > qty_installed)
+  // CRITICAL: Install eligibility depends ONLY on inventory, NOT billing status
+  // This was a bug where billing_status gated install incorrectly
   if (uninstalled > 0) {
     actions.canInstall = true;
   }
