@@ -415,71 +415,67 @@ Deno.serve(async (req) => {
     }
 
     // ===== PART 1: AUTO-SETTLE COMMITMENTS FULLY COVERED BY CREDIT =====
-    // Map credit to individual commitments and determine billing status
-    // All-or-nothing: only commitments fully covered become PAID immediately
-    const partCommitmentIds = lineResults
+    // DETERMINISTIC: Credit allocated strictly in invoice line order (top-to-bottom)
+    // NO optimization sort - user controls priority by line ordering in the invoice
+    // All-or-nothing per line: fully covered → PAID, otherwise → INVOICED
+    
+    // Get part lines in original invoice line order (lineResults preserves input order via sort_order)
+    const partLineResults = lineResults
       .filter(l => l.part_commitment_id)
-      .map(l => l.part_commitment_id);
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     
-    // Build line total map for credit allocation per commitment
-    const lineTotalMap = new Map();
-    for (const line of lineResults) {
-      if (line.part_commitment_id) {
-        lineTotalMap.set(line.part_commitment_id, line.line_total || 0);
-      }
-    }
-    
-    // Sort by line_total ascending (settle smaller commitments first to maximize PAID count)
-    const sortedCommitmentIds = [...partCommitmentIds].sort((a, b) => {
-      return (lineTotalMap.get(a) || 0) - (lineTotalMap.get(b) || 0);
-    });
-    
-    // Allocate credit to commitments
+    // Allocate credit to commitments IN LINE ORDER
     let remainingCreditForCommitments = creditToApply;
     const commitmentSettlements = [];
     const autoSettledCommitments = [];
     
-    for (const commitmentId of sortedCommitmentIds) {
+    for (const lineData of partLineResults) {
+      const commitmentId = lineData.part_commitment_id;
       const commitment = commitmentMap.get(commitmentId);
-      const lineData = lineResults.find(l => l.part_commitment_id === commitmentId);
-      const lineTotal = lineData?.line_total || 0;
+      const lineTotal = lineData.line_total || 0;
       
-      // Determine if credit fully covers this commitment
-      const creditForThis = Math.min(remainingCreditForCommitments, lineTotal);
-      const isFullyCovered = creditForThis >= lineTotal && lineTotal > 0;
+      // Determine if credit fully covers this commitment's outstanding amount
+      const outstanding = lineTotal;
+      const creditForThis = Math.min(remainingCreditForCommitments, outstanding);
+      const isFullyCovered = creditForThis >= outstanding && outstanding > 0;
       
-      // Update billing status: PAID if fully covered, INVOICED otherwise
+      // Update billing status: PAID if fully covered by credit, INVOICED otherwise
       const newBillingStatus = isFullyCovered ? 'paid' : 'invoiced';
       
       await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
         billing_status: newBillingStatus,
-        invoiced_qty: lineData?.qty || (commitment?.required_total ?? 0),
+        invoiced_qty: lineData.qty || (commitment?.required_total ?? 0),
         invoiced_retail_total: lineTotal,
         invoiced_amount: lineTotal, // Total amount invoiced
       });
       
-      // Deduct credit used
+      // Deduct credit used ONLY if fully covered
       if (isFullyCovered) {
-        remainingCreditForCommitments -= lineTotal;
+        remainingCreditForCommitments -= outstanding;
         autoSettledCommitments.push({
           commitment_id: commitmentId,
-          part_id: commitment.part_id,
-          part_name: lineData?.part_name || 'Part',
+          part_id: commitment?.part_id,
+          part_name: lineData.part_name || 'Part',
           line_total: lineTotal,
-          credit_applied: lineTotal,
+          credit_applied: outstanding,
           billing_status: 'paid',
         });
       }
       
+      // CANONICAL OUTPUT: Clear mapping of allocation per commitment
       commitmentSettlements.push({
         commitment_id: commitmentId,
-        part_name: lineData?.part_name || 'Part',
-        line_total: lineTotal,
-        credit_applied: isFullyCovered ? lineTotal : 0,
-        billing_status: newBillingStatus,
+        part_name: lineData.part_name || 'Part',
+        outstanding: outstanding,
+        credit_applied: isFullyCovered ? outstanding : 0,
+        resulting_status: newBillingStatus,
         fully_covered_by_credit: isFullyCovered,
+        line_order: lineData.sort_order ?? 0,
       });
     }
+    
+    // Collect all part commitment IDs (in line order)
+    const partCommitmentIds = partLineResults.map(l => l.part_commitment_id);
 
     // Count lines needing review
     const linesNeedingReview = lineResults.filter(l => l.needs_review).length;
