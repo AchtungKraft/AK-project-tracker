@@ -68,28 +68,6 @@ export function useProjectSupplyView(projectId, filters = {}) {
   // Backend is the single source of truth for to_order, coverage_status, gap_qty
   const items = query.data?.items || [];
   
-  // PHASE 2: DEV DRIFT GUARD - Use shared validation function
-  // DIAGNOSTIC: Full diagnostic report for PSM
-  let diagnosticReport = null;
-  if (process.env.NODE_ENV === 'development' && items.length > 0) {
-    const sample = items[0];
-    console.log('[DEV] Project Supply View - Sample commitment shape:', sample);
-    
-    // FAIL-FAST: Check canonical fields
-    const required = ['commitment_id', 'required_total', 'to_order', 'coverage_status', 'reserved_from_stock', 'covered_from_po'];
-    const missing = required.filter(f => sample[f] === undefined);
-    if (missing.length > 0) {
-      console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
-    }
-    
-    // Use shared drift validation
-    validateSupplyModelDrift(items, 'useProjectSupplyView');
-    
-    // DIAGNOSTIC: Run full diagnostic and store for cross-view comparison
-    diagnosticReport = diagnoseSupplyItems(items, 'useProjectSupplyView');
-    storePSMDiagnostics(normalizedId, items);
-  }
-  
   return {
     items,
     summary: query.data?.summary || {},
@@ -102,8 +80,6 @@ export function useProjectSupplyView(projectId, filters = {}) {
     error: query.error,
     refetch: query.refetch,
     invalidate,
-    // DIAGNOSTIC: Expose diagnostic data in dev mode only
-    _diagnostics: process.env.NODE_ENV === 'development' ? diagnosticReport : null,
   };
 }
 
@@ -148,28 +124,6 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
   // PERF FIX: Trust backend canonical values - NO frontend re-derivation
   const items = query.data?.items || [];
   
-  // PHASE 2: DEV DRIFT GUARD - Use shared validation function
-  // DIAGNOSTIC: Full diagnostic report for GNO
-  let diagnosticReport = null;
-  if (process.env.NODE_ENV === 'development' && items.length > 0) {
-    const sample = items[0];
-    console.log('[DEV] Ops Supply View - Sample commitment shape:', sample);
-    
-    // FAIL-FAST: Check canonical fields
-    const required = ['commitment_id', 'to_order', 'coverage_status'];
-    const missing = required.filter(f => sample[f] === undefined);
-    if (missing.length > 0) {
-      console.error('[CANONICAL VIOLATION] Missing required fields:', missing);
-    }
-    
-    // Use shared drift validation
-    validateSupplyModelDrift(items, 'useOpsSupplyView');
-    
-    // DIAGNOSTIC: Run full diagnostic and store for cross-view comparison
-    diagnosticReport = diagnoseSupplyItems(items, 'useOpsSupplyView');
-    storeGNODiagnostics(items);
-  }
-  
   return {
     items,
     summary: query.data?.summary || {},
@@ -179,8 +133,6 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     error: query.error,
     refetch: query.refetch,
     invalidate,
-    // DIAGNOSTIC: Expose diagnostic data in dev mode only
-    _diagnostics: process.env.NODE_ENV === 'development' ? diagnosticReport : null,
   };
 }
 
