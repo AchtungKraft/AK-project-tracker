@@ -29,6 +29,9 @@ export { default as ClosePoolModal } from './ClosePoolModal';
 export { default as TransferPoolBalanceModal } from './TransferPoolBalanceModal';
 export { default as CoverageBadge } from './CoverageBadge';
 export { default as ProjectFinancialDashboard } from './ProjectFinancialDashboard';
+
+// Phase 3: Credit Settlement
+export { default as SettlePartsWithCreditModal } from './SettlePartsWithCreditModal';
 export { 
   isProtectedEntity, 
   isSensitiveField, 
