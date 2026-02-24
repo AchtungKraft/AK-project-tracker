@@ -2,28 +2,50 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wallet, DollarSign, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Wallet, DollarSign, ArrowRight, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import { useProjectFinancialSnapshot, validateTotalsGate } from "./useProjectFinancialSnapshot";
 
 /**
  * CreditSummaryStrip - Shows credit allocation summary
  * 
- * PHASE 4: UI component for Invoice Tab header
- * Shows: Gross Exposure | Available Credit | Credit Applied | Net Exposure
+ * PHASE 4 REFACTORED: Now uses canonical financial snapshot as single source of truth.
+ * Shows: Planned Retail | Credit Available | Credit Applied | Net Exposure
  * With "Apply Credit" button
+ * 
+ * Props can override snapshot values for backwards compatibility,
+ * but projectId-based loading is preferred.
  */
 export default function CreditSummaryStrip({
-  grossExposure = 0,
-  creditAvailable = 0,
-  creditApplied = 0,
-  netExposure = 0,
+  projectId,
+  // Legacy props - will be overridden by snapshot when projectId is provided
+  grossExposure: propGrossExposure,
+  creditAvailable: propCreditAvailable,
+  creditApplied: propCreditApplied,
+  netExposure: propNetExposure,
   onApplyCredit,
   selectedCount = 0,
-  isLoading = false,
+  isLoading: propIsLoading = false,
 }) {
+  // CANONICAL SOURCE: Use financial snapshot when projectId is provided
+  const { canonical, totalsGate, isLoading: snapshotLoading } = useProjectFinancialSnapshot(
+    projectId,
+    { enabled: !!projectId }
+  );
+
+  // Use snapshot values when available, fallback to props for backwards compatibility
+  const grossExposure = canonical?.planned_retail ?? propGrossExposure ?? 0;
+  const creditAvailable = canonical?.credit_available ?? propCreditAvailable ?? 0;
+  const creditApplied = canonical?.credit_applied ?? propCreditApplied ?? 0;
+  const netExposure = canonical?.net_exposure ?? propNetExposure ?? 0;
+  const isLoading = propIsLoading || snapshotLoading;
+
   const hasCredit = creditAvailable > 0;
   const hasUnappliedCredit = creditAvailable > 0 && netExposure > 0;
+
+  // Validate totals gate
+  const gateValidation = totalsGate ? validateTotalsGate({ totals_gate: totalsGate }) : { valid: true };
   
   // Determine disabled reason for tooltip/accessibility
   const getDisabledReason = () => {
