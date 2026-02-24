@@ -166,28 +166,12 @@ Deno.serve(async (req) => {
           continue; // Skip this line
         }
 
-        // ===== BILLED-ONCE ENFORCEMENT =====
-        const billingStatus = normalizeBillingStatus(commitment.billing_status);
-        
-        if (billingStatus === 'invoiced') {
-          blockedLines.push({
-            line: i,
-            part_commitment_id: line.part_commitment_id,
-            reason: 'ALREADY_INVOICED',
-            message: `Commitment already invoiced (awaiting payment). Cannot invoice again.`,
-          });
-          continue; // Skip this line
-        }
-        
-        if (billingStatus === 'paid') {
-          blockedLines.push({
-            line: i,
-            part_commitment_id: line.part_commitment_id,
-            reason: 'ALREADY_PAID',
-            message: `Commitment already fully paid. Cannot invoice again.`,
-          });
-          continue; // Skip this line
-        }
+        // ============================================================================
+        // INVOICE ELIGIBILITY CANONICAL RULE (Phase 3):
+        // Gate ONLY on remaining_to_bill_qty > 0
+        // DO NOT gate on billing_status enum - it can be stale if normalization
+        // hasn't run. The remainingQty check below is always authoritative.
+        // ============================================================================
 
         // Calculate remaining to bill qty
         const required = commitment.required_total ?? commitment.qty_committed ?? 0;
