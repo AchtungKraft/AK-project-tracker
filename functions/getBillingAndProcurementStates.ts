@@ -663,6 +663,16 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     category_name: item.category_name || 'Uncategorized',
     part_category_id: item.part_category_id || item.category_id || null,
     is_archived: item.is_archived || false,
+    // CANONICAL: 3-state billing model
+    billing_state: item.billing_state,
+    // CANONICAL: Invoice eligibility contract (propagate from row)
+    allowed: item.allowed || { canInvoice: true },
+    invoice_block_reason_code: item.invoice_block_reason_code,
+    invoice_block_reason_text: item.invoice_block_reason_text,
+    invoice_warning_code: item.invoice_warning_code,
+    invoice_warning_text: item.invoice_warning_text,
+    // CANONICAL: Outstanding amount
+    outstanding_retail_amount: item.outstanding_retail_amount || item.net_line_total || 0,
   }));
 
   // PHASE 1 CANONICAL: Build totals object
