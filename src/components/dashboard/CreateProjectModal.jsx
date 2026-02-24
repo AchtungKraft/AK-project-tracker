@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { referenceDataConfig } from "@/components/common/queryConfig";
 
 export default function CreateProjectModal({ onClose }) {
   const queryClient = useQueryClient();
@@ -28,19 +29,23 @@ export default function CreateProjectModal({ onClose }) {
     assigned_team: [],
   });
 
+  // PHASE 1: Use extended caching for reference data
   const { data: projectTypes = [] } = useQuery({
-    queryKey: ['projectTypes'],
+    queryKey: ['referenceData', 'projectTypes'],
     queryFn: () => base44.entities.ProjectType.list(),
+    ...referenceDataConfig,
   });
 
   const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
+    queryKey: ['referenceData', 'statuses'],
     queryFn: () => base44.entities.StatusList.list(),
+    ...referenceDataConfig,
   });
 
   const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
+    queryKey: ['referenceData', 'teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    ...referenceDataConfig,
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
