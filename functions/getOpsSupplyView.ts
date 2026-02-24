@@ -43,6 +43,8 @@ Deno.serve(async (req) => {
       lineItems,
       orders,
       categories,
+      projectInvoices,
+      projectInvoiceLines,
     ] = await Promise.all([
       base44.entities.PartCommitment.filter({ commitment_status: { $ne: 'cancelled' } }),
       base44.entities.Part.list(),
@@ -52,6 +54,8 @@ Deno.serve(async (req) => {
       base44.entities.PartPurchaseLineItem.list(),
       base44.entities.Order.list(),
       base44.entities.PartCategory.list(),
+      base44.entities.ProjectInvoice.list(),
+      base44.entities.ProjectInvoiceLine.list(),
     ]);
 
     // Build lookup maps
