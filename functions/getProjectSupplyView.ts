@@ -524,7 +524,8 @@ function mapSourceType(legacyType) {
 }
 
 // PHASE 9H: Strict billing gating + auto-reserve enforcement
-function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}) {
+// PHASE 10: Prepay gating uses commitment-level payment resolution
+function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}, prepayContext = {}) {
   const {
     required_total = 0,
     reserved_from_stock = 0,
@@ -536,18 +537,38 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
   const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
   const available_stock = partInventory.available ?? 0;
 
-  // PHASE 9H: Check billing flags for prepay requirements
-  const requires_prepay = rawCommitment.requires_prepay ?? false;
-  const billing_status = rawCommitment.billing_status || 'unbilled';
+  // ============================================================================
+  // PREPAY GATING: Commitment-level payment resolution
+  // Uses actual invoice lines and payment data, NOT stale billing_status
+  // ============================================================================
+  const requires_prepay = !!rawCommitment.requires_prepay;
   
-  // If requires_prepay and NOT yet invoiced/paid, block ordering
-  if (requires_prepay && 
-      billing_status !== 'INVOICED' && 
-      billing_status !== 'invoiced' &&
-      billing_status !== 'PAID' &&
-      billing_status !== 'paid'
-  ) {
-    return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY' };
+  if (requires_prepay) {
+    const invoicedRetail = prepayContext.invoicedRetail ?? 0;
+    const paidRetail = prepayContext.paidRetail ?? 0;
+    
+    // Prepay is satisfied when:
+    // 1. Commitment has been invoiced (invoicedRetail > 0)
+    // 2. Paid amount >= invoiced amount (with 0.01 tolerance for rounding)
+    const prepaySatisfied = invoicedRetail > 0 && paidRetail >= (invoicedRetail - 0.01);
+    
+    // Build diagnostics for dev mode
+    const prepay_diagnostics = {
+      prepay_invoiced_retail: invoicedRetail,
+      prepay_paid_retail: paidRetail,
+      prepay_satisfied: prepaySatisfied,
+    };
+    
+    if (!prepaySatisfied) {
+      return { 
+        next_action: 'BLOCKED_PREPAY', 
+        block_reason_code: 'REQUIRES_PREPAY',
+        prepay_diagnostics,
+      };
+    }
+    
+    // Prepay satisfied - continue to normal flow but include diagnostics
+    // We'll attach diagnostics to successful actions too for debugging
   }
 
   // Only block: no vendor
