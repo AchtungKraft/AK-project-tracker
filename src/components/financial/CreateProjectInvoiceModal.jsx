@@ -36,6 +36,7 @@ import {
   FileText,
   CheckCircle2,
   AlertTriangle,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
