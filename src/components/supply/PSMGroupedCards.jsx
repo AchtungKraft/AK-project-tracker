@@ -786,7 +786,7 @@ export default function PSMGroupedView({
   const groups = useMemo(() => {
     const result = {};
 
-    items.forEach(item => {
+    filteredItems.forEach(item => {
       const groupInfo = getGroupInfo(item, groupMode, categoriesMap, vendorsMap);
       const { key: groupKey, name: groupName, inventoryState } = groupInfo;
 
