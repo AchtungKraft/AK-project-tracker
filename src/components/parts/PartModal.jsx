@@ -67,6 +67,11 @@ export default function PartModal({ part, partId, onClose }) {
   const isOpen = Boolean(partId);
   const effectivePartId = partId || part?.id;
   
+  // Dev diagnostic for tracking part switches
+  if (process.env.NODE_ENV === 'development') {
+    console.debug('[PartModal] effectivePartId:', effectivePartId);
+  }
+  
   // Track previous partId to cancel in-flight queries on switch
   const prevPartIdRef = useRef(null);
 
@@ -267,7 +272,15 @@ export default function PartModal({ part, partId, onClose }) {
   } = useQuery({
     queryKey: ['partsInventoryView', effectivePartId],
     queryFn: async () => {
+      // Defensive: prevent late resolution into closed modal
+      if (!effectivePartId) return null;
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[PartModal] inventoryQuery start', effectivePartId);
+      }
       const res = await base44.functions.invoke('getPartsInventoryView', { part_id: effectivePartId });
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[PartModal] inventoryQuery success', effectivePartId);
+      }
       return res.data?.parts?.[0] ?? null;
     },
     enabled: Boolean(isOpen && effectivePartId && !partNotFound),
@@ -288,7 +301,11 @@ export default function PartModal({ part, partId, onClose }) {
   // PERF FIX: Gate with isOpen + effectivePartId, add caching and retry control
   const { data: locationItems = [], isLoading: locationsLoading, error: locationsError } = useQuery({
     queryKey: ['inventoryLocations', effectivePartId],
-    queryFn: () => base44.entities.InventoryItem.filter({ part_id: effectivePartId }),
+    queryFn: async () => {
+      // Defensive: prevent late resolution into closed modal
+      if (!effectivePartId) return [];
+      return base44.entities.InventoryItem.filter({ part_id: effectivePartId });
+    },
     enabled: Boolean(isOpen && effectivePartId && !partNotFound),
     staleTime: 30000,
     gcTime: 120000,
@@ -325,13 +342,14 @@ export default function PartModal({ part, partId, onClose }) {
 
   // PHASE 16: Canonical inventory metrics - SINGLE SOURCE, NO FALLBACK
   // If data not loaded, inventoryMetrics is null (render skeleton)
+  // Safe fallback: use null coalescing to prevent undefined access
   const inventoryMetrics = partInventoryView ? {
-    physical_stock: partInventoryView.physical_stock,
-    reserved_global: partInventoryView.allocated_total,
-    on_order: partInventoryView.on_order,
-    available_to_allocate: partInventoryView.available,
-    to_order: partInventoryView.to_order,
-    required_total: partInventoryView.required_total,
+    physical_stock: partInventoryView?.physical_stock ?? 0,
+    reserved_global: partInventoryView?.allocated_total ?? 0,
+    on_order: partInventoryView?.on_order ?? 0,
+    available_to_allocate: partInventoryView?.available ?? 0,
+    to_order: partInventoryView?.to_order ?? 0,
+    required_total: partInventoryView?.required_total ?? 0,
   } : null;
 
   // Location breakdown - DISPLAY ONLY, not used for totals
