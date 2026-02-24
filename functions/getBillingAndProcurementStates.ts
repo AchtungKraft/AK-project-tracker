@@ -68,6 +68,108 @@ function deriveClientPaymentStatus(billingStatus) {
   return 'UNPAID';
 }
 
+/**
+ * Derive canonical 3-state billing_state from normalized billing status
+ * Maps: NOT_INVOICED -> NOT_INVOICED
+ *       INVOICED, PARTIALLY_PAID -> INVOICED
+ *       PAID -> PAID
+ */
+function deriveBillingState(normalizedBillingStatus) {
+  if (normalizedBillingStatus === 'PAID') return 'PAID';
+  if (normalizedBillingStatus === 'INVOICED' || normalizedBillingStatus === 'PARTIALLY_PAID') return 'INVOICED';
+  return 'NOT_INVOICED';
+}
+
+/**
+ * Compute canonical invoice eligibility contract
+ * Returns: { canInvoice, block_reason_code, block_reason_text, warning_code, warning_text }
+ * 
+ * Block priority order (first match wins):
+ * 1. archived
+ * 2. financial_role === NON_BILLABLE or requires_client_billing === false
+ * 3. billing_state is INVOICED or PAID
+ * 4. outstanding <= 0
+ * 
+ * Non-blocking warnings:
+ * - MISSING_RETAIL: unit_retail is 0 or missing (still invoiceable, just flagged)
+ */
+function computeInvoiceEligibility({ 
+  isArchived, 
+  financialRole, 
+  requiresClientBilling,
+  billingState, 
+  outstandingAmount, 
+  unitRetail 
+}) {
+  // Check blocking conditions in priority order
+  if (isArchived) {
+    return {
+      canInvoice: false,
+      block_reason_code: 'ARCHIVED',
+      block_reason_text: 'This item is archived and cannot be invoiced.',
+      warning_code: null,
+      warning_text: null,
+    };
+  }
+  
+  if (financialRole === 'NON_BILLABLE' || requiresClientBilling === false) {
+    return {
+      canInvoice: false,
+      block_reason_code: 'NON_BILLABLE',
+      block_reason_text: 'This item is marked as non-billable.',
+      warning_code: null,
+      warning_text: null,
+    };
+  }
+  
+  if (billingState === 'INVOICED') {
+    return {
+      canInvoice: false,
+      block_reason_code: 'ALREADY_INVOICED',
+      block_reason_text: 'This item has already been invoiced (awaiting payment).',
+      warning_code: null,
+      warning_text: null,
+    };
+  }
+  
+  if (billingState === 'PAID') {
+    return {
+      canInvoice: false,
+      block_reason_code: 'ALREADY_PAID',
+      block_reason_text: 'This item has already been fully paid.',
+      warning_code: null,
+      warning_text: null,
+    };
+  }
+  
+  if (outstandingAmount <= 0) {
+    return {
+      canInvoice: false,
+      block_reason_code: 'NO_OUTSTANDING',
+      block_reason_text: 'No outstanding amount to invoice.',
+      warning_code: null,
+      warning_text: null,
+    };
+  }
+  
+  // Eligible - check for non-blocking warnings
+  let warningCode = null;
+  let warningText = null;
+  
+  if (!unitRetail || unitRetail <= 0) {
+    warningCode = 'MISSING_RETAIL';
+    warningText = 'Retail price is missing or zero. Invoice will show $0.00.';
+  }
+  
+  return {
+    canInvoice: true,
+    block_reason_code: null,
+    block_reason_text: null,
+    warning_code: warningCode,
+    warning_text: warningText,
+  };
+}
+
 function getEffectivePartType(part) {
   if (!part) return DEFAULT_PART_TYPE;
   return part.part_type || DEFAULT_PART_TYPE;
@@ -339,6 +441,19 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     const invoicedAmount = commitment.invoiced_amount || 0;
     const creditAppliedLine = creditByCommitment[commitment.id] || 0;
     const netLineTotal = Math.max(0, grossLineTotal - invoicedAmount - creditAppliedLine);
+    
+    // CANONICAL: Derive 3-state billing_state
+    const billingState = deriveBillingState(clientBillingStatus);
+    
+    // CANONICAL: Compute invoice eligibility contract
+    const invoiceEligibility = computeInvoiceEligibility({
+      isArchived: part.is_archived || false,
+      financialRole,
+      requiresClientBilling: part.requires_client_billing,
+      billingState,
+      outstandingAmount: netLineTotal,
+      unitRetail,
+    });
 
     // PHASE 3: Resolve vendor and category names for grouping
     const vendorId = part.default_vendor_id || null;
@@ -394,6 +509,19 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       category_name: categoryName,
       part_category_id: categoryId,
       is_archived: part.is_archived || false,
+      // CANONICAL: 3-state billing model
+      billing_state: billingState,
+      // CANONICAL: Invoice eligibility contract
+      allowed: {
+        ...row.allowed, // Preserve existing allowed flags if any
+        canInvoice: invoiceEligibility.canInvoice,
+      },
+      invoice_block_reason_code: invoiceEligibility.block_reason_code,
+      invoice_block_reason_text: invoiceEligibility.block_reason_text,
+      invoice_warning_code: invoiceEligibility.warning_code,
+      invoice_warning_text: invoiceEligibility.warning_text,
+      // CANONICAL: Outstanding amount (alias for net_line_total for clarity)
+      outstanding_retail_amount: netLineTotal,
     };
 
     // Categorize based on lifecycle state
