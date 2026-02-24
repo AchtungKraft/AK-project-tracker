@@ -110,10 +110,12 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     refetch,
   } = useProjectInvoiceView(normalizedProjectId);
   
-  // HARD ASSERTION: Log invoice data for debugging
+  // DEV: Log invoice data only in development
   React.useEffect(() => {
-    console.log("INVOICE PROJECT ID:", normalizedProjectId);
-    console.log("INVOICE LIST:", invoices);
+    if (process.env.NODE_ENV === 'development') {
+      console.log("INVOICE PROJECT ID:", normalizedProjectId);
+      console.log("INVOICE LIST:", invoices?.length ?? 0);
+    }
   }, [normalizedProjectId, invoices]);
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
@@ -132,19 +134,17 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     net_exposure: canonicalTotals.net_exposure ?? 0,
   };
 
-  // DEV diagnostic logging
+  // DEV diagnostic logging - only in development
   React.useEffect(() => {
-    console.log("[ForwardInvoiceDashboard] Query State:", {
-      normalizedProjectId,
-      queryKey: billingKeys.states(normalizedProjectId),
-      invoiceCount: invoices?.length ?? 0,
-      billingData: billingData ? "loaded" : "null",
-      isLoading,
-      billingFetching,
-      dataUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : null,
-      netExposure: canonicalTotals.net_exposure ?? "N/A",
-    });
-  }, [normalizedProjectId, invoices, billingData, isLoading, billingFetching, dataUpdatedAt, canonicalTotals.net_exposure]);
+    if (process.env.NODE_ENV === 'development') {
+      console.log("[ForwardInvoiceDashboard] Query State:", {
+        normalizedProjectId,
+        invoiceCount: invoices?.length ?? 0,
+        billingData: billingData ? "loaded" : "null",
+        isLoading,
+      });
+    }
+  }, [normalizedProjectId, invoices, billingData, isLoading]);
 
   // Compute ProjectInvoice-level KPIs from canonical invoices array
   const batchKpis = useMemo(() => {
