@@ -1204,7 +1204,7 @@ export default function PartModal({ part, partId, onClose }) {
         <Button
           type="button"
           variant="outline"
-          onClick={onClose}
+          onClick={handleClose}
           className="flex-1 border-gray-700"
         >
           Close
@@ -1242,7 +1242,7 @@ export default function PartModal({ part, partId, onClose }) {
           icon: Edit2,
         }}
         secondaryActions={[
-          { label: 'Close', onClick: onClose, variant: 'outline' }
+          { label: 'Close', onClick: handleClose, variant: 'outline' }
         ]}
       />
     );
