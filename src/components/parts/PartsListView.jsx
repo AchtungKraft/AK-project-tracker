@@ -423,13 +423,7 @@ export default function PartsListView({
               {stats.onOrder}
             </div>
           </div>
-          <div className="text-center min-w-[70px]">
-            <div className="text-gray-500 mb-0.5">Financial</div>
-            <FinancialStatusBadge 
-              financialStatus={financialStatusMap.get(part.id)} 
-              displayMode="compact" 
-            />
-          </div>
+
         </div>
 
         {/* Actions Dropdown */}
