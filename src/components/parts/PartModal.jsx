@@ -1249,12 +1249,12 @@ export default function PartModal({ part, partId, onClose }) {
 
     return (
       <>
-        <Dialog open={true} onOpenChange={onClose}>
+        <Dialog open={true} onOpenChange={handleClose}>
           <DialogContent className="p-0 max-w-full h-full max-h-full bg-gray-900 border-red-900/30">
             <MobileModalWrapper
               title={formData.part_name}
               description={formData.vendor_part_number}
-              onClose={onClose}
+              onClose={handleClose}
               footer={mobileFooter}
             >
               {editing ? renderEditMode() : renderViewMode()}
