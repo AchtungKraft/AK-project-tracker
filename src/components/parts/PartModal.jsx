@@ -178,38 +178,52 @@ export default function PartModal({ part, partId, onClose }) {
 
   // Initialize formData when part is loaded
   // PHASE 1: Only include editable fields, NOT derived inventory fields
+  // FIX: Only initialize ONCE per partId to prevent overwrites during editing/uploads
   useEffect(() => {
-    if (activePart) {
-      setFormData({
-        part_name: activePart.part_name || '',
-        vendor_part_number: activePart.vendor_part_number || '',
-        part_category_id: activePart.part_category_id || '',
-        default_vendor_id: activePart.default_vendor_id || '',
-        car_make_id: activePart.car_make_id || '',
-        car_model_id: activePart.car_model_id || '',
-        car_year_id: activePart.car_year_id || '',
-        // Pricing fields (editable)
-        pricing_mode: activePart.pricing_mode || 'matrix',
-        cost: activePart.cost ?? 0,
-        retail_override: activePart.retail_override ?? null,
-        retail_matrix_price: activePart.retail_matrix_price ?? null,
-        applied_markup_pct: activePart.applied_markup_pct ?? null,
-        // Part type and flags
-        part_type: activePart.part_type || 'PURCHASED_VENDOR',
-        is_active: activePart.is_active ?? true,
-        // Metadata
-        notes: activePart.notes || '',
-        order_url: activePart.order_url || '',
-        photos: activePart.photos || [],
-        featured_photo: activePart.featured_photo || '',
-        // Reorder settings
-        reorder_point: activePart.reorder_point ?? 0,
-        reorder_quantity: activePart.reorder_quantity ?? 1,
-        // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order (derived/canonical)
-      });
-      setEditing(false);
-    }
+    if (!activePart?.id) return;
+    
+    // Skip if we've already initialized for this partId (prevents overwrite after upload/refetch)
+    if (initializedPartIdRef.current === activePart.id) return;
+    
+    // Mark this partId as initialized
+    initializedPartIdRef.current = activePart.id;
+    
+    setFormData({
+      part_name: activePart.part_name || '',
+      vendor_part_number: activePart.vendor_part_number || '',
+      part_category_id: activePart.part_category_id || '',
+      default_vendor_id: activePart.default_vendor_id || '',
+      car_make_id: activePart.car_make_id || '',
+      car_model_id: activePart.car_model_id || '',
+      car_year_id: activePart.car_year_id || '',
+      // Pricing fields (editable)
+      pricing_mode: activePart.pricing_mode || 'matrix',
+      cost: activePart.cost ?? 0,
+      retail_override: activePart.retail_override ?? null,
+      retail_matrix_price: activePart.retail_matrix_price ?? null,
+      applied_markup_pct: activePart.applied_markup_pct ?? null,
+      // Part type and flags
+      part_type: activePart.part_type || 'PURCHASED_VENDOR',
+      is_active: activePart.is_active ?? true,
+      // Metadata
+      notes: activePart.notes || '',
+      order_url: activePart.order_url || '',
+      photos: activePart.photos || [],
+      featured_photo: activePart.featured_photo || '',
+      // Reorder settings
+      reorder_point: activePart.reorder_point ?? 0,
+      reorder_quantity: activePart.reorder_quantity ?? 1,
+      // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order (derived/canonical)
+    });
+    setEditing(false);
   }, [activePart?.id]);
+  
+  // Reset initialization ref when partId changes to a different part
+  useEffect(() => {
+    if (effectivePartId && initializedPartIdRef.current !== effectivePartId) {
+      initializedPartIdRef.current = null;
+    }
+  }, [effectivePartId]);
 
   // PHASE 2: Matrix pricing derivation - fetch from backend when cost changes in MATRIX mode
   // FIXED: Uses backend computeRetailFromMatrix to get correct tier + markup, not stale applied_markup_pct
