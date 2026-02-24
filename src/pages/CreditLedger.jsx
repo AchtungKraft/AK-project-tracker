@@ -261,6 +261,17 @@ export default function CreditLedger() {
             className="pl-9 bg-gray-900/50 border-gray-700"
           />
         </div>
+        <Select value={projectFilter} onValueChange={setProjectFilter}>
+          <SelectTrigger className="w-[220px] bg-gray-900/50 border-gray-700">
+            <SelectValue placeholder="All Projects" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Projects</SelectItem>
+            {projectsWithCredits.map(p => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700">
             <SelectValue placeholder="All Status" />
@@ -272,7 +283,26 @@ export default function CreditLedger() {
             <SelectItem value="applied">Applied</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowDiagnostics(!showDiagnostics)}
+          className="gap-1"
+        >
+          {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          Diagnostics
+        </Button>
       </div>
+
+      {/* Financial Diagnostics Panel (collapsible) */}
+      {showDiagnostics && projectFilter !== "all" && (
+        <FinancialDiagnosticsPanel projectId={projectFilter} />
+      )}
+      {showDiagnostics && projectFilter === "all" && (
+        <div className="p-4 bg-gray-800/50 rounded border border-gray-700 text-gray-400 text-sm">
+          Select a project to view financial diagnostics.
+        </div>
+      )}
 
       {/* Credits Table */}
       <Card className="bg-gray-900/50 border-gray-800">
