@@ -77,24 +77,15 @@ export default function PartsListView({
     const canonical = inventoryViewMap.get(part.id);
     
     if (canonical) {
-      // CANONICAL VERIFICATION LOG
-      console.log('[PartsListView CANONICAL]', {
-        part_id: part.id,
-        physical_stock: canonical.physical_stock,
-        reserved_total: canonical.reserved_total,
-        available: canonical.available,
-        to_order: canonical.to_order,
-        on_order: canonical.on_order
-      });
-      
+      // PHASE 5: Return actual values - null fallback only when truly missing
       return {
-        onHand: canonical.physical_stock ?? 0,
-        available: canonical.available ?? 0,
-        need: canonical.required_total ?? 0,
-        onOrder: canonical.on_order ?? 0,
-        toOrder: canonical.to_order ?? 0,
-        reserved: canonical.reserved_total ?? 0,
-        projectCount: canonical.projects_using_count ?? 0
+        onHand: canonical.physical_stock ?? null,
+        available: canonical.available ?? null,
+        need: canonical.required_total ?? null,
+        onOrder: canonical.on_order ?? null,
+        toOrder: canonical.to_order ?? null,
+        reserved: canonical.reserved_total ?? null,
+        projectCount: canonical.projects_using_count ?? null
       };
     }
     
