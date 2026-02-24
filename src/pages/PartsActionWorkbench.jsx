@@ -459,7 +459,14 @@ function ActionTable({ items, tabConfig, selectedIds, onToggleSelection, onRowCl
 // INVOICE SELECTION PANEL (forward model - single ProjectInvoice flow)
 // ============================================
 
-function InvoiceSelectionPanel({ selectedItems, onCreateInvoice, onClearSelection, projectFilter }) {
+function InvoiceSelectionPanel({ 
+  selectedItems, 
+  onCreateInvoice, 
+  onClearSelection, 
+  onApplyCredit,
+  projectFilter,
+  availableCredit = 0,
+}) {
   const selectedCount = selectedItems.length;
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
   
@@ -470,6 +477,7 @@ function InvoiceSelectionPanel({ selectedItems, onCreateInvoice, onClearSelectio
   if (selectedCount === 0) return null;
 
   const canCreate = readyCount > 0 && projectFilter !== 'all';
+  const hasCredit = availableCredit > 0;
 
   return (
     <Card className="sticky bottom-4 border bg-gradient-to-r from-green-900/30 to-emerald-900/30 border-green-700/50">
@@ -492,20 +500,39 @@ function InvoiceSelectionPanel({ selectedItems, onCreateInvoice, onClearSelectio
                   <span className="text-red-400">✗ Blocked: {blockedCount}</span>
                 )}
               </div>
+              
+              {/* Credit indicator */}
+              {hasCredit && projectFilter !== 'all' && (
+                <Badge className="bg-emerald-600/30 text-emerald-400 border border-emerald-600/50">
+                  Credit: {formatCurrencyUSD(availableCredit)}
+                </Badge>
+              )}
             </div>
             
             {projectFilter === 'all' && (
               <p className="text-xs text-amber-400 mt-1">
-                Select a specific project to create an invoice
+                Select a specific project to create an invoice or apply credit
               </p>
             )}
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={onClearSelection} className="border-gray-600">
               <X className="w-4 h-4 mr-1" />
               Clear
             </Button>
+            
+            {/* PHASE 3: Apply Credit button */}
+            {hasCredit && projectFilter !== 'all' && (
+              <Button 
+                onClick={onApplyCredit}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                <DollarSign className="w-4 h-4 mr-2" />
+                Apply Credit
+              </Button>
+            )}
+            
             <Button 
               onClick={onCreateInvoice} 
               disabled={!canCreate}
