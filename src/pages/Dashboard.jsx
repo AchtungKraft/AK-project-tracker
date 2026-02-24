@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, DASHBOARD_DEFAULTS } from "@/components/common/useFilterState";
+import { operationalDataConfig, referenceDataConfig } from "@/components/common/queryConfig";
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
