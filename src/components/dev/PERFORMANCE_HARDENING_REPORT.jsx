@@ -346,9 +346,9 @@ window.__QUERY_TRACE__.getHistory().filter(q =>
 | PartModal reference data caching | ✅ Applied | staleTime: 60s on 6 queries |
 | InventoryLocations caching | ✅ Applied | staleTime: 30-60s on 7 queries |
 | PartsExplorerLayout caching | ✅ Applied | staleTime: 30-60s on 6 queries |
-| PartJournalSection staleTime | ⏳ Pending | See Patch #4 |
-| InventoryManagement limit | ⏳ Pending | See Patch #1 |
-| InventoryLocations row caps | ⏳ Pending | See Patches #2, #3 |
+| PartJournalSection staleTime | ✅ Applied | staleTime: 30s, gcTime: 120s |
+| InventoryManagement limit | ✅ Applied | limit: 200 in getPartsInventoryView |
+| InventoryLocations commitments cap | ✅ Applied | limit: 200 on partCommitments |
 | Trace instrumentation | ✅ Created | `components/dev/traceQuery.js` |
 
 ---
