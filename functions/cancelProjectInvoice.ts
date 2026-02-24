@@ -186,6 +186,45 @@ Deno.serve(async (req) => {
       }, { status: 500 });
     }
 
+    // ===== PHASE 2: Reverse credit (ONLY if commitment revert succeeded) =====
+    // ASSERTION: This code only executes if ALL commitment reverts passed above
+    let creditReversed = 0;
+    const creditReversalDetail = [];
+
+    if (creditApplied > 0) {
+      // Check if reversal already done (idempotency)
+      const existingReversals = await base44.entities.ProjectCreditLedger.filter({
+        project_id: invoice.project_id,
+      });
+      
+      const alreadyReversed = existingReversals.some(
+        c => c.reversal_idempotency_key === reversalIdempotencyKey
+      );
+
+      if (alreadyReversed) {
+        console.log(`Credit reversal already done for invoice ${invoice_id}`);
+        creditReversed = creditApplied; // Already reversed in prior call
+      } else {
+        // Create a NEW credit entry representing the reversal
+        const reversalCredit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
+          project_id: invoice.project_id,
+          source_invoice_id: invoice_id,
+          credit_amount: creditApplied,
+          remaining_amount: creditApplied,
+          notes: `Credit reversal from cancelled invoice ${invoice.qb_invoice_number || invoice_id}`,
+          reversed_from_invoice_id: invoice_id,
+          reversal_idempotency_key: reversalIdempotencyKey,
+        });
+
+        creditReversed = creditApplied;
+        creditReversalDetail.push({
+          reversal_credit_id: reversalCredit.id,
+          amount_reversed: creditApplied,
+          reversal_idempotency_key: reversalIdempotencyKey,
+        });
+      }
+    }
+
     // ===== PHASE 3: Update invoice to cancelled =====
     await base44.asServiceRole.entities.ProjectInvoice.update(invoice_id, {
       status: 'cancelled',
