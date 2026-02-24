@@ -45,6 +45,17 @@ export default function PartJournalSection({ partId, isOpen = true }) {
       return failureCount < 1;
     },
   });
+
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.PartJournalEntry.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partJournalEntries', partId] });
+      setNewEntry({ content: '', url: '', photos: [] });
+      setShowAddForm(false);
+      toast.success('Entry added');
+    },
+  });
   
   // If section is not open, render nothing
   if (!isOpen) {
@@ -59,16 +70,6 @@ export default function PartJournalSection({ partId, isOpen = true }) {
       </div>
     );
   }
-
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.PartJournalEntry.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partJournalEntries', partId] });
-      setNewEntry({ content: '', url: '', photos: [] });
-      setShowAddForm(false);
-      toast.success('Entry added');
-    },
-  });
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
