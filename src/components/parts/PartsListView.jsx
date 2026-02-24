@@ -345,27 +345,32 @@ export default function PartsListView({
               );
             })()}
           </div>
+          {/* PHASE 5: Display null as "—", only show 0 when explicitly 0 */}
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Stock</div>
-            <div className="text-white font-semibold">{stats.onHand}</div>
+            <div className="text-white font-semibold">
+              {stats.onHand === null ? '—' : stats.onHand}
+            </div>
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Avail</div>
             <div className={cn(
               "font-semibold",
+              stats.available === null ? "text-gray-600" :
               stats.available > 0 ? "text-green-400" : "text-gray-500"
             )}>
-              {stats.available}
+              {stats.available === null ? '—' : stats.available}
             </div>
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Demand</div>
             <div className={cn(
               "font-semibold",
+              stats.need === null ? "text-gray-600" :
               stats.need > 0 ? "text-cyan-400" : "text-gray-500"
             )}>
-              {stats.need}
-              {stats.projectCount > 0 && (
+              {stats.need === null ? '—' : stats.need}
+              {stats.projectCount !== null && stats.projectCount > 0 && (
                 <span className="text-gray-500 text-[10px] block">
                   ({stats.projectCount} proj)
                 </span>
@@ -376,18 +381,20 @@ export default function PartsListView({
             <div className="text-gray-500 mb-0.5">To Order</div>
             <div className={cn(
               "font-semibold",
+              stats.toOrder === null ? "text-gray-600" :
               stats.toOrder > 0 ? "text-red-400" : "text-gray-500"
             )}>
-              {stats.toOrder}
+              {stats.toOrder === null ? '—' : stats.toOrder}
             </div>
           </div>
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">On Order</div>
             <div className={cn(
               "font-semibold",
+              stats.onOrder === null ? "text-gray-600" :
               stats.onOrder > 0 ? "text-purple-400" : "text-gray-500"
             )}>
-              {stats.onOrder}
+              {stats.onOrder === null ? '—' : stats.onOrder}
             </div>
           </div>
 
