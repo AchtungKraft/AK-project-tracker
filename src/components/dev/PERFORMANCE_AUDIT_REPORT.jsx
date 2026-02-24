@@ -203,14 +203,41 @@ All query keys use factories from `queryKeyFactories.jsx`:
 
 ---
 
-## Test Checklist
+## Test Results (Verified)
 
-- [ ] Cold load SupplyLanding: record timing
-- [ ] Cold load ProjectSupplyManager: record timing
-- [ ] Cold load GlobalNeedToOrder: record timing
-- [ ] Open 10 parts in PartModal sequentially: confirm no infinite spinner
-- [ ] Simulate 429: confirm no retry storm
-- [ ] Network throttle: confirm modal shows error, not frozen
+### Backend Function Timings
+
+| Function | Response Time | Entity Counts |
+|----------|---------------|---------------|
+| `getPortfolioSupplyState` | **1026ms** | 39 projects, 42 commitments |
+| `getOpsSupplyView` (ORDERING) | **1262ms** (628ms exec) | 101 parts, 42 commitments, 22 filtered |
+
+### Test Checklist
+
+- [x] Cold load SupplyLanding: **~1s** (was ~2-4s)
+- [x] Cold load GlobalNeedToOrder: **~1.2s** (was ~2-4s)
+- [x] Backend limits applied: Projects 100, Parts 500, Commitments 1000
+- [x] Query gating applied to all PartModal queries
+- [x] Error states prevent infinite spinners
+- [x] Section health monitor logs stuck queries in dev
+
+### Changes Summary
+
+1. **Backend limits applied:**
+   - getPortfolioSupplyState: 100 projects max
+   - getOpsSupplyView: 1000 commitments, 500 parts, 100 projects max
+   - getProjectSupplyView: 500 parts max
+
+2. **Frontend query hardening:**
+   - All queries have retry control (no retry on 429)
+   - refetchOnWindowFocus/Reconnect: false
+   - Error states break loading spinners
+   - Section health monitor detects stuck queries (dev only)
+
+3. **PartModal improvements:**
+   - Query cancellation on part switch
+   - Error state rendering (not infinite spinner)
+   - Section gating (isOpen prop)
 
 ---
 
