@@ -54,8 +54,10 @@ import LifecycleTimelineDrawer from "@/components/lifecycle/LifecycleTimelineDra
 import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnosticsDrawer";
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
+import SettlePartsWithCreditModal from "@/components/financial/SettlePartsWithCreditModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { lifecycleKeys } from "@/components/financial/queryKeyFactories";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 // DEV guardrail
 if (process.env.NODE_ENV === "development") {
