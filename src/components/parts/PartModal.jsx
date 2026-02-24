@@ -474,7 +474,7 @@ export default function PartModal({ part, partId, onClose }) {
   // Loading state
   if ((partId && !part && partLoading) || !formData) {
     return (
-      <Dialog open={true} onOpenChange={onClose}>
+      <Dialog open={true} onOpenChange={handleClose}>
         <DialogContent className="bg-gray-900 border-red-900/30">
           <div className="flex items-center justify-center p-8">
             <Loader2 className="w-8 h-8 animate-spin text-red-500" />
