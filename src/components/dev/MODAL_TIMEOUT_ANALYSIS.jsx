@@ -384,14 +384,14 @@ After applying fixes:
 
 ---
 
-## FILES TO CHANGE
+## FILES CHANGED ✅
 
-| File | Changes |
-|------|---------|
-| `components/parts/PartModal.jsx` | Add staleTime to 6 reference data queries |
-| `components/inventory/InventoryLocations.jsx` | Add staleTime + gcTime to all queries |
-| `components/parts/PartsExplorerLayout.jsx` | Add staleTime to parts, vendors queries |
-| `components/inventory/InventoryManagement.jsx` | Verify caching (already has some) |
+| File | Changes Applied |
+|------|-----------------|
+| `components/parts/PartModal.jsx` | ✅ Added staleTime: 60000, gcTime: 300000, refetchOnWindowFocus: false to 6 reference data queries |
+| `components/inventory/InventoryLocations.jsx` | ✅ Added caching to all 7 queries (staleTime 30-60s based on volatility) |
+| `components/parts/PartsExplorerLayout.jsx` | ✅ Added caching to all 6 queries |
+| `components/inventory/InventoryManagement.jsx` | Already has caching from previous hardening |
 
 ---
 
@@ -403,3 +403,21 @@ After applying fixes:
 | Part Modal Open (cold) | 8 queries, 2-4s | 3 queries, <1s |
 | Part Modal Open (warm) | 8 queries, 1-2s | 0 new queries, <200ms |
 | Timeout rate | ~15% | <2% |
+
+---
+
+## TRACING INSTRUMENTATION ADDED
+
+**File:** `components/dev/traceQuery.js`
+
+Provides DEV-only query tracing:
+- `traceQueryFn(componentName, queryKey, queryFn)` - Wrap queryFn for detailed logging
+- `logModalEvent(modalName, event, props)` - Log modal open/close
+- `logComponentMount(componentName, expectedQueries)` - Log mount events
+- `window.__QUERY_TRACE__.dump()` - Dump current query state
+- `window.__QUERY_TRACE__.getHistory()` - Get recent query history
+
+Usage in browser console:
+```javascript
+window.__QUERY_TRACE__.dump()
+``
