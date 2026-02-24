@@ -16,9 +16,9 @@ const BADGE_CONFIG = {
   // DO NOT RENDER these - they are "normal" states
   MATRIX: null,
   OK: null,
+  OVERRIDE: null, // REMOVED: No longer showing RETAIL_OVERRIDDEN badge - use color-coded retail instead
   
-  // RENDER these warning states only
-  OVERRIDE: { label: 'RETAIL OVERRIDDEN', accent: 'border-l-amber-600' },
+  // RENDER these warning states only (integrity issues)
   NO_COST: { label: 'MISSING COST', accent: 'border-l-red-700' },
   NEG_MARGIN: { label: 'NEGATIVE MARGIN', accent: 'border-l-red-700' },
   REVIEW: { label: 'NEEDS REVIEW', accent: 'border-l-amber-600' },
@@ -38,13 +38,13 @@ export default function PricingBadge({
     );
   }
 
-  // PHASE 15V.2: Show commitment-level negative margin
+  // PHASE 15V.2: Show commitment-level pricing warnings (not overridden_retail - use color instead)
   if (commitment?.pricing_integrity_status && commitment.pricing_integrity_status !== 'ok') {
     const commitmentConfig = {
       margin_negative: { label: 'NEGATIVE MARGIN', accent: 'border-l-red-700' },
       missing_cost: { label: 'MISSING COST', accent: 'border-l-amber-600' },
       missing_retail: { label: 'MISSING RETAIL', accent: 'border-l-red-700' },
-      overridden_retail: { label: 'RETAIL OVERRIDDEN', accent: 'border-l-amber-600' },
+      // REMOVED: overridden_retail - no longer showing badge, use color-coded retail instead
       estimated_cost: { label: 'ESTIMATED COST', accent: 'border-l-gray-500' },
       cost_retail_mismatch: { label: 'COST/RETAIL MISMATCH', accent: 'border-l-amber-600' },
     };
@@ -97,7 +97,7 @@ export function CommitmentPricingBadge({ commitment }) {
   if (status === 'ok') return null;
   
   const statusConfig = {
-    overridden_retail: { label: 'RETAIL OVERRIDDEN', accent: 'border-l-amber-600' },
+    // REMOVED: overridden_retail - no longer showing badge, use color-coded retail instead
     missing_retail: { label: 'MISSING RETAIL', accent: 'border-l-red-700' },
     missing_cost: { label: 'MISSING COST', accent: 'border-l-amber-600' },
     margin_negative: { label: 'NEGATIVE MARGIN', accent: 'border-l-red-700' },

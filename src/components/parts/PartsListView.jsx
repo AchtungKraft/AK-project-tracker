@@ -360,20 +360,24 @@ export default function PartsListView({
             </div>
           </div>
           
-          {/* Retail (effective) - PHASE 15V canonical */}
+          {/* Retail (effective) - Color by pricing_mode: green=matrix, blue=manual */}
           <div className="text-center min-w-[50px]">
             <div className="text-gray-500 mb-0.5">Retail</div>
             {(() => {
               const { value: retail } = getPartRetailEffectiveSafe(part);
+              const isManual = part.pricing_mode === 'manual';
               return (
-                <div className="font-mono text-gray-300">
+                <div className={cn(
+                  "font-mono font-semibold",
+                  isManual ? "text-blue-400" : "text-green-400"
+                )}>
                   {formatCurrency(retail)}
                 </div>
               );
             })()}
           </div>
           
-          {/* Pricing Warning Badge - only shows if NOT ok (AK Industrial Mode) */}
+          {/* Pricing Integrity Badge - only shows warnings (NO_COST, NEG_MARGIN, REVIEW) */}
           <div className="text-center min-w-[80px]">
             <PricingBadge part={part} showLabel={true} />
           </div>
