@@ -161,16 +161,24 @@ export default function PartModal({ part, partId, onClose }) {
     }
   }, [formData?.cost, formData?.pricing_mode]);
 
-  // Fetch reference data - PERF FIX: Add aggressive caching to prevent refetch on every modal open
+  // Fetch reference data - PERF FIX: Gate with isOpen, long cache, no refetch storms
+  // These queries only fire when modal is open
+  const refDataOptions = {
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000,    // 30 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 0, // Reference data: no retry, just use cache
+  };
+
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,  // 1 minute - reference data rarely changes
-    gcTime: 300000,    // 5 minutes
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   const { data: vendors = [] } = useQuery({
@@ -179,9 +187,8 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,
-    gcTime: 300000,
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   const { data: locations = [] } = useQuery({
@@ -190,9 +197,8 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,
-    gcTime: 300000,
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   const { data: makes = [] } = useQuery({
@@ -201,9 +207,8 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarMake.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,
-    gcTime: 300000,
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   const { data: models = [] } = useQuery({
@@ -212,9 +217,8 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarModel.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,
-    gcTime: 300000,
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   const { data: years = [] } = useQuery({
@@ -223,23 +227,23 @@ export default function PartModal({ part, partId, onClose }) {
       const list = await base44.entities.CarYear.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
-    staleTime: 60000,
-    gcTime: 300000,
-    refetchOnWindowFocus: false,
+    enabled: isOpen,
+    ...refDataOptions,
   });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
-  // PERF FIX: Safe caching - 15s stale, no refetch on focus, retry control
+  // PERF FIX: Gate with isOpen + activePart?.id, safe caching, retry control
   const { data: partInventoryView, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery({
     queryKey: ['partsInventoryView', activePart?.id],
     queryFn: async () => {
       const res = await base44.functions.invoke('getPartsInventoryView', { part_id: activePart?.id });
-      return res.data?.parts?.[0] || null;
+      return res.data?.parts?.[0] ?? null;
     },
-    enabled: Boolean(activePart?.id),
+    enabled: Boolean(isOpen && activePart?.id && !partNotFound),
     staleTime: 15000,
     gcTime: 60000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
@@ -248,14 +252,15 @@ export default function PartModal({ part, partId, onClose }) {
 
   // Location breakdown - ONLY used for location display, NOT for totals
   // This is a SECONDARY display, NOT a source of truth for inventory metrics
-  // PERF FIX: Add caching and retry control to prevent refetch storms
+  // PERF FIX: Gate with isOpen + activePart?.id, add caching and retry control
   const { data: locationItems = [], isLoading: locationsLoading } = useQuery({
     queryKey: ['inventoryLocations', activePart?.id],
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: activePart?.id }),
-    enabled: Boolean(activePart?.id),
+    enabled: Boolean(isOpen && activePart?.id && !partNotFound),
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
