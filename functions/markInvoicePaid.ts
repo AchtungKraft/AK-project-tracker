@@ -297,20 +297,35 @@ Deno.serve(async (req) => {
     const hasOverpayment = actualPaidAmount > balanceDueAfterCredit;
     
     if (isDepositInvoice && actualPaidAmount > 0) {
-      // Deposit creates credit for full paid amount
-      const credit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
-        project_id: invoice.project_id,
+      // IDEMPOTENCY: Check if credit ledger already exists for this deposit
+      const existingCredits = await base44.entities.ProjectCreditLedger.filter({
         source_invoice_id: invoice_id,
-        credit_amount: actualPaidAmount,
-        remaining_amount: actualPaidAmount,
-        notes: `Deposit payment from invoice ${invoice.qb_invoice_number || invoice_id}`,
       });
+      
+      if (existingCredits.length > 0) {
+        // Credit already exists - skip creation, return existing
+        creditCreated = {
+          credit_id: existingCredits[0].id,
+          amount: existingCredits[0].credit_amount,
+          type: 'deposit',
+          already_existed: true,
+        };
+      } else {
+        // Deposit creates credit for full paid amount
+        const credit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
+          project_id: invoice.project_id,
+          source_invoice_id: invoice_id,
+          credit_amount: actualPaidAmount,
+          remaining_amount: actualPaidAmount,
+          notes: `Deposit payment from invoice ${invoice.qb_invoice_number || invoice_id}`,
+        });
 
-      creditCreated = {
-        credit_id: credit.id,
-        amount: actualPaidAmount,
-        type: 'deposit',
-      };
+        creditCreated = {
+          credit_id: credit.id,
+          amount: actualPaidAmount,
+          type: 'deposit',
+        };
+      }
     } else if (hasOverpayment) {
       // Non-deposit overpayment creates credit for overage only
       const overage = actualPaidAmount - balanceDueAfterCredit;

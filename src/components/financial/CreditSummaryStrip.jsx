@@ -24,6 +24,14 @@ export default function CreditSummaryStrip({
 }) {
   const hasCredit = creditAvailable > 0;
   const hasUnappliedCredit = creditAvailable > 0 && netExposure > 0;
+  
+  // Determine disabled reason for tooltip/accessibility
+  const getDisabledReason = () => {
+    if (!hasCredit) return "No credit available";
+    if (netExposure <= 0) return "Nothing to apply credit to";
+    return null;
+  };
+  const disabledReason = getDisabledReason();
 
   return (
     <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
@@ -73,14 +81,15 @@ export default function CreditSummaryStrip({
         </p>
       </div>
 
-      {/* Apply Credit Button */}
+      {/* Apply Credit Button - always render when handler provided, disabled state shown */}
       {onApplyCredit && (
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center gap-2">
           <Button
             onClick={onApplyCredit}
             disabled={!hasUnappliedCredit || isLoading}
             variant={hasUnappliedCredit ? "default" : "outline"}
             size="sm"
+            title={disabledReason || undefined}
             className={cn(
               "gap-2",
               hasUnappliedCredit && "bg-green-600 hover:bg-green-700"
@@ -93,6 +102,10 @@ export default function CreditSummaryStrip({
               "Apply Credit"
             )}
           </Button>
+          {/* Show reason when disabled */}
+          {disabledReason && !isLoading && (
+            <span className="text-xs text-gray-500">{disabledReason}</span>
+          )}
         </div>
       )}
 
