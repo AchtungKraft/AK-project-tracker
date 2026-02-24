@@ -263,11 +263,18 @@ Deno.serve(async (req) => {
     const newCreditApplied = alreadyApplied + allocationPlan.reduce((sum, a) => sum + a.amount_applied, 0);
     const newNetExposure = grossExposure - commitmentExposures.reduce((sum, e) => sum + e.invoiced, 0) - newCreditApplied;
 
-    // Build per-commitment breakdown
+    // Build per-commitment breakdown with settle status
     const perCommitmentResult = commitmentExposures.map(e => {
       const newAllocationsForCommitment = allocationPlan
         .filter(a => a.commitment_id === e.commitment_id)
         .reduce((sum, a) => sum + a.amount_applied, 0);
+
+      const totalCreditApplied = e.credit_applied + newAllocationsForCommitment;
+      const remainingNet = Math.max(0, e.net - newAllocationsForCommitment);
+      
+      // PHASE 3: Determine if commitment will be fully settled
+      // A commitment is fully settled when: outstanding (net) becomes 0
+      const willBeSettled = remainingNet === 0 && totalCreditApplied > 0;
 
       return {
         commitment_id: e.commitment_id,
@@ -276,10 +283,15 @@ Deno.serve(async (req) => {
         invoiced: e.invoiced,
         credit_applied_existing: e.credit_applied,
         credit_applied_new: newAllocationsForCommitment,
-        credit_applied_total: e.credit_applied + newAllocationsForCommitment,
-        net: Math.max(0, e.net - newAllocationsForCommitment),
+        credit_applied_total: totalCreditApplied,
+        net: remainingNet,
+        will_be_settled: willBeSettled, // PHASE 3: Flag for UI
       };
     });
+
+    // PHASE 3: Calculate how many commitments will be settled
+    const settledCount = perCommitmentResult.filter(c => c.will_be_settled).length;
+    const partiallySettledCount = perCommitmentResult.filter(c => c.credit_applied_new > 0 && !c.will_be_settled).length;
 
     // If dry_run, return preview only
     if (dry_run) {
@@ -288,6 +300,7 @@ Deno.serve(async (req) => {
         dry_run: true,
         project_id,
         mode,
+        settle_parts,
         summary: {
           gross_exposure: grossExposure,
           credit_available: totalCreditAvailable,
@@ -296,6 +309,9 @@ Deno.serve(async (req) => {
           credit_applied_total: newCreditApplied,
           net_exposure: Math.max(0, newNetExposure),
           allocations_count: allocationPlan.length,
+          // PHASE 3: Settlement preview
+          commitments_to_settle: settledCount,
+          commitments_partially_settled: partiallySettledCount,
         },
         allocation_plan: allocationPlan,
         per_commitment: perCommitmentResult,
@@ -311,6 +327,7 @@ Deno.serve(async (req) => {
     // EXECUTE: Create CreditAllocation records and update ledgers
     const createdAllocations = [];
     const ledgerUpdates = [];
+    const settledCommitments = []; // PHASE 3: Track which commitments were marked PAID
 
     for (const alloc of allocationPlan) {
       // Create CreditAllocation
@@ -341,11 +358,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    // PHASE 3: If settle_parts=true, mark fully-settled commitments as PAID
+    if (settle_parts) {
+      const commitmentsToSettle = perCommitmentResult.filter(c => c.will_be_settled);
+      
+      for (const c of commitmentsToSettle) {
+        await base44.entities.PartCommitment.update(c.commitment_id, {
+          billing_status: 'paid',
+          // Also update invoiced_amount to reflect credit settlement
+          // invoiced_amount should equal the gross (settled by credit)
+          invoiced_amount: c.gross,
+          invoiced_qty: targetCommitments.find(tc => tc.id === c.commitment_id)?.required_total || 0,
+        });
+        settledCommitments.push(c.commitment_id);
+      }
+    }
+
     return Response.json({
       success: true,
       dry_run: false,
       project_id,
       mode,
+      settle_parts,
       summary: {
         gross_exposure: grossExposure,
         credit_available: totalCreditAvailable,
@@ -354,8 +388,12 @@ Deno.serve(async (req) => {
         credit_applied_total: newCreditApplied,
         net_exposure: Math.max(0, newNetExposure),
         allocations_created: createdAllocations.length,
+        // PHASE 3: Settlement results
+        commitments_settled: settledCommitments.length,
+        commitments_partially_settled: partiallySettledCount,
       },
       created_allocations: createdAllocations.map(a => a.id),
+      settled_commitments: settledCommitments, // PHASE 3: IDs of commitments marked PAID
       per_commitment: perCommitmentResult,
     });
 
