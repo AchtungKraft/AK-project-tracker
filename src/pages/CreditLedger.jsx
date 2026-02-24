@@ -171,6 +171,8 @@ export default function CreditLedger() {
     queryClient.invalidateQueries({ queryKey: creditKeys.ledger() });
     queryClient.invalidateQueries({ queryKey: invoiceKeys.all() });
     queryClient.invalidateQueries({ queryKey: creditKeys.all() });
+    // PHASE 4: Also invalidate financial snapshot for canonical data refresh
+    queryClient.invalidateQueries({ queryKey: financialSnapshotKeys.all() });
   };
 
   const getStatusBadge = (status) => {
