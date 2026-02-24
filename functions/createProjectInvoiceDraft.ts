@@ -145,6 +145,27 @@ Deno.serve(async (req) => {
           return Response.json({ error: `Line ${i}: Commitment does not belong to this project` }, { status: 400 });
         }
 
+        // ===== ARCHIVED/CANCELLED COMMITMENT GUARD (STABILIZATION) =====
+        if (commitment.is_archived === true) {
+          blockedLines.push({
+            line: i,
+            part_commitment_id: line.part_commitment_id,
+            reason: 'ARCHIVED',
+            message: `Commitment is archived. Cannot invoice archived commitments.`,
+          });
+          continue; // Skip this line
+        }
+
+        if (commitment.cancelled_at) {
+          blockedLines.push({
+            line: i,
+            part_commitment_id: line.part_commitment_id,
+            reason: 'CANCELLED',
+            message: `Commitment was cancelled on ${commitment.cancelled_at}. Cannot invoice cancelled commitments.`,
+          });
+          continue; // Skip this line
+        }
+
         // ===== BILLED-ONCE ENFORCEMENT =====
         const billingStatus = normalizeBillingStatus(commitment.billing_status);
         

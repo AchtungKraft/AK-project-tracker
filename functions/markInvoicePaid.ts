@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== PHASE 2: Apply credit (only if not already applied at invoice creation) =====
+    // ===== PHASE 2: Apply credit (GATED - only for legacy invoices) =====
     let creditApplied = invoice.credit_applied ?? 0;
     const creditsAppliedDetail = [];
     const idempotencyKey = generatePaymentIdempotencyKey(invoice_id, Date.now());
@@ -222,8 +222,19 @@ Deno.serve(async (req) => {
     // Check if credit was already applied at invoice creation
     const creditAlreadyAppliedAtCreation = (invoice.credit_applied ?? 0) > 0;
     
-    if (!creditAlreadyAppliedAtCreation && subtotal > 0) {
-      // Credit not applied at creation - apply now
+    // STABILIZATION GATE: Payment-time credit application is now DISABLED by default
+    // Only applies if:
+    // 1. invoice.apply_credit_at_payment === true (explicit flag), OR
+    // 2. invoice.credit_idempotency_key is null/undefined (legacy invoice pre-stabilization)
+    const isLegacyInvoice = !invoice.credit_idempotency_key;
+    const explicitPaymentTimeCredit = invoice.apply_credit_at_payment === true;
+    const shouldApplyCreditAtPayment = !creditAlreadyAppliedAtCreation && 
+                                        (isLegacyInvoice || explicitPaymentTimeCredit);
+    
+    if (shouldApplyCreditAtPayment && subtotal > 0) {
+      // Credit not applied at creation AND this is a legacy invoice or explicitly requested
+      console.log(`Applying credit at payment time for ${isLegacyInvoice ? 'legacy' : 'explicit'} invoice ${invoice_id}`);
+      
       const credits = await base44.entities.ProjectCreditLedger.filter({
         project_id: invoice.project_id,
       });
@@ -259,6 +270,8 @@ Deno.serve(async (req) => {
           remaining_after: newRemaining,
         });
       }
+    } else if (!creditAlreadyAppliedAtCreation && subtotal > 0 && !shouldApplyCreditAtPayment) {
+      console.log(`Skipping payment-time credit for invoice ${invoice_id} (not legacy, no explicit flag)`);
     }
 
     // Calculate actual balance due after credit
