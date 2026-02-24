@@ -72,6 +72,40 @@ export default function PartModal({ part, partId, onClose }) {
     console.debug('[PartModal] effectivePartId:', effectivePartId);
   }
   
+  // PHASE 3: Section health monitor - detect stuck queries
+  const sectionHealthRef = useRef({});
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const checkStuckQueries = () => {
+      const queryCache = queryClient.getQueryCache();
+      const stuckThreshold = 4000; // 4 seconds
+      const now = Date.now();
+      
+      queryCache.getAll().forEach(query => {
+        const key = query.queryKey;
+        const state = query.state;
+        
+        // Only check part-scoped queries
+        if (!Array.isArray(key) || !key.some(k => k === effectivePartId)) return;
+        
+        if (state.fetchStatus === 'fetching') {
+          const elapsed = now - (state.fetchMeta?.fetchMore?.timestamp || state.dataUpdatedAt || now);
+          if (elapsed > stuckThreshold) {
+            console.warn('[SECTION_HEALTH] Stuck query detected:', {
+              queryKey: key,
+              elapsed: `${elapsed}ms`,
+              status: state.status,
+              fetchStatus: state.fetchStatus,
+            });
+          }
+        }
+      });
+    };
+    
+    const interval = setInterval(checkStuckQueries, 2000);
+    return () => clearInterval(interval);
+  }, [effectivePartId, queryClient]);
+  
   // Track previous partId to cancel in-flight queries on switch
   const prevPartIdRef = useRef(null);
 
