@@ -86,11 +86,20 @@ function deriveBillingState(normalizedBillingStatus) {
  * Compute canonical invoice eligibility contract
  * Returns: { canInvoice, block_reason_code, block_reason_text, warning_code, warning_text }
  * 
+ * ============================================================================
+ * PHASE 3 CANONICAL RULE: Invoice eligibility depends ONLY on remaining_to_bill
+ * 
  * Block priority order (first match wins):
  * 1. archived
  * 2. financial_role === NON_BILLABLE or requires_client_billing === false
- * 3. billing_state is INVOICED or PAID
- * 4. outstanding <= 0
+ * 3. remaining_to_bill_qty <= 0 (no outstanding qty to invoice)
+ * 
+ * DOES NOT GATE ON:
+ * - "in stock" / "installed" status
+ * - "paid" status (payment affects collectibility, not billability)
+ * - "credit" allocations
+ * - "balance_due" of prior invoices
+ * ============================================================================
  * 
  * Non-blocking warnings:
  * - MISSING_RETAIL: unit_retail is 0 or missing (still invoiceable, just flagged)
@@ -101,7 +110,8 @@ function computeInvoiceEligibility({
   requiresClientBilling,
   billingState, 
   outstandingAmount, 
-  unitRetail 
+  unitRetail,
+  remainingToBillQty = null, // Phase 3: explicit qty-based check
 }) {
   // Check blocking conditions in priority order
   if (isArchived) {
@@ -124,27 +134,12 @@ function computeInvoiceEligibility({
     };
   }
   
-  if (billingState === 'INVOICED') {
-    return {
-      canInvoice: false,
-      block_reason_code: 'ALREADY_INVOICED',
-      block_reason_text: 'This item has already been invoiced (awaiting payment).',
-      warning_code: null,
-      warning_text: null,
-    };
-  }
+  // PHASE 3: Use qty-based check if available, otherwise fall back to amount
+  const hasRemainingToBill = remainingToBillQty !== null 
+    ? remainingToBillQty > 0 
+    : outstandingAmount > 0;
   
-  if (billingState === 'PAID') {
-    return {
-      canInvoice: false,
-      block_reason_code: 'ALREADY_PAID',
-      block_reason_text: 'This item has already been fully paid.',
-      warning_code: null,
-      warning_text: null,
-    };
-  }
-  
-  if (outstandingAmount <= 0) {
+  if (!hasRemainingToBill) {
     return {
       canInvoice: false,
       block_reason_code: 'NO_OUTSTANDING',
@@ -447,7 +442,12 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     // CANONICAL: Derive 3-state billing_state
     const billingState = deriveBillingState(clientBillingStatus);
     
+    // PHASE 3: Compute remaining to bill qty from canonical fields
+    const invoicedQty = commitment.invoiced_qty ?? 0;
+    const remainingToBillQty = Math.max(0, assignedQty - invoicedQty);
+    
     // CANONICAL: Compute invoice eligibility contract
+    // Uses remaining_to_bill_qty as primary gating (not billing_state or payment status)
     const invoiceEligibility = computeInvoiceEligibility({
       isArchived: part.is_archived || false,
       financialRole,
@@ -455,6 +455,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       billingState,
       outstandingAmount: netLineTotal,
       unitRetail,
+      remainingToBillQty, // Phase 3: explicit qty-based check
     });
 
     // PHASE 3: Resolve vendor and category names for grouping
@@ -631,13 +632,20 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
 
   // PHASE 1 CANONICAL: Build canonical commitment exposure list for invoice modal
   // This is the SINGLE SOURCE OF TRUTH for invoiceable commitments
-  const canonicalCommitments = allItems.map(item => ({
+  const canonicalCommitments = allItems.map(item => {
+    // PHASE 3: Compute remaining_to_bill_qty from canonical sources
+    const requiredQty = item.assigned_qty || 0;
+    const invoicedQty = item.invoiced_qty || 0;
+    const remainingToBillQty = Math.max(0, requiredQty - invoicedQty);
+    
+    return {
     id: item.commitment_id || item.id,
     part_id: item.part_id,
     part_name: item.part_name,
     project_id: item.project_id,
     required_total: item.assigned_qty,
-    qty_remaining_to_bill: item.assigned_qty, // Alias for BillablePartsSelector
+    invoiced_qty: invoicedQty, // PHASE 3: Expose for UI
+    qty_remaining_to_bill: remainingToBillQty, // PHASE 3: Canonical remaining qty
     unit_retail_snapshot: item.unit_retail,
     unit_retail: item.unit_retail, // Alias for BillablePartsSelector
     unit_cost_snapshot: item.unit_cost,

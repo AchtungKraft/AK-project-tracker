@@ -201,28 +201,43 @@ export default function BillablePartsSelector({
     const commitments = billingData.commitments || [];
     let warning = null;
     
-    // CANONICAL: Filter by billing_state = NOT_INVOICED only (use backend canonical field)
-    // We show all items but mark eligibility via allowed.canInvoice from backend
-    const unbilledItems = commitments.filter(c => {
-      // Only show items with billing_state = NOT_INVOICED
-      const billingState = c.billing_state || 'NOT_INVOICED';
-      return billingState === 'NOT_INVOICED';
+    // ============================================================================
+    // PHASE 3: Invoice eligibility is ONLY based on remaining_to_bill_qty > 0
+    // 
+    // CANONICAL RULE: Invoice selection must NOT gate on:
+    // - "in stock" / "installed" / "paid" / "credit" / "balance_due"
+    // 
+    // We show items where:
+    // 1. canInvoice === true from backend (which checks remaining_to_bill > 0)
+    // 2. OR billing_state === NOT_INVOICED (backward compat)
+    // ============================================================================
+    const invoiceableItems = commitments.filter(c => {
+      // Backend canonical invoice eligibility
+      const canInvoice = c.allowed?.canInvoice ?? true;
+      
+      // Remaining to bill calculation (qty or amount based)
+      const requiredQty = c.required_total ?? c.assigned_qty ?? 0;
+      const invoicedQty = c.invoiced_qty ?? 0;
+      const remainingToBillQty = Math.max(0, requiredQty - invoicedQty);
+      
+      // Eligible if: backend says canInvoice OR has remaining qty to bill
+      return canInvoice && remainingToBillQty > 0;
     });
     
-    if (commitments.length > 0 && unbilledItems.length === 0) {
-      warning = 'No unbilled items found';
+    if (commitments.length > 0 && invoiceableItems.length === 0) {
+      warning = 'No items with remaining quantity to bill';
     }
     
-    const grouped = groupByVendorThenCategory(unbilledItems);
+    const grouped = groupByVendorThenCategory(invoiceableItems);
     
     return {
       vendorGroups: grouped,
       summary: {
-        total_items: unbilledItems.length,
-        total_remaining_to_bill: unbilledItems.reduce((sum, i) => sum + (i.outstanding_retail_amount ?? i.net_exposure ?? i.net_line_total ?? 0), 0),
+        total_items: invoiceableItems.length,
+        total_remaining_to_bill: invoiceableItems.reduce((sum, i) => sum + (i.outstanding_retail_amount ?? i.net_exposure ?? i.net_line_total ?? 0), 0),
       },
       contractWarning: warning,
-      allItems: unbilledItems,
+      allItems: invoiceableItems,
     };
   }, [billingData]);
   
