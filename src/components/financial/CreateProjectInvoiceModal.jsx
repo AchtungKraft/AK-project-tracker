@@ -672,17 +672,29 @@ export default function CreateProjectInvoiceModal({
               </div>
             </div>
 
+            {/* PART 4: Helper text about credit behavior */}
             {effectiveCreditToApply > 0 && (
-              <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg">
+              <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
                 <p className="text-sm text-green-300">
                   <strong>Credit will be applied:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is created.
                 </p>
+                <p className="text-xs text-green-400/80">
+                  Credit applied here settles commitments immediately if fully covered.
+                </p>
+                {effectiveCreditToApply >= subtotal && subtotal > 0 && (
+                  <div className="flex items-center gap-2 mt-2 p-2 bg-emerald-900/30 rounded border border-emerald-700/50">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-sm text-emerald-300 font-medium">
+                      These items will be marked PAID immediately.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
             <div className="p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
               <p className="text-sm text-blue-300">
-                This will create a draft invoice. Commitments will be marked as invoiced and credit will be applied.
+                This will create a draft invoice. Commitments will be marked as invoiced (or PAID if fully covered by credit).
               </p>
             </div>
           </div>

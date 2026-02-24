@@ -414,20 +414,70 @@ Deno.serve(async (req) => {
       createdLines.push(createdLine);
     }
 
-    // Update commitments to 'invoiced' status NOW (at draft creation)
-    // This prevents double-invoicing even while invoice is in draft
+    // ===== PART 1: AUTO-SETTLE COMMITMENTS FULLY COVERED BY CREDIT =====
+    // Map credit to individual commitments and determine billing status
+    // All-or-nothing: only commitments fully covered become PAID immediately
     const partCommitmentIds = lineResults
       .filter(l => l.part_commitment_id)
       .map(l => l.part_commitment_id);
     
-    for (const commitmentId of partCommitmentIds) {
+    // Build line total map for credit allocation per commitment
+    const lineTotalMap = new Map();
+    for (const line of lineResults) {
+      if (line.part_commitment_id) {
+        lineTotalMap.set(line.part_commitment_id, line.line_total || 0);
+      }
+    }
+    
+    // Sort by line_total ascending (settle smaller commitments first to maximize PAID count)
+    const sortedCommitmentIds = [...partCommitmentIds].sort((a, b) => {
+      return (lineTotalMap.get(a) || 0) - (lineTotalMap.get(b) || 0);
+    });
+    
+    // Allocate credit to commitments
+    let remainingCreditForCommitments = creditToApply;
+    const commitmentSettlements = [];
+    const autoSettledCommitments = [];
+    
+    for (const commitmentId of sortedCommitmentIds) {
       const commitment = commitmentMap.get(commitmentId);
       const lineData = lineResults.find(l => l.part_commitment_id === commitmentId);
+      const lineTotal = lineData?.line_total || 0;
+      
+      // Determine if credit fully covers this commitment
+      const creditForThis = Math.min(remainingCreditForCommitments, lineTotal);
+      const isFullyCovered = creditForThis >= lineTotal && lineTotal > 0;
+      
+      // Update billing status: PAID if fully covered, INVOICED otherwise
+      const newBillingStatus = isFullyCovered ? 'paid' : 'invoiced';
       
       await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-        billing_status: 'invoiced',
+        billing_status: newBillingStatus,
         invoiced_qty: lineData?.qty || (commitment?.required_total ?? 0),
-        invoiced_retail_total: lineData?.line_total || 0,
+        invoiced_retail_total: lineTotal,
+        invoiced_amount: lineTotal, // Total amount invoiced
+      });
+      
+      // Deduct credit used
+      if (isFullyCovered) {
+        remainingCreditForCommitments -= lineTotal;
+        autoSettledCommitments.push({
+          commitment_id: commitmentId,
+          part_id: commitment.part_id,
+          part_name: lineData?.part_name || 'Part',
+          line_total: lineTotal,
+          credit_applied: lineTotal,
+          billing_status: 'paid',
+        });
+      }
+      
+      commitmentSettlements.push({
+        commitment_id: commitmentId,
+        part_name: lineData?.part_name || 'Part',
+        line_total: lineTotal,
+        credit_applied: isFullyCovered ? lineTotal : 0,
+        billing_status: newBillingStatus,
+        fully_covered_by_credit: isFullyCovered,
       });
     }
 
@@ -458,6 +508,10 @@ Deno.serve(async (req) => {
       ledger_mutated: creditToApply > 0,
       blocked_lines: blockedLines.length > 0 ? blockedLines : null,
       warnings: warnings.length > 0 ? warnings : null,
+      // PART 1: Auto-settle summary
+      auto_settled_commitments: autoSettledCommitments,
+      auto_settled_count: autoSettledCommitments.length,
+      commitment_settlements: commitmentSettlements,
     });
 
   } catch (error) {

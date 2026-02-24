@@ -431,8 +431,8 @@ export default function BillablePartsSelector({
         className="bg-gray-800 border-gray-700"
       />
 
-      {/* Vendor > Category > Parts Tree */}
-      <ScrollArea className="h-[300px] overflow-x-auto">
+      {/* Vendor > Category > Parts Tree - PART 2: No nested vertical scroll */}
+      <div className="overflow-x-auto">
         <div className="space-y-2 pr-3 min-w-full">
           {filteredVendorGroups.map((vendor) => {
             const vendorKey = `${vendor.vendor_id}::${vendor.vendor_name}`;
