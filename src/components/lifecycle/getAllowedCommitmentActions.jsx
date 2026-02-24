@@ -134,12 +134,16 @@ export function getAllowedCommitmentActions(commitment) {
     actions.cancelRequiresInventoryReturn = true;
   }
 
-  // BILLING ACTIONS
-  if (commitment_status !== 'planned') {
-    // Can only bill after ordering has started
-    if (!hasBeenBilled && remaining > 0) {
-      actions.canCreateInvoice = true;
-    }
+  // BILLING ACTIONS - CANONICAL RULE
+  // Invoice eligibility depends ONLY on: qty_required - invoiced_qty > 0
+  // It does NOT depend on: paid status, credit, install status, stock
+  // The old check (!hasBeenBilled) was too restrictive - it blocked items
+  // that were previously billed but have remaining qty to bill
+  const invoicedQty = commitment.invoiced_qty ?? 0;
+  const remainingToBill = Math.max(0, effectiveRequired - invoicedQty);
+  
+  if (remainingToBill > 0) {
+    actions.canCreateInvoice = true;
   }
 
   // POOL ALLOCATION - only for commitments with retail value
