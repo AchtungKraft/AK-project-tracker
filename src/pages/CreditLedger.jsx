@@ -41,6 +41,8 @@ export default function CreditLedger() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Fetch credit ledger entries - uses factory key
   const { data: credits = [], isLoading, refetch } = useQuery({
