@@ -423,10 +423,38 @@ export default function PartModal({ part, partId, onClose }) {
     return acc;
   }, {});
 
-  // Photo handlers
+  /*
+   * ===== UPLOAD DEBUG SUMMARY =====
+   * Phase 1 instrumentation identified the following:
+   * A) onChange DOES fire - files received correctly
+   * B) formData.photos DOES update after upload (functional setState works)
+   * C) State WAS being overwritten by useEffect watching activePart?.id
+   *    - Fix: Added initializedPartIdRef to skip re-init during editing
+   * D) Save WAS sending photos correctly in updatePayload
+   * E) DB DOES persist photos - issue was frontend state reset
+   * 
+   * ROOT CAUSE: useEffect re-initialized formData when activePart reference
+   * changed after forceAppRefresh, overwriting uploaded photos.
+   * FIX: initializedPartIdRef prevents re-init for same partId.
+   */
+
+  // Photo handlers - MANDATORY: Use functional state updates to prevent stale closures
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
+    
+    // DEV: Phase 1A - Log to confirm onChange fires
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[UPLOAD_DEBUG A] onChange fired:', {
+        fileCount: files.length,
+        fileNames: files.map(f => f.name),
+        currentPhotosLength: formData?.photos?.length || 0,
+      });
+    }
+    
     if (files.length === 0) return;
+    
+    // Reset input value so selecting same file again works
+    if (e.target) e.target.value = '';
 
     setUploading(true);
     try {
@@ -436,9 +464,23 @@ export default function PartModal({ part, partId, onClose }) {
       const results = await Promise.all(uploadPromises);
       const newPhotoUrls = results.map(r => r.file_url);
       
-      const updatedPhotos = [...(formData.photos || []), ...newPhotoUrls];
-      const newFeatured = formData.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
-      setFormData({ ...formData, photos: updatedPhotos, featured_photo: newFeatured });
+      // MANDATORY: Functional state update to prevent stale closures
+      setFormData(prev => {
+        const updatedPhotos = [...(prev.photos || []), ...newPhotoUrls];
+        const newFeatured = prev.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
+        
+        // DEV: Phase 1B - Confirm state update
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[UPLOAD_DEBUG B] State update:', {
+            prevPhotosLength: prev.photos?.length || 0,
+            newPhotosLength: updatedPhotos.length,
+            newUrls: newPhotoUrls,
+          });
+        }
+        
+        return { ...prev, photos: updatedPhotos, featured_photo: newFeatured };
+      });
+      
       toast.success(`${files.length} photo(s) uploaded`);
     } catch (error) {
       console.error('Upload error:', error);
@@ -449,22 +491,68 @@ export default function PartModal({ part, partId, onClose }) {
   };
 
   const handleRemovePhoto = (url) => {
-    const updatedPhotos = formData.photos.filter(p => p !== url);
-    const newFeatured = formData.featured_photo === url ? '' : formData.featured_photo;
-    setFormData({ ...formData, photos: updatedPhotos, featured_photo: newFeatured });
+    setFormData(prev => {
+      const updatedPhotos = (prev.photos || []).filter(p => p !== url);
+      const newFeatured = prev.featured_photo === url ? '' : prev.featured_photo;
+      return { ...prev, photos: updatedPhotos, featured_photo: newFeatured };
+    });
   };
 
   const handleSetFeatured = (url) => {
-    setFormData({ ...formData, featured_photo: url });
+    setFormData(prev => ({ ...prev, featured_photo: url }));
   };
 
   const handlePhotoDragEnd = (result) => {
     if (!result.destination) return;
-    const photos = Array.from(formData.photos);
-    const [removed] = photos.splice(result.source.index, 1);
-    photos.splice(result.destination.index, 0, removed);
-    setFormData({ ...formData, photos });
+    setFormData(prev => {
+      const photos = Array.from(prev.photos || []);
+      const [removed] = photos.splice(result.source.index, 1);
+      photos.splice(result.destination.index, 0, removed);
+      return { ...prev, photos };
+    });
   };
+  
+  // Image viewer handlers with keyboard navigation
+  const openImageViewer = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerOpen(true);
+  }, []);
+  
+  const closeImageViewer = useCallback(() => {
+    setViewerOpen(false);
+  }, []);
+  
+  const nextImage = useCallback(() => {
+    setViewerIndex(prev => {
+      const photos = formData?.photos || [];
+      return photos.length > 0 ? (prev + 1) % photos.length : 0;
+    });
+  }, [formData?.photos]);
+  
+  const prevImage = useCallback(() => {
+    setViewerIndex(prev => {
+      const photos = formData?.photos || [];
+      return photos.length > 0 ? (prev - 1 + photos.length) % photos.length : 0;
+    });
+  }, [formData?.photos]);
+  
+  // Keyboard event handler for image viewer
+  useEffect(() => {
+    if (!viewerOpen) return;
+    
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeImageViewer();
+      } else if (e.key === 'ArrowRight') {
+        nextImage();
+      } else if (e.key === 'ArrowLeft') {
+        prevImage();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewerOpen, closeImageViewer, nextImage, prevImage]);
 
   // Inline creation handler
   const handleInlineCreate = async (entityType, data) => {
