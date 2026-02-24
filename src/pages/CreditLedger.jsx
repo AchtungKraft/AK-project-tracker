@@ -118,6 +118,9 @@ export default function CreditLedger() {
   // Filter credits
   const filteredCredits = useMemo(() => {
     return enrichedCredits.filter((credit) => {
+      // Project filter
+      if (projectFilter !== "all" && credit.project_id !== projectFilter) return false;
+
       // Status filter
       if (statusFilter !== "all" && credit.status !== statusFilter) return false;
 
@@ -131,7 +134,18 @@ export default function CreditLedger() {
 
       return true;
     });
-  }, [enrichedCredits, statusFilter, searchTerm]);
+  }, [enrichedCredits, statusFilter, searchTerm, projectFilter]);
+
+  // Get unique projects with credits
+  const projectsWithCredits = useMemo(() => {
+    const uniqueProjects = new Map();
+    for (const credit of enrichedCredits) {
+      if (!uniqueProjects.has(credit.project_id)) {
+        uniqueProjects.set(credit.project_id, credit.project_name);
+      }
+    }
+    return Array.from(uniqueProjects.entries()).map(([id, name]) => ({ id, name }));
+  }, [enrichedCredits]);
 
   // Calculate summary
   const summary = useMemo(() => {
