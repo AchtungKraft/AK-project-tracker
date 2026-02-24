@@ -4,7 +4,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * markInvoicePaid - PHASE 10 Forward Invoice System
  * 
  * Marks a sent invoice as paid.
- * THIS IS THE ONLY PLACE WHERE CREDIT IS APPLIED AND LEDGER IS MUTATED.
+ * THIS IS THE ONLY PLACE WHERE:
+ * 1. Credit is actually applied (ledger is mutated)
+ * 2. Linked commitments are set to billing_status = 'paid'
  * 
  * Inputs:
  * - invoice_id (required)
@@ -13,13 +15,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  * - apply_credit: boolean (default true) - whether to apply available credit
  * 
  * Rules:
- * - status sent->paid only
+ * - status sent->paid only (no partial payments)
  * - Apply credit from ProjectCreditLedger (deduct from remaining_amount)
  * - if paid_amount > actual_balance_due: create new ProjectCreditLedger entry for overpayment
- * - Defensive: cannot apply more credit than ledger balance
- * - Defensive: cannot create duplicate credit deductions
+ * - ALL linked commitments get billing_status = 'paid'
  * 
- * Returns updated invoice + credits_applied[] + credit_created?
+ * Returns updated invoice + credits_applied[] + credit_created? + commitments_updated
  */
 
 Deno.serve(async (req) => {
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
 
     const invoice = invoices[0];
 
-    // Validate status transition
+    // Validate status transition (sent -> paid only)
     if (invoice.status !== 'sent') {
       return Response.json({ 
         error: `Cannot mark as paid: invoice is ${invoice.status}, must be sent` 
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
 
     const subtotal = invoice.subtotal ?? 0;
     
-    // STEP 1: Apply credit NOW (this is the only place credit is actually applied)
+    // ===== STEP 1: Apply credit NOW (this is the only place credit is actually applied) =====
     let creditApplied = 0;
     const creditsAppliedDetail = [];
 
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
     // Determine paid amount (default to balance due after credit)
     const actualPaidAmount = paid_amount ?? balanceDueAfterCredit;
 
-    // STEP 2: Update invoice with final credit_applied and paid_amount
+    // ===== STEP 2: Update invoice with final credit_applied and paid_amount =====
     await base44.asServiceRole.entities.ProjectInvoice.update(invoice_id, {
       status: 'paid',
       payment_date,
@@ -131,7 +132,7 @@ Deno.serve(async (req) => {
 
     let creditCreated = null;
 
-    // STEP 3: Check for overpayment - create new credit
+    // ===== STEP 3: Check for overpayment - create new credit =====
     if (actualPaidAmount > balanceDueAfterCredit) {
       const overage = actualPaidAmount - balanceDueAfterCredit;
 
@@ -149,6 +150,33 @@ Deno.serve(async (req) => {
       };
     }
 
+    // ===== STEP 4: Update ALL linked commitments to billing_status = 'paid' =====
+    const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
+      invoice_id: invoice_id,
+    });
+
+    const commitmentIds = invoiceLines
+      .filter(line => line.part_commitment_id)
+      .map(line => line.part_commitment_id);
+
+    // Deduplicate (in case multiple lines reference same commitment)
+    const uniqueCommitmentIds = [...new Set(commitmentIds)];
+
+    let commitmentsUpdated = 0;
+    for (const commitmentId of uniqueCommitmentIds) {
+      try {
+        await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
+          billing_status: 'paid',
+          // Clear any invoice blocking reasons since payment is complete
+          invoice_blocked_reason: null,
+        });
+        commitmentsUpdated++;
+      } catch (err) {
+        console.error(`Failed to update commitment ${commitmentId}:`, err);
+        // Continue with other commitments
+      }
+    }
+
     return Response.json({
       success: true,
       invoice_id,
@@ -161,6 +189,8 @@ Deno.serve(async (req) => {
       credits_applied: creditsAppliedDetail.length > 0 ? creditsAppliedDetail : null,
       credit_created: creditCreated,
       ledger_mutated: creditApplied > 0 || creditCreated !== null,
+      commitments_updated: commitmentsUpdated,
+      commitment_ids: uniqueCommitmentIds,
     });
 
   } catch (error) {
