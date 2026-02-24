@@ -56,7 +56,8 @@ Deno.serve(async (req) => {
       invoice_type, 
       preview_credit = true, 
       lines = [],
-      notes 
+      notes,
+      credit_to_apply = null, // STABILIZATION: User-specified credit amount to apply at creation
     } = payload;
 
     // Validate required fields
@@ -271,53 +272,99 @@ Deno.serve(async (req) => {
     // Compute subtotal
     const subtotal = lineResults.reduce((sum, l) => sum + (l.line_total || 0), 0);
 
-    // PREVIEW credit (DO NOT MUTATE LEDGER)
-    let creditPreview = 0;
-    const creditPreviewDetail = [];
+    // ===== STABILIZATION: Hybrid Credit at Invoice Creation =====
+    // Fetch available credits
+    const credits = await base44.entities.ProjectCreditLedger.filter({
+      project_id,
+    });
 
-    if (preview_credit && subtotal > 0) {
-      const credits = await base44.entities.ProjectCreditLedger.filter({
-        project_id,
+    const availableCredits = credits
+      .filter(c => (c.remaining_amount ?? 0) > 0)
+      .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+
+    const totalCreditAvailable = availableCredits.reduce((sum, c) => sum + (c.remaining_amount ?? 0), 0);
+
+    // Calculate credit to apply
+    // If user specified credit_to_apply, use it (with validation)
+    // Otherwise, calculate suggested credit (min of available and subtotal)
+    let creditToApply = 0;
+    let creditAppliedDetail = [];
+    let creditValidationError = null;
+
+    if (credit_to_apply !== null && credit_to_apply !== undefined) {
+      // User specified a credit amount - validate it
+      const requestedCredit = parseFloat(credit_to_apply) || 0;
+      
+      if (requestedCredit < 0) {
+        creditValidationError = 'Credit amount cannot be negative';
+      } else if (requestedCredit > totalCreditAvailable) {
+        creditValidationError = `Credit amount (${requestedCredit}) exceeds available credit (${totalCreditAvailable})`;
+      } else if (requestedCredit > subtotal) {
+        creditValidationError = `Credit amount (${requestedCredit}) exceeds invoice subtotal (${subtotal})`;
+      } else {
+        creditToApply = requestedCredit;
+      }
+    } else if (preview_credit && subtotal > 0) {
+      // Auto-suggest: min of available and subtotal
+      creditToApply = Math.min(totalCreditAvailable, subtotal);
+    }
+
+    if (creditValidationError) {
+      return Response.json({
+        success: false,
+        error: creditValidationError,
+        available_credit: totalCreditAvailable,
+        subtotal,
+      }, { status: 400 });
+    }
+
+    // Generate idempotency key for credit application
+    const creditIdempotencyKey = `inv_create_${project_id}_${Date.now()}`;
+
+    // APPLY credit NOW (mutate ledger at invoice creation)
+    let remainingToApply = creditToApply;
+
+    for (const credit of availableCredits) {
+      if (remainingToApply <= 0) break;
+
+      const available = credit.remaining_amount ?? 0;
+      const toApply = Math.min(available, remainingToApply);
+
+      if (toApply <= 0) continue;
+
+      // MUTATE LEDGER: Deduct from remaining_amount
+      const newRemaining = available - toApply;
+      await base44.asServiceRole.entities.ProjectCreditLedger.update(credit.id, {
+        remaining_amount: newRemaining,
+        credit_idempotency_key: creditIdempotencyKey,
       });
 
-      const availableCredits = credits
-        .filter(c => (c.remaining_amount ?? 0) > 0)
-        .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+      remainingToApply -= toApply;
 
-      let remainingToPreview = subtotal;
-
-      for (const credit of availableCredits) {
-        if (remainingToPreview <= 0) break;
-
-        const available = credit.remaining_amount ?? 0;
-        const toPreview = Math.min(available, remainingToPreview);
-
-        creditPreview += toPreview;
-        remainingToPreview -= toPreview;
-
-        creditPreviewDetail.push({
-          credit_id: credit.id,
-          source_invoice_id: credit.source_invoice_id,
-          amount_available: available,
-          amount_preview: toPreview,
-        });
-      }
+      creditAppliedDetail.push({
+        credit_id: credit.id,
+        source_invoice_id: credit.source_invoice_id,
+        amount_available: available,
+        amount_applied: toApply,
+        remaining_after: newRemaining,
+      });
     }
 
     const total = subtotal;
-    const balanceDue = Math.max(0, subtotal - creditPreview);
+    const balanceDue = Math.max(0, subtotal - creditToApply);
 
-    // Create invoice
+    // Create invoice with credit_applied set (not preview)
     const invoice = await base44.asServiceRole.entities.ProjectInvoice.create({
       project_id,
       invoice_type,
       status: 'draft',
       subtotal,
-      credit_preview: creditPreview,
-      credit_applied: 0, // ALWAYS 0 for drafts
+      credit_preview: 0, // No longer needed - using credit_applied
+      credit_applied: creditToApply, // STABILIZATION: Credit applied at creation
       total,
       balance_due: balanceDue,
       notes: notes || null,
+      credit_idempotency_key: creditIdempotencyKey,
     });
 
     // Create invoice lines with all export fields
@@ -375,17 +422,19 @@ Deno.serve(async (req) => {
         invoice_type,
         status: 'draft',
         subtotal,
-        credit_preview: creditPreview,
-        credit_applied: 0,
+        credit_applied: creditToApply,
         total,
         balance_due: balanceDue,
       },
       lines_created: createdLines.length,
       lines_needing_review: linesNeedingReview,
       commitments_updated: partCommitmentIds.length,
-      part_commitment_ids: partCommitmentIds, // For payment flow linkage
-      credit_preview_detail: creditPreviewDetail.length > 0 ? creditPreviewDetail : null,
-      ledger_mutated: false,
+      part_commitment_ids: partCommitmentIds,
+      credit_applied: creditToApply,
+      credit_available_before: totalCreditAvailable,
+      credit_available_after: totalCreditAvailable - creditToApply,
+      credit_applied_detail: creditAppliedDetail.length > 0 ? creditAppliedDetail : null,
+      ledger_mutated: creditToApply > 0,
       blocked_lines: blockedLines.length > 0 ? blockedLines : null,
       warnings: warnings.length > 0 ? warnings : null,
     });

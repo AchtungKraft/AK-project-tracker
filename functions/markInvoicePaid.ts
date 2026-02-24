@@ -1,27 +1,41 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * markInvoicePaid - PHASE 10 Forward Invoice System
+ * markInvoicePaid - PHASE 10 Forward Invoice System (STABILIZATION HARDENED)
  * 
  * Marks a sent invoice as paid.
- * THIS IS THE ONLY PLACE WHERE:
- * 1. Credit is actually applied (ledger is mutated)
- * 2. Linked commitments are set to billing_status = 'paid'
+ * 
+ * STABILIZATION FIXES:
+ * 1. ATOMIC: All commitment updates must succeed before invoice is marked paid
+ * 2. IDEMPOTENT: Credit application uses payment_idempotency_key
+ * 3. SAFE: If credit was applied at invoice creation, do not re-apply
  * 
  * Inputs:
  * - invoice_id (required)
  * - payment_date (required)
  * - paid_amount (optional; default invoice.balance_due)
- * - apply_credit: boolean (default true) - whether to apply available credit
  * 
  * Rules:
  * - status sent->paid only (no partial payments)
- * - Apply credit from ProjectCreditLedger (deduct from remaining_amount)
- * - if paid_amount > actual_balance_due: create new ProjectCreditLedger entry for overpayment
- * - ALL linked commitments get billing_status = 'paid'
+ * - If invoice.credit_applied > 0, credit was applied at creation - skip credit application
+ * - If invoice.credit_applied === 0 and apply_credit=true, apply credit now
+ * - ALL linked commitments MUST update to 'paid' or the entire operation fails
+ * - if paid_amount > balance_due: create new ProjectCreditLedger entry for overpayment
  * 
  * Returns updated invoice + credits_applied[] + credit_created? + commitments_updated
  */
+
+// Generate idempotency key for payment credit application
+function generatePaymentIdempotencyKey(invoiceId, timestamp) {
+  const input = `payment:${invoiceId}:${Math.floor(timestamp / 60000)}`;
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `pay_${Math.abs(hash).toString(36)}`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -43,7 +57,7 @@ Deno.serve(async (req) => {
     }
 
     const payload = await req.json();
-    const { invoice_id, payment_date, paid_amount, apply_credit = true } = payload;
+    const { invoice_id, payment_date, paid_amount } = payload;
 
     // Validate required fields
     if (!invoice_id) {
@@ -61,6 +75,17 @@ Deno.serve(async (req) => {
 
     const invoice = invoices[0];
 
+    // IDEMPOTENCY: If already paid, return success without changes
+    if (invoice.status === 'paid') {
+      return Response.json({ 
+        success: true,
+        idempotent: true,
+        message: 'Invoice already paid - no changes made',
+        invoice_id,
+        status: 'paid',
+      });
+    }
+
     // Validate status transition (sent -> paid only)
     if (invoice.status !== 'sent') {
       return Response.json({ 
@@ -68,14 +93,137 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
+    // ===== PREFLIGHT: Validate all linked commitments exist and are eligible =====
+    const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
+      invoice_id: invoice_id,
+    });
+
+    const commitmentIds = invoiceLines
+      .filter(line => line.part_commitment_id)
+      .map(line => line.part_commitment_id);
+
+    const uniqueCommitmentIds = [...new Set(commitmentIds)];
+
+    // Fetch all commitments in parallel
+    const commitmentFetches = uniqueCommitmentIds.map(id => 
+      base44.entities.PartCommitment.filter({ id })
+    );
+    const commitmentResults = await Promise.all(commitmentFetches);
+    
+    const commitmentMap = new Map();
+    const preflightErrors = [];
+    
+    for (let i = 0; i < uniqueCommitmentIds.length; i++) {
+      const commitments = commitmentResults[i];
+      const commitmentId = uniqueCommitmentIds[i];
+      
+      if (!commitments || commitments.length === 0) {
+        preflightErrors.push({
+          commitment_id: commitmentId,
+          error: 'Commitment not found',
+        });
+        continue;
+      }
+      
+      const commitment = commitments[0];
+      commitmentMap.set(commitmentId, commitment);
+      
+      // Validate commitment is in valid state
+      if (commitment.billing_status === 'paid') {
+        // Already paid - this is OK, we'll skip updating it
+        continue;
+      }
+      
+      if (commitment.billing_status !== 'invoiced' && commitment.billing_status !== 'unbilled') {
+        preflightErrors.push({
+          commitment_id: commitmentId,
+          error: `Commitment in unexpected state: ${commitment.billing_status}`,
+        });
+      }
+    }
+    
+    // FAIL FAST: If any commitment is invalid, abort entire operation
+    if (preflightErrors.length > 0) {
+      return Response.json({
+        success: false,
+        error: 'Preflight validation failed - some commitments are invalid',
+        preflight_errors: preflightErrors,
+      }, { status: 400 });
+    }
+
     const subtotal = invoice.subtotal ?? 0;
     
-    // ===== STEP 1: Apply credit NOW (this is the only place credit is actually applied) =====
-    let creditApplied = 0;
-    const creditsAppliedDetail = [];
+    // ===== PHASE 1: Update ALL commitments FIRST (before invoice/credit changes) =====
+    // This ensures we fail early if any commitment update fails
+    const commitmentUpdateResults = [];
+    const commitmentsToUpdate = [];
+    
+    for (const commitmentId of uniqueCommitmentIds) {
+      const commitment = commitmentMap.get(commitmentId);
+      
+      // Skip already paid commitments
+      if (commitment?.billing_status === 'paid') {
+        commitmentUpdateResults.push({
+          commitment_id: commitmentId,
+          status: 'skipped',
+          reason: 'already_paid',
+        });
+        continue;
+      }
+      
+      commitmentsToUpdate.push(commitmentId);
+    }
+    
+    // Update all commitments - fail if ANY fails
+    for (const commitmentId of commitmentsToUpdate) {
+      try {
+        await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
+          billing_status: 'paid',
+          invoice_blocked_reason: null,
+        });
+        commitmentUpdateResults.push({
+          commitment_id: commitmentId,
+          status: 'updated',
+        });
+      } catch (err) {
+        // CRITICAL FAILURE: A commitment failed to update
+        // Roll back any commitments we already updated
+        console.error(`CRITICAL: Failed to update commitment ${commitmentId}:`, err);
+        
+        // Attempt rollback of previously updated commitments
+        const updatedCommitments = commitmentUpdateResults
+          .filter(r => r.status === 'updated')
+          .map(r => r.commitment_id);
+        
+        for (const rollbackId of updatedCommitments) {
+          try {
+            await base44.asServiceRole.entities.PartCommitment.update(rollbackId, {
+              billing_status: 'invoiced',
+            });
+          } catch (rollbackErr) {
+            console.error(`Rollback failed for commitment ${rollbackId}:`, rollbackErr);
+          }
+        }
+        
+        return Response.json({
+          success: false,
+          error: `Failed to update commitment ${commitmentId}: ${err.message}`,
+          rolled_back: updatedCommitments.length,
+          failed_at: commitmentId,
+        }, { status: 500 });
+      }
+    }
 
-    if (apply_credit && subtotal > 0) {
-      // Fetch fresh credit ledger entries
+    // ===== PHASE 2: Apply credit (only if not already applied at invoice creation) =====
+    let creditApplied = invoice.credit_applied ?? 0;
+    const creditsAppliedDetail = [];
+    const idempotencyKey = generatePaymentIdempotencyKey(invoice_id, Date.now());
+
+    // Check if credit was already applied at invoice creation
+    const creditAlreadyAppliedAtCreation = (invoice.credit_applied ?? 0) > 0;
+    
+    if (!creditAlreadyAppliedAtCreation && subtotal > 0) {
+      // Credit not applied at creation - apply now
       const credits = await base44.entities.ProjectCreditLedger.filter({
         project_id: invoice.project_id,
       });
@@ -90,17 +238,15 @@ Deno.serve(async (req) => {
         if (remainingToApply <= 0) break;
 
         const available = credit.remaining_amount ?? 0;
-        
-        // DEFENSIVE: Cannot apply more than available
         const toApply = Math.min(available, remainingToApply);
 
         if (toApply <= 0) continue;
 
-        // MUTATE LEDGER: Deduct from remaining_amount
         const newRemaining = available - toApply;
         await base44.asServiceRole.entities.ProjectCreditLedger.update(credit.id, {
           remaining_amount: newRemaining,
           applied_to_invoice_id: newRemaining === 0 ? invoice_id : credit.applied_to_invoice_id,
+          payment_idempotency_key: idempotencyKey,
         });
 
         creditApplied += toApply;
@@ -121,18 +267,19 @@ Deno.serve(async (req) => {
     // Determine paid amount (default to balance due after credit)
     const actualPaidAmount = paid_amount ?? balanceDueAfterCredit;
 
-    // ===== STEP 2: Update invoice with final credit_applied and paid_amount =====
+    // ===== PHASE 3: Update invoice to PAID =====
     await base44.asServiceRole.entities.ProjectInvoice.update(invoice_id, {
       status: 'paid',
       payment_date,
       paid_amount: actualPaidAmount,
       credit_applied: creditApplied,
       balance_due: balanceDueAfterCredit,
+      payment_idempotency_key: idempotencyKey,
     });
 
     let creditCreated = null;
 
-    // ===== STEP 3: Check for overpayment - create new credit =====
+    // ===== PHASE 4: Check for overpayment - create new credit =====
     if (actualPaidAmount > balanceDueAfterCredit) {
       const overage = actualPaidAmount - balanceDueAfterCredit;
 
@@ -150,33 +297,6 @@ Deno.serve(async (req) => {
       };
     }
 
-    // ===== STEP 4: Update ALL linked commitments to billing_status = 'paid' =====
-    const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
-      invoice_id: invoice_id,
-    });
-
-    const commitmentIds = invoiceLines
-      .filter(line => line.part_commitment_id)
-      .map(line => line.part_commitment_id);
-
-    // Deduplicate (in case multiple lines reference same commitment)
-    const uniqueCommitmentIds = [...new Set(commitmentIds)];
-
-    let commitmentsUpdated = 0;
-    for (const commitmentId of uniqueCommitmentIds) {
-      try {
-        await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-          billing_status: 'paid',
-          // Clear any invoice blocking reasons since payment is complete
-          invoice_blocked_reason: null,
-        });
-        commitmentsUpdated++;
-      } catch (err) {
-        console.error(`Failed to update commitment ${commitmentId}:`, err);
-        // Continue with other commitments
-      }
-    }
-
     return Response.json({
       success: true,
       invoice_id,
@@ -184,13 +304,15 @@ Deno.serve(async (req) => {
       payment_date,
       subtotal,
       credit_applied: creditApplied,
+      credit_already_applied_at_creation: creditAlreadyAppliedAtCreation,
       balance_due: balanceDueAfterCredit,
       paid_amount: actualPaidAmount,
       credits_applied: creditsAppliedDetail.length > 0 ? creditsAppliedDetail : null,
       credit_created: creditCreated,
-      ledger_mutated: creditApplied > 0 || creditCreated !== null,
-      commitments_updated: commitmentsUpdated,
-      commitment_ids: uniqueCommitmentIds,
+      ledger_mutated: creditsAppliedDetail.length > 0 || creditCreated !== null,
+      commitments_updated: commitmentUpdateResults.filter(r => r.status === 'updated').length,
+      commitment_results: commitmentUpdateResults,
+      idempotency_key: idempotencyKey,
     });
 
   } catch (error) {
