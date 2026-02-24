@@ -88,6 +88,10 @@ export default function CreateProjectInvoiceModal({
   const [selectedParts, setSelectedParts] = useState(initialSelectedItems || []);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // STABILIZATION: Editable credit input
+  const [creditToApply, setCreditToApply] = useState(null); // null = auto-suggest, number = user override
+  const [creditInputValue, setCreditInputValue] = useState(""); // Raw input string for controlled input
 
   // PERMANENT DEBUG: Track selectedProjectId changes
   useEffect(() => {
@@ -108,6 +112,8 @@ export default function CreateProjectInvoiceModal({
       setDepositAmount("");
       setNotes("");
       setManualLines([]);
+      setCreditToApply(null);
+      setCreditInputValue("");
     }
   }, [open, normalizedPreselectedId, initialSelectedItems]);
 
@@ -155,16 +161,28 @@ export default function CreateProjectInvoiceModal({
   // PHASE 5: Use canonical net values - no frontend credit math
   const subtotal = invoiceType === "deposit" 
     ? parseFloat(depositAmount) || 0 
-    : partsTotal + manualTotal;
+    : partsGrossTotal + manualTotal; // Use GROSS for subtotal, credit is applied separately
 
   // For display: gross total before credit
   const grossSubtotal = invoiceType === "deposit"
     ? parseFloat(depositAmount) || 0
     : partsGrossTotal + manualTotal;
 
-  // Credit preview: backend already applied credits to selected parts
-  const creditPreview = partsCreditApplied;
-  const balanceDue = subtotal; // Net exposure is already credit-adjusted
+  // STABILIZATION: Compute effective credit to apply
+  // If user has set a value, use it; otherwise use suggested (min of available and subtotal)
+  const suggestedCredit = Math.min(availableCredit, subtotal);
+  const effectiveCreditToApply = creditToApply !== null ? creditToApply : suggestedCredit;
+  
+  // Credit validation
+  const creditValidationError = useMemo(() => {
+    if (effectiveCreditToApply < 0) return "Credit cannot be negative";
+    if (effectiveCreditToApply > availableCredit) return `Exceeds available credit (${formatCurrencyUSD(availableCredit)})`;
+    if (effectiveCreditToApply > subtotal) return `Exceeds invoice subtotal (${formatCurrencyUSD(subtotal)})`;
+    return null;
+  }, [effectiveCreditToApply, availableCredit, subtotal]);
+
+  // Balance due after credit
+  const balanceDue = Math.max(0, subtotal - effectiveCreditToApply);
 
   // Manual line handlers
   const handleAddManualLine = () => {
@@ -199,7 +217,7 @@ export default function CreateProjectInvoiceModal({
         }
         return selectedParts.length > 0 || manualLines.length > 0;
       case 3:
-        return subtotal > 0;
+        return subtotal > 0 && !creditValidationError;
       default:
         return false;
     }
@@ -290,9 +308,10 @@ export default function CreateProjectInvoiceModal({
       const payload = {
         project_id: selectedProjectId,
         invoice_type: invoiceType,
-        preview_credit: true,
+        preview_credit: false, // No longer using preview - applying credit at creation
         lines,
         notes,
+        credit_to_apply: effectiveCreditToApply, // STABILIZATION: Send credit amount to backend
       };
 
       // DEV GUARDRAIL: Log canonical invoice creation
