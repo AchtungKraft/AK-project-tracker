@@ -98,9 +98,11 @@ export default function Dashboard() {
     selectView('All Projects');
   }, [clearFilterState, selectView]);
 
+  // PHASE 1: Apply extended caching to prevent refetch storms
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list('-created_date'),
+    ...operationalDataConfig,
   });
 
   const { data: statuses = [] } = useQuery({
@@ -109,6 +111,7 @@ export default function Dashboard() {
       const list = await base44.entities.StatusList.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...referenceDataConfig,
   });
 
   const { data: projectTypes = [] } = useQuery({
@@ -117,6 +120,7 @@ export default function Dashboard() {
       const list = await base44.entities.ProjectType.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...referenceDataConfig,
   });
 
   const { data: teamMembers = [] } = useQuery({
@@ -125,6 +129,7 @@ export default function Dashboard() {
       const list = await base44.entities.TeamMember.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...referenceDataConfig,
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
