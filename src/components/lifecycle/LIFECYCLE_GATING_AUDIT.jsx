@@ -3,6 +3,156 @@
 
 ---
 
+# SINGLE COMMITMENT FORENSIC AUDIT
+
+## Target Commitment
+- **Part**: Electric Air Conditioning for Classic 911 (single condenser)
+- **Project**: 69176d6e3888297089966a36
+- **Commitment ID**: 699d18287e3d0b91beb0d6f0
+
+---
+
+## PHASE 1 — Runtime Snapshot
+
+| Field | Value |
+|-------|-------|
+| commitment_id | `699d18287e3d0b91beb0d6f0` |
+| commitment_status | `planned` |
+| required_total | `1.0` |
+| invoiced_qty | `0.0` |
+| remaining_to_bill (required - invoiced) | `1.0` |
+| reserved_from_stock | `1.0` |
+| available_to_install (reserved - installed) | `1.0` |
+| qty_installed | `0.0` |
+| to_order | `0.0` |
+| covered_from_po | `0.0` |
+| received_qty | `0.0` |
+| billing_status | `unbilled` |
+
+### Computed Actions (from getAllowedCommitmentActions):
+
+| Action | Expected | Actual | Status |
+|--------|----------|--------|--------|
+| canInstall | `true` (reserved > installed) | `true` | ✅ PASS |
+| canCreateInvoice | `true` (remaining > 0) | `true` | ✅ PASS |
+| canCreatePO | `false` (to_order = 0) | `false` | ✅ PASS |
+| canEdit | `true` (invoiced_qty = 0) | `true` | ✅ PASS |
+
+---
+
+## PHASE 2 — Canonical Invariant Checks
+
+### INSTALL CHECK
+```
+available_to_install = reserved_from_stock - qty_installed
+                     = 1.0 - 0.0 = 1.0 > 0
+```
+**Result**: ✅ PASS - Install should be allowed
+
+### INVOICE CHECK
+```
+remaining_to_bill = required_total - invoiced_qty
+                  = 1.0 - 0.0 = 1.0 > 0
+```
+**Result**: ✅ PASS - Invoice should be allowed
+
+### PO CHECK
+```
+to_order = 0.0 <= 0
+```
+**Result**: ✅ PASS - PO correctly disabled (fully covered from stock)
+
+---
+
+## PHASE 3 — Status Lock Check
+
+| Field | Value | Blocks Actions? |
+|-------|-------|-----------------|
+| commitment_status | `planned` | ❌ NO (only `cancelled`/`closed` block) |
+| cancelled_at | `null` | ❌ NO |
+| billing_status | `unbilled` | ❌ NO (no longer gates actions per Phase 8) |
+
+**Result**: ✅ PASS - No status locks active
+
+---
+
+## PHASE 4 — UI Disable Audit
+
+**Root Cause Investigation**: If buttons appear disabled despite `allowed.canInstall === true`:
+
+1. **Check `actionsEnabled` prop** - may be `false` at parent level
+2. **Check `SupplyIntegrityBanner` lock** - `hasErrors` may disable all actions
+3. **Check PSMGroupedView row rendering** - local override conditions
+
+**Likely Issue**: The commitment's Part has `requires_client_billing: false` and `affects_inventory: false` flags, which may cause special handling or exclusion from certain views.
+
+---
+
+## PHASE 5 — Root Cause Declaration
+
+### Commitment State Analysis
+
+The commitment data shows:
+- `reserved_from_stock: 1.0` ✅
+- `qty_installed: 0.0` ✅
+- `invoiced_qty: 0.0` ✅
+- `required_total: 1.0` ✅
+
+**ALL CANONICAL FIELDS ARE CORRECT FOR INSTALL AND INVOICE**
+
+### Part Behavior Flags (POSSIBLE ISSUE)
+
+The linked Part (`691b33440244c2156b796384`) has:
+```javascript
+requires_client_billing: false
+affects_inventory: false
+affects_margin: false
+requires_vendor_purchase: false
+requires_vendor_payment: false
+```
+
+These flags may cause the part to be:
+1. **Excluded from invoice workbench** (requires_client_billing = false)
+2. **Excluded from install flows** (affects_inventory = false)
+
+### Root Cause (Single Sentence)
+
+**The commitment is eligible per canonical math, but the Part's `requires_client_billing: false` and `affects_inventory: false` flags may exclude it from billable/installable item lists in the UI filtering layer.**
+
+---
+
+## PHASE 6 — Required Corrections
+
+### Option A: Fix Part Flags (if billing/inventory ARE intended)
+```javascript
+// Update Part 691b33440244c2156b796384
+{
+  requires_client_billing: true,
+  affects_inventory: true
+}
+```
+
+### Option B: Verify Business Intent
+If this part is intentionally non-billable (e.g., client-supplied), the flags are correct and the UI behavior is intentional.
+
+---
+
+## Final Verdict
+
+| Check | Result |
+|-------|--------|
+| Canonical fields correct | ✅ PASS |
+| getAllowedCommitmentActions returns correct values | ✅ PASS |
+| No lifecycle string blocking | ✅ PASS |
+| No billing_status blocking | ✅ PASS |
+| Part behavior flags may cause UI exclusion | ⚠️ INVESTIGATE |
+
+**Action Required**: Verify if `requires_client_billing: false` on the Part is intentional. If not, update the Part record.
+
+---
+
+---
+
 # PHASE 1 — DETECT RULE MISMATCHES
 
 ## Action Gating Comparison Table
