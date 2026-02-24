@@ -40,11 +40,11 @@ export default function InventoryManagement({ onPartClick }) {
   const [sortConfig, setSortConfig] = useState({ key: 'part_name', direction: 'asc' });
 
   // CANONICAL: Use read model for inventory view
-  // PERF FIX: Safe caching - 15s stale, 60s cache
+  // PERF FIX: Safe caching - 15s stale, 60s cache, limit initial load to 200 parts
   const { data: partsInventoryView = [], isLoading } = useQuery({
     queryKey: ['partsInventoryView'],
     queryFn: async () => {
-      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      const res = await base44.functions.invoke('getPartsInventoryView', { limit: 200 });
       return res.data?.parts || [];
     },
     staleTime: 15000,
