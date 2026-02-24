@@ -258,16 +258,23 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
-  // PERF FIX: Gate with isOpen + activePart?.id, safe caching, retry control
-  const { data: partInventoryView, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery({
-    queryKey: ['partsInventoryView', activePart?.id],
+  // PERF FIX: Gate with isOpen + effectivePartId, safe caching, retry control
+  const {
+    data: partInventoryView,
+    isLoading: inventoryLoading,
+    error: inventoryError,
+    refetch: refetchInventory,
+  } = useQuery({
+    queryKey: ['partsInventoryView', effectivePartId],
     queryFn: async () => {
-      const res = await base44.functions.invoke('getPartsInventoryView', { part_id: activePart?.id });
+      const res = await base44.functions.invoke('getPartsInventoryView', { part_id: effectivePartId });
       return res.data?.parts?.[0] ?? null;
     },
-    enabled: Boolean(isOpen && activePart?.id && !partNotFound),
+    enabled: Boolean(isOpen && effectivePartId && !partNotFound),
     staleTime: 15000,
     gcTime: 60000,
+    placeholderData: (prev) => prev, // keeps previous data during refetch (replaces keepPreviousData)
+    networkMode: 'always',           // prevents pause in certain states
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error) => {
@@ -278,13 +285,15 @@ export default function PartModal({ part, partId, onClose }) {
 
   // Location breakdown - ONLY used for location display, NOT for totals
   // This is a SECONDARY display, NOT a source of truth for inventory metrics
-  // PERF FIX: Gate with isOpen + activePart?.id, add caching and retry control
-  const { data: locationItems = [], isLoading: locationsLoading } = useQuery({
-    queryKey: ['inventoryLocations', activePart?.id],
-    queryFn: () => base44.entities.InventoryItem.filter({ part_id: activePart?.id }),
-    enabled: Boolean(isOpen && activePart?.id && !partNotFound),
+  // PERF FIX: Gate with isOpen + effectivePartId, add caching and retry control
+  const { data: locationItems = [], isLoading: locationsLoading, error: locationsError } = useQuery({
+    queryKey: ['inventoryLocations', effectivePartId],
+    queryFn: () => base44.entities.InventoryItem.filter({ part_id: effectivePartId }),
+    enabled: Boolean(isOpen && effectivePartId && !partNotFound),
     staleTime: 30000,
     gcTime: 120000,
+    placeholderData: (prev) => prev, // keeps previous data during refetch
+    networkMode: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error) => {
@@ -637,8 +646,12 @@ export default function PartModal({ part, partId, onClose }) {
           </div>
         </div>
         
-        {/* PHASE 16: Canonical Metrics - Show skeleton if loading, NEVER fallback */}
-        {inventoryLoading || !inventoryMetrics ? (
+        {/* PHASE 16: Canonical Metrics - Error state breaks loading loop */}
+        {inventoryError ? (
+          <div className="text-red-400 text-xs bg-red-900/20 px-2 py-1.5 rounded">
+            Failed to load inventory data
+          </div>
+        ) : inventoryLoading || !inventoryMetrics ? (
           <div className="flex items-center gap-2 bg-gray-900/60 px-2 py-1.5 rounded animate-pulse">
             <div className="h-3 w-16 bg-gray-700 rounded" />
             <div className="h-3 w-12 bg-gray-700 rounded" />
