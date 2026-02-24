@@ -224,28 +224,35 @@ Deno.serve(async (req) => {
       // Source type mapping
       const source_type = mapSourceType(c.supply_source_type);
 
-      // PHASE 9K-B: Normalize billing flags to explicit booleans
+      // PHASE 10: Use commitment-level payment data for prepay gating
       const requires_prepay = c.requires_prepay === true;
-      const prepay_ok = c.prepay_ok === true || requires_prepay === false;
       const has_vendor = !!vendor;
+      
+      // PREPAY GATING: Pass commitment-level payment data to computeNextAction
+      const prepayContext = {
+        invoicedRetail: commitmentInvoicedRetailMap.get(c.id) ?? 0,
+        paidRetail: commitmentPaidRetailMap.get(c.id) ?? 0,
+      };
 
       // Determine next action and blocks
-      const { next_action, block_reason_code } = computeNextAction(
-        { required_total, reserved_from_stock, covered_from_po, qty_installed, requires_prepay, prepay_ok },
+      const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
+        { required_total, reserved_from_stock, covered_from_po, qty_installed, requires_prepay },
         has_vendor,
-        poolBalance,
-        exposure_gap
+        prepayContext
       );
 
-      // PHASE 9K-B: is_orderable = (to_order > 0) AND (requires_prepay === false OR prepay_ok === true) AND has_vendor
+      // PHASE 10: is_orderable computed from prepay resolution
+      const prepaySatisfied = !requires_prepay || 
+        (prepayContext.invoicedRetail > 0 && prepayContext.paidRetail >= (prepayContext.invoicedRetail - 0.01));
+      
       const is_orderable = 
         to_order > 0 && 
         has_vendor && 
-        (requires_prepay === false || prepay_ok === true);
+        prepaySatisfied;
       
       // PHASE 9K-B: Server-side assertion - detect invalid blocks
-      if (to_order > 0 && requires_prepay === false && has_vendor && !is_orderable) {
-        console.error(`[INVALID_ORDER_BLOCK] commitment=${c.id} to_order=${to_order} requires_prepay=${requires_prepay} prepay_ok=${prepay_ok} has_vendor=${has_vendor}`);
+      if (to_order > 0 && !requires_prepay && has_vendor && !is_orderable) {
+        console.error(`[INVALID_ORDER_BLOCK] commitment=${c.id} to_order=${to_order} requires_prepay=${requires_prepay} has_vendor=${has_vendor}`);
         throw new Error(`INVALID_ORDER_BLOCK: commitment ${c.id} should be orderable`);
       }
       
