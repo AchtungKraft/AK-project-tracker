@@ -977,6 +977,34 @@ export default function PSMGroupedView({
         </div>
       </div>
 
+      {/* Billing Status Filters */}
+      <div className="flex items-center gap-4 px-1">
+        <span className="text-[10px] text-gray-500 uppercase">Billing</span>
+        {BILLING_STATUS_OPTIONS.map(opt => (
+          <label 
+            key={opt.value} 
+            className="flex items-center gap-1.5 cursor-pointer"
+          >
+            <Checkbox
+              checked={billingFilters.has(opt.value)}
+              onCheckedChange={() => toggleBillingFilter(opt.value)}
+              className="h-3.5 w-3.5"
+            />
+            <span className={cn(
+              "text-xs",
+              billingFilters.has(opt.value) ? "text-gray-200" : "text-gray-500"
+            )}>
+              {opt.label}
+            </span>
+          </label>
+        ))}
+        {filteredItems.length !== items.length && (
+          <span className="text-[10px] text-gray-500 ml-2">
+            ({filteredItems.length} of {items.length})
+          </span>
+        )}
+      </div>
+
       {/* Groups */}
       {groups.map(group => (
         <PSMGroupCardWithSubgroups
