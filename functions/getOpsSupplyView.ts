@@ -344,12 +344,11 @@ Deno.serve(async (req) => {
         pool_balance: poolBalance,
         billing_status: c.billing_status || 'billable',
 
-        // Ordering flags - PHASE 9K-B: EXPLICIT BOOLEANS ONLY
+        // Ordering flags - PHASE 10: prepay resolved from actual payments
         is_orderable,
         is_funding_blocked,
         has_vendor,
         requires_prepay,
-        prepay_ok,
 
         // Inventory snapshot
         inventory_snapshot,
@@ -358,6 +357,9 @@ Deno.serve(async (req) => {
         _raw: {
           commitment_status: c.commitment_status,
         },
+
+        // PREPAY DIAGNOSTICS (helps debug prepay gating)
+        ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
       };
     });
 
