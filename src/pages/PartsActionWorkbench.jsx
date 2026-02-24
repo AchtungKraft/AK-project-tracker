@@ -943,7 +943,9 @@ export default function PartsActionWorkbench() {
           selectedItems={selectedItems}
           onCreateInvoice={handleOpenCreateInvoice}
           onClearSelection={() => setSelectedIds(new Set())}
+          onApplyCredit={() => setShowSettleCreditModal(true)}
           projectFilter={projectFilter}
+          availableCredit={billingData?.credit_summary?.available_credit || 0}
         />
       )}
 
