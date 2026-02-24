@@ -45,6 +45,7 @@ export function getAllowedCommitmentActions(commitment) {
     // Optional fields for specific actions
     unit_retail_snapshot,
     received_qty = 0, // From read model if available
+    invoiced_qty = 0, // For invoice eligibility check
   } = commitment;
 
   // All values come directly from read model - NO recomputation
