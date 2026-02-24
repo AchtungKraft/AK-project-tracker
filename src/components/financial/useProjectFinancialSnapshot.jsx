@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { financialSnapshotKeys, normalizeProjectId } from "./queryKeyFactories";
 
 /**
  * useProjectFinancialSnapshot - React hook for canonical financial data
@@ -11,13 +12,6 @@ import { base44 } from "@/api/base44Client";
  *   const { snapshot, isLoading, error, refetch } = useProjectFinancialSnapshot(projectId);
  *   // Use snapshot.canonical.net_exposure, snapshot.canonical.credit_available, etc.
  */
-
-// Query key factory for consistent cache management
-export const financialSnapshotKeys = {
-  all: ['financial-snapshot'] as const,
-  project: (projectId: string) => [...financialSnapshotKeys.all, projectId] as const,
-  projectWithDiagnostics: (projectId: string) => [...financialSnapshotKeys.all, projectId, 'diagnostics'] as const,
-};
 
 /**
  * Fetch financial snapshot from backend
