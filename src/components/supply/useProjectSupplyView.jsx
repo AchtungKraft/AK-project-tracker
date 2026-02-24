@@ -37,29 +37,19 @@ export function useProjectSupplyView(projectId, filters = {}) {
     queryFn: async () => {
       // Defensive: prevent query if no valid projectId
       if (!normalizedId) return null;
-      const _start = Date.now();
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[useProjectSupplyView] queryFn EXECUTING for projectId:', normalizedId);
-      }
       const response = await base44.functions.invoke('getProjectSupplyView', {
         project_id: normalizedId,
         filters,
       });
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[PERF] getProjectSupplyView ${Date.now() - _start}ms`, {
-          items: response.data?.items?.length,
-          projectId: normalizedId
-        });
-      }
       return response.data;
     },
     enabled: Boolean(normalizedId),
-    // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
-    staleTime: 15000,
-    gcTime: 60000,
+    // PHASE 1: Extended caching to prevent refetch storms
+    staleTime: 60000,     // 1 minute
+    gcTime: 300000,       // 5 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: 'always',
+    refetchOnMount: false, // PHASE 1: Don't refetch on every mount
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
