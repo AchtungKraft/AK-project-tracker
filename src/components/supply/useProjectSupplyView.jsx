@@ -101,20 +101,14 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
         mode,
         filters,
       });
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[PERF] getOpsSupplyView ${Date.now() - _start}ms`, {
-          mode,
-          items: response.data?.items?.length
-        });
-      }
       return response.data;
     },
-    // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
-    staleTime: 15000,
-    gcTime: 60000,
+    // PHASE 1: Extended caching to prevent refetch storms
+    staleTime: 60000,
+    gcTime: 300000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: 'always',
+    refetchOnMount: false,
     retry: (failureCount, error) => {
       if (error?.status === 429) return false;
       return failureCount < 1;
