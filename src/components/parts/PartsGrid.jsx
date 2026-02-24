@@ -348,20 +348,31 @@ export default function PartsGrid({
                     </p>
                   )}
 
-                  {/* Cost + Inventory Grid */}
-                  <div className="grid grid-cols-5 gap-1 mb-2 pt-2 border-t border-gray-800">
+                  {/* Cost + Retail + Inventory Grid */}
+                  <div className="grid grid-cols-6 gap-1 mb-2 pt-2 border-t border-gray-800">
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Cost</p>
-                      <p className={`text-sm font-semibold flex items-center justify-center gap-0.5 ${(!part.default_cost || part.default_cost === 0) ? 'text-red-400' : 'text-white'}`}>
-                        {(!part.default_cost || part.default_cost === 0) ? (
-                          <>
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>$0</span>
-                          </>
-                        ) : (
-                          <>${part.default_cost.toFixed(2)}</>
-                        )}
+                      <p className={cn(
+                        "text-sm font-semibold font-mono",
+                        (!part.cost || part.cost === 0) ? 'text-red-400' : 'text-gray-300'
+                      )}>
+                        {formatCurrency(part.cost || 0)}
                       </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Retail</p>
+                      {(() => {
+                        const { value: retail } = getPartRetailEffectiveSafe(part);
+                        const isManual = part.pricing_mode === 'manual';
+                        return (
+                          <p className={cn(
+                            "text-sm font-semibold font-mono",
+                            isManual ? "text-blue-400" : "text-green-400"
+                          )}>
+                            {formatCurrency(retail)}
+                          </p>
+                        );
+                      })()}
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Stock</p>
