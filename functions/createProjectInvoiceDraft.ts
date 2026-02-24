@@ -86,32 +86,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch all referenced commitments
-    const commitmentMap = new Map();
-    if (commitmentIds.length > 0) {
-      const allCommitments = await base44.entities.PartCommitment.filter({ project_id });
-      for (const c of allCommitments) {
-        commitmentMap.set(c.id, c);
-        if (c.part_id) partIds.add(c.part_id);
-      }
-    }
-
-    // Fetch all referenced parts
-    const partMap = new Map();
-    if (partIds.size > 0) {
-      const allParts = await base44.entities.Part.filter({});
-      for (const p of allParts) {
-        if (partIds.has(p.id)) {
-          partMap.set(p.id, p);
-        }
-      }
-    }
-
-    // Fetch vendors and categories for denormalization
-    const [vendors, categories] = await Promise.all([
+    // Fetch all referenced commitments and reference data in parallel
+    const [allCommitments, allParts, vendors, categories] = await Promise.all([
+      base44.entities.PartCommitment.filter({ project_id }),
+      base44.entities.Part.filter({}),
       base44.entities.Vendor.filter({}),
       base44.entities.PartCategory.filter({}),
     ]);
+
+    const commitmentMap = new Map();
+    for (const c of allCommitments) {
+      commitmentMap.set(c.id, c);
+      if (c.part_id) partIds.add(c.part_id);
+    }
+
+    const partMap = new Map();
+    for (const p of allParts) {
+      if (partIds.has(p.id)) {
+        partMap.set(p.id, p);
+      }
+    }
+
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
