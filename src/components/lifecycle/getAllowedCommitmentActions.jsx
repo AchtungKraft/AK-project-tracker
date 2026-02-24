@@ -108,7 +108,11 @@ export function getAllowedCommitmentActions(commitment) {
   // CANONICAL: CREATE PO - depends ONLY on to_order > 0
   // Lifecycle string does NOT block (except cancelled/closed)
   // A commitment with existing orders but remaining gap can still create POs
-  if (unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status)) {
+  // PHASE 3 FIX: If reserved_from_stock can cover the remaining need, don't suggest PO
+  const needsFromStock = Math.max(0, effectiveRequired - qty_installed - effectiveOnOrder);
+  const stockCanCover = effectiveReserved >= needsFromStock;
+  
+  if (unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status) && !stockCanCover) {
     actions.canCreatePO = true;
   }
 

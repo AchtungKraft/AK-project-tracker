@@ -172,6 +172,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    // PHASE 5: HARD GUARDRAIL — STOCK_AVAILABLE_NOT_RESERVED
+    // If physical_stock > 0 AND to_order > 0 AND reserved_from_stock === 0
+    // This indicates a bug in the allocation algorithm
+    for (const u of updates) {
+      if (physical_stock > 0 && u.new_to_order > 0 && u.new_reserved === 0 && u.remaining_required > 0) {
+        violations.push({
+          commitment_id: u.commitment_id,
+          violation: 'STOCK_AVAILABLE_NOT_RESERVED',
+          message: `Stock exists (${physical_stock}) but commitment needs order (${u.new_to_order}) with zero reservation. This indicates allocation was skipped incorrectly.`,
+          physical_stock,
+          new_reserved: u.new_reserved,
+          new_to_order: u.new_to_order,
+          remaining_required: u.remaining_required,
+          covered_from_po: u.covered_from_po
+        });
+      }
+    }
+
     // HARD FAIL if violations
     if (violations.length > 0) {
       throw new Error(`REBALANCE_INVARIANT_VIOLATION: ${JSON.stringify(violations)}`);
