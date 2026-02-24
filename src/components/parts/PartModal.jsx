@@ -394,6 +394,19 @@ export default function PartModal({ part, partId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: async () => {
+      // DEV: Phase 1E - Verify DB persisted photos
+      if (process.env.NODE_ENV === 'development') {
+        try {
+          const [verifyPart] = await base44.entities.Part.filter({ id: activePart.id });
+          console.log('[UPLOAD_DEBUG E] After save, DB photos:', {
+            photosLength: verifyPart?.photos?.length || 0,
+            photos: verifyPart?.photos,
+          });
+        } catch (err) {
+          console.error('[UPLOAD_DEBUG E] Verification failed:', err);
+        }
+      }
+      
       // PHASE 17: Deterministic refresh - invalidate + refetch
       await forceAppRefresh(queryClient, { partIds: [activePart.id] });
       
