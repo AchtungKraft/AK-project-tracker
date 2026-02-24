@@ -45,6 +45,8 @@ export default function PartProjectUsageSection({ partId, isOpen = true }) {
     enabled: queryEnabled,
     staleTime: 30000,
     gcTime: 120000,
+    placeholderData: (prev) => prev, // keeps previous data during part switch
+    networkMode: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error) => {
