@@ -289,8 +289,30 @@ Deno.serve(async (req) => {
 
     let creditCreated = null;
 
-    // ===== PHASE 4: Check for overpayment - create new credit =====
-    if (actualPaidAmount > balanceDueAfterCredit) {
+    // ===== PHASE 4: Create credit from deposit OR overpayment =====
+    // DEPOSIT INVOICES: The paid amount becomes available credit for future invoices
+    // OVERPAYMENT: Any amount paid above balance_due becomes credit
+    
+    const isDepositInvoice = invoice.invoice_type === 'deposit';
+    const hasOverpayment = actualPaidAmount > balanceDueAfterCredit;
+    
+    if (isDepositInvoice && actualPaidAmount > 0) {
+      // Deposit creates credit for full paid amount
+      const credit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
+        project_id: invoice.project_id,
+        source_invoice_id: invoice_id,
+        credit_amount: actualPaidAmount,
+        remaining_amount: actualPaidAmount,
+        notes: `Deposit payment from invoice ${invoice.qb_invoice_number || invoice_id}`,
+      });
+
+      creditCreated = {
+        credit_id: credit.id,
+        amount: actualPaidAmount,
+        type: 'deposit',
+      };
+    } else if (hasOverpayment) {
+      // Non-deposit overpayment creates credit for overage only
       const overage = actualPaidAmount - balanceDueAfterCredit;
 
       const credit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
@@ -304,6 +326,7 @@ Deno.serve(async (req) => {
       creditCreated = {
         credit_id: credit.id,
         amount: overage,
+        type: 'overpayment',
       };
     }
 

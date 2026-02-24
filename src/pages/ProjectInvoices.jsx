@@ -42,6 +42,7 @@ import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoi
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
+import ApplyCreditModal from "@/components/financial/ApplyCreditModal";
 import { 
   invoiceKeys, 
   billingKeys, 
@@ -68,6 +69,7 @@ export default function ProjectInvoices() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
+  const [showApplyCreditModal, setShowApplyCreditModal] = useState(false);
 
   // DETERMINISTIC: Normalize projectId once - null for global, string for scoped
   const normalizedProjectId = normalizeProjectId(
@@ -227,14 +229,15 @@ export default function ProjectInvoices() {
         </div>
       </div>
 
-      {/* PHASE 6: Credit Summary (read-only) - uses canonical data when project selected */}
-      {(totalCreditAvailable > 0 || totalCreditApplied > 0 || projectFilter !== "all") && (
+      {/* PHASE 6: Credit Summary - always show when project selected */}
+      {projectFilter !== "all" && (
         <CreditSummaryStrip
           grossExposure={grossExposure}
           creditAvailable={totalCreditAvailable}
           creditApplied={totalCreditApplied}
           netExposure={netExposure}
-          isLoading={isLoading}
+          isLoading={isLoading || billingFetching}
+          onApplyCredit={totalCreditAvailable > 0 ? () => setShowApplyCreditModal(true) : undefined}
         />
       )}
 
