@@ -351,6 +351,24 @@ export default function SettlePartsWithCreditModal({
                 </div>
               </ScrollArea>
 
+              {/* PART 3: Credit Application Summary */}
+              <div className="grid grid-cols-3 gap-2 p-3 bg-gray-800/30 rounded-lg border border-gray-700 text-xs">
+                <div className="text-center">
+                  <p className="text-gray-500">Credit Used</p>
+                  <p className="font-bold text-blue-400">{formatCurrencyUSD(summary.credit_to_apply || 0)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500">Commitments Settled</p>
+                  <p className="font-bold text-emerald-400">{willSettleCount}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500">Credit Remaining</p>
+                  <p className="font-bold text-gray-300">
+                    {formatCurrencyUSD((summary.credit_available || 0) - (summary.credit_to_apply || 0))}
+                  </p>
+                </div>
+              </div>
+
               {/* Confirmation checkbox for settlements */}
               {willSettleCount > 0 && (
                 <div className="p-3 bg-emerald-900/20 border border-emerald-800/30 rounded-lg">
