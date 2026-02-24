@@ -916,10 +916,34 @@ export default function PSMGroupedView({
     }
   }, [subgroupMode, groups]);
 
-  if (items.length === 0) {
+  if (filteredItems.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        No items in this tab
+      <div className="space-y-3">
+        {/* Billing Status Filters - show even when empty */}
+        <div className="flex items-center gap-4 px-1">
+          <span className="text-[10px] text-gray-500 uppercase">Billing</span>
+          {BILLING_STATUS_OPTIONS.map(opt => (
+            <label 
+              key={opt.value} 
+              className="flex items-center gap-1.5 cursor-pointer"
+            >
+              <Checkbox
+                checked={billingFilters.has(opt.value)}
+                onCheckedChange={() => toggleBillingFilter(opt.value)}
+                className="h-3.5 w-3.5"
+              />
+              <span className={cn(
+                "text-xs",
+                billingFilters.has(opt.value) ? "text-gray-200" : "text-gray-500"
+              )}>
+                {opt.label}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="text-center py-12 text-gray-500">
+          {items.length === 0 ? 'No items in this tab' : 'No items match billing filters'}
+        </div>
       </div>
     );
   }
