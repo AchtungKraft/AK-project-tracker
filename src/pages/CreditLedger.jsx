@@ -27,7 +27,12 @@ import {
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { creditKeys, invoiceKeys, projectKeys, financialSnapshotKeys } from "@/components/financial/queryKeyFactories";
+import { 
+  creditKeys, 
+  invoiceKeys, 
+  projectKeys, 
+  financialSnapshotKeys 
+} from "@/components/financial/queryKeyFactories";
 import { FinancialDiagnosticsPanel } from "@/components/financial/CanonicalFinancialDisplay";
 
 /**
