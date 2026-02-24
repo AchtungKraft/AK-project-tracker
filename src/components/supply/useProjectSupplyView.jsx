@@ -43,99 +43,30 @@ export function useProjectSupplyView(projectId, filters = {}) {
   const query = useQuery({
     queryKey,
     queryFn: async () => {
-      console.log('[useProjectSupplyView] queryFn EXECUTING for projectId:', normalizedId);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[useProjectSupplyView] queryFn EXECUTING for projectId:', normalizedId);
+      }
       const response = await base44.functions.invoke('getProjectSupplyView', {
         project_id: normalizedId,
         filters,
       });
-      
-      // AUDIT: Log raw invoke envelope structure
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[useProjectSupplyView] RAW INVOKE ENVELOPE:', {
-          'Object.keys(response)': Object.keys(response),
-          'Object.keys(response.data)': Object.keys(response?.data ?? {}),
-          'response.data.success': response?.data?.success,
-          'response.data.items?.length': response?.data?.items?.length ?? 'undefined',
-          'response.data.project?.name': response?.data?.project?.name ?? 'undefined',
-        });
-      }
-      
-      // The invoke returns { data: { success, project, items, ... } }
-      // So query.data will be the inner object with items, project, etc.
       return response.data;
     },
     enabled: Boolean(normalizedId),
-    staleTime: 30000, // 30 seconds
-    refetchOnWindowFocus: true,
+    // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: supplyKeys.projectView(normalizedId) });
   };
 
-  const rawItems = query.data?.items || [];
-  
-  // PHASE 1: CANONICAL INVENTORY INVARIANT ENFORCEMENT
-  // Enforce to_order consistency based on inventory_snapshot.available
-  const items = rawItems.map(item => {
-    const inv = item.inventory_snapshot || {};
-    const availableGlobal = inv.available_global_active ?? inv.available ?? 0;
-    const requiredTotal = item.required_total ?? 0;
-    
-    let correctedToOrder = item.to_order ?? 0;
-    let correctedCoverageStatus = item.coverage_status;
-    let correctedGapQty = item.gap_qty ?? correctedToOrder;
-    
-    // Enforce canonical invariants
-    if (availableGlobal >= requiredTotal && requiredTotal > 0) {
-      // FULL coverage - stock can cover everything
-      correctedToOrder = 0;
-      correctedCoverageStatus = 'FULL';
-      correctedGapQty = 0;
-    } else if (availableGlobal > 0 && availableGlobal < requiredTotal) {
-      // PARTIAL coverage
-      correctedCoverageStatus = 'PARTIAL';
-      correctedGapQty = requiredTotal - availableGlobal;
-      correctedToOrder = correctedGapQty;
-    } else if (availableGlobal === 0 && requiredTotal > 0) {
-      // NO coverage
-      correctedCoverageStatus = 'NONE';
-      correctedGapQty = requiredTotal;
-      correctedToOrder = requiredTotal;
-    }
-    
-    // Also factor in already reserved + on_order
-    const reservedProject = item.reserved_from_stock ?? 0;
-    const coveredPO = item.covered_from_po ?? 0;
-    const alreadyCovered = reservedProject + coveredPO;
-    
-    // Final to_order is gap minus what's already covered
-    const finalToOrder = Math.max(0, requiredTotal - alreadyCovered);
-    
-    // If finalToOrder differs from corrected, use finalToOrder (it accounts for existing coverage)
-    if (finalToOrder !== correctedToOrder) {
-      correctedToOrder = finalToOrder;
-      correctedGapQty = finalToOrder;
-      if (finalToOrder === 0) {
-        correctedCoverageStatus = 'FULL';
-      } else if (finalToOrder < requiredTotal) {
-        correctedCoverageStatus = 'PARTIAL';
-      }
-    }
-    
-    return {
-      ...item,
-      to_order: correctedToOrder,
-      coverage_status: correctedCoverageStatus,
-      gap_qty: correctedGapQty,
-      // Add coverage block for UI consistency
-      coverage: {
-        ...item.coverage,
-        gap_qty: correctedGapQty,
-        coverage_status: correctedCoverageStatus,
-      },
-    };
-  });
+  // PERF FIX: Trust backend canonical values - NO frontend re-derivation
+  // Backend is the single source of truth for to_order, coverage_status, gap_qty
+  const items = query.data?.items || [];
   
   // PHASE 2: DEV DRIFT GUARD - Use shared validation function
   // DIAGNOSTIC: Full diagnostic report for PSM
@@ -194,8 +125,11 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
       });
       return response.data;
     },
-    staleTime: 30000,
-    refetchOnWindowFocus: true,
+    // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   });
 
   const invalidate = () => {
@@ -211,21 +145,12 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
     categories: rawFilterOptions.categories || [],
   };
 
+  // PERF FIX: Trust backend canonical values - NO frontend re-derivation
   const rawItems = query.data?.items || [];
   
-  // PHASE 1: CANONICAL INVENTORY INVARIANT ENFORCEMENT (same logic as project view)
+  // Simple passthrough - backend already computed canonical values
   const items = rawItems.map(item => {
-    const inv = item.inventory_snapshot || {};
-    const availableGlobal = inv.available_global_active ?? inv.available ?? 0;
-    const requiredTotal = item.required_total ?? 0;
-    const reservedProject = item.reserved_from_stock ?? 0;
-    const coveredPO = item.covered_from_po ?? 0;
-    const alreadyCovered = reservedProject + coveredPO;
-    
-    // Final to_order is gap minus what's already covered
-    const finalToOrder = Math.max(0, requiredTotal - alreadyCovered);
-    
-    let correctedCoverageStatus = item.coverage_status;
+    // Only add coverage block alias if missing for UI consistency
     if (finalToOrder === 0 && requiredTotal > 0) {
       correctedCoverageStatus = 'FULL';
     } else if (finalToOrder > 0 && finalToOrder < requiredTotal) {

@@ -61,7 +61,10 @@ export function useBillingAndProcurementStates(projectId, options = {}) {
       return response.data;
     },
     enabled: Boolean(normalizedId) && options.enabled !== false,
-    staleTime: 0, // PHASE 6: Always fresh for invoice modal
+    // PERF: Safe caching - 15s stale, 60s cache
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
     ...options,
   });
   

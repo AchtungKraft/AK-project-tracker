@@ -117,7 +117,10 @@ export function useProjectInvoiceView(projectId) {
       return response.data || { invoices: [], credit_balances: {}, credit_applied: 0, summary: {} };
     },
     enabled: Boolean(normalizedProjectId),
-    staleTime: 30000,
+    // PERF: Safe caching - 15s stale, 60s cache, no refetch on focus
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   // HARD-LOCKED: Return EXACTLY what backend returns - NO transformation

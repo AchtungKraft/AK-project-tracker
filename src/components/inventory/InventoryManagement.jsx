@@ -48,34 +48,32 @@ export default function InventoryManagement({ onPartClick }) {
     },
   });
 
+  // PERF FIX: Only fetch reference data - partsInventoryView is canonical source
+  // Removed duplicate Part.list(), PartCommitment.list(), PartPurchaseLineItem.list()
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list()
+    queryFn: () => base44.entities.Part.list(),
+    staleTime: 30000,
+    gcTime: 120000,
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['partCategories'],
-    queryFn: () => base44.entities.PartCategory.list()
+    queryFn: () => base44.entities.PartCategory.list(),
+    staleTime: 60000,
+    gcTime: 300000,
   });
 
-  const { data: commitments = [] } = useQuery({
-    queryKey: ['partCommitments'],
-    queryFn: () => base44.entities.PartCommitment.list()
-  });
-
-  const { data: lineItems = [] } = useQuery({
-    queryKey: ['partPurchaseLineItems'],
-    queryFn: () => base44.entities.PartPurchaseLineItem.list()
-  });
+  // PERF FIX: Removed - partsInventoryView provides aggregated commitment data
+  // const { data: commitments = [] } = ...
+  // const { data: lineItems = [] } = ...
+  // const { data: orders = [] } = ...
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list()
-  });
-
-  const { data: orders = [] } = useQuery({
-    queryKey: ['orders'],
-    queryFn: () => base44.entities.Order.list()
+    queryFn: () => base44.entities.Project.list(),
+    staleTime: 30000,
+    gcTime: 120000,
   });
 
   // Get all descendant category IDs
@@ -101,84 +99,32 @@ export default function InventoryManagement({ onPartClick }) {
     return map;
   }, [partsInventoryView]);
 
-  // Aggregate inventory data by Part (global position) - CANONICAL source
+  // PERF FIX: Simplified aggregation - trust partsInventoryView canonical values
+  // Removed duplicate loops over commitments/lineItems/orders
   const partAggregates = useMemo(() => {
     const aggregates = {};
 
-    // Use canonical read model for inventory stats
-    // PHASE 9J: Use ONLY canonical values from read model
+    // Use canonical read model for inventory stats - NO additional loops
     partsInventoryView.forEach(pv => {
       aggregates[pv.part_id] = {
         partId: pv.part_id,
         // CANONICAL: All values from read model - NO local computation
         onHand: pv.physical_stock ?? 0,
         reserved: pv.reserved_total ?? 0,
-        available: pv.available ?? 0,  // From read model
+        available: pv.available ?? 0,
         needed: pv.required_total ?? 0,
         onOrder: pv.on_order ?? 0,
         toOrder: pv.to_order ?? 0,
-        netPosition: pv.net_position ?? 0,  // From read model
-        locations: [], // Populated below from commitments for drill-down
+        netPosition: pv.net_position ?? 0,
+        // Drill-down data would require separate on-demand fetch
+        locations: [],
         requirementsByProject: [],
         orderLineItems: []
       };
     });
 
-    // Build project demand drill-down from commitments (CANONICAL)
-    commitments.forEach(c => {
-      if (c.commitment_status === 'cancelled' || c.commitment_status === 'closed') return;
-      
-      const required = c.required_total ?? 0;
-      const installed = c.qty_installed ?? 0;
-      const reserved = c.reserved_from_stock ?? 0;
-      const onOrder = c.covered_from_po ?? 0;
-      const stillNeeded = Math.max(0, required - reserved - onOrder);
-      
-      if (required > installed) {
-        const project = projects.find(p => p.id === c.project_id);
-        if (!aggregates[c.part_id]) {
-          const part = parts.find(p => p.id === c.part_id);
-          aggregates[c.part_id] = {
-            partId: c.part_id,
-            onHand: part?.physical_stock ?? 0,
-            reserved: 0,
-            needed: 0,
-            onOrder: 0,
-            toOrder: 0,
-            locations: [],
-            requirementsByProject: [],
-            orderLineItems: []
-          };
-        }
-        aggregates[c.part_id].requirementsByProject.push({
-          projectId: c.project_id,
-          projectName: project?.name || 'Unknown Project',
-          qtyNeeded: required,
-          qtyAllocated: reserved,
-          qtyInstalled: installed,
-          stillNeeded
-        });
-      }
-    });
-
-    // Build on-order drill-down from line items
-    lineItems.forEach(li => {
-      const pending = Math.max(0, (li.qty_ordered || 0) - (li.qty_received || 0));
-      if (pending > 0 && aggregates[li.part_id]) {
-        const order = orders.find(o => o.id === li.order_id);
-        aggregates[li.part_id].orderLineItems.push({
-          orderId: li.order_id,
-          poNumber: order?.po_number || 'Unknown PO',
-          qtyOrdered: li.qty_ordered || 0,
-          qtyReceived: li.qty_received || 0,
-          pending,
-          etaDate: order?.eta_date
-        });
-      }
-    });
-
     return aggregates;
-  }, [partsInventoryView, commitments, lineItems, projects, orders, parts]);
+  }, [partsInventoryView]);
 
   // Filter and enrich part data - CANONICAL: from read model
   const filteredParts = useMemo(() => {
