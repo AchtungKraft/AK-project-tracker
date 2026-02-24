@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import ImageModal from "../ui/ImageModal";
 
-export default function PartJournalSection({ partId }) {
+export default function PartJournalSection({ partId, isOpen = true }) {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -22,14 +22,19 @@ export default function PartJournalSection({ partId }) {
     photos: []
   });
 
-  // PERF FIX: Add caching to prevent refetch storms
+  // PERF FIX: Gate with isOpen + partId, add caching and retry control
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ['partJournalEntries', partId],
     queryFn: () => base44.entities.PartJournalEntry.filter({ part_id: partId }),
-    enabled: !!partId,
+    enabled: Boolean(isOpen && partId),
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error) => {
+      if (error?.status === 429) return false;
+      return failureCount < 1;
+    },
   });
 
   const createMutation = useMutation({
