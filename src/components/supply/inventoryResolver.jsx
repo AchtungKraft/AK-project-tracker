@@ -73,8 +73,11 @@ export function buildPartInventoryMap(parts, commitments) {
   }
   
   // Calculate available after aggregation
+  // PHASE 5: Only compute if physical_stock is not null
   for (const [partId, inv] of map.entries()) {
-    inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+    if (inv.physical_stock !== null) {
+      inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
+    }
   }
   
   return map;
