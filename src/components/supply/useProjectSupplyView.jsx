@@ -1,8 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { forceAppRefresh, extractRefreshContext } from "./forceAppRefresh";
-import { validateSupplyModelDrift } from "./ExecutionDataBlock";
-import { diagnoseSupplyItems, storePSMDiagnostics, storeGNODiagnostics } from "./supplyDiagnostics";
 import { 
   normalizeProjectId, 
   normalizeId,
@@ -13,7 +11,6 @@ import {
   receivingKeys,
   inventoryKeys,
   lifecycleKeys,
-  validateQueryKeyFactory,
 } from "@/components/financial/queryKeyFactories";
 
 // Re-export supplyKeys for backwards compatibility
@@ -34,11 +31,6 @@ export function useProjectSupplyView(projectId, filters = {}) {
 
   // CANONICAL: Pass raw filters to factory - serialization happens ONLY in factory
   const queryKey = supplyKeys.projectView(normalizedId, filters);
-  
-  // DIAGNOSTIC: Log query key (factory handles serialization)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[SUPPLY KEY]', queryKey);
-  }
   
   const query = useQuery({
     queryKey,
