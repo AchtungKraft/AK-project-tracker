@@ -55,15 +55,34 @@ export default function CreditSummaryStrip({
   };
   const disabledReason = getDisabledReason();
 
-  return (
-    <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-      {/* Gross Exposure */}
-      <div className="flex-1 min-w-[100px]">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wide">Gross Exposure</p>
-        <p className="text-lg font-bold text-white font-mono">
-          {formatCurrencyUSD(grossExposure)}
-        </p>
+  // Show loading state
+  if (isLoading && projectId) {
+    return (
+      <div className="flex items-center justify-center p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+        <Loader2 className="w-4 h-4 animate-spin text-gray-400 mr-2" />
+        <span className="text-gray-400 text-sm">Loading financial data...</span>
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Totals Gate Warning */}
+      {!gateValidation.valid && (
+        <div className="flex items-center gap-2 p-2 bg-amber-900/20 rounded border border-amber-700">
+          <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+          <span className="text-amber-300 text-xs">Financial reconciliation mismatch detected</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+        {/* Planned Retail (was Gross Exposure) */}
+        <div className="flex-1 min-w-[100px]">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Planned Retail</p>
+          <p className="text-lg font-bold text-white font-mono">
+            {formatCurrencyUSD(grossExposure)}
+          </p>
+        </div>
 
       {/* Available Credit */}
       <div className="flex-1 min-w-[100px]">
