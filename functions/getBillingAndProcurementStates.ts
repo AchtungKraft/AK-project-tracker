@@ -599,6 +599,17 @@ Deno.serve(async (req) => {
     
     const result = await getBillingAndProcurementStates(base44, payload.filters || {});
     
+    // PERF: Timing log
+    console.log('[PERF] getBillingAndProcurementStates', {
+      project_id,
+      commitmentsCount: result.commitments?.length ?? 0,
+      bucketCounts: {
+        assigned_needs_billing: result.assigned_needs_billing?.length ?? 0,
+        billed_not_paid: result.billed_not_paid?.length ?? 0,
+        paid_ready_to_order: result.paid_ready_to_order?.length ?? 0,
+      }
+    });
+    
     return Response.json({
       success: true,
       ...result,

@@ -168,6 +168,7 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
+  // PERF FIX: Safe caching - 15s stale, no refetch on focus
   const { data: partInventoryView, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery({
     queryKey: ['partsInventoryView', activePart?.id],
     queryFn: async () => {
@@ -175,7 +176,9 @@ export default function PartModal({ part, partId, onClose }) {
       return res.data?.parts?.[0] || null;
     },
     enabled: !!activePart?.id,
-    staleTime: 0, // Always refetch on mount
+    staleTime: 15000,
+    gcTime: 60000,
+    refetchOnWindowFocus: false,
   });
 
   // Location breakdown - ONLY used for location display, NOT for totals

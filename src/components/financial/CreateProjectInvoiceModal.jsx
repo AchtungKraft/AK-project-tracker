@@ -119,9 +119,10 @@ export default function CreateProjectInvoiceModal({
 
   // PHASE 1 CANONICAL: Use getBillingAndProcurementStates as single source of truth
   // HARD FIX: Hard guard - billing query MUST NOT run if projectId is null/empty
+  // PERF FIX: Also guard on step - only fetch when modal is on lines step or later
   const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(
     normalizedProjectId,
-    { enabled: Boolean(normalizedProjectId) && open }
+    { enabled: Boolean(normalizedProjectId) && open && step >= 2 }
   );
 
   // PHASE 1: Extract canonical totals from billing data
