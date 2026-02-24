@@ -691,7 +691,7 @@ export default function PartModal({ part, partId, onClose }) {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="pt-2">
-            <PartJournalSection partId={activePart.id} />
+            <PartJournalSection partId={activePart.id} isOpen={isOpen && journalSectionOpen} />
           </div>
         </CollapsibleContent>
       </Collapsible>
