@@ -145,6 +145,9 @@ export default function ProjectSupplyManager() {
   
   // Blocked items resolution state
   const [blockedItems, setBlockedItems] = useState(null);
+  
+  // Diagnostics overlay toggle (dev/admin)
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // =====================================================================
   // CANONICAL READ MODEL - Already loaded above for tab routing
