@@ -487,7 +487,7 @@ export default function PartModal({ part, partId, onClose }) {
   // PERF FIX: Part not found - show error state, don't spin forever
   if (partNotFound) {
     return (
-      <Dialog open={true} onOpenChange={onClose}>
+      <Dialog open={true} onOpenChange={handleClose}>
         <DialogContent className="bg-gray-900 border-red-900/30">
           <DialogHeader>
             <DialogTitle className="text-white">Part Not Found</DialogTitle>
@@ -496,7 +496,7 @@ export default function PartModal({ part, partId, onClose }) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end pt-4">
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="outline" onClick={handleClose}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
