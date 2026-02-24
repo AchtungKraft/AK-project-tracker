@@ -116,11 +116,12 @@ export default function InventoryLocations({ onPartClick }) {
   // PHASE 14E: Removed partProjectRequirements and partBuildAssignments queries
   // InventoryItem is the SOLE source of truth for stock totals
   // Use commitments query instead for reserved stock display
+  // PERF FIX: Limit to 200 most recent active commitments
   const { data: commitments = [] } = useQuery({
     queryKey: ['partCommitments'],
     queryFn: () => base44.entities.PartCommitment.filter({ 
       commitment_status: { $nin: ['cancelled', 'closed'] }
-    }),
+    }, '-created_date', 200),
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,

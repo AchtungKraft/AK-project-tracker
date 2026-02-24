@@ -22,10 +22,14 @@ export default function PartJournalSection({ partId }) {
     photos: []
   });
 
+  // PERF FIX: Add caching to prevent refetch storms
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ['partJournalEntries', partId],
     queryFn: () => base44.entities.PartJournalEntry.filter({ part_id: partId }),
     enabled: !!partId,
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const createMutation = useMutation({
