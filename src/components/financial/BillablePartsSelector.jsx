@@ -580,7 +580,7 @@ export default function BillablePartsSelector({
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Selection Summary */}
       {selectedItems.length > 0 && (
