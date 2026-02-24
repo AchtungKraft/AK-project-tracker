@@ -195,9 +195,10 @@ export function CreditSummaryCompact({ projectId, className }) {
  * Diagnostic panel for debugging
  */
 export function FinancialDiagnosticsPanel({ projectId }) {
-  const { snapshot, diagnostics, isLoading, error } = useProjectFinancialSnapshot(projectId, {
-    includeDiagnostics: true,
-  });
+  const { snapshot, diagnostics, isLoading, error } = useProjectFinancialSnapshot(
+    projectId, 
+    { includeDiagnostics: true }
+  );
 
   if (isLoading) {
     return (
