@@ -32,6 +32,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // PERF: Timing start
+    const _perfStart = Date.now();
+
     const { part_id, part_ids } = await req.json();
     
     // Support single or batch
@@ -191,6 +194,12 @@ Deno.serve(async (req) => {
         }
       });
     }
+
+    // PERF: Timing log
+    console.log('[PERF] getPartSupplyUsage', Date.now() - _perfStart, 'ms', {
+      partCount: idsToQuery.length,
+      commitmentCount: commitments.length,
+    });
 
     // If single part, return unwrapped
     if (idsToQuery.length === 1) {
