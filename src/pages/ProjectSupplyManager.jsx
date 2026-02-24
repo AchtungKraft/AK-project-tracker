@@ -393,9 +393,13 @@ export default function ProjectSupplyManager() {
         );
         break;
       case 'install':
-        // Items with available_to_install > 0
+        // PHASE 7: Items with in-stock parts that can be installed
+        // Install eligibility depends ONLY on inventory: reserved_from_stock > qty_installed
+        // Does NOT depend on billing_status, payment, or credit state
         filtered = filtered.filter(c => {
-          return c.available_to_install > 0;
+          const reservedProject = c.reserved_from_stock ?? 0;
+          const installed = c.qty_installed ?? 0;
+          return reservedProject > installed;
         });
         break;
     }
