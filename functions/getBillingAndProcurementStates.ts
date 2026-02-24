@@ -119,34 +119,66 @@ function isOrderingAllowed(paymentStatus, effectivePartType) {
 // ============================================
 
 async function getBillingAndProcurementStates(base44, filters = {}) {
-  // Batch fetch all required data including credit allocations
+  // PERF: Timing start
+  const _perfStart = Date.now();
+  
+  // PERF FIX: Scope queries by project_id if provided
+  const projectFilter = filters.project_id ? { project_id: filters.project_id } : {};
+  const commitmentFilter = filters.project_id 
+    ? { project_id: filters.project_id }
+    : {};
+  
+  // Batch fetch - SCOPED to project when filter provided
   const [
     commitments,
     parts,
     projects,
-    orders,
-    lineItems,
-    installedParts,
-    vendorInvoices,
-    batchLines,
-    creditAllocations,
-    creditLedgers,
     vendors,
     categories,
+    creditLedgers,
+    creditAllocations,
   ] = await Promise.all([
-    base44.entities.PartCommitment.filter({}),
-    base44.entities.Part.filter({}),
-    base44.entities.Project.filter({}),
-    base44.entities.Order.filter({}),
-    base44.entities.PartPurchaseLineItem.filter({}),
-    base44.entities.InstalledPart.filter({}),
-    base44.entities.VendorInvoice.filter({}),
-    base44.entities.ProjectInvoiceLine.filter({}), // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
-    base44.entities.CreditAllocation.filter({ is_reversed: false }),
-    base44.entities.ProjectCreditLedger.filter({}),
-    base44.entities.Vendor.filter({}),
-    base44.entities.PartCategory.filter({}),
+    Object.keys(commitmentFilter).length > 0
+      ? base44.entities.PartCommitment.filter(commitmentFilter)
+      : base44.entities.PartCommitment.list(),
+    base44.entities.Part.list(),
+    filters.project_id 
+      ? base44.entities.Project.filter({ id: filters.project_id })
+      : base44.entities.Project.list(),
+    base44.entities.Vendor.list(),
+    base44.entities.PartCategory.list(),
+    filters.project_id
+      ? base44.entities.ProjectCreditLedger.filter({ project_id: filters.project_id })
+      : base44.entities.ProjectCreditLedger.list(),
+    filters.project_id
+      ? base44.entities.CreditAllocation.filter({ project_id: filters.project_id, is_reversed: false })
+      : base44.entities.CreditAllocation.filter({ is_reversed: false }),
   ]);
+  
+  // PERF FIX: Fetch dependent entities only for relevant commitments
+  const commitmentIds = commitments.map(c => c.id);
+  const projectIds = [...new Set(commitments.map(c => c.project_id))];
+  
+  const [lineItems, batchLines, installedParts] = await Promise.all([
+    commitmentIds.length > 0
+      ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+      : [],
+    commitmentIds.length > 0
+      ? base44.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
+      : [],
+    projectIds.length > 0
+      ? base44.entities.InstalledPart.filter({ project_id: { $in: projectIds } })
+      : [],
+  ]);
+  
+  // PERF FIX: Derive orders from line items (no full scan)
+  const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+  const orders = orderIds.length > 0
+    ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+    : [];
+  
+  // DEPRECATED: vendorInvoices not used in current logic
+  const vendorInvoices = [];
 
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));

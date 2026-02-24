@@ -33,30 +33,52 @@ Deno.serve(async (req) => {
 
     const { mode = 'ORDERING', filters = {} } = await req.json();
 
-    // Fetch all required data in parallel
+    // PERF: Timing start
+    const _perfStart = Date.now();
+    
+    // PERF FIX: Apply server-side filters to reduce data volume
+    const commitmentFilter = { commitment_status: { $ne: 'cancelled' } };
+    if (filters.project_id) commitmentFilter.project_id = filters.project_id;
+    
+    // Fetch core data in parallel - REMOVED pools (deprecated), REMOVED full table scans
     const [
       commitments,
       parts,
       projects,
       vendors,
-      pools,
-      lineItems,
-      orders,
       categories,
-      projectInvoices,
-      projectInvoiceLines,
     ] = await Promise.all([
-      base44.entities.PartCommitment.filter({ commitment_status: { $ne: 'cancelled' } }),
+      base44.entities.PartCommitment.filter(commitmentFilter),
       base44.entities.Part.list(),
       base44.entities.Project.list(),
       base44.entities.Vendor.list(),
-      base44.entities.BillingPool.filter({ status: { $ne: 'closed' } }),
-      base44.entities.PartPurchaseLineItem.list(),
-      base44.entities.Order.list(),
       base44.entities.PartCategory.list(),
-      base44.entities.ProjectInvoice.list(),
-      base44.entities.ProjectInvoiceLine.list(),
     ]);
+    
+    // PERF FIX: Scope lineItems to relevant commitments only
+    const commitmentIds = commitments.map(c => c.id);
+    const projectIds = [...new Set(commitments.map(c => c.project_id))];
+    
+    const [lineItems, projectInvoices] = await Promise.all([
+      commitmentIds.length > 0
+        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+        : [],
+      projectIds.length > 0
+        ? base44.entities.ProjectInvoice.filter({ project_id: { $in: projectIds } })
+        : [],
+    ]);
+    
+    // PERF FIX: Derive orders from line items (no full scan)
+    const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+    const invoiceIds = projectInvoices.map(i => i.id);
+    
+    const [orders, projectInvoiceLines] = await Promise.all([
+      orderIds.length > 0 ? base44.entities.Order.filter({ id: { $in: orderIds } }) : [],
+      invoiceIds.length > 0 ? base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }) : [],
+    ]);
+    
+    // DEPRECATED: pools removed - forward model only
+    const pools = [];
 
     // Build lookup maps
     const partMap = new Map(parts.map(p => [p.id, p]));

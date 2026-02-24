@@ -59,26 +59,23 @@ Deno.serve(async (req) => {
       : [];
     const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
 
-    // Fetch invoice lines with full data for export
+    // PERF FIX: Scope line fetches to invoice IDs only
     const invoiceIds = invoices.map(inv => inv.id);
-    const allLines = invoiceIds.length > 0
-      ? await base44.entities.ProjectInvoiceLine.list()
+    const relevantLines = invoiceIds.length > 0
+      ? await base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } })
       : [];
     
-    // Filter to only lines belonging to these invoices
-    const relevantLines = allLines.filter(line => invoiceIds.includes(line.invoice_id));
-    
-    // Fetch commitments for part details (needed for export)
+    // PERF FIX: Scope commitment fetch to relevant IDs only
     const commitmentIds = [...new Set(relevantLines.filter(l => l.part_commitment_id).map(l => l.part_commitment_id))];
     const commitments = commitmentIds.length > 0
-      ? await base44.entities.PartCommitment.list()
+      ? await base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
       : [];
     const commitmentMap = Object.fromEntries(commitments.map(c => [c.id, c]));
     
-    // Fetch parts for names and vendor part numbers
+    // PERF FIX: Scope part fetch to relevant IDs only
     const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const parts = partIds.length > 0
-      ? await base44.entities.Part.list()
+      ? await base44.entities.Part.filter({ id: { $in: partIds } })
       : [];
     const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
     
