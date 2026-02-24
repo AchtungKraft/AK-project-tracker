@@ -26,22 +26,26 @@ import { cn } from "@/lib/utils";
  * - Part inventory summary
  * - List of projects with commitment details
  * - Coverage status per project
+ * 
+ * PERF FIX: This section is NON-BLOCKING - errors here don't block modal render.
+ * Accepts isOpen prop to gate queries when modal is closed.
  */
-export default function PartProjectUsageSection({ partId }) {
-  // PERF FIX: Add gcTime, refetchOnWindowFocus, and retry control
+export default function PartProjectUsageSection({ partId, isOpen = true }) {
+  // PERF FIX: Gate with isOpen + partId, add retry control
   const { data, isLoading, error } = useQuery({
     queryKey: ['partSupplyUsage', partId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getPartSupplyUsage', { part_id: partId });
       return response.data;
     },
-    enabled: Boolean(partId),
+    enabled: Boolean(isOpen && partId),
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error) => {
-      // Stop retrying on rate limit
-      if (error?.status === 429) return false;
+      // Stop retrying on rate limit or server error
+      if (error?.status === 429 || error?.status >= 500) return false;
       return failureCount < 1;
     },
   });
@@ -56,10 +60,25 @@ export default function PartProjectUsageSection({ partId }) {
     );
   }
 
-  if (error || !data?.success) {
+  // PERF FIX: Non-blocking error state - show actionable message, don't break modal
+  if (error) {
+    const errorMessage = error?.status === 429 
+      ? 'Rate limited - please wait a moment' 
+      : 'Failed to load project usage';
     return (
-      <div className="text-sm text-red-400 p-3 bg-red-900/20 rounded-lg">
-        Failed to load project usage
+      <div className="text-sm text-red-400 p-3 bg-red-900/20 rounded-lg flex items-center gap-2">
+        <AlertCircle className="w-4 h-4" />
+        {errorMessage}
+      </div>
+    );
+  }
+
+  // Handle success:false from backend
+  if (!data?.success) {
+    return (
+      <div className="text-sm text-yellow-400 p-3 bg-yellow-900/20 rounded-lg flex items-center gap-2">
+        <AlertCircle className="w-4 h-4" />
+        Unable to load project data
       </div>
     );
   }
