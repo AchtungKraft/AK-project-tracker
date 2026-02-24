@@ -44,19 +44,50 @@ export default function PartModal({ part, partId, onClose }) {
   // Action modals
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showAddToBuildModal, setShowAddToBuildModal] = useState(false);
+
+  // PERF FIX: Modal is "open" when mounted with a valid partId
+  // Use this for gating all queries consistently
+  const isOpen = Boolean(partId);
+  const effectivePartId = partId || part?.id;
+
+  // PERF FIX: Cancel inflight queries on partId change or unmount
+  // This prevents stale data from resolving into UI after switching parts
+  useEffect(() => {
+    return () => {
+      // On unmount or partId change, cancel all modal-scoped queries
+      if (effectivePartId) {
+        queryClient.cancelQueries({ 
+          predicate: (query) => {
+            const key = query.queryKey;
+            // Cancel part-specific queries for this partId
+            return (
+              (key[0] === 'part' && key[1] === effectivePartId) ||
+              (key[0] === 'partsInventoryView' && key[1] === effectivePartId) ||
+              (key[0] === 'inventoryLocations' && key[1] === effectivePartId) ||
+              (key[0] === 'partSupplyUsage' && key[1] === effectivePartId) ||
+              (key[0] === 'partJournalEntries' && key[1] === effectivePartId)
+            );
+          }
+        });
+      }
+    };
+  }, [effectivePartId, queryClient]);
   
   // Fetch part if only partId provided
   // PERF FIX: Add caching, retry control, and window focus handling
-  const { data: fetchedPart, isLoading: partLoading } = useQuery({
+  // Normalize return shape to single object or null
+  const { data: fetchedPart, isLoading: partLoading, error: partError } = useQuery({
     queryKey: ['part', partId],
     queryFn: async () => {
-      const parts = await base44.entities.Part.filter({ id: partId });
-      return parts[0];
+      const rows = await base44.entities.Part.filter({ id: partId });
+      // Normalize: always return single object or null
+      return rows?.[0] ?? null;
     },
-    enabled: Boolean(partId && !part),
+    enabled: Boolean(isOpen && partId && !part),
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error) => {
       // Stop retrying on rate limit or not found
       if (error?.status === 429 || error?.status === 404) return false;
@@ -65,6 +96,9 @@ export default function PartModal({ part, partId, onClose }) {
   });
 
   const activePart = part || fetchedPart;
+  
+  // PERF FIX: Handle part not found - stop dependent queries
+  const partNotFound = !partLoading && !activePart && isOpen && partId && !part;
 
   const [formData, setFormData] = useState(null);
 
