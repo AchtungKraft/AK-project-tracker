@@ -947,6 +947,49 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
+      {/* Part Type & Reorder Settings */}
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <Label className="text-gray-400 text-xs">Part Type</Label>
+          <Select
+            value={formData.part_type || 'PURCHASED_VENDOR'}
+            onValueChange={(value) => setFormData({ ...formData, part_type: value })}
+          >
+            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PURCHASED_VENDOR">Purchased Vendor</SelectItem>
+              <SelectItem value="AK_MANUFACTURED">AK Manufactured</SelectItem>
+              <SelectItem value="CLIENT_SUPPLIED">Client Supplied</SelectItem>
+              <SelectItem value="TAKE_OFF">Take Off</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-gray-400 text-xs">Reorder Point</Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.reorder_point ?? 0}
+            onChange={(e) => setFormData({ ...formData, reorder_point: parseInt(e.target.value) || 0 })}
+            className="bg-gray-800 border-gray-700 text-white"
+          />
+        </div>
+
+        <div>
+          <Label className="text-gray-400 text-xs">Reorder Quantity</Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.reorder_quantity ?? 1}
+            onChange={(e) => setFormData({ ...formData, reorder_quantity: parseInt(e.target.value) || 1 })}
+            className="bg-gray-800 border-gray-700 text-white"
+          />
+        </div>
+      </div>
+
       {/* Canonical Pricing Section */}
       <PartPricingFields
         defaultCost={formData.cost}
