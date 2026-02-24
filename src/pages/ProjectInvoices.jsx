@@ -47,6 +47,7 @@ import {
   invoiceKeys, 
   billingKeys, 
   financialProjectKeys, 
+  financialSnapshotKeys,
   creditKeys,
   normalizeProjectId 
 } from "@/components/financial/queryKeyFactories";
