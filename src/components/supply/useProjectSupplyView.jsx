@@ -74,13 +74,18 @@ export function useProjectSupplyView(projectId, filters = {}) {
   // Backend is the single source of truth for to_order, coverage_status, gap_qty
   const items = query.data?.items || [];
   
+  // PHASE 3: Detect stuck loading state
+  // isLoading is true only on initial load. isFetching can stay true longer.
+  // If error exists, loading is done (even if failed)
+  const effectiveLoading = query.isLoading && !query.isError;
+  
   return {
     items,
     summary: query.data?.summary || {},
     categories: query.data?.categories || [],
     tabCounts: query.data?.tab_counts || {},
     project: query.data?.project || null,
-    isLoading: query.isLoading,
+    isLoading: effectiveLoading,
     isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
