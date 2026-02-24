@@ -354,6 +354,10 @@ export default function ProjectSupplyManager() {
         // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
         billing_state: item.billing_state || 'NOT_INVOICED',
         
+        // Phase 7: Invoice tracking fields from read model
+        invoiced_qty: item.invoiced_qty ?? 0,
+        invoiced_amount: item.invoiced_amount ?? 0,
+        
         // Inventory snapshot from read model
         inventory_snapshot: item.inventory_snapshot,
         
