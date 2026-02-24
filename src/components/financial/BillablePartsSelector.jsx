@@ -432,8 +432,8 @@ export default function BillablePartsSelector({
       />
 
       {/* Vendor > Category > Parts Tree */}
-      <ScrollArea className="h-[400px]">
-        <div className="space-y-2 pr-3">
+      <ScrollArea className="h-[300px] overflow-x-auto">
+        <div className="space-y-2 pr-3 min-w-full">
           {filteredVendorGroups.map((vendor) => {
             const vendorKey = `${vendor.vendor_id}::${vendor.vendor_name}`;
             const isExpanded = expandedVendors[vendorKey];
