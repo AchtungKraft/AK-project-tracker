@@ -735,8 +735,9 @@ export default function ProjectSupplyManager() {
             <CommitmentBillingDiagnostics projectId={projectId} />
           )}
 
-          {/* Integrity Banner */}
+          {/* Integrity Banner - Project-scoped gate check */}
           <SupplyIntegrityBanner 
+            projectId={projectId}
             onGateStatusChange={setActionsEnabled}
             showFixControls={true}
             compact={false}
