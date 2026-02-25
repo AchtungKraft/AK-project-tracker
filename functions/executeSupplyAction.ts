@@ -365,6 +365,78 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   } else {
     new_required = Math.max(0, current_required + (required_total_delta ?? 0));
   }
+  
+  // =========== DELTA COMMITMENT MODEL ENFORCEMENT ===========
+  // PHASE: Scope Add Architecture
+  // If delta is POSITIVE on an existing commitment, create a scope addition instead
+  const delta = new_required - current_required;
+  
+  if (!isNewCommitment && delta > 0 && commitmentId) {
+    // Check if commitment has lifecycle progress that would make upward mutation dangerous
+    const has_lifecycle_progress = 
+      (commitment?.invoiced_qty || 0) > 0 ||
+      (commitment?.qty_installed || 0) > 0 ||
+      (commitment?.covered_from_po || 0) > 0;
+    
+    if (has_lifecycle_progress) {
+      // HARD RULE: Create scope addition instead of mutating
+      console.log(`[DELTA_MODEL] Commitment ${commitmentId} has lifecycle progress, creating scope addition for +${delta}`);
+      
+      if (ctx.dry_run) {
+        return {
+          preview: {
+            action: 'WILL_CREATE_SCOPE_ADDITION',
+            commitment_id: commitmentId,
+            delta,
+            reason: 'Commitment has lifecycle progress (invoiced/installed/on PO)',
+            parent_commitment_id: commitmentId
+          }
+        };
+      }
+      
+      // Create scope addition commitment
+      const scopeAddResult = await ctx.base44.asServiceRole.functions.invoke('createScopeAddCommitment', {
+        project_id: commitment.project_id,
+        part_id: part.id,
+        deltaQty: delta,
+        parent_commitment_id: commitmentId
+      });
+      
+      if (scopeAddResult.data?.error) {
+        throw new Error(scopeAddResult.data.error);
+      }
+      
+      ctx.mutations.push({ entity: 'PartCommitment', id: scopeAddResult.data.commitment_id, action: 'SCOPE_ADDITION_CREATE' });
+      ctx.lifecycle_events.push({
+        commitment_id: commitmentId,
+        event_type: 'SCOPE_ADDITION_CREATED',
+        trigger_source: 'UNIFIED_ENGINE',
+        triggered_by: ctx.user.email,
+        actor_email: ctx.user.email,
+        old_values: JSON.stringify({ required_total: current_required }),
+        new_values: JSON.stringify({ 
+          new_commitment_id: scopeAddResult.data.commitment_id,
+          delta_qty: delta,
+          model: 'DELTA_COMMITMENT'
+        }),
+        part_id: part.id,
+        project_id: commitment.project_id,
+        event_date: ctx.timestamp
+      });
+      
+      return {
+        success: true,
+        action: 'SCOPE_ADDITION_CREATED',
+        parent_commitment_id: commitmentId,
+        parent_required_total: current_required,
+        new_commitment_id: scopeAddResult.data.commitment_id,
+        new_commitment: scopeAddResult.data.commitment,
+        delta_qty: delta,
+        pricing: scopeAddResult.data.pricing,
+        message: `Created scope addition commitment for +${delta} units. Parent unchanged.`
+      };
+    }
+  }
 
   // =========== PHASE 9G: DEFER TO CANONICAL REBALANCE ===========
   // Reservation math is handled by rebalancePartReservations after commit
