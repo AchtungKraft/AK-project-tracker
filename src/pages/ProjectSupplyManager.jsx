@@ -42,6 +42,7 @@ import BlockedActionResolutionModal from "@/components/supply/BlockedActionResol
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
+import SafeRenderBoundary from "@/components/ui/SafeRenderBoundary";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
