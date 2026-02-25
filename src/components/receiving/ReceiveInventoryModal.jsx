@@ -226,8 +226,8 @@ export default function ReceiveInventoryModal({
     
     // Phase 12R: EXPLICIT MODE ROUTING
     try {
-      // Mode 1: Receive Against PO/Commitment (commitment context exists)
-      if (commitment && commitment.order_line_item_ids?.[0]) {
+      // Mode 1: Receive Against PO/Commitment (commitment context exists with line item)
+      if (commitment && orderLineItemIds[0]) {
         if (!commitment.id) {
           console.error("RECEIVE_SUBMIT_BLOCKED: Missing commitment_id", { commitment });
           toast.error("Commitment information is missing");
@@ -239,7 +239,7 @@ export default function ReceiveInventoryModal({
           action_type: 'RECEIVE',
           commitment_ids: [commitment.id],
           payload: {
-            line_item_id: commitment.order_line_item_ids[0],
+            line_item_id: orderLineItemIds[0],
             qty_received: qty,
             location_id: formData.location_id || null
           },
@@ -260,7 +260,7 @@ export default function ReceiveInventoryModal({
           }
         });
       } 
-      // Mode 2: Add General Stock (no commitment context)
+      // Mode 2: Add General Stock (no PO line item - either no commitment or commitment without PO)
       else {
         console.log("ADD_STOCK_PAYLOAD", { ...formData, quantity: qty });
         window.__lastReceiveDebug.payload = { ...formData, quantity: qty };
