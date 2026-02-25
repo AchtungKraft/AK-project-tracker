@@ -190,15 +190,19 @@ export default function ReceiveInventoryModal({
   
   const handleConfirmedReceive = async () => {
     // PHASE: CRASH-PROOF INSTRUMENTATION
+    const orderLineItemIds = commitment?.order_line_item_ids || [];
     const debugPayload = {
       timestamp: new Date().toISOString(),
-      mode: commitment && commitment.order_line_item_ids?.[0] ? 'RECEIVE_PO' : 'ADD_STOCK',
+      mode: commitment && orderLineItemIds[0] ? 'RECEIVE_PO' : 'ADD_STOCK',
       part_id: part?.id,
       part_name: part?.part_name,
       commitment_id: commitment?.id,
-      order_line_item_id: commitment?.order_line_item_ids?.[0],
+      commitment_keys: commitment ? Object.keys(commitment) : [],
+      order_line_item_ids: orderLineItemIds,
+      order_line_item_id: orderLineItemIds[0],
       qty: formData.quantity,
       location_id: formData.location_id,
+      hasCommitment: !!commitment,
     };
     
     console.log("RECEIVE_SUBMIT_START", debugPayload);
