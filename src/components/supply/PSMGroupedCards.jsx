@@ -234,6 +234,21 @@ export function PSMItemRow({
       inventory_snapshot: commitment.inventory_snapshot,
     });
   }
+  
+  // TRACE: Debug specific commitment 699bcdbc64c5d88332d0e0c7 (Heating Pipe)
+  if (commitment.id === '699bcdbc64c5d88332d0e0c7' || commitment.commitment_id === '699bcdbc64c5d88332d0e0c7') {
+    console.log("🔍 ROW DEBUG - Heating Pipe", commitment.id, {
+      required_total: commitment.required_total,
+      invoiced_qty: commitment.invoiced_qty,
+      reserved_from_stock: commitment.reserved_from_stock,
+      qty_installed: commitment.qty_installed,
+      actionsEnabled,
+      allowed,
+      canInvoice,
+      canOrder,
+      billingState,
+    });
+  }
 
   return (
     <div className={cn(

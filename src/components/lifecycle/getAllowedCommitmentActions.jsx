@@ -174,6 +174,20 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canCreateInvoice = true;
   }
   
+  // TRACE: Debug logging for specific commitment
+  if (process.env.NODE_ENV === 'development' && commitment?.id === '699bcdbc64c5d88332d0e0c7') {
+    console.log("🔍 LIFECYCLE TRACE - Heating Pipe", commitment?.id, {
+      required_total: effectiveRequired,
+      invoiced_qty: commitmentInvoicedQty,
+      remainingToBill,
+      canCreateInvoice: actions.canCreateInvoice,
+      canInstall: actions.canInstall,
+      reserved_from_stock: effectiveReserved,
+      qty_installed,
+      uninstalled,
+    });
+  }
+  
   // Store remaining for external use
   actions.remainingToBill = remainingToBill;
 
