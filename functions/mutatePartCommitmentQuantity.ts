@@ -367,140 +367,134 @@ async function createLifecycleEvent(base44, commitment, eventType, oldValues, ne
 // ============================================
 
 /**
- * INCREASE_QTY - Reservation-first logic
+ * INCREASE_QTY - DELTA COMMITMENT MODEL (Phase: Scope Add Architecture)
+ * 
+ * HARD RULE: Positive quantity increases MUST create a NEW commitment row.
+ * This function delegates to createScopeAddCommitment instead of mutating existing.
+ * 
+ * This eliminates lifecycle contamination where invoiced/installed/ordered
+ * quantities become misaligned with required_total.
  */
 async function executeIncreaseQty(base44, commitment, part, delta, reason, userId, dryRun = false) {
-  const currentQty = commitment.qty_committed || 0;
-  const targetQty = currentQty + delta;
-  
-  // Get inventory availability
-  const availability = await getInventoryAvailability(base44, commitment.part_id);
-  
-  // Calculate reservation and order queue quantities
-  const reserveQty = Math.min(delta, availability.total_available);
-  const toOrderQty = delta - reserveQty;
+  // DELTA MODEL ENFORCEMENT: No upward mutation allowed
+  // All positive deltas create a new scope addition commitment
   
   if (dryRun) {
     return {
       dry_run: true,
       success: true,
       commitment_id: commitment.id,
-      current_qty: currentQty,
-      target_qty: targetQty,
       delta,
-      reserve_qty: reserveQty,
-      to_order_qty: toOrderQty,
-      inventory_available: availability.total_available,
-      inventory_items: availability.items.map(i => ({
-        inventory_item_id: i.inventory_item_id,
-        qty_available: i.qty_available
-      }))
+      action: 'WILL_CREATE_SCOPE_ADDITION',
+      message: `Will create new scope addition commitment for ${delta} units (delta model enforced)`,
+      parent_commitment_id: commitment.id,
+      project_id: commitment.project_id,
+      part_id: commitment.part_id,
+      part_name: part?.part_name
     };
   }
   
-  // Re-validate availability immediately before writing (concurrency protection)
-  const freshAvailability = await getInventoryAvailability(base44, commitment.part_id);
-  const actualReserveQty = Math.min(delta, freshAvailability.total_available);
-  const actualToOrderQty = delta - actualReserveQty;
+  // Call createScopeAddCommitment to create a new commitment
+  const scopeAddResult = await base44.asServiceRole.functions.invoke('createScopeAddCommitment', {
+    project_id: commitment.project_id,
+    part_id: commitment.part_id,
+    deltaQty: delta,
+    parent_commitment_id: commitment.id
+  });
   
-  // Create reservations
-  let reservationsCreated = [];
-  if (actualReserveQty > 0) {
-    const result = await createReservations(
-      base44, 
-      commitment.part_id, 
-      commitment.project_id, 
-      commitment.id,
-      actualReserveQty,
-      freshAvailability.items
-    );
-    reservationsCreated = result.reservationsCreated;
+  if (scopeAddResult.data?.error) {
+    throw new Error(scopeAddResult.data.error);
   }
   
-  // Calculate new totals
-  const newQtyCommitted = targetQty;
-  const newQtyReserved = (commitment.qty_reserved || 0) + actualReserveQty;
-  
-  // Recompute qty_to_order from invariant: gap = needed - (reserved + max(ordered, received))
-  const coverageAfter = newQtyReserved + Math.max(commitment.qty_ordered || 0, commitment.qty_received || 0);
-  const newQtyToOrder = Math.max(0, newQtyCommitted - coverageAfter);
-  
-  const unitCost = commitment.unit_cost_snapshot || part?.cost || 0;
-  const unitRetail = commitment.unit_retail_snapshot || part?.retail_override || part?.retail_matrix_price || 0;
-  
-  // Update commitment
-  const updates = {
-    qty_committed: newQtyCommitted,
-    qty_reserved: newQtyReserved,
-    qty_to_order: newQtyToOrder,
-    planned_cost_total: newQtyCommitted * unitCost,
-    planned_retail_total: newQtyCommitted * unitRetail,
-    coverage_status: computeCoverageStatus({ ...commitment, qty_committed: newQtyCommitted, qty_reserved: newQtyReserved })
-  };
-  
-  await base44.asServiceRole.entities.PartCommitment.update(commitment.id, updates);
-  
-  // Create lifecycle events
+  // Create lifecycle event on PARENT commitment noting the scope addition
   await createLifecycleEvent(
     base44,
     commitment,
-    'QTY_INCREASED',
-    { qty_committed: currentQty, qty_reserved: commitment.qty_reserved || 0, qty_to_order: commitment.qty_to_order || 0 },
-    { qty_committed: newQtyCommitted, qty_reserved: newQtyReserved, qty_to_order: newQtyToOrder, delta, reserved_qty_added: actualReserveQty, to_order_qty_added: actualToOrderQty },
+    'SCOPE_ADDITION_CREATED',
+    { required_total: commitment.required_total || commitment.qty_committed || 0 },
+    { 
+      new_commitment_id: scopeAddResult.data.commitment_id,
+      delta_qty: delta,
+      model: 'DELTA_COMMITMENT'
+    },
     userId,
-    reason
+    reason || `Scope addition: +${delta} units`
   );
-  
-  if (actualReserveQty > 0) {
-    await createLifecycleEvent(
-      base44,
-      commitment,
-      'STOCK_RESERVED',
-      { qty_reserved: commitment.qty_reserved || 0 },
-      { qty_reserved: newQtyReserved, reserved_qty_added: actualReserveQty, inventory_item_ids: reservationsCreated.map(r => r.inventory_item_id) },
-      userId,
-      reason
-    );
-  }
-  
-  if (actualToOrderQty > 0) {
-    await createLifecycleEvent(
-      base44,
-      commitment,
-      'ADDED_TO_ORDER_QUEUE',
-      { qty_to_order: commitment.qty_to_order || 0 },
-      { qty_to_order: newQtyToOrder, to_order_qty_added: actualToOrderQty },
-      userId,
-      reason
-    );
-  }
-  
-  // Compute lifecycle state
-  const updatedCommitment = { ...commitment, ...updates };
-  const lifecycleState = computeLifecycleState(updatedCommitment, part);
   
   return {
     success: true,
-    commitment_id: commitment.id,
-    qty_needed_new: newQtyCommitted,
-    reserved_qty_added: actualReserveQty,
-    to_order_qty_added: actualToOrderQty,
-    reservations_created: reservationsCreated,
-    lifecycle_state: lifecycleState,
-    warnings: actualReserveQty < delta ? [`Only ${actualReserveQty} of ${delta} could be reserved from inventory`] : []
+    action: 'SCOPE_ADDITION_CREATED',
+    parent_commitment_id: commitment.id,
+    new_commitment_id: scopeAddResult.data.commitment_id,
+    delta_qty: delta,
+    new_commitment: scopeAddResult.data.commitment,
+    pricing: scopeAddResult.data.pricing,
+    message: `Created scope addition commitment for ${delta} units. Parent commitment unchanged.`,
+    warnings: []
   };
 }
 
 /**
- * DECREASE_QTY - Release reservations first, then reduce to_order
+ * DECREASE_QTY - CONTROLLED REDUCTION (Phase: Scope Add Architecture)
+ * 
+ * HARD RULE: Negative deltas ONLY allowed if commitment has NO lifecycle progress:
+ * - invoiced_qty === 0
+ * - qty_installed === 0
+ * - covered_from_po === 0
+ * - reserved_from_stock === 0
+ * 
+ * If any lifecycle field > 0, reduction is BLOCKED.
  */
 async function executeDecreaseQty(base44, commitment, part, delta, reason, userId, dryRun = false) {
-  const currentQty = commitment.qty_committed || 0;
+  const currentQty = commitment.qty_committed || commitment.required_total || 0;
   const targetQty = currentQty - delta;
   
-  // Validate constraints
-  if (targetQty < (commitment.qty_installed || 0)) {
-    return { success: false, error: `Cannot reduce below installed qty (${commitment.qty_installed})` };
+  // PHASE 3: CONTROLLED REDUCTION - Check for lifecycle progress
+  const invoiced_qty = commitment.invoiced_qty || 0;
+  const qty_installed = commitment.qty_installed || 0;
+  const covered_from_po = commitment.covered_from_po || 0;
+  const reserved_from_stock = commitment.reserved_from_stock || commitment.qty_reserved || 0;
+  
+  // HARD GUARD: Block reduction if any lifecycle progress exists
+  if (invoiced_qty > 0) {
+    return { 
+      success: false, 
+      error: `Cannot reduce committed qty: ${invoiced_qty} units already invoiced.`,
+      code: 'LIFECYCLE_PROGRESS_INVOICED',
+      blocked_by: { invoiced_qty }
+    };
+  }
+  
+  if (qty_installed > 0) {
+    return { 
+      success: false, 
+      error: `Cannot reduce committed qty: ${qty_installed} units already installed.`,
+      code: 'LIFECYCLE_PROGRESS_INSTALLED',
+      blocked_by: { qty_installed }
+    };
+  }
+  
+  if (covered_from_po > 0) {
+    return { 
+      success: false, 
+      error: `Cannot reduce committed qty: ${covered_from_po} units covered by purchase order.`,
+      code: 'LIFECYCLE_PROGRESS_PO',
+      blocked_by: { covered_from_po }
+    };
+  }
+  
+  if (reserved_from_stock > 0) {
+    return { 
+      success: false, 
+      error: `Cannot reduce committed qty: ${reserved_from_stock} units reserved from stock.`,
+      code: 'LIFECYCLE_PROGRESS_RESERVED',
+      blocked_by: { reserved_from_stock }
+    };
+  }
+  
+  // Legacy validation (kept for safety)
+  if (targetQty < qty_installed) {
+    return { success: false, error: `Cannot reduce below installed qty (${qty_installed})` };
   }
   if (targetQty < (commitment.qty_ordered || 0)) {
     return { 
