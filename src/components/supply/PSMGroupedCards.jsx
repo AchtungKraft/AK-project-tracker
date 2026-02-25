@@ -277,13 +277,28 @@ export function PSMItemRow({
           onClick={() => onPartClick?.(part, commitment)}
           className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
         >
-          <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+            {/* PHASE 4: SCOPE ADD Badge for Delta Commitment Model */}
+            {commitment.source_type === 'scope_addition' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50 whitespace-nowrap">
+                SCOPE ADD +{commitment.required_total ?? 0}
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 truncate">
             {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
             <span>·</span>
             <span className="truncate">{resolvedCategory.name}</span>
             <span>·</span>
             <span className="truncate">{resolvedVendor.name}</span>
+            {/* PHASE 4: Show parent commitment reference */}
+            {commitment.parent_commitment_id && (
+              <>
+                <span>·</span>
+                <span className="text-purple-400/70 truncate">parent: {commitment.parent_commitment_id.slice(-6)}</span>
+              </>
+            )}
           </div>
         </button>
 
