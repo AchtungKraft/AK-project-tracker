@@ -167,25 +167,85 @@ export default function ReceiveInventoryModal({
     setShowConfirmModal(true);
   };
   
-  const handleConfirmedReceive = () => {
-    // Phase 12R: EXPLICIT MODE ROUTING
+  const handleConfirmedReceive = async () => {
+    // PHASE: CRASH-PROOF INSTRUMENTATION
+    const debugPayload = {
+      timestamp: new Date().toISOString(),
+      mode: commitment && commitment.order_line_item_ids?.[0] ? 'RECEIVE_PO' : 'ADD_STOCK',
+      part_id: part?.id,
+      part_name: part?.part_name,
+      commitment_id: commitment?.id,
+      order_line_item_id: commitment?.order_line_item_ids?.[0],
+      qty: formData.quantity,
+      location_id: formData.location_id,
+    };
     
-    // Mode 1: Receive Against PO/Commitment (commitment context exists)
-    if (commitment && commitment.order_line_item_ids?.[0]) {
-      supplyAction.mutate({
-        action_type: 'RECEIVE',
-        commitment_ids: [commitment.id],
-        payload: {
-          line_item_id: commitment.order_line_item_ids[0],
-          qty_received: formData.quantity,
-          location_id: formData.location_id || null
-        },
-        dry_run: false
-      });
-    } 
-    // Mode 2: Add General Stock (no commitment context)
-    else {
-      addStockMutation.mutate(formData);
+    console.log("RECEIVE_SUBMIT_START", debugPayload);
+    window.__lastReceiveDebug = debugPayload;
+    
+    // PHASE: VALIDATION - Block invalid submissions
+    const qty = Number(formData.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      console.error("RECEIVE_SUBMIT_BLOCKED: Invalid quantity", { qty, raw: formData.quantity });
+      toast.error("Quantity must be a positive number");
+      setShowConfirmModal(false);
+      return;
+    }
+    
+    if (!part?.id) {
+      console.error("RECEIVE_SUBMIT_BLOCKED: Missing part_id", { part });
+      toast.error("Part information is missing");
+      setShowConfirmModal(false);
+      return;
+    }
+    
+    // Phase 12R: EXPLICIT MODE ROUTING
+    try {
+      // Mode 1: Receive Against PO/Commitment (commitment context exists)
+      if (commitment && commitment.order_line_item_ids?.[0]) {
+        if (!commitment.id) {
+          console.error("RECEIVE_SUBMIT_BLOCKED: Missing commitment_id", { commitment });
+          toast.error("Commitment information is missing");
+          setShowConfirmModal(false);
+          return;
+        }
+        
+        const payload = {
+          action_type: 'RECEIVE',
+          commitment_ids: [commitment.id],
+          payload: {
+            line_item_id: commitment.order_line_item_ids[0],
+            qty_received: qty,
+            location_id: formData.location_id || null
+          },
+          dry_run: false
+        };
+        
+        console.log("RECEIVE_SUBMIT_PAYLOAD", payload);
+        window.__lastReceiveDebug.payload = payload;
+        
+        supplyAction.mutate(payload, {
+          onSuccess: (res) => {
+            console.log("RECEIVE_SUBMIT_OK", res);
+          },
+          onError: (err) => {
+            console.error("RECEIVE_SUBMIT_ERR", err);
+            toast.error(err?.message || "Receive failed");
+            setShowConfirmModal(false);
+          }
+        });
+      } 
+      // Mode 2: Add General Stock (no commitment context)
+      else {
+        console.log("ADD_STOCK_PAYLOAD", { ...formData, quantity: qty });
+        window.__lastReceiveDebug.payload = { ...formData, quantity: qty };
+        
+        addStockMutation.mutate({ ...formData, quantity: qty });
+      }
+    } catch (err) {
+      console.error("RECEIVE_SUBMIT_EXCEPTION", err);
+      toast.error(err?.message || "Receive failed unexpectedly");
+      setShowConfirmModal(false);
     }
   };
 
