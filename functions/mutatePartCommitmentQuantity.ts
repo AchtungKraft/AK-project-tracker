@@ -404,17 +404,73 @@ async function executeIncreaseQty(base44, commitment, part, delta, reason, userI
     };
   }
   
-  // Call createScopeAddCommitment to create a new commitment
-  const scopeAddResult = await base44.asServiceRole.functions.invoke('createScopeAddCommitment', {
+  // Create scope addition commitment INLINE (avoid nested function call permission issues)
+  // Fetch part for pricing
+  const parts = await base44.asServiceRole.entities.Part.filter({ id: commitment.part_id });
+  const partForPricing = parts[0];
+  if (!partForPricing) throw new Error('Part not found for scope addition');
+  
+  // Get cost and retail
+  const unit_cost_snapshot = partForPricing.cost || 0;
+  let unit_retail_snapshot = 0;
+  const pricing_mode = partForPricing.pricing_mode || 'matrix';
+  if (pricing_mode === 'manual') {
+    unit_retail_snapshot = partForPricing.retail_override || 0;
+  } else {
+    unit_retail_snapshot = partForPricing.retail_matrix_price || 0;
+  }
+  
+  // Create the new commitment
+  const newCommitment = await base44.asServiceRole.entities.PartCommitment.create({
     project_id: commitment.project_id,
     part_id: commitment.part_id,
-    deltaQty: delta,
-    parent_commitment_id: commitment.id
+    required_total: delta,
+    reserved_from_stock: 0,
+    covered_from_po: 0,
+    qty_installed: 0,
+    invoiced_qty: 0,
+    invoiced_amount: 0,
+    billing_status: 'unbilled',
+    commitment_status: 'planned',
+    coverage_status: 'NOT_COVERED',
+    source_type: 'scope_addition',
+    parent_commitment_id: commitment.id,
+    allocation_source: 'manual_commitment',
+    unit_cost_snapshot,
+    unit_retail_snapshot,
+    planned_cost_total: unit_cost_snapshot * delta,
+    planned_retail_total: unit_retail_snapshot * delta,
+    qty_committed: delta,
+    qty_to_order: delta,
+    qty_ordered: 0,
+    qty_received: 0,
+    qty_reserved: 0,
+    qty_allocated: 0,
+    qty_cancelled: 0,
+    supply_source_type: 'VENDOR',
+    order_line_item_ids: [],
+    commitment_version: 1,
+    state_version: 0,
+    last_recomputed_at: new Date().toISOString(),
+    integrity_warning: false,
+    pricing_integrity_status: unit_cost_snapshot > 0 && unit_retail_snapshot > 0 ? 'ok' : 'estimated_cost',
+    invoice_override_approved: false,
+    scope_reduction_credit_created: false,
+    requires_prepay: false,
   });
   
-  if (scopeAddResult.data?.error) {
-    throw new Error(scopeAddResult.data.error);
-  }
+  const scopeAddResult = {
+    data: {
+      commitment_id: newCommitment.id,
+      commitment: newCommitment,
+      pricing: {
+        unit_cost_snapshot,
+        unit_retail_snapshot,
+        planned_cost_total: unit_cost_snapshot * delta,
+        planned_retail_total: unit_retail_snapshot * delta,
+      }
+    }
+  };
   
   // Create lifecycle event on PARENT commitment noting the scope addition
   await createLifecycleEvent(
