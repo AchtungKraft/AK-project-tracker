@@ -364,6 +364,9 @@ export default function ProjectSupplyManager() {
         
         // PART 3: Inventory location for expanded detail view
         inventory_location: item.inventory_location || item._raw?.inventory_location || null,
+        
+        // PO line item tracking for receive action
+        order_line_item_ids: item.order_line_item_ids || item._raw?.order_line_item_ids || [],
       };
     });
   }, [supplyItems, categoriesMap]);
