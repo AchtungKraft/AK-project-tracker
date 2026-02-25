@@ -571,6 +571,8 @@ Deno.serve(async (req) => {
       tab_counts: tabCounts,
       summary,
       categories: categories.filter(c => c.active !== false).map(c => ({ id: c.id, name: c.name, color: c.color })),
+      // DELTA MODEL: Include integrity warnings for legacy contamination detection
+      integrity_warnings: integrityWarnings.length > 0 ? integrityWarnings : null,
     });
 
   } catch (error) {
