@@ -937,6 +937,7 @@ export default function ProjectSupplyManager() {
             </TabsContent>
 
             <TabsContent value="receive" className="mt-4 space-y-4">
+              <SafeRenderBoundary context="Receive Tab">
               {/* Tab Header */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                 <div>
