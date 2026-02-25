@@ -15,7 +15,8 @@ import { toast } from "sonner";
 export default function SupplyIntegrityBanner({ 
   onGateStatusChange,
   showFixControls = true,
-  compact = false
+  compact = false,
+  projectId = null, // PHASE 2: Project-scoped gate check
 }) {
   const [isRunningNormalization, setIsRunningNormalization] = useState(false);
   const [normalizationReport, setNormalizationReport] = useState(null);
@@ -31,12 +32,44 @@ export default function SupplyIntegrityBanner({
     refetchOnWindowFocus: false,
   });
 
+  // PHASE 2: Project-scoped gate evaluation
+  // When projectId is provided, only disable actions if THIS project has integrity issues
+  // Global integrity issues in other projects should NOT block actions on unaffected projects
+  const isProjectAffected = React.useMemo(() => {
+    if (!projectId || !gateResult?.gates) return true; // No project context = use global result
+    
+    // Check if any violation specifically targets this project
+    const gates = gateResult.gates;
+    for (const [gateName, gate] of Object.entries(gates)) {
+      if (gate?.violations) {
+        for (const violation of gate.violations) {
+          // Check if violation has project-level samples
+          if (violation.sample) {
+            const samples = Array.isArray(violation.sample) ? violation.sample : [violation.sample];
+            for (const sample of samples) {
+              if (sample?.project_id === projectId) {
+                return true; // This project IS affected
+              }
+            }
+          }
+        }
+      }
+    }
+    return false; // This project is NOT affected by any violations
+  }, [projectId, gateResult?.gates]);
+
   // Notify parent of gate status changes
+  // PHASE 2: If project-scoped and not affected, allow actions even if global gate fails
   React.useEffect(() => {
     if (gateResult && onGateStatusChange) {
-      onGateStatusChange(gateResult.execution_surface_ready);
+      if (projectId && !isProjectAffected) {
+        // This project is clean - enable actions
+        onGateStatusChange(true);
+      } else {
+        onGateStatusChange(gateResult.execution_surface_ready);
+      }
     }
-  }, [gateResult?.execution_surface_ready, onGateStatusChange]);
+  }, [gateResult?.execution_surface_ready, onGateStatusChange, projectId, isProjectAffected]);
 
   const handleDryRun = async () => {
     setIsRunningNormalization(true);
@@ -75,8 +108,9 @@ export default function SupplyIntegrityBanner({
     );
   }
 
-  // Gate passed - NO success badge (AK Industrial Mode: no green success badges)
-  if (gateResult?.execution_surface_ready) {
+  // Gate passed OR this project is not affected - NO banner needed
+  // PHASE 2: Project-scoped check - if this project has no violations, don't show warning
+  if (gateResult?.execution_surface_ready || (projectId && !isProjectAffected)) {
     return null;
   }
 
