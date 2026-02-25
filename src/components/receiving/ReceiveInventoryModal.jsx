@@ -95,9 +95,16 @@ export default function ReceiveInventoryModal({
   const supplyAction = useSupplyAction({
     showSuccessToast: false, // We handle toast manually
     onSuccess: (result) => {
+      console.log("[ReceiveInventoryModal] supplyAction.onSuccess", result);
       setShowConfirmModal(false);
-      toast.success(`${formData.quantity} units added to inventory`);
-      if (onSuccess) onSuccess(result);
+      toast.success(`${formData.quantity} units received successfully`);
+      if (onSuccess) {
+        try {
+          onSuccess(result);
+        } catch (err) {
+          console.error("[ReceiveInventoryModal] onSuccess callback error:", err);
+        }
+      }
       handleClose();
     }
   });
