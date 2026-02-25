@@ -1211,20 +1211,25 @@ export default function ProjectSupplyManager() {
           <ReceiveInventoryModal
             open={true}
             commitment={{
-              id: receiveModal.id,
+              id: receiveModal.id || receiveModal.commitment_id,
               commitment_status: receiveModal.commitment_status,
               required_total: receiveModal.required_total,
               reserved_from_stock: receiveModal.reserved_from_stock,
               covered_from_po: receiveModal.covered_from_po,
               on_order_qty: receiveModal.on_order_qty,
-              order_line_item_ids: receiveModal.order_line_item_ids || [],
+              // CRITICAL: Try all possible paths for order_line_item_ids
+              order_line_item_ids: receiveModal.order_line_item_ids || receiveModal._raw?.order_line_item_ids || [],
               part_id: receiveModal.part_id,
               project_id: receiveModal.project_id || projectId,
             }}
             part={receiveModal.part}
             onClose={() => setReceiveModal(null)}
             onSuccess={() => {
-              invalidateSupply();
+              try {
+                invalidateSupply();
+              } catch (err) {
+                console.error("[PSM] invalidateSupply error (non-fatal):", err);
+              }
               setReceiveModal(null);
             }}
           />
