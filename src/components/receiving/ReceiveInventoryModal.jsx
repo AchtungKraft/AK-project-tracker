@@ -139,18 +139,32 @@ export default function ReceiveInventoryModal({
       return response.data;
     },
     onSuccess: async (result) => {
+      console.log("[ReceiveInventoryModal] addStockMutation.onSuccess", result);
+      
       // PHASE 17: Deterministic refresh
-      const context = extractRefreshContext(result, { part_id: result.part_id });
-      await forceAppRefresh(queryClient, context);
+      try {
+        const context = extractRefreshContext(result, { part_id: result?.part_id || part?.id });
+        await forceAppRefresh(queryClient, context);
+      } catch (refreshErr) {
+        console.error("[ReceiveInventoryModal] Refresh error (non-fatal):", refreshErr);
+      }
       
       toast.success(`${formData.quantity} units added to inventory (auto-allocated to open needs)`);
       setShowConfirmModal(false);
       
-      if (onSuccess) onSuccess(result);
+      if (onSuccess) {
+        try {
+          onSuccess(result);
+        } catch (err) {
+          console.error("[ReceiveInventoryModal] onSuccess callback error:", err);
+        }
+      }
       handleClose();
     },
     onError: (error) => {
-      toast.error("Failed to add inventory: " + error.message);
+      console.error("[ReceiveInventoryModal] addStockMutation.onError", error);
+      toast.error("Failed to add inventory: " + (error?.message || "Unknown error"));
+      setShowConfirmModal(false);
     }
   });
   
