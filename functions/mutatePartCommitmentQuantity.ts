@@ -374,10 +374,19 @@ async function createLifecycleEvent(base44, commitment, eventType, oldValues, ne
  * 
  * This eliminates lifecycle contamination where invoiced/installed/ordered
  * quantities become misaligned with required_total.
+ * 
+ * ENFORCEMENT: ALL positive deltas create scope additions, regardless of lifecycle progress.
  */
 async function executeIncreaseQty(base44, commitment, part, delta, reason, userId, dryRun = false) {
-  // DELTA MODEL ENFORCEMENT: No upward mutation allowed
+  // DELTA MODEL ENFORCEMENT: No upward mutation allowed - EVER
   // All positive deltas create a new scope addition commitment
+  
+  console.log(`[DELTA_MODEL] INCREASE_QTY intercepted - creating scope addition instead of mutating`, {
+    commitment_id: commitment.id,
+    current_required: commitment.required_total || commitment.qty_committed,
+    delta,
+    dry_run: dryRun
+  });
   
   if (dryRun) {
     return {
@@ -386,11 +395,12 @@ async function executeIncreaseQty(base44, commitment, part, delta, reason, userI
       commitment_id: commitment.id,
       delta,
       action: 'WILL_CREATE_SCOPE_ADDITION',
-      message: `Will create new scope addition commitment for ${delta} units (delta model enforced)`,
+      message: `Will create new scope addition commitment for ${delta} units (delta model enforced - no mutation allowed)`,
       parent_commitment_id: commitment.id,
       project_id: commitment.project_id,
       part_id: commitment.part_id,
-      part_name: part?.part_name
+      part_name: part?.part_name,
+      model: 'DELTA_COMMITMENT'
     };
   }
   
@@ -421,6 +431,12 @@ async function executeIncreaseQty(base44, commitment, part, delta, reason, userI
     reason || `Scope addition: +${delta} units`
   );
   
+  console.log(`[DELTA_MODEL] Scope addition created successfully`, {
+    parent_commitment_id: commitment.id,
+    new_commitment_id: scopeAddResult.data.commitment_id,
+    delta
+  });
+  
   return {
     success: true,
     action: 'SCOPE_ADDITION_CREATED',
@@ -429,8 +445,9 @@ async function executeIncreaseQty(base44, commitment, part, delta, reason, userI
     delta_qty: delta,
     new_commitment: scopeAddResult.data.commitment,
     pricing: scopeAddResult.data.pricing,
-    message: `Created scope addition commitment for ${delta} units. Parent commitment unchanged.`,
-    warnings: []
+    message: `Created scope addition commitment for ${delta} units. Parent commitment unchanged (delta model enforced).`,
+    warnings: [],
+    model: 'DELTA_COMMITMENT'
   };
 }
 
