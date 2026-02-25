@@ -138,6 +138,25 @@ Deno.serve(async (req) => {
 
     const created = await base44.asServiceRole.entities.PartCommitment.create(newCommitment);
 
+    // ========== PHASE 6: AUDIT LOGGING ==========
+    // Track scope additions for traceability
+    await base44.asServiceRole.entities.CommitmentAuditLog.create({
+      commitment_id: created.id,
+      action_type: 'SCOPE_ADD',
+      actor_email: user.email,
+      previous_state: null,
+      new_state: JSON.stringify({
+        required_total: deltaQty,
+        unit_cost_snapshot,
+        unit_retail_snapshot
+      }),
+      delta_qty: deltaQty,
+      parent_commitment_id: parent_commitment_id || null,
+      created_commitment_id: created.id,
+      timestamp: new Date().toISOString(),
+      notes: `Scope addition: +${deltaQty} x ${part.part_name}`
+    });
+
     console.log(`[createScopeAddCommitment] Created scope addition commitment:`, {
       commitment_id: created.id,
       project_id,
