@@ -211,46 +211,81 @@ export function usePOReceivingView(orderId = null, filters = {}) {
  * 
  * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh.
  */
-export function useSupplyAction() {
+export function useSupplyAction(options = {}) {
   const queryClient = useQueryClient();
+  const { showSuccessToast = true, onSuccess: customOnSuccess } = options;
 
   const mutation = useMutation({
     mutationFn: async ({ action_type, commitment_ids, payload, dry_run = false }) => {
+      console.log("[useSupplyAction] START", { action_type, commitment_ids, payload, dry_run });
+      
+      // PHASE: Validate inputs before calling backend
+      if (!action_type) {
+        throw new Error("action_type is required");
+      }
+      
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type,
-        commitment_ids,
-        payload,
+        commitment_ids: commitment_ids || [],
+        payload: payload || {},
         dry_run,
       });
+      
+      console.log("[useSupplyAction] RESPONSE", response?.data);
+      
       if (response.data?.error) {
         throw new Error(response.data.error);
       }
       return { ...response.data, _action_type: action_type, _payload: payload };
     },
     onSuccess: async (data, variables) => {
+      console.log("[useSupplyAction] SUCCESS", { action: variables.action_type, data });
+      
       // PHASE 17: Use forceAppRefresh for deterministic refresh
       if (!variables.dry_run) {
-        const context = extractRefreshContext(data, variables.payload);
-        await forceAppRefresh(queryClient, context);
+        try {
+          const context = extractRefreshContext(data, variables.payload);
+          await forceAppRefresh(queryClient, context);
+        } catch (refreshErr) {
+          console.error("[useSupplyAction] Refresh error (non-fatal):", refreshErr);
+        }
         
         // PHASE 9I: Show toast for auto-reservation
-        if (data.toast_notification) {
-          // Import toast dynamically to avoid circular deps
+        if (showSuccessToast && data.toast_notification) {
           import('sonner').then(({ toast }) => {
             toast.success(data.toast_notification.message);
           });
         }
       }
+      
+      // Call custom onSuccess if provided
+      if (customOnSuccess) {
+        try {
+          customOnSuccess(data);
+        } catch (callbackErr) {
+          console.error("[useSupplyAction] onSuccess callback error:", callbackErr);
+        }
+      }
+    },
+    onError: (error, variables) => {
+      console.error("[useSupplyAction] ERROR", { 
+        action: variables.action_type, 
+        error: error?.message || error,
+        payload: variables.payload 
+      });
     },
   });
 
   return {
     execute: mutation.mutateAsync,
     executeSync: mutation.mutate,
+    mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
     isError: mutation.isError,
     error: mutation.error,
     data: mutation.data,
+    reset: mutation.reset,
   };
 }
 
