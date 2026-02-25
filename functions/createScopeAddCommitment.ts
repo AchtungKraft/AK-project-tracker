@@ -143,7 +143,9 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.CommitmentAuditLog.create({
       commitment_id: created.id,
       action_type: 'SCOPE_ADD',
+      trigger_source: 'scope_add',
       actor_email: user.email,
+      triggered_by: user.email,
       previous_state: null,
       new_state: JSON.stringify({
         required_total: deltaQty,
