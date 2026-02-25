@@ -983,6 +983,7 @@ export default function ProjectSupplyManager() {
                 vendorsMap={vendorsMap}
                 tab="receive"
               />
+              </SafeRenderBoundary>
             </TabsContent>
 
             <TabsContent value="install" className="mt-4 space-y-4">
