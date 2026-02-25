@@ -8,6 +8,19 @@
  * No legacy fallbacks. The caller MUST provide canonical fields.
  * 
  * ============================================================================
+ * CRITICAL: ELIGIBILITY IS PER COMMITMENT ROW. NEVER AGGREGATE.
+ * ============================================================================
+ * 
+ * Each commitment is an atomic lifecycle unit. Eligibility calculations:
+ * - remainingToBill = required_total - invoiced_qty (THIS ROW ONLY)
+ * - install eligibility = reserved_from_stock - qty_installed (THIS ROW ONLY)
+ * 
+ * MUST NOT reference:
+ * - sibling commitments
+ * - aggregated required_total across commitments
+ * - Part-level quantities (except for informational display)
+ * 
+ * ============================================================================
  * CRITICAL ELIGIBILITY RULES (Phase 7):
  * ============================================================================
  * 
@@ -162,9 +175,13 @@ export function getAllowedCommitmentActions(commitment) {
     actions.cancelRequiresInventoryReturn = true;
   }
 
+  // ============================================================================
+  // ELIGIBILITY IS PER COMMITMENT ROW. NEVER AGGREGATE.
+  // ============================================================================
   // BILLING ACTIONS - CANONICAL RULE
-  // Invoice eligibility depends ONLY on: qty_required - invoiced_qty > 0
+  // Invoice eligibility depends ONLY on: required_total - invoiced_qty > 0 (THIS ROW)
   // It does NOT depend on: paid status, credit, install status, stock
+  // It does NOT reference: sibling commitments, Part-level totals, aggregated required_total
   // The old check (!hasBeenBilled) was too restrictive - it blocked items
   // that were previously billed but have remaining qty to bill
   const commitmentInvoicedQty = invoiced_qty;

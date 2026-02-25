@@ -219,6 +219,39 @@ Deno.serve(async (req) => {
       };
     };
 
+    // ============================================================================
+    // PHASE: DELTA COMMITMENT MODEL - INTEGRITY ASSERTION
+    // Detect legacy contamination where required_total was mutated after lifecycle progress
+    // ============================================================================
+    const integrityWarnings = [];
+    for (const c of commitments) {
+      if (c.commitment_status === 'cancelled') continue;
+      
+      // If source_type !== "scope_addition" but commitment_version > 1, check for suspicious patterns
+      if (c.source_type !== 'scope_addition' && (c.commitment_version ?? 1) > 1) {
+        // Check if required_total > original estimates (legacy contamination signal)
+        const required = c.required_total ?? c.qty_committed ?? 0;
+        const invoiced = c.invoiced_qty ?? 0;
+        const installed = c.qty_installed ?? 0;
+        const covered = c.covered_from_po ?? 0;
+        
+        // Warn if required_total exceeds invoiced/installed/covered (evidence of upward mutation)
+        if (invoiced > 0 && required > invoiced) {
+          integrityWarnings.push({
+            commitment_id: c.id,
+            part_id: c.part_id,
+            warning_type: 'LEGACY_UPWARD_MUTATION_SUSPECTED',
+            message: `Commitment has invoiced_qty=${invoiced} but required_total=${required} (v${c.commitment_version})`,
+            severity: 'warning'
+          });
+        }
+      }
+    }
+    
+    if (integrityWarnings.length > 0) {
+      console.warn(`[DELTA_MODEL] ${integrityWarnings.length} integrity warnings detected for project ${project_id}`, integrityWarnings);
+    }
+
     // Build SupplyCommitmentViewModel for each commitment
     const viewModels = commitments
       .filter(c => c.commitment_status !== 'cancelled')
