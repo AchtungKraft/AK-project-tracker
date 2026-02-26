@@ -124,207 +124,210 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Task Details</DialogTitle>
-          <DialogDescription>
-            View and edit task information.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Task Details</DialogTitle>
+            <DialogDescription>
+              View and edit task information.
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div>
-            <Label>Task Name</Label>
-            <Input
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Task name"
-              className="bg-gray-800 border-gray-700 text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <Label>Description</Label>
-            <Textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Task description"
-              className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div>
-              <Label>Category</Label>
-              <Select
-                value={formData.category_id}
-                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Task Name</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Task name"
+                className="bg-gray-800 border-gray-700 text-white"
+                required
+              />
             </div>
 
             <div>
-              <Label>Status</Label>
-              <Select
-                value={formData.status_id}
-                onValueChange={(value) => setFormData({ ...formData, status_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {taskStatuses.map(status => (
-                    <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Description</Label>
+              <Textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Task description"
+                className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
+              />
             </div>
-          </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label>Assign To</Label>
-              {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAssignToMe}
-                  className="border-gray-700 text-xs gap-1"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Category</Label>
+                <Select
+                  value={formData.category_id}
+                  onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                 >
-                  <UserPlus className="w-3 h-3" />
-                  Assign to Me
-                </Button>
-              )}
-            </div>
-            <Select
-              value={formData.assigned_team_member_id}
-              onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
-            >
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                <SelectValue placeholder="Assign to team member" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeTeamMembers.map(member => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name} {member.team_role && `(${member.team_role})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeCategories.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Start Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.start_date ? new Date(formData.start_date) : undefined}
-                    onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div>
-              <Label>Due Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start bg-gray-800 border-gray-700 text-white"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={formData.due_date ? new Date(formData.due_date) : undefined}
-                    onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
-            <div className="flex justify-between">
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Task
-                  </>
-                )}
-              </Button>
-
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-red-600 hover:bg-red-700"
-                  disabled={updateMutation.isPending}
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={formData.status_id}
+                  onValueChange={(value) => setFormData({ ...formData, status_id: value })}
                 >
-                  {updateMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save Changes'
-                  )}
-                </Button>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskStatuses.map(status => (
+                      <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <Button
-              type="button"
-              onClick={onClose}
-              variant="outline"
-              className="w-full border-gray-700"
-            >
-              Close
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
 
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>Assign To</Label>
+                {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAssignToMe}
+                    className="border-gray-700 text-xs gap-1"
+                  >
+                    <UserPlus className="w-3 h-3" />
+                    Assign to Me
+                  </Button>
+                )}
+              </div>
+              <Select
+                value={formData.assigned_team_member_id}
+                onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="Assign to team member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeTeamMembers.map(member => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.full_name} {member.team_role && `(${member.team_role})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Start Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.start_date ? new Date(formData.start_date) : undefined}
+                      onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <Label>Due Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start bg-gray-800 border-gray-700 text-white"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.due_date ? new Date(formData.due_date) : undefined}
+                      onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
+              <div className="flex justify-between">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Task
+                    </>
+                  )}
+                </Button>
+
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={onClose}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={updateMutation.isPending}
+                  >
+                    {updateMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="outline"
+                className="w-full border-gray-700"
+              >
+                Close
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* IMPORTANT: Rendered as sibling OUTSIDE the Radix Dialog to escape focus trap */}
       <DeleteTaskConfirm
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -332,6 +335,6 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
         taskName={task?.name}
         isLoading={deleteMutation.isPending}
       />
-    </Dialog>
+    </>
   );
 }
