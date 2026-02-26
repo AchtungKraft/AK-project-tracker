@@ -330,7 +330,7 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
 
       {/* AlertDialog as sibling - Radix handles stacking correctly */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white z-[100]">
+        <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Task?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
