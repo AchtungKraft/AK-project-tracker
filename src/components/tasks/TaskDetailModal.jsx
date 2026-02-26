@@ -12,10 +12,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2, Trash2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import DeleteTaskConfirm from "@/components/tasks/DeleteTaskConfirm";
 
 export default function TaskDetailModal({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
