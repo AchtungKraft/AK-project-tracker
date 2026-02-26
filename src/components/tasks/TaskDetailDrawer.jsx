@@ -246,8 +246,22 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   return (
     <>
-    <Sheet open onOpenChange={onClose} modal={!showDeleteConfirm}>
-      <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto">
+    <Sheet 
+      open={true} 
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !showDeleteConfirm) onClose();
+      }} 
+      modal={!showDeleteConfirm}
+    >
+      <SheetContent 
+        className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto"
+        onInteractOutside={(e) => {
+          if (showDeleteConfirm) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (showDeleteConfirm) e.preventDefault();
+        }}
+      >
         <SheetHeader className="border-b border-gray-700 pb-4">
           <SheetTitle className="text-white text-xl">{task?.name}</SheetTitle>
           {project && (
