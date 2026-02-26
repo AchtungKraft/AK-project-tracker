@@ -20,9 +20,18 @@ import TaskCommentsSection from "./TaskCommentsSection";
 import TaskPartsSection from "./TaskPartsSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
-import DeleteTaskConfirm from "./DeleteTaskConfirm";
 import TaskActionFooter from "./TaskActionFooter";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function ClientFeedbackLinks({ taskId }) {
   const navigate = useNavigate();
@@ -197,6 +206,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+      setShowDeleteConfirm(false);
       toast.success('Task deleted successfully');
       onClose();
     },
@@ -234,7 +245,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const assignedMember = teamMembers.find(m => m.id === task?.assigned_team_member_id);
 
   return (
-    <Sheet open onOpenChange={onClose}>
+    <>
+    <Sheet open onOpenChange={onClose} modal={!showDeleteConfirm}>
       <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader className="border-b border-gray-700 pb-4">
           <SheetTitle className="text-white text-xl">{task?.name}</SheetTitle>
@@ -459,15 +471,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
         </div>
 
-        {/* Delete Confirmation Dialog */}
-        <DeleteTaskConfirm
-          isOpen={showDeleteConfirm}
-          onClose={() => setShowDeleteConfirm(false)}
-          onConfirm={handleConfirmDelete}
-          taskName={task?.name}
-          isLoading={deleteMutation.isPending}
-        />
-
         {/* Unified Sticky Footer - Using TaskActionFooter */}
         <TaskActionFooter
           mode={editing ? 'edit' : 'view'}
@@ -493,5 +496,36 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         />
       </SheetContent>
     </Sheet>
+
+    {/* Delete Confirmation - Radix AlertDialog sibling to Sheet */}
+    <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Task?</AlertDialogTitle>
+          <AlertDialogDescription className="text-gray-400">
+            Delete "{task?.name || 'this task'}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel 
+            disabled={deleteMutation.isPending}
+            className="border-gray-700 text-white hover:bg-gray-800"
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={deleteMutation.isPending}
+            onClick={(e) => {
+              e.preventDefault();
+              deleteMutation.mutate();
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete Task'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
