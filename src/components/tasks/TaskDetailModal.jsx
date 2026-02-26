@@ -323,6 +323,14 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
             </Button>
           </div>
         </form>
+
+        <DeleteTaskConfirm
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={confirmDelete}
+          taskName={task?.name}
+          isLoading={deleteMutation.isPending}
+        />
       </DialogContent>
     </Dialog>
   );
