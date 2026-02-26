@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,12 +13,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2, Trash2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import DeleteTaskConfirm from "@/components/tasks/DeleteTaskConfirm";
 
 export default function TaskDetailModal({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -94,7 +94,11 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+      }
       toast.success('Task deleted successfully');
+      setConfirmOpen(false);
       onClose();
     },
     onError: () => {
@@ -108,11 +112,7 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   };
 
   const handleDelete = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = () => {
-    deleteMutation.mutate();
+    setConfirmOpen(true);
   };
 
   const handleAssignToMe = () => {
@@ -125,7 +125,8 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
 
   return (
     <>
-      <Dialog open onOpenChange={onClose}>
+      {/* modal={false} when confirm is open to prevent focus trap blocking AlertDialog */}
+      <Dialog open onOpenChange={onClose} modal={!confirmOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Task Details</DialogTitle>
@@ -327,14 +328,42 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
         </DialogContent>
       </Dialog>
 
-      {/* IMPORTANT: Rendered as sibling OUTSIDE the Radix Dialog to escape focus trap */}
-      <DeleteTaskConfirm
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={confirmDelete}
-        taskName={task?.name}
-        isLoading={deleteMutation.isPending}
-      />
+      {/* AlertDialog as sibling - Radix handles stacking correctly */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white z-[100]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Task?</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              Delete "{task?.name || 'this task'}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              disabled={deleteMutation.isPending}
+              className="border-gray-700 text-white hover:bg-gray-800"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteMutation.mutate();
+              }}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Task'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
