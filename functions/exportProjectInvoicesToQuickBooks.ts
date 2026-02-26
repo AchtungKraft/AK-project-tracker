@@ -55,16 +55,21 @@ Deno.serve(async (req) => {
     // ============================================
     // STEP 1: Fetch Invoice Data via Canonical Read Model
     // ============================================
-    const response = await base44.functions.invoke("getProjectInvoicesView", {
+    const inv = await base44.functions.invoke("getProjectInvoicesView", {
       project_id
     });
     
-    if (!response || !response.success) {
+    // Fix invoke response parsing: actual data is in inv.data
+    const payload = inv?.data;
+    
+    if (payload?.success === false) {
       return Response.json({
         success: false,
-        error: response?.error || 'Failed to fetch invoice data',
+        error: payload?.error || 'Failed to fetch invoice data',
       });
     }
+
+    const invoices = payload?.invoices || [];
 
     // Fetch project name separately (not in read model response)
     const projects = await base44.entities.Project.filter({ id: project_id });
@@ -72,7 +77,7 @@ Deno.serve(async (req) => {
     const projectName = project?.name || 'Unknown Project';
 
     const data = {
-      invoices: response.invoices || [],
+      invoices,
       project_name: projectName,
     };
 
@@ -195,9 +200,9 @@ Deno.serve(async (req) => {
         // Accumulate total retail sum
         totalRetailSum += lineTotal;
 
-        // Cost calculations
-        const cost = Number(line.unit_cost_snapshot ?? 0);
-        const costExtended = cost * qty;
+        // Cost calculations - prefer unit_cost_snapshot, fallback to unit_cost
+        const unitCost = Number(line.unit_cost_snapshot ?? line.unit_cost ?? 0);
+        const costExtended = unitCost * qty;
         totalCostSum += costExtended;
 
         if (costExtended < 0) {
@@ -210,7 +215,7 @@ Deno.serve(async (req) => {
         // Currency formatting: 2 decimal fixed
         const rateFormatted = rate.toFixed(2);
         const amountFormatted = lineTotal.toFixed(2);
-        const costFormatted = cost.toFixed(2);
+        const costFormatted = unitCost.toFixed(2);
         const costExtendedFormatted = costExtended.toFixed(2);
 
         rows.push(
@@ -237,6 +242,7 @@ Deno.serve(async (req) => {
 
     return Response.json({
       success: true,
+      export_version: "QB_EXPORT_COST_V2",
       file_name: fileName,
       mime_type: 'text/csv',
       content: rows.join('\n'),

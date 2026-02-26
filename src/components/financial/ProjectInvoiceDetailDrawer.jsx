@@ -231,11 +231,16 @@ export default function ProjectInvoiceDetailDrawer({
         return;
       }
 
-      // DEV Log
+      // DEV Log - verify export version and CSV header
+      const csvLines = result.data.content?.split('\n') || [];
+      const headerRow = csvLines[3] || '';  // Row index 3 is the column header
       console.log('[QB EXPORT]', {
+        export_version: result.data.export_version,
         mode: 'single',
         invoice_count: result.data.invoice_count,
         line_count: result.data.line_count,
+        total_cost_sum: result.data.total_cost_sum,
+        csv_header_preview: headerRow.substring(0, 80),
       });
 
       const blob = new Blob([result.data.content], { type: result.data.mime_type });
