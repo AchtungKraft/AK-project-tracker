@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
             category_name: category?.name || 'Uncategorized',
             // Pricing fields from commitment snapshot
             unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
+            unit_cost_snapshot: commitment.unit_cost_snapshot ?? 0,
           };
         }
       } else {
@@ -122,6 +123,7 @@ Deno.serve(async (req) => {
           vendor_part_number: '',
           category_name: line.type === 'outside_cost' ? 'Outside Costs' : 'Manual',
           unit_retail_snapshot: line.unit_price ?? 0,
+          unit_cost_snapshot: 0,
         };
       }
       
