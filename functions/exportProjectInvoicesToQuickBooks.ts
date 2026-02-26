@@ -21,7 +21,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
-  console.log("EXPORT VERSION: WITH COST COLUMNS V2");
+  console.log("RUNNING EXPORT FUNCTION: QB_EXPORT_COST_V2");
   
   // CORS
   if (req.method === 'OPTIONS') {
@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await req.json();
-    const { project_id, invoice_ids, mode = 'all' } = payload;
+    const reqPayload = await req.json();
+    const { project_id, invoice_ids, mode = 'all' } = reqPayload;
 
     if (!project_id) {
       return Response.json({ error: 'project_id is required' }, { status: 400 });
@@ -55,21 +55,21 @@ Deno.serve(async (req) => {
     // ============================================
     // STEP 1: Fetch Invoice Data via Canonical Read Model
     // ============================================
-    const inv = await base44.functions.invoke("getProjectInvoicesView", {
+    const invokeResult = await base44.functions.invoke("getProjectInvoicesView", {
       project_id
     });
     
-    // Fix invoke response parsing: actual data is in inv.data
-    const payload = inv?.data;
+    // Fix invoke response parsing: actual data is in invokeResult.data
+    const payload = invokeResult?.data;
     
-    if (payload?.success === false) {
+    if (!payload || payload.success !== true) {
       return Response.json({
         success: false,
-        error: payload?.error || 'Failed to fetch invoice data',
+        error: payload?.error || 'Failed to fetch invoice read model',
       });
     }
 
-    const invoices = payload?.invoices || [];
+    const invoices = payload.invoices || [];
 
     // Fetch project name separately (not in read model response)
     const projects = await base44.entities.Project.filter({ id: project_id });
@@ -170,6 +170,11 @@ Deno.serve(async (req) => {
     // Column header
     rows.push('Product/Service,Description,Qty,Rate,Amount,Part Cost,Part Cost Extended');
 
+    // HARD RUNTIME ASSERTION: Verify cost columns in header
+    if (!rows[3].includes("Part Cost Extended")) {
+      throw new Error("COST COLUMNS MISSING FROM HEADER BUILD");
+    }
+
     // Invoice lines
     for (const invoice of exportInvoices) {
       const lines = invoice.lines || [];
@@ -243,6 +248,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       export_version: "QB_EXPORT_COST_V2",
+      csv_header: rows[3],
       file_name: fileName,
       mime_type: 'text/csv',
       content: rows.join('\n'),
