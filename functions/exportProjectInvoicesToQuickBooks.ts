@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
             vendor_part_number: part?.vendor_part_number || '',
             category_name: category?.name || 'Uncategorized',
             unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
+            unit_cost_snapshot: commitment.unit_cost_snapshot ?? 0,
           };
         }
       } else {
@@ -122,6 +123,7 @@ Deno.serve(async (req) => {
           vendor_part_number: '',
           category_name: line.type === 'outside_cost' ? 'Outside Costs' : 'Manual',
           unit_retail_snapshot: line.unit_price ?? 0,
+          unit_cost_snapshot: 0,
         };
       }
 
@@ -226,7 +228,7 @@ Deno.serve(async (req) => {
     rows.push('');
 
     // Column header
-    rows.push('Product/Service,Description,Qty,Rate,Amount');
+    rows.push('Product/Service,Description,Qty,Rate,Amount,Part Cost,Part Cost Extended');
 
     // Invoice lines
     for (const invoice of exportInvoices) {
@@ -265,8 +267,19 @@ Deno.serve(async (req) => {
         const rateFormatted = rate.toFixed(2);
         const amountFormatted = lineTotal.toFixed(2);
 
+        // Cost calculations
+        const cost = Number(line.unit_cost_snapshot) || 0;
+        const costExtended = qty * cost;
+
+        if (costExtended < 0) {
+          throw new Error(`Invalid cost calculation for ${partName}`);
+        }
+
+        const costFormatted = cost.toFixed(2);
+        const costExtendedFormatted = costExtended.toFixed(2);
+
         rows.push(
-          `Build_Parts,"${escapedDescription}",${qty},${rateFormatted},${amountFormatted}`
+          `Build_Parts,"${escapedDescription}",${qty},${rateFormatted},${amountFormatted},${costFormatted},${costExtendedFormatted}`
         );
       }
     }
