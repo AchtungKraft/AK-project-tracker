@@ -18,6 +18,17 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // DEBUG: Log the topmost element at click location when confirm is open
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const handler = (e) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      console.log("TOP_ELEMENT_AT_CLICK", el, el?.className, el?.tagName);
+    };
+    window.addEventListener("pointerdown", handler, true);
+    return () => window.removeEventListener("pointerdown", handler, true);
+  }, [confirmOpen]);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -331,6 +342,14 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
       {/* AlertDialog as sibling - Radix handles stacking correctly */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
+          {/* DEBUG: Click test button */}
+          <button
+            type="button"
+            onClick={() => console.log("CONFIRM_CONTENT_CLICKED")}
+            className="px-3 py-2 border border-white mb-2"
+          >
+            DEBUG CLICK TEST
+          </button>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Task?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
