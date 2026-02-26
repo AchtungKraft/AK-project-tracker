@@ -21,6 +21,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
+  console.log("EXPORT VERSION: WITH COST COLUMNS V2");
+  
   // CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -51,94 +53,26 @@ Deno.serve(async (req) => {
     const exportTimestamp = new Date().toISOString();
 
     // ============================================
-    // STEP 1: Fetch Invoice Data Directly (inline read model)
+    // STEP 1: Fetch Invoice Data via Canonical Read Model
     // ============================================
+    const response = await base44.functions.invoke("getProjectInvoicesView", {
+      project_id
+    });
     
-    // Fetch invoices for this project
-    const invoices = await base44.entities.ProjectInvoice.filter({ project_id }, '-created_date');
-    
-    if (!invoices || invoices.length === 0) {
+    if (!response || !response.success) {
       return Response.json({
         success: false,
-        error: 'No invoices found for this project',
+        error: response?.error || 'Failed to fetch invoice data',
       });
     }
 
-    // Fetch project for name
+    // Fetch project name separately (not in read model response)
     const projects = await base44.entities.Project.filter({ id: project_id });
     const project = projects[0];
     const projectName = project?.name || 'Unknown Project';
 
-    // Fetch all invoice lines
-    const invoiceIds = invoices.map(inv => inv.id);
-    const allLines = await base44.entities.ProjectInvoiceLine.list();
-    const relevantLines = allLines.filter(line => invoiceIds.includes(line.invoice_id));
-
-    // Fetch commitments for part details
-    const commitmentIds = [...new Set(relevantLines.filter(l => l.part_commitment_id).map(l => l.part_commitment_id))];
-    const commitments = commitmentIds.length > 0
-      ? await base44.entities.PartCommitment.list()
-      : [];
-    const commitmentMap = Object.fromEntries(commitments.map(c => [c.id, c]));
-
-    // Fetch parts for names
-    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
-    const parts = partIds.length > 0
-      ? await base44.entities.Part.list()
-      : [];
-    const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
-
-    // Fetch categories
-    const categories = await base44.entities.PartCategory.list();
-    const categoryMap = Object.fromEntries(categories.map(c => [c.id, c]));
-
-    // Build lines by invoice with enriched data
-    const linesByInvoice = {};
-    for (const line of relevantLines) {
-      if (!linesByInvoice[line.invoice_id]) {
-        linesByInvoice[line.invoice_id] = [];
-      }
-
-      let enrichedLine = { ...line };
-
-      if (line.part_commitment_id) {
-        const commitment = commitmentMap[line.part_commitment_id];
-        if (commitment) {
-          const part = partMap[commitment.part_id];
-          const category = part?.part_category_id ? categoryMap[part.part_category_id] : null;
-
-          enrichedLine = {
-            ...line,
-            part_name: part?.part_name || line.description || 'Unknown Part',
-            vendor_part_number: part?.vendor_part_number || '',
-            category_name: category?.name || 'Uncategorized',
-            unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
-            unit_cost_snapshot: commitment.unit_cost_snapshot ?? 0,
-          };
-        }
-      } else {
-        enrichedLine = {
-          ...line,
-          part_name: line.description || 'Manual Item',
-          vendor_part_number: '',
-          category_name: line.type === 'outside_cost' ? 'Outside Costs' : 'Manual',
-          unit_retail_snapshot: line.unit_price ?? 0,
-          unit_cost_snapshot: 0,
-        };
-      }
-
-      linesByInvoice[line.invoice_id].push(enrichedLine);
-    }
-
-    // Attach lines to invoices
-    const invoicesWithLines = invoices.map(inv => ({
-      ...inv,
-      lines: linesByInvoice[inv.id] || [],
-    }));
-
-    // Build data structure matching expected format
     const data = {
-      invoices: invoicesWithLines,
+      invoices: response.invoices || [],
       project_name: projectName,
     };
 
@@ -221,6 +155,7 @@ Deno.serve(async (req) => {
     // ============================================
     const rows = [];
     let totalRetailSum = 0;
+    let totalCostSum = 0;
 
     // Header block
     rows.push(`Project Name: ${data.project_name || 'Unknown Project'}`);
@@ -260,21 +195,21 @@ Deno.serve(async (req) => {
         // Accumulate total retail sum
         totalRetailSum += lineTotal;
 
+        // Cost calculations
+        const cost = Number(line.unit_cost_snapshot ?? 0);
+        const costExtended = cost * qty;
+        totalCostSum += costExtended;
+
+        if (costExtended < 0) {
+          throw new Error(`Invalid cost calculation for ${partName}`);
+        }
+
         // CSV escaping: escape internal quotes with double-quote, wrap in quotes
         const escapedDescription = descriptionRaw.replace(/"/g, '""');
 
         // Currency formatting: 2 decimal fixed
         const rateFormatted = rate.toFixed(2);
         const amountFormatted = lineTotal.toFixed(2);
-
-        // Cost calculations
-        const cost = Number(line.unit_cost_snapshot) || 0;
-        const costExtended = qty * cost;
-
-        if (costExtended < 0) {
-          throw new Error(`Invalid cost calculation for ${partName}`);
-        }
-
         const costFormatted = cost.toFixed(2);
         const costExtendedFormatted = costExtended.toFixed(2);
 
@@ -311,6 +246,7 @@ Deno.serve(async (req) => {
       project_id,
       export_timestamp: exportTimestamp,
       total_retail_sum: Number(totalRetailSum.toFixed(2)),
+      total_cost_sum: Number(totalCostSum.toFixed(2)),
     });
 
   } catch (error) {
