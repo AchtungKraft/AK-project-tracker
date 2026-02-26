@@ -108,9 +108,11 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
   };
 
   const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this task?')) {
-      deleteMutation.mutate();
-    }
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    deleteMutation.mutate();
   };
 
   const handleAssignToMe = () => {
