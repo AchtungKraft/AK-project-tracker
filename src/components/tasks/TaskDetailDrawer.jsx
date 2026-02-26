@@ -287,7 +287,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                         {parentCategories.map(parent => {
                           const children = activeCategories.filter(c => c.parent_id === parent.id);
                           return (
-                            <React.Fragment key={parent.id}>
+                            <div key={parent.id} className="contents">
                               <SelectItem value={parent.id}>
                                 <span style={{ color: parent.color }}>{parent.name}</span>
                               </SelectItem>
@@ -298,7 +298,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                                   </span>
                                 </SelectItem>
                               ))}
-                            </React.Fragment>
+                            </div>
                           );
                         })}
                       </SelectContent>
