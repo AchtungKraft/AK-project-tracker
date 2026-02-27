@@ -5,8 +5,8 @@
  * - This is the ONLY component allowed to call markInvoiceSent/markInvoicePaid
  * - Uses queryKeyFactories for all queries
  */
-import React, { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
   Sheet,
@@ -36,6 +36,8 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  Pencil,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -68,6 +70,11 @@ export default function ProjectInvoiceDetailDrawer({
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [paidAmount, setPaidAmount] = useState("");
 
+  // QB Info editing state
+  const [isEditingQB, setIsEditingQB] = useState(false);
+  const [qbDraft, setQbDraft] = useState({ qb_invoice_number: "", qb_invoice_date: "" });
+  const [qbError, setQbError] = useState(null);
+
   // Fetch invoice - uses factory key
   const { data: invoice, isLoading: loadingInvoice } = useQuery({
     queryKey: invoiceKeys.detail(normalizedInvoiceId),
@@ -89,6 +96,61 @@ export default function ProjectInvoiceDetailDrawer({
 
   // DETERMINISTIC: Normalize project ID from invoice
   const normalizedProjectId = invoice?.project_id ? String(invoice.project_id) : "";
+
+  // Reset QB draft state when invoice changes
+  useEffect(() => {
+    setIsEditingQB(false);
+    setQbError(null);
+    setQbDraft({
+      qb_invoice_number: invoice?.qb_invoice_number ?? "",
+      qb_invoice_date: invoice?.qb_invoice_date ?? "",
+    });
+  }, [invoice?.id]);
+
+  // QB Info mutation
+  const qbMutation = useMutation({
+    mutationFn: async (payload) => {
+      return base44.entities.ProjectInvoice.update(invoice.id, payload);
+    },
+    onSuccess: () => {
+      toast.success("QB info updated");
+      setIsEditingQB(false);
+      setQbError(null);
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.detail(normalizedInvoiceId) });
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.list(normalizedProjectId) });
+      queryClient.invalidateQueries({ queryKey: ['projectInvoicesView', normalizedProjectId] });
+      onUpdated?.();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update QB info");
+    },
+  });
+
+  const handleSaveQBInfo = () => {
+    const trimmedNumber = qbDraft.qb_invoice_number.trim();
+    
+    // Validation: if number is set, date is required
+    if (trimmedNumber && !qbDraft.qb_invoice_date) {
+      setQbError("QB date required when invoice # is set");
+      return;
+    }
+    
+    setQbError(null);
+    qbMutation.mutate({
+      qb_invoice_number: trimmedNumber || null,
+      qb_invoice_date: qbDraft.qb_invoice_date || null,
+    });
+  };
+
+  const handleCancelQBEdit = () => {
+    setIsEditingQB(false);
+    setQbError(null);
+    setQbDraft({
+      qb_invoice_number: invoice?.qb_invoice_number ?? "",
+      qb_invoice_date: invoice?.qb_invoice_date ?? "",
+    });
+  };
 
   // Fetch project
   const { data: project } = useQuery({
@@ -283,16 +345,91 @@ export default function ProjectInvoiceDetailDrawer({
                   <span className="text-gray-400">Type</span>
                   {getInvoiceTypeBadge(invoice.invoice_type)}
                 </div>
-                {invoice.qb_invoice_number && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">QB Invoice #</span>
-                    <span className="font-mono text-white">{invoice.qb_invoice_number}</span>
-                  </div>
-                )}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Project</span>
                   <span className="text-white">{project?.name || "—"}</span>
                 </div>
+              </div>
+
+              {/* QB Invoice Metadata */}
+              <div className="p-4 bg-gray-800/30 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-300">QuickBooks Info</h4>
+                  {!isEditingQB && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingQB(true)}
+                      className="h-7 px-2 text-gray-400 hover:text-white"
+                    >
+                      <Pencil className="w-3 h-3 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
+
+                {isEditingQB ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-400">QB Invoice #</Label>
+                      <Input
+                        value={qbDraft.qb_invoice_number}
+                        onChange={(e) => setQbDraft(prev => ({ ...prev, qb_invoice_number: e.target.value }))}
+                        placeholder="e.g., INV-001234"
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-400">QB Invoice Date</Label>
+                      <Input
+                        type="date"
+                        value={qbDraft.qb_invoice_date}
+                        onChange={(e) => setQbDraft(prev => ({ ...prev, qb_invoice_date: e.target.value }))}
+                        className="h-8"
+                      />
+                    </div>
+                    {qbError && (
+                      <p className="text-xs text-red-400">{qbError}</p>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveQBInfo}
+                        disabled={qbMutation.isPending}
+                        className="h-7 bg-purple-600 hover:bg-purple-700"
+                      >
+                        {qbMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCancelQBEdit}
+                        disabled={qbMutation.isPending}
+                        className="h-7"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">QB Invoice #</span>
+                      <span className="font-mono text-white text-sm">
+                        {invoice.qb_invoice_number || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">QB Invoice Date</span>
+                      <span className="text-white text-sm">
+                        {invoice.qb_invoice_date
+                          ? format(parseISO(invoice.qb_invoice_date), "MMM d, yyyy")
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Dates */}
