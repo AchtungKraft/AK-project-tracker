@@ -170,15 +170,10 @@ const NeedsAttentionSection = ({
               colorClass="bg-blue-500/30" 
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-              {client_replied.slice(0, 6).map(item => (
+              {client_replied.map(item => (
                 <RequestCard key={item.request.id} item={item} />
               ))}
             </div>
-            {client_replied.length > 6 && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                +{client_replied.length - 6} more client replies
-              </p>
-            )}
           </div>
         )}
 
@@ -191,15 +186,10 @@ const NeedsAttentionSection = ({
               colorClass="bg-red-500/30" 
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-              {overdue.slice(0, 3).map(item => (
+              {overdue.map(item => (
                 <RequestCard key={item.request.id} item={item} />
               ))}
             </div>
-            {overdue.length > 3 && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                +{overdue.length - 3} more overdue items
-              </p>
-            )}
           </div>
         )}
 
@@ -212,15 +202,10 @@ const NeedsAttentionSection = ({
               colorClass="bg-green-500/30" 
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-              {approved_recent.slice(0, 3).map(item => (
+              {approved_recent.map(item => (
                 <RequestCard key={item.request.id} item={item} isDeemphasized />
               ))}
             </div>
-            {approved_recent.length > 3 && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                +{approved_recent.length - 3} more recently approved
-              </p>
-            )}
           </div>
         )}
       </CardContent>
