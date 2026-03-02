@@ -218,6 +218,20 @@ Deno.serve(async (req) => {
         // Enrich and minimize decisions
         const enrichedDecisions = decisions.map(d => {
             const decider = d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id);
+            
+            // Resolve display name with proper fallback chain
+            let decider_display_name = null;
+            if (d.decided_by_type === 'client_contact' && contactMap.get(d.decided_by_id)) {
+                decider_display_name = contactMap.get(d.decided_by_id).name;
+            } else if (d.decided_by_type === 'internal_user' && userMap.get(d.decided_by_id)) {
+                decider_display_name = userMap.get(d.decided_by_id).full_name;
+            } else if (d.decided_by_type === 'client_contact') {
+                decider_display_name = 'Client';
+            }
+            if (!decider_display_name) {
+                decider_display_name = 'System';
+            }
+            
             return {
                 id: d.id,
                 request_id: d.request_id,
@@ -231,7 +245,7 @@ Deno.serve(async (req) => {
                 decided_at: d.decided_at,
                 created_date: d.created_date,
                 decider,
-                decider_display_name: decider?.full_name || decider?.name || 'System'
+                decider_display_name
             };
         });
 
