@@ -489,7 +489,7 @@ const SidebarMenuButton = React.forwardRef(function SidebarMenuButtonComponent(
       </Tooltip>
     )
   }
-)
+})
 SidebarMenuButton.displayName = "SidebarMenuButton"
 
 const SidebarMenuAction = React.forwardRef(({ className, asChild = false, showOnHover = false, ...props }, ref) => {
