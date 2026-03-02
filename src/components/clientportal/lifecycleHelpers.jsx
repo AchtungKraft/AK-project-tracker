@@ -184,11 +184,17 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
   const isOverdue = request.due_date && new Date(request.due_date) < new Date();
 
   // CANONICAL RULE: Request requires team action if:
-  // - Latest activity was by client AND request is not archived
-  // - OR request is overdue
+  // - Request is NOT archived AND any of:
+  //   - Request is overdue
+  //   - Latest activity was by client
+  //   - Request is approved (awaiting AK confirmation to close)
   const requiresTeamAction =
-    (latestActivityActor === 'client' && request.status !== 'archived') ||
-    isOverdue;
+    request.status !== 'archived' &&
+    (
+      isOverdue ||
+      latestActivityActor === 'client' ||
+      request.status === 'approved'
+    );
 
   return {
     ...request,
