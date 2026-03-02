@@ -103,12 +103,12 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
                   <span className="text-white font-bold text-xs">
-                    {event.author?.name?.[0] || event.author?.full_name?.[0] || 'U'}
+                    {(event.comment?.author_display_name || event.author?.name || event.author?.full_name || 'S')[0]}
                   </span>
                 </div>
                 <div>
                   <p className="font-medium text-white text-sm">
-                    {event.author?.name || event.author?.full_name || 'Unknown'}
+                    {event.comment?.author_display_name || event.author?.name || event.author?.full_name || 'System'}
                   </p>
                   <p className="text-xs text-gray-400">
                     {format(event.timestamp, 'MMM d, h:mm a')}
@@ -138,7 +138,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                 {event.decision.decision === 'approved' ? <CheckCircle2 className="text-blue-500" /> : <AlertCircle className="text-orange-500" />}
                 <div>
                   <p className="font-medium text-sm">
-                    {event.decider?.name || event.decider?.full_name} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
+                    {event.decision?.decider_display_name || event.decider?.name || event.decider?.full_name || 'System'} {event.decision.decision === 'approved' ? 'Approved' : 'Requested Changes'}
                   </p>
                   <p className="text-xs text-gray-400">{format(event.timestamp, 'MMM d, h:mm a')}</p>
                 </div>

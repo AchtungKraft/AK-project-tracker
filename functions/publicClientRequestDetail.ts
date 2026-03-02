@@ -199,33 +199,41 @@ Deno.serve(async (req) => {
         const requestCreator = request.created_by_user_id ? userMap.get(request.created_by_user_id) : null;
 
         // Enrich and minimize comments
-        const enrichedComments = comments.map(c => ({
-            id: c.id,
-            request_id: c.request_id,
-            author_type: c.author_type,
-            author_id: c.author_id,
-            body: c.body,
-            visibility: c.visibility,
-            posted_at: c.posted_at,
-            created_date: c.created_date,
-            author: c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id)
-        }));
+        const enrichedComments = comments.map(c => {
+            const author = c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id);
+            return {
+                id: c.id,
+                request_id: c.request_id,
+                author_type: c.author_type,
+                author_id: c.author_id,
+                body: c.body,
+                visibility: c.visibility,
+                posted_at: c.posted_at,
+                created_date: c.created_date,
+                author,
+                author_display_name: author?.full_name || author?.name || 'System'
+            };
+        });
 
         // Enrich and minimize decisions
-        const enrichedDecisions = decisions.map(d => ({
-            id: d.id,
-            request_id: d.request_id,
-            decided_by_type: d.decided_by_type,
-            decided_by_id: d.decided_by_id,
-            decision: d.decision,
-            note: d.note,
-            target_type: d.target_type,
-            target_attachment_id: d.target_attachment_id,
-            target_image_url: d.target_image_url,
-            decided_at: d.decided_at,
-            created_date: d.created_date,
-            decider: d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id)
-        }));
+        const enrichedDecisions = decisions.map(d => {
+            const decider = d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id);
+            return {
+                id: d.id,
+                request_id: d.request_id,
+                decided_by_type: d.decided_by_type,
+                decided_by_id: d.decided_by_id,
+                decision: d.decision,
+                note: d.note,
+                target_type: d.target_type,
+                target_attachment_id: d.target_attachment_id,
+                target_image_url: d.target_image_url,
+                decided_at: d.decided_at,
+                created_date: d.created_date,
+                decider,
+                decider_display_name: decider?.full_name || decider?.name || 'System'
+            };
+        });
 
         // Minimize attachments
         const minimalAttachments = attachments.map(a => ({
