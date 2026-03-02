@@ -24,7 +24,8 @@ const AttentionBadge = ({ type, size = 'sm' }) => {
   const iconMap = {
     client_replied: MessageSquareText,
     overdue: Clock,
-    approved_recent: CheckCircle2
+    approved_recent: CheckCircle2,
+    archived_response: AlertCircle
   };
   const Icon = iconMap[type] || AlertCircle;
   const isSmall = size === 'sm';
@@ -144,7 +145,9 @@ const NeedsAttentionSection = ({
       .map(r => {
         // Determine display type for sectioning
         let type = 'client_replied';
-        if (r.isOverdue && r.latestActivityActor !== 'client') {
+        if (r.isArchivedWithClientResponse) {
+          type = 'archived_response';
+        } else if (r.isOverdue && r.latestActivityActor !== 'client') {
           type = 'overdue';
         } else if (r.status === 'approved') {
           type = 'approved_recent';
@@ -177,7 +180,7 @@ const NeedsAttentionSection = ({
   // Don't render if no attention items
   if (attentionItems.length === 0) return null;
 
-  const { client_replied, overdue, approved_recent } = groupedAttention;
+  const { client_replied, overdue, archived_response, approved_recent } = groupedAttention;
 
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
@@ -223,6 +226,22 @@ const NeedsAttentionSection = ({
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {overdue.map(item => (
+                <RequestCard key={item.request.id} item={item} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Archived Responses Section */}
+        {archived_response.length > 0 && (
+          <div>
+            <SectionHeader 
+              label="Archived Responses" 
+              count={archived_response.length} 
+              colorClass="bg-purple-500/30" 
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+              {archived_response.map(item => (
                 <RequestCard key={item.request.id} item={item} />
               ))}
             </div>

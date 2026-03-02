@@ -28,7 +28,8 @@ function isRecentlyApproved(request, now) {
 const ATTENTION_PRIORITY = {
   client_replied: 1,
   overdue: 2,
-  approved_recent: 3
+  archived_response: 3,
+  approved_recent: 4
 };
 
 /**
@@ -55,6 +56,13 @@ export const ATTENTION_BADGE_CONFIG = {
     bgClass: "bg-green-600/20",
     borderClass: "border-green-600/50",
     textClass: "text-green-400"
+  },
+  archived_response: {
+    label: "Archived Response",
+    color: "purple",
+    bgClass: "bg-purple-500/20",
+    borderClass: "border-purple-500/40",
+    textClass: "text-purple-400"
   }
 };
 
@@ -160,6 +168,7 @@ export function groupAttentionByType(attentionItems) {
   return {
     client_replied: attentionItems.filter(i => i.type === 'client_replied'),
     overdue: attentionItems.filter(i => i.type === 'overdue'),
+    archived_response: attentionItems.filter(i => i.type === 'archived_response'),
     approved_recent: attentionItems.filter(i => i.type === 'approved_recent')
   };
 }
