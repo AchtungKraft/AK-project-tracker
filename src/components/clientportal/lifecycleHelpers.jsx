@@ -138,25 +138,68 @@ export const getSortComparator = (mode) => {
 };
 
 /**
- * Enrich a request with computed fields
+ * Enrich a request with computed fields including actor-driven attention logic
  */
 export const enrichRequest = (request, comments, decisions, attachments) => {
-  // Get last client comment
-  const allClientComments = comments.filter(c => 
-    c.request_id === request.id && c.author_type === 'client_contact'
-  ).sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-  
-  const lastClientComment = allClientComments[0];
-  const totalCommentCount = allClientComments.length;
-  
+  const requestComments = comments.filter(c => c.request_id === request.id);
+  const requestDecisions = decisions.filter(d => d.request_id === request.id);
+
+  const clientComments = requestComments.filter(
+    c => c.author_type === 'client_contact'
+  );
+
+  // Build timeline of all events to determine latest activity actor
+  const events = [
+    {
+      type: 'request_created',
+      actor: 'team',
+      date: request.created_date
+    },
+    ...(request.posted_at ? [{
+      type: 'request_posted',
+      actor: 'team',
+      date: request.posted_at
+    }] : []),
+    ...requestComments.map(c => ({
+      type: 'comment',
+      actor: c.author_type === 'client_contact' ? 'client' : 'team',
+      date: c.created_date
+    })),
+    ...requestDecisions.map(d => ({
+      type: 'decision',
+      actor: d.decided_by_type === 'client_contact' ? 'client' : 'team',
+      date: d.decided_at || d.created_date,
+      decision: d.decision
+    }))
+  ].filter(e => e.date);
+
+  // Sort descending by date (most recent first)
+  events.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const latestEvent = events[0];
+  const latestActivityActor = latestEvent?.actor || 'team';
+  const latestActivityAt = latestEvent?.date || request.updated_date;
+
   // Check for overdue
   const isOverdue = request.due_date && new Date(request.due_date) < new Date();
-  
+
+  // CANONICAL RULE: Request requires team action if:
+  // - Latest activity was by client AND request is not archived
+  // - OR request is overdue
+  const requiresTeamAction =
+    (latestActivityActor === 'client' && request.status !== 'archived') ||
+    isOverdue;
+
   return {
     ...request,
-    lastClientComment,
-    totalCommentCount,
-    isOverdue
+    lastClientComment: clientComments.sort(
+      (a, b) => new Date(b.created_date) - new Date(a.created_date)
+    )[0],
+    totalCommentCount: clientComments.length,
+    isOverdue,
+    latestActivityActor,
+    latestActivityAt,
+    requiresTeamAction
   };
 };
 

@@ -12,7 +12,7 @@ import {
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatDistanceToNow } from "date-fns";
-import { buildAttentionList, groupAttentionByType, ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
+import { groupAttentionByType, ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
 
 /**
  * Attention Badge Component
@@ -121,17 +121,53 @@ const SectionHeader = ({ label, count, colorClass }) => (
 );
 
 /**
- * NeedsAttentionSection - Lifecycle-Driven Architecture
- * Uses grouped project data from lifecycleHelpers
+ * NeedsAttentionSection - Actor-Driven Architecture
+ * Uses requiresTeamAction from enrichRequest (not lifecycle buckets)
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
   lifecycleQuickFilter = 'all'
 }) => {
-  // Build attention list from lifecycle-grouped data
+  // Build attention list from requiresTeamAction flag (actor-driven, not lifecycle-driven)
   const attentionItems = useMemo(() => {
-    return buildAttentionList(projectGroups, lifecycleQuickFilter);
-  }, [projectGroups, lifecycleQuickFilter]);
+    // Flatten all requests from all buckets
+    const flatRequests = projectGroups.flatMap(pg => [
+      ...pg.draft,
+      ...pg.awaiting_client,
+      ...pg.client_replied,
+      ...pg.approved
+    ]);
+
+    // Filter by requiresTeamAction (canonical attention rule)
+    const items = flatRequests
+      .filter(r => r.requiresTeamAction)
+      .map(r => {
+        // Determine display type for sectioning
+        let type = 'client_replied';
+        if (r.isOverdue && r.latestActivityActor !== 'client') {
+          type = 'overdue';
+        } else if (r.status === 'approved') {
+          type = 'approved_recent';
+        }
+
+        return {
+          request: r,
+          project: projectGroups.find(pg => pg.project?.id === r.project_id)?.project,
+          type,
+          isOverdue: r.isOverdue
+        };
+      });
+
+    // Sort by priority: client_replied > overdue > approved_recent
+    const priorityOrder = { client_replied: 1, overdue: 2, approved_recent: 3 };
+    return items.sort((a, b) => {
+      const priorityDiff = priorityOrder[a.type] - priorityOrder[b.type];
+      if (priorityDiff !== 0) return priorityDiff;
+      // Secondary: most recent activity first
+      return new Date(b.request.latestActivityAt || b.request.updated_date) - 
+             new Date(a.request.latestActivityAt || a.request.updated_date);
+    });
+  }, [projectGroups]);
 
   // Group by type for sectioned display
   const groupedAttention = useMemo(() => {
