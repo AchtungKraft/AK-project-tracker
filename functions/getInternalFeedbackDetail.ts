@@ -164,15 +164,23 @@ Deno.serve(async (req) => {
             creator: request.created_by_user_id ? userMap.get(request.created_by_user_id) : null 
         };
 
-        const enrichedComments = comments.map(c => ({
-            ...c,
-            author: c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id)
-        }));
+        const enrichedComments = comments.map(c => {
+            const author = c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id);
+            return {
+                ...c,
+                author,
+                author_display_name: author?.full_name || author?.name || 'System'
+            };
+        });
 
-        const enrichedDecisions = decisions.map(d => ({
-            ...d,
-            decider: d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id)
-        }));
+        const enrichedDecisions = decisions.map(d => {
+            const decider = d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id);
+            return {
+                ...d,
+                decider,
+                decider_display_name: decider?.full_name || decider?.name || 'System'
+            };
+        });
 
         const enrichedAttachments = attachments.map(a => ({
             ...a,
