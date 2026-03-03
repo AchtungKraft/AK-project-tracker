@@ -43,6 +43,18 @@ import { cn } from "@/lib/utils";
 export default function CreateBatchOrderModal({ selectedItems, onClose, onSuccess }) {
   const queryClient = useQueryClient();
   
+  // UI-only state for tracking which items have been added to vendor cart
+  const [cartMarkedItems, setCartMarkedItems] = useState(new Set());
+  
+  const toggleCartMarked = (commitmentId) => {
+    setCartMarkedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(commitmentId)) next.delete(commitmentId);
+      else next.add(commitmentId);
+      return next;
+    });
+  };
+  
   // PHASE 10B: Validate all items have commitment_id and vendor_id
   const invalidItems = selectedItems.filter(item => !item.commitment_id || !item.vendor_id);
   if (invalidItems.length > 0) {
@@ -568,11 +580,42 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                   {/* Line Items */}
                   <div className="space-y-2">
                     {group.items.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-2 bg-gray-800/30 rounded">
+                      <div 
+                        key={idx} 
+                        className={cn(
+                          "flex items-center gap-2 p-2 bg-gray-800/30 rounded transition-colors",
+                          cartMarkedItems.has(item.commitment_id) && "bg-green-900/20 border border-green-700/30"
+                        )}
+                      >
+                        {/* Cart tracking checkbox - UI only */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <Checkbox
+                                  checked={cartMarkedItems.has(item.commitment_id)}
+                                  onCheckedChange={() => toggleCartMarked(item.commitment_id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "border-gray-600",
+                                    cartMarkedItems.has(item.commitment_id) && "border-green-500 data-[state=checked]:bg-green-600"
+                                  )}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              {cartMarkedItems.has(item.commitment_id) ? "Added to cart" : "Mark as added to cart"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1">
                             {/* PHASE 10B: part_name comes from read model directly */}
-                            <p className="text-sm text-white truncate">{item.part_name || item.part?.part_name}</p>
+                            <p className={cn(
+                              "text-sm truncate",
+                              cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
+                            )}>{item.part_name || item.part?.part_name}</p>
                             {item.order_url && item.order_url.startsWith('http') && (
                               <a
                                 href={item.order_url}
