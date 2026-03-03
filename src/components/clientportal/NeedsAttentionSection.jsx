@@ -189,7 +189,7 @@ const NeedsAttentionSection = ({
       return new Date(b.request.latestActivityAt || b.request.updated_date) - 
              new Date(a.request.latestActivityAt || a.request.updated_date);
     });
-  }, [projectGroups]);
+  }, [projectGroups, allRequests, comments, decisions, attachments]);
 
   // Group by type for sectioned display
   const groupedAttention = useMemo(() => {
