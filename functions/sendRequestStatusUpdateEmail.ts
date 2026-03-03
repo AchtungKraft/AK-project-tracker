@@ -68,6 +68,13 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Request not found' }, { status: 404 });
         }
 
+        // Fetch comments for this request
+        const comments = await base44.asServiceRole.entities.ClientFeedbackComment.filter({
+            request_id: request.id
+        });
+        const latestTeamComment = getLatestTeamComment(comments);
+        console.log('Email includes team comment:', latestTeamComment?.id);
+
         // Fetch Project details
         const projects = await base44.asServiceRole.entities.Project.filter({ id: request.project_id });
         const project = projects[0];

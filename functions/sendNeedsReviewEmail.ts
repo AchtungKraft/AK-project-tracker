@@ -63,6 +63,13 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'Request is archived - no email sent' });
         }
 
+        // Fetch comments for this request
+        const comments = await base44.asServiceRole.entities.ClientFeedbackComment.filter({
+            request_id: request.id
+        });
+        const latestTeamComment = getLatestTeamComment(comments);
+        console.log('Email includes team comment:', latestTeamComment?.id);
+
         // Fetch Project details
         const projects = await base44.asServiceRole.entities.Project.filter({ id: request.project_id });
         const project = projects[0];
