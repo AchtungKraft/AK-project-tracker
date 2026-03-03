@@ -59,8 +59,9 @@ Deno.serve(async (req) => {
         const commitment = li.commitment_id ? commitmentMap.get(li.commitment_id) : null;
         const project = commitment?.project_id ? projectMap.get(commitment.project_id) : null;
 
-        const qty_ordered = li.qty_ordered || 0;
-        const qty_received = li.qty_received || 0;
+        // CANONICAL: qty_ordered comes directly from line item - this is the authoritative source
+        const qty_ordered = li.qty_ordered ?? 0;
+        const qty_received = li.qty_received ?? 0;
         const qty_remaining = Math.max(0, qty_ordered - qty_received);
 
         return {
@@ -82,9 +83,13 @@ Deno.serve(async (req) => {
           // For UI receive input
           receive_qty: qty_remaining, // Default to remaining
           location_id: null,
+          // Debug fields for audit
+          _debug_raw_qty_ordered: li.qty_ordered,
+          _debug_raw_qty_received: li.qty_received,
         };
       });
 
+      // CANONICAL: Aggregates from line-level quantities
       const total_qty_ordered = lines.reduce((sum, l) => sum + l.qty_ordered, 0);
       const total_qty_received = lines.reduce((sum, l) => sum + l.qty_received, 0);
       const total_qty_remaining = lines.reduce((sum, l) => sum + l.qty_remaining, 0);
@@ -107,6 +112,9 @@ Deno.serve(async (req) => {
         lines,
         // Attachments for reference
         pdf_attachments: order.pdf_attachments || [],
+        // Debug fields for data integrity validation
+        _debug_total_qty_ordered_raw: orderLineItems.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0),
+        _debug_total_qty_received_raw: orderLineItems.reduce((sum, li) => sum + (li.qty_received ?? 0), 0),
       };
     });
 
