@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatDistanceToNow } from "date-fns";
 import { groupAttentionByType, ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
+import { enrichRequest } from "./lifecycleHelpers";
 
 /**
  * Attention Badge Component
@@ -128,11 +129,14 @@ const SectionHeader = ({ label, count, colorClass }) => (
 const NeedsAttentionSection = ({ 
   projectGroups,
   allRequests = [],
+  comments = [],
+  decisions = [],
+  attachments = [],
   lifecycleQuickFilter = 'all'
 }) => {
   // Build attention list from requiresTeamAction flag (actor-driven, not lifecycle-driven)
   const attentionItems = useMemo(() => {
-    // Existing lifecycle-based requests
+    // Existing lifecycle-based requests (already enriched)
     const lifecycleRequests = projectGroups.flatMap(pg => [
       ...pg.draft,
       ...pg.awaiting_client,
@@ -140,11 +144,11 @@ const NeedsAttentionSection = ({
       ...pg.approved
     ]);
 
-    // Archived requests that require attention (injected separately)
-    const archivedAttentionRequests = allRequests.filter(r =>
-      r.status === 'archived' &&
-      r.requiresTeamAction
-    );
+    // Archived requests - enrich them and check if they require attention
+    const archivedAttentionRequests = allRequests
+      .filter(r => r.status === 'archived')
+      .map(r => enrichRequest(r, comments, decisions, attachments))
+      .filter(r => r.requiresTeamAction);
 
     // Merge without duplicates
     const flatRequests = [
