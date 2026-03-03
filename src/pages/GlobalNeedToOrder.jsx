@@ -23,7 +23,7 @@ import {
 import {
   ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
   DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
-  Plus, RefreshCw, ArrowRight, Truck, Package
+  Plus, RefreshCw, ArrowRight, Truck, Package, Pencil
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
 import ExecutionDataBlock, { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
+import PartModal from "@/components/parts/PartModal";
 import { cn } from "@/lib/utils";
 
 /**
@@ -89,6 +90,7 @@ export default function GlobalNeedToOrder() {
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
+  const [editingPartId, setEditingPartId] = useState(null);
 
   // Use canonical ops supply view - replaces getGlobalOrderQueue
   const { 
@@ -413,6 +415,10 @@ export default function GlobalNeedToOrder() {
                 Go to Project
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-gray-700" />
+              <DropdownMenuItem onClick={() => setEditingPartId(item.part_id)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit Part
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -722,6 +728,14 @@ export default function GlobalNeedToOrder() {
           }}
           part={{ id: deltaOrderCommitment.part_id, part_name: deltaOrderCommitment.part_name }}
           onClose={() => setDeltaOrderCommitment(null)}
+        />
+      )}
+
+      {/* Edit Part Modal - same as ProjectSupplyManager */}
+      {editingPartId && (
+        <PartModal
+          partId={editingPartId}
+          onClose={() => setEditingPartId(null)}
         />
       )}
     </MobileSafeAreaContainer>
