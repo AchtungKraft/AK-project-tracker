@@ -124,14 +124,30 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
   // === ORDER-SPECIFIC INVALIDATION ===
   
   if (order_ids.length > 0 || invalidateAll) {
-    // PO receiving view - affects POReceiving
+    // PO receiving view - affects POReceiving (list and detail)
     queryClient.invalidateQueries({ queryKey: ['poReceivingView'] });
+    
+    // Project purchase orders - affects ProjectDetail PO tab
+    queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'] });
     
     // Orders list
     queryClient.invalidateQueries({ queryKey: ['orders'] });
     
     // Line items
     queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] });
+    
+    // Specific order invalidations
+    order_ids.forEach(orderId => {
+      queryClient.invalidateQueries({ queryKey: ['poReceivingView', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    });
+  }
+  
+  // === PROJECT-SPECIFIC PO INVALIDATION ===
+  if (project_ids.length > 0) {
+    project_ids.forEach(projectId => {
+      queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders', projectId] });
+    });
   }
 
   // === COMMITMENT-SPECIFIC INVALIDATION ===
@@ -267,6 +283,7 @@ export function getInvalidationKeysForAction(actionType) {
       'orders',
       'partPurchaseLineItems',
       'poReceivingView',
+      'projectPurchaseOrders', // PHASE 1: Project PO tab
     ],
     RECEIVE: [
       ...baseKeys,
@@ -274,6 +291,7 @@ export function getInvalidationKeysForAction(actionType) {
       'orders',
       'partPurchaseLineItems',
       'poReceivingView',
+      'projectPurchaseOrders', // PHASE 1: Project PO tab
       'inventoryItems',
     ],
     INSTALL: [

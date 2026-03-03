@@ -38,16 +38,62 @@ Deno.serve(async (req) => {
       order_id,           // Single PO detail mode
       order_ids,          // Batch mode (array of order IDs)
       project_id,         // Project filter mode
-      include_cancelled,  // Include cancelled lines (default: false)
-      include_debug,      // Include debug diagnostics (default: false)
+      include_debug = false,  // Include debug diagnostics (PRODUCTION: default false)
     } = await req.json();
 
-    // Fetch reference data
+    // PHASE 4: PERFORMANCE OPTIMIZATION
+    // Collect unique IDs first, then fetch only required records
+    // This prevents O(N) full-table scans on every PO request
+    
+    // Determine which orders to fetch first to get line items
+    let orders = [];
+    let lineItems = [];
+
+    if (order_id) {
+      orders = await base44.entities.Order.filter({ id: order_id });
+      lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id });
+    } else if (order_ids && order_ids.length > 0) {
+      orders = await base44.entities.Order.filter({ id: { $in: order_ids } });
+      lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: { $in: order_ids } });
+    } else if (project_id) {
+      // For project mode, we need commitments first to find line items
+      const projectCommitments = await base44.entities.PartCommitment.filter({ project_id });
+      const projectCommitmentIds = new Set(projectCommitments.map(c => c.id));
+      
+      const allLineItems = await base44.entities.PartPurchaseLineItem.list();
+      lineItems = allLineItems.filter(li => 
+        li.commitment_id && projectCommitmentIds.has(li.commitment_id)
+      );
+      
+      const orderIds = [...new Set(lineItems.map(li => li.order_id))];
+      if (orderIds.length > 0) {
+        orders = await base44.entities.Order.filter({ id: { $in: orderIds } });
+      }
+    } else {
+      return Response.json({ error: 'order_id, order_ids[], or project_id required' }, { status: 400 });
+    }
+
+    // Now collect unique IDs from line items for targeted fetches
+    const partIds = [...new Set(lineItems.map(li => li.part_id).filter(Boolean))];
+    const vendorIds = [...new Set([
+      ...orders.map(o => o.vendor_id).filter(Boolean),
+      ...lineItems.map(li => li.vendor_id).filter(Boolean)
+    ])];
+    const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
+
+    // Fetch only required reference data (scoped by IDs)
     const [parts, vendors, commitments, projects] = await Promise.all([
-      base44.entities.Part.list(),
-      base44.entities.Vendor.list(),
-      base44.entities.PartCommitment.list(),
-      base44.entities.Project.list(),
+      partIds.length > 0 
+        ? base44.entities.Part.filter({ id: { $in: partIds } })
+        : Promise.resolve([]),
+      vendorIds.length > 0 
+        ? base44.entities.Vendor.filter({ id: { $in: vendorIds } })
+        : Promise.resolve([]),
+      commitmentIds.length > 0 
+        ? base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
+        : Promise.resolve([]),
+      // Projects need to be fetched from commitments
+      base44.entities.Project.list(), // Keep full list for now - usually small
     ]);
 
     // Build lookup maps
@@ -56,38 +102,7 @@ Deno.serve(async (req) => {
     const commitmentMap = new Map(commitments.map(c => [c.id, c]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
 
-    // Determine which orders to fetch
-    // PURE PROJECTION: No filtering here - just fetch requested data
-    let orders = [];
-    let lineItems = [];
-
-    if (order_id) {
-      // Single PO mode - fetch regardless of status
-      orders = await base44.entities.Order.filter({ id: order_id });
-      lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id });
-    } else if (order_ids && order_ids.length > 0) {
-      // Batch mode - fetch all requested orders regardless of status
-      orders = await base44.entities.Order.filter({ id: { $in: order_ids } });
-      lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: { $in: order_ids } });
-    } else if (project_id) {
-      // Project filter mode - find ALL orders linked to project's commitments (no status filter)
-      const projectCommitments = commitments.filter(c => c.project_id === project_id);
-      const projectCommitmentIds = new Set(projectCommitments.map(c => c.id));
-      
-      // Get all line items, then filter by commitment
-      const allLineItems = await base44.entities.PartPurchaseLineItem.list();
-      lineItems = allLineItems.filter(li => 
-        li.commitment_id && projectCommitmentIds.has(li.commitment_id)
-      );
-      
-      // Get unique order IDs - fetch ALL orders (no status filter)
-      const orderIds = [...new Set(lineItems.map(li => li.order_id))];
-      if (orderIds.length > 0) {
-        orders = await base44.entities.Order.filter({ id: { $in: orderIds } });
-      }
-    } else {
-      return Response.json({ error: 'order_id, order_ids[], or project_id required' }, { status: 400 });
-    }
+    // Data already fetched in PHASE 4 optimization above
 
     // Build canonical PO view models
     const poViewModels = orders.map(order => {
@@ -212,16 +227,19 @@ Deno.serve(async (req) => {
         pdf_attachments: order.pdf_attachments || [],
       };
 
-      // Add debug diagnostics if requested
-      if (include_debug) {
+      // Add debug diagnostics ONLY if explicitly requested (development only)
+      if (include_debug === true) {
         // Raw line sums for integrity validation (active lines only)
         const rawActiveLines = lineItems.filter(li => li.order_id === order.id && li.status !== 'Cancelled');
         const rawAllLines = lineItems.filter(li => li.order_id === order.id);
         
-        // Check for lines missing qty_ordered
+        // PHASE 2: Legacy guard - warn but don't throw for missing qty_ordered
         const linesMissingQtyOrdered = rawAllLines.filter(li => li.qty_ordered == null);
         if (linesMissingQtyOrdered.length > 0) {
-          console.warn(`[DATA_INTEGRITY] Order ${order.id} has ${linesMissingQtyOrdered.length} lines missing qty_ordered`);
+          console.warn(`[LEGACY_PO_LINE_MISSING_QTY_ORDERED] Order ${order.id} has ${linesMissingQtyOrdered.length} lines without qty_ordered`);
+          linesMissingQtyOrdered.forEach(li => {
+            console.warn(`  - Line ${li.id}, part=${li.part_id}`);
+          });
         }
         
         poViewModel._debug = {
@@ -229,6 +247,7 @@ Deno.serve(async (req) => {
           line_count_active: rawActiveLines.length,
           line_count_cancelled: rawAllLines.length - rawActiveLines.length,
           lines_missing_qty_ordered: linesMissingQtyOrdered.length,
+          lines_missing_qty_ordered_ids: linesMissingQtyOrdered.map(li => li.id),
           line_sum_ordered: rawActiveLines.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0),
           line_sum_received: rawActiveLines.reduce((sum, li) => sum + (li.qty_received ?? 0), 0),
           line_sum_remaining: rawActiveLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0),
@@ -238,6 +257,7 @@ Deno.serve(async (req) => {
           remaining_matches: rawActiveLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0) === total_qty_remaining,
         };
       }
+      // PHASE 3: No debug fields in standard responses
 
       return poViewModel;
     });

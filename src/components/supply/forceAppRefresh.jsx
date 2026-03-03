@@ -98,10 +98,11 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.invalidateQueries({ queryKey: ['inventoryLocations'] }),
     queryClient.invalidateQueries({ queryKey: ['locations'] }),
     
-    // Orders domain
+    // Orders domain - PHASE 1: Hard invalidation for PO system
     queryClient.invalidateQueries({ queryKey: ['orders'] }),
-    queryClient.invalidateQueries({ queryKey: ['poReceivingView'] }),
+    queryClient.invalidateQueries({ queryKey: ['poReceivingView'] }), // All receiving views
     queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'] }), // Project PO tab
     
     // Pricing domain
     queryClient.invalidateQueries({ queryKey: ['pricingAudit'] }),
@@ -144,9 +145,17 @@ export async function forceAppRefresh(queryClient, options = {}) {
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['commitmentState', normalizeId(id)] }));
   });
   
-  // Scoped order invalidations
+  // Scoped order invalidations - PHASE 1: Hard invalidation for PO surfaces
   orderIds.forEach(id => {
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['order', normalizeId(id)] }));
+    const normalizedOrderId = normalizeId(id);
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['order', normalizedOrderId] }));
+    // Invalidate specific PO receiving view
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['poReceivingView', normalizedOrderId] }));
+  });
+  
+  // Also invalidate project purchase orders for affected projects
+  normalizedProjectIds.forEach(id => {
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders', id] }));
   });
   
   // Wait for all invalidations to complete
@@ -339,6 +348,20 @@ export function extractRefreshContext(result, payload = {}) {
   if (result?.commitment_id) context.commitmentIds.push(result.commitment_id);
   if (result?.commitment?.id) context.commitmentIds.push(result.commitment.id);
   if (result?.order_id) context.orderIds.push(result.order_id);
+  
+  // PHASE 1: Extract from CREATE_PO result
+  if (result?.created_orders) {
+    result.created_orders.forEach(o => {
+      if (o.order_id) context.orderIds.push(o.order_id);
+    });
+  }
+  
+  // PHASE 1: Extract from RECEIVE result
+  if (result?.results) {
+    result.results.forEach(r => {
+      if (r.part_id) context.partIds.push(r.part_id);
+    });
+  }
   
   // Extract from invalidation_context if provided by backend
   if (result?.invalidation_context) {

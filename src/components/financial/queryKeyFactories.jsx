@@ -455,6 +455,13 @@ export const orderKeys = {
     assertPrimitiveQueryKey(key);
     return key;
   },
+  // PHASE 5: Project purchase orders key factory
+  projectPurchaseOrders: (projectId) => {
+    const normalized = normalizeProjectId(projectId);
+    const key = ['projectPurchaseOrders', normalized];
+    assertPrimitiveQueryKey(key);
+    return key;
+  },
 };
 
 // ============================================
