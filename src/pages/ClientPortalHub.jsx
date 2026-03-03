@@ -614,6 +614,9 @@ export default function ClientPortalHub() {
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
           allRequests={attentionEligibleRequests}
+          comments={comments}
+          decisions={decisions}
+          attachments={attachments}
           lifecycleQuickFilter={lifecycleQuickFilter}
         />
 
