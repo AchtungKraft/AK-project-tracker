@@ -245,10 +245,10 @@ export default function ClientPortalHub() {
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [teamMembers]);
 
-  // Filter requests by project filters
-  const filteredRequests = useMemo(() => {
+  // Filter requests for lifecycle board (excludes archived)
+  const lifecycleRequests = useMemo(() => {
     return allRequests.filter(request => {
-      // Never show archived
+      // Never show archived on lifecycle board
       if (request.status === 'archived') return false;
       
       const project = projects.find(p => p.id === request.project_id);
@@ -275,17 +275,54 @@ export default function ClientPortalHub() {
     });
   }, [allRequests, projects, selectedTypes, statusFilter, assignedTo]);
 
-  // Group requests by project and lifecycle bucket
+  // Filter requests for attention (includes archived - they may have new client activity)
+  const attentionEligibleRequests = useMemo(() => {
+    return allRequests.filter(request => {
+      const project = projects.find(p => p.id === request.project_id);
+      
+      // Apply project filters only (not status filter on request)
+      if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) {
+        return false;
+      }
+      
+      if (statusFilter !== 'all' && project && project.status_id !== statusFilter) {
+        return false;
+      }
+      
+      if (assignedTo.length > 0 && project) {
+        const projectTeam = project.assigned_team || [];
+        if (!projectTeam.some(memberId => assignedTo.includes(memberId))) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [allRequests, projects, selectedTypes, statusFilter, assignedTo]);
+
+  // Group requests by project and lifecycle bucket (for board display)
   const groupedProjectData = useMemo(() => {
     return groupRequestsByProjectAndLifecycle(
-      filteredRequests,
+      lifecycleRequests,
       projects,
       decisions,
       attachments,
       comments,
       sortMode
     );
-  }, [filteredRequests, projects, decisions, attachments, comments, sortMode]);
+  }, [lifecycleRequests, projects, decisions, attachments, comments, sortMode]);
+
+  // Group attention-eligible requests separately (includes archived with activity)
+  const attentionProjectGroups = useMemo(() => {
+    return groupRequestsByProjectAndLifecycle(
+      attentionEligibleRequests,
+      projects,
+      decisions,
+      attachments,
+      comments,
+      sortMode
+    );
+  }, [attentionEligibleRequests, projects, decisions, attachments, comments, sortMode]);
 
   // Calculate summary counts including overdue
   const summaryCounts = useMemo(() => {
