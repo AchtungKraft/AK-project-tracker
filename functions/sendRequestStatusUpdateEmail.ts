@@ -199,6 +199,13 @@ to <strong>${newStatus}</strong>.
     <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.body || 'No description provided.'}</p>
 </div>
 
+${latestTeamComment ? `
+<div style="margin-top:16px;padding:14px;background:#1a1a1a;border-left:3px solid #dc2626;">
+  <p style="margin:0 0 6px 0;font-weight:bold;color:#fff;">Latest Update From Ächtung Kraft:</p>
+  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${latestTeamComment.body}</p>
+</div>
+` : ''}
+
 <p>
 <a href="${requestDetailUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
 ${buttonText}
@@ -229,6 +236,10 @@ Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 ${request.title}
 ${request.body || 'No description provided.'}
 
+${latestTeamComment ? `Latest Update From Ächtung Kraft:
+---------------------------------
+${latestTeamComment.body}
+` : ''}
 View the request:
 ${requestDetailUrl}
 
