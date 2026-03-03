@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2 } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2, Package } from "lucide-react";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +19,7 @@ import ProjectOverview from "../components/project/ProjectOverview";
 import ProjectTasks from "../components/project/ProjectTasks";
 import ProjectJournal from "../components/project/ProjectJournal";
 import ProjectClientPortal from "../components/project/ProjectClientPortal";
+import ProjectPurchaseOrders from "../components/project/ProjectPurchaseOrders";
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
@@ -215,6 +216,13 @@ export default function ProjectDetail() {
               <Users className="w-4 h-4" />
               Client Portal
             </TabsTrigger>
+            <TabsTrigger 
+              value="purchaseorders"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Package className="w-4 h-4" />
+              Purchase Orders
+            </TabsTrigger>
           </TabsList>
 
           {/* Mobile Hamburger Menu */}
@@ -228,6 +236,7 @@ export default function ProjectDetail() {
                     {activeTab === 'supply' && <><Layers className="w-4 h-4" /> Supply</>}
                     {activeTab === 'journal' && <><BookOpen className="w-4 h-4" /> Journal</>}
                     {activeTab === 'clientportal' && <><Users className="w-4 h-4" /> Client Portal</>}
+                    {activeTab === 'purchaseorders' && <><Package className="w-4 h-4" /> Purchase Orders</>}
                   </span>
                   <Menu className="w-4 h-4" />
                 </Button>
@@ -263,6 +272,12 @@ export default function ProjectDetail() {
                 >
                   <Users className="w-4 h-4" /> Client Portal
                 </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setActiveTab('purchaseorders')}
+                  className={`gap-2 ${activeTab === 'purchaseorders' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <Package className="w-4 h-4" /> Purchase Orders
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -281,6 +296,10 @@ export default function ProjectDetail() {
 
           <TabsContent value="clientportal" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectClientPortal projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="purchaseorders" className={isMobile ? 'mt-3' : 'mt-6'}>
+            <ProjectPurchaseOrders projectId={projectId} />
           </TabsContent>
         </Tabs>
       </div>
