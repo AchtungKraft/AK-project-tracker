@@ -28,11 +28,12 @@ Deno.serve(async (req) => {
 
     const { order_id, filters = {} } = await req.json();
 
-    // Fetch data - if order_id provided, get specific PO; otherwise get all receivable POs
+    // Fetch data - if order_id provided, get specific PO; otherwise get all POs
+    // CANONICAL: Receivability is determined by qty_remaining > 0, NOT by status
     const [orders, lineItems, parts, vendors, commitments, projects, locations] = await Promise.all([
       order_id 
         ? base44.entities.Order.filter({ id: order_id })
-        : base44.entities.Order.filter({ status: { $in: ['Ordered', 'Partial'] } }),
+        : base44.entities.Order.filter({ status: { $ne: 'Cancelled' } }),
       base44.entities.PartPurchaseLineItem.list(),
       base44.entities.Part.list(),
       base44.entities.Vendor.list(),
