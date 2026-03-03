@@ -841,17 +841,28 @@ async function createPO(ctx, commitment_ids, payload) {
 
     // Create line items and update commitments
     for (const item of items) {
+      // PHASE DATA INTEGRITY: Validate qty_ordered before creation
+      if (!item.qty || item.qty <= 0) {
+        throw new Error(`PO_INVALID_QTY: Cannot create PO line with qty_ordered=${item.qty} for ${item.part.part_name}`);
+      }
+      
       const lineItem = await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({
         order_id: order.id,
         part_id: item.part.id,
         commitment_id: item.commitment.id,
         vendor_id: vendorId,
+        // CANONICAL: qty_ordered is IMMUTABLE after creation - locked at PO creation time
         qty_ordered: item.qty,
         qty_received: 0,
+        // Pricing snapshots - locked at creation
         unit_cost: item.unit_cost,
+        unit_retail: item.commitment.unit_retail_snapshot ?? 0,
         extended_cost: item.unit_cost * item.qty,
         status: 'Ordered'
       });
+      
+      // Log for audit
+      console.log(`[CREATE_PO] Line created: part=${item.part.part_name}, qty_ordered=${item.qty}, unit_cost=${item.unit_cost}`);
 
       // Update commitment
       const current_covered = item.commitment.covered_from_po ?? 0;
@@ -998,12 +1009,24 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   const [part] = await ctx.base44.entities.Part.filter({ id: lineItem.part_id });
   if (!part) throw new Error('Part not found');
 
+  // CANONICAL: qty_ordered is IMMUTABLE - read only, never update
   const ordered = lineItem.qty_ordered ?? 0;
   const already_received = lineItem.qty_received ?? 0;
-  const remaining = ordered - already_received;
+  
+  // CANONICAL: qty_remaining is always derived, never stored
+  const remaining = Math.max(0, ordered - already_received);
 
+  // DATA INTEGRITY GUARD: Cannot receive more than remaining
   if (qty_received > remaining) {
-    throw new Error(`Cannot receive ${qty_received} of ${part.part_name}, only ${remaining} remaining`);
+    throw new Error(
+      `RECEIVE_OVERFLOW: Cannot receive ${qty_received} of ${part.part_name}. ` +
+      `Only ${remaining} remaining (ordered=${ordered}, already_received=${already_received})`
+    );
+  }
+  
+  // DATA INTEGRITY GUARD: Cannot receive negative or zero
+  if (qty_received <= 0) {
+    throw new Error(`RECEIVE_INVALID_QTY: qty_received must be positive, got ${qty_received}`);
   }
 
   // PHASE 14: Location enforcement - default to UNASSIGNED_SYSTEM
@@ -1040,14 +1063,18 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
     };
   }
 
-  // Update line item
+  // Update line item - ONLY qty_received changes, qty_ordered is IMMUTABLE
   const new_line_received = already_received + qty_received;
   const line_status = new_line_received >= ordered ? 'Received' : 'Partial';
   
+  // CANONICAL: Only update qty_received and status - NEVER touch qty_ordered
   await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id, {
     qty_received: new_line_received,
     status: line_status
+    // NOTE: qty_ordered is NEVER updated here - it's immutable after creation
   });
+  
+  console.log(`[RECEIVE] Line updated: id=${line_item_id}, new_received=${new_line_received}, status=${line_status}`);
 
   // PHASE 14: Upsert InventoryItem (authoritative source)
   const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
