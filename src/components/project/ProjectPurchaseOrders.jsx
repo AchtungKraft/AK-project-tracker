@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
+import { orderKeys } from "@/components/financial/queryKeyFactories";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,13 +39,16 @@ import { cn } from "@/lib/utils";
 export default function ProjectPurchaseOrders({ projectId }) {
   const navigate = useNavigate();
 
+  // PHASE 5: Use canonical query key factory for consistent cache invalidation
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['projectPurchaseOrders', projectId],
+    queryKey: orderKeys.projectPurchaseOrders(projectId),
     queryFn: async () => {
       const response = await base44.functions.invoke('getProjectPurchaseOrders', { project_id: projectId });
       return response.data;
     },
     enabled: !!projectId,
+    // No staleTime - trust invalidation from forceAppRefresh
+    staleTime: 0,
   });
 
   const orders = data?.orders || [];
