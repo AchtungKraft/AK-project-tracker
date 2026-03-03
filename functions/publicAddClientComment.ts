@@ -118,6 +118,14 @@ Deno.serve(async (req) => {
             createdAttachments.push(...await Promise.all(attachmentPromises));
         }
 
+        // AUTO-REOPEN IF ARCHIVED
+        if (request.status === 'archived') {
+            await base44.asServiceRole.entities.ClientFeedbackRequest.update(request.id, {
+                status: 'posted',
+                archived_at: null
+            });
+        }
+
         return Response.json({
             success: true,
             comment: newComment,

@@ -13,7 +13,6 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatDistanceToNow } from "date-fns";
 import { groupAttentionByType, ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
-import { enrichRequest } from "./lifecycleHelpers";
 
 /**
  * Attention Badge Component
@@ -128,35 +127,17 @@ const SectionHeader = ({ label, count, colorClass }) => (
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
-  allRequests = [],
-  comments = [],
-  decisions = [],
-  attachments = [],
   lifecycleQuickFilter = 'all'
 }) => {
   // Build attention list from requiresTeamAction flag (actor-driven, not lifecycle-driven)
   const attentionItems = useMemo(() => {
-    // Existing lifecycle-based requests (already enriched)
-    const lifecycleRequests = projectGroups.flatMap(pg => [
+    // Flatten all requests from all buckets
+    const flatRequests = projectGroups.flatMap(pg => [
       ...pg.draft,
       ...pg.awaiting_client,
       ...pg.client_replied,
       ...pg.approved
     ]);
-
-    // Archived requests - enrich them and check if they require attention
-    const archivedAttentionRequests = allRequests
-      .filter(r => r.status === 'archived')
-      .map(r => enrichRequest(r, comments, decisions, attachments))
-      .filter(r => r.requiresTeamAction);
-
-    // Merge without duplicates
-    const flatRequests = [
-      ...lifecycleRequests,
-      ...archivedAttentionRequests.filter(
-        ar => !lifecycleRequests.some(lr => lr.id === ar.id)
-      )
-    ];
 
     // Filter by requiresTeamAction (canonical attention rule)
     const items = flatRequests
@@ -189,7 +170,7 @@ const NeedsAttentionSection = ({
       return new Date(b.request.latestActivityAt || b.request.updated_date) - 
              new Date(a.request.latestActivityAt || a.request.updated_date);
     });
-  }, [projectGroups, allRequests, comments, decisions, attachments]);
+  }, [projectGroups]);
 
   // Group by type for sectioned display
   const groupedAttention = useMemo(() => {

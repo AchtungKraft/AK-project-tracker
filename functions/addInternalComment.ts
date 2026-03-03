@@ -79,6 +79,17 @@ Deno.serve(async (req) => {
             }
         }
 
+        // AUTO-REOPEN IF ARCHIVED
+        // Fetch request to check status
+        const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
+        const request = requests[0];
+        if (request && request.status === 'archived') {
+            await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+                status: 'posted',
+                archived_at: null
+            });
+        }
+
         return Response.json({
             success: true,
             comment,

@@ -610,13 +610,9 @@ export default function ClientPortalHub() {
           </div>
         )}
 
-        {/* Needs Attention Section - Uses attention-eligible requests (includes archived with activity) */}
+        {/* Needs Attention Section - Uses lifecycle bucket data */}
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
-          allRequests={attentionEligibleRequests}
-          comments={comments}
-          decisions={decisions}
-          attachments={attachments}
           lifecycleQuickFilter={lifecycleQuickFilter}
         />
 
