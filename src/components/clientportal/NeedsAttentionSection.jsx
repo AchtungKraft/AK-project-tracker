@@ -127,17 +127,32 @@ const SectionHeader = ({ label, count, colorClass }) => (
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
+  allRequests = [],
   lifecycleQuickFilter = 'all'
 }) => {
   // Build attention list from requiresTeamAction flag (actor-driven, not lifecycle-driven)
   const attentionItems = useMemo(() => {
-    // Flatten all requests from all buckets
-    const flatRequests = projectGroups.flatMap(pg => [
+    // Existing lifecycle-based requests
+    const lifecycleRequests = projectGroups.flatMap(pg => [
       ...pg.draft,
       ...pg.awaiting_client,
       ...pg.client_replied,
       ...pg.approved
     ]);
+
+    // Archived requests that require attention (injected separately)
+    const archivedAttentionRequests = allRequests.filter(r =>
+      r.status === 'archived' &&
+      r.requiresTeamAction
+    );
+
+    // Merge without duplicates
+    const flatRequests = [
+      ...lifecycleRequests,
+      ...archivedAttentionRequests.filter(
+        ar => !lifecycleRequests.some(lr => lr.id === ar.id)
+      )
+    ];
 
     // Filter by requiresTeamAction (canonical attention rule)
     const items = flatRequests

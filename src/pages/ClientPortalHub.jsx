@@ -613,6 +613,7 @@ export default function ClientPortalHub() {
         {/* Needs Attention Section - Uses attention-eligible requests (includes archived with activity) */}
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
+          allRequests={attentionEligibleRequests}
           lifecycleQuickFilter={lifecycleQuickFilter}
         />
 
