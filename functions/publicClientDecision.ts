@@ -167,14 +167,22 @@ Deno.serve(async (req) => {
         // Update request status based on decision
         console.log(`[STATUS UPDATE] Starting update for request ${requestId} to status: ${decision}`);
         let updatedRequest = null;
-        const statusToSet = decision === 'changes_requested' ? 'changes_requested' : (decision === 'approved' ? 'approved' : null);
+        let statusToSet = decision === 'changes_requested' ? 'changes_requested' : (decision === 'approved' ? 'approved' : null);
+        
+        // AUTO-REOPEN IF ARCHIVED
+        if (request.status === 'archived') {
+            statusToSet = 'posted';
+            console.log(`[STATUS UPDATE] Request was archived, auto-reopening to 'posted'`);
+        }
         
         if (statusToSet) {
             console.log(`[STATUS UPDATE] Will set status to: ${statusToSet}`);
             try {
-                updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                    status: statusToSet
-                });
+                const updatePayload = { status: statusToSet };
+                if (request.status === 'archived') {
+                    updatePayload.archived_at = null;
+                }
+                updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, updatePayload);
                 console.log(`[STATUS UPDATE] Success! Updated request:`, JSON.stringify(updatedRequest));
             } catch (updateError) {
                 console.error(`[STATUS UPDATE] FAILED:`, updateError.message);
