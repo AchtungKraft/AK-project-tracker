@@ -56,9 +56,10 @@ import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
+import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { Receipt, Download } from "lucide-react";
+import { Receipt, Download, ClipboardList } from "lucide-react";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -107,7 +108,7 @@ export default function ProjectSupplyManager() {
   }
 
   // FORWARD MODEL ONLY - No legacy support
-  const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'report'];
+  const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'orders', 'report'];
   
   const rawTab = urlParams.get('tab');
   // Remap legacy fund tab to invoice
@@ -831,6 +832,10 @@ export default function ProjectSupplyManager() {
                 <Receipt className="w-4 h-4" />
                 Invoice
               </TabsTrigger>
+              <TabsTrigger value="orders" className="data-[state=active]:bg-indigo-900/30 gap-1.5">
+                <ClipboardList className="w-4 h-4" />
+                Purchase Orders
+              </TabsTrigger>
               <TabsTrigger value="report" className="data-[state=active]:bg-red-900/30 gap-1.5">
                 <FileText className="w-4 h-4" />
                 Report
@@ -892,6 +897,11 @@ export default function ProjectSupplyManager() {
             {/* Invoice tab content - FORWARD MODEL */}
             <TabsContent value="invoice" className="mt-4">
               <ForwardInvoiceDashboard projectId={projectId} />
+            </TabsContent>
+
+            {/* Purchase Orders tab - All project POs */}
+            <TabsContent value="orders" className="mt-4">
+              <ProjectPurchaseOrders projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="buy" className="mt-4 space-y-4">
