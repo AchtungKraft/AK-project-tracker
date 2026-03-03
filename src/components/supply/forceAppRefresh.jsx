@@ -354,6 +354,10 @@ export function extractRefreshContext(result, payload = {}) {
     result.created_orders.forEach(o => {
       if (o.order_id) context.orderIds.push(o.order_id);
       if (o.project_id) context.projectIds.push(o.project_id);
+      // PHASE 1: Support project_ids array from CREATE_PO
+      if (o.project_ids && Array.isArray(o.project_ids)) {
+        context.projectIds.push(...o.project_ids);
+      }
     });
   }
   
