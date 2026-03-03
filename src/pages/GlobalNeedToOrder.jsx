@@ -702,6 +702,7 @@ export default function GlobalNeedToOrder() {
             estimated_cost: item.estimated_cost,
             default_cost: item.unit_cost,
             default_retail: item.unit_retail,
+            order_url: item.order_url,
           }))}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {

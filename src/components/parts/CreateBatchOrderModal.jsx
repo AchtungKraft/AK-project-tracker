@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign, Truck, AlertCircle } from "lucide-react";
+import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign, Truck, AlertCircle, Link as LinkIcon } from "lucide-react";
 import { useSupplyAction } from "@/components/supply/useSupplyState";
 import { cn } from "@/lib/utils";
 
@@ -573,6 +573,18 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
                           <div className="flex items-center gap-1">
                             {/* PHASE 10B: part_name comes from read model directly */}
                             <p className="text-sm text-white truncate">{item.part_name || item.part?.part_name}</p>
+                            {item.order_url && item.order_url.startsWith('http') && (
+                              <a
+                                href={item.order_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300 ml-1 flex-shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Open Vendor Page"
+                              >
+                                <LinkIcon className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500">
                             {/* PHASE 10B: project info comes from read model directly */}

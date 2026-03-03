@@ -325,6 +325,7 @@ Deno.serve(async (req) => {
         part_name: part?.part_name || 'Unknown Part',
         vendor_part_number: part?.vendor_part_number || null,
         featured_photo: part?.featured_photo || null,
+        order_url: part?.order_url || null,
         project_id: c.project_id,
         project_name: project?.name || 'AK Stock',
         vendor_id: vendor?.id || null,
