@@ -353,14 +353,21 @@ export function extractRefreshContext(result, payload = {}) {
   if (result?.created_orders) {
     result.created_orders.forEach(o => {
       if (o.order_id) context.orderIds.push(o.order_id);
+      if (o.project_id) context.projectIds.push(o.project_id);
     });
   }
   
-  // PHASE 1: Extract from RECEIVE result
+  // PHASE 1: Extract from RECEIVE result (batch mode)
   if (result?.results) {
     result.results.forEach(r => {
       if (r.part_id) context.partIds.push(r.part_id);
+      if (r.project_id) context.projectIds.push(r.project_id);
     });
+  }
+  
+  // PHASE 1: Extract order_id from batch receive
+  if (result?.order_id) {
+    context.orderIds.push(result.order_id);
   }
   
   // Extract from invalidation_context if provided by backend
