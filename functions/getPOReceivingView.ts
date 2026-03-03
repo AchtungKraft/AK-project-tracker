@@ -1,10 +1,18 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 /**
  * getPOReceivingView - PO-centric receiving read model
  * 
+ * USES CANONICAL buildPOReadModel for data projection.
+ * This ensures identical data structure across all PO surfaces.
+ * 
  * Returns POReceivingViewModel shaped data for fast batch receiving.
  * Designed for: open PO → check boxes → enter qty → assign location → receive all
+ * 
+ * CANONICAL RULES:
+ * - qty_remaining = qty_ordered - qty_received (derived, never stored)
+ * - qty_ordered is IMMUTABLE after PO creation
+ * - Receivability determined by qty_remaining > 0, NOT by status
  */
 
 Deno.serve(async (req) => {
@@ -28,154 +36,125 @@ Deno.serve(async (req) => {
 
     const { order_id, filters = {} } = await req.json();
 
-    // Fetch data - if order_id provided, get specific PO; otherwise get all POs
-    // CANONICAL: Receivability is determined by qty_remaining > 0, NOT by status
-    const [orders, lineItems, parts, vendors, commitments, projects, locations] = await Promise.all([
-      order_id 
-        ? base44.entities.Order.filter({ id: order_id })
-        : base44.entities.Order.filter({ status: { $ne: 'Cancelled' } }),
-      base44.entities.PartPurchaseLineItem.list(),
-      base44.entities.Part.list(),
-      base44.entities.Vendor.list(),
-      base44.entities.PartCommitment.list(),
-      base44.entities.Project.list(),
-      base44.entities.Location.filter({ active: { $ne: false } }),
-    ]);
+    // Fetch locations for dropdown
+    const locations = await base44.entities.Location.filter({ active: { $ne: false } });
+    const locationOptions = locations.map(l => ({
+      id: l.id,
+      name: l.location_area + (l.bin_description ? ` - ${l.bin_description}` : ''),
+    }));
 
-    // Build lookup maps
-    const partMap = new Map(parts.map(p => [p.id, p]));
-    const vendorMap = new Map(vendors.map(v => [v.id, v]));
-    const commitmentMap = new Map(commitments.map(c => [c.id, c]));
-    const projectMap = new Map(projects.map(p => [p.id, p]));
-
-    // Build PO receiving view models
-    const poViews = orders.map(order => {
-      const vendor = vendorMap.get(order.vendor_id);
-      const orderLineItems = lineItems.filter(li => li.order_id === order.id && li.status !== 'Cancelled');
-
-      // Build line view models
-      const lines = orderLineItems.map(li => {
-        const part = partMap.get(li.part_id);
-        const commitment = li.commitment_id ? commitmentMap.get(li.commitment_id) : null;
-        const project = commitment?.project_id ? projectMap.get(commitment.project_id) : null;
-
-        // CANONICAL: qty_ordered comes directly from line item - this is the authoritative source
-        const qty_ordered = li.qty_ordered ?? 0;
-        const qty_received = li.qty_received ?? 0;
-        const qty_remaining = Math.max(0, qty_ordered - qty_received);
-
-        return {
-          line_item_id: li.id,
-          part_id: li.part_id,
-          part_name: part?.part_name || 'Unknown Part',
-          vendor_part_number: part?.vendor_part_number || null,
-          featured_photo: part?.featured_photo || null,
-          qty_ordered,
-          qty_received,
-          qty_remaining,
-          unit_cost: li.unit_cost || li.unit_price || 0,
-          extended_cost: (li.unit_cost || li.unit_price || 0) * qty_ordered,
-          commitment_id: li.commitment_id || null,
-          project_id: commitment?.project_id || null,
-          project_name: project?.name || 'AK Stock',
-          status: li.status || 'Ordered',
-          notes: li.notes || null,
-          // For UI receive input
-          receive_qty: qty_remaining, // Default to remaining
-          location_id: null,
-          // Debug fields for audit
-          _debug_raw_qty_ordered: li.qty_ordered,
-          _debug_raw_qty_received: li.qty_received,
-        };
+    // DETAIL MODE: Single PO
+    if (order_id) {
+      const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
+        order_id,
+        include_debug: true,
       });
 
-      // CANONICAL: Aggregates from line-level quantities
-      const total_qty_ordered = lines.reduce((sum, l) => sum + l.qty_ordered, 0);
-      const total_qty_received = lines.reduce((sum, l) => sum + l.qty_received, 0);
-      const total_qty_remaining = lines.reduce((sum, l) => sum + l.qty_remaining, 0);
+      if (poResult.data?.error) {
+        throw new Error(poResult.data.error);
+      }
 
-      return {
-        order_id: order.id,
-        po_number: order.po_number || `PO-${order.id.slice(-6)}`,
-        vendor_id: order.vendor_id,
-        vendor_name: vendor?.vendor_name || 'Unknown Vendor',
-        order_date: order.order_date,
-        eta_date: order.eta_date,
-        status: order.status,
-        order_number: order.order_number, // External reference
-        order_url: order.order_url,
-        notes: order.notes,
-        total_lines: lines.length,
-        total_qty_ordered,
-        total_qty_received,
-        total_qty_remaining,
-        lines,
-        // Attachments for reference
-        pdf_attachments: order.pdf_attachments || [],
-        // Debug fields for data integrity validation
-        _debug_total_qty_ordered_raw: orderLineItems.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0),
-        _debug_total_qty_received_raw: orderLineItems.reduce((sum, li) => sum + (li.qty_received ?? 0), 0),
-      };
+      const po = poResult.data?.po;
+      if (!po) {
+        return Response.json({ error: 'Order not found' }, { status: 404 });
+      }
+
+      return Response.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        po,
+        locations: locationOptions,
+      });
+    }
+
+    // LIST MODE: All receivable POs
+    // Fetch all non-cancelled orders
+    const orders = await base44.entities.Order.filter({ status: { $ne: 'Cancelled' } });
+    const orderIds = orders.map(o => o.id);
+
+    if (orderIds.length === 0) {
+      return Response.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        orders: [],
+        summary: { total_orders: 0, total_lines: 0, total_qty_remaining: 0 },
+        locations: locationOptions,
+        filter_options: { vendors: [], projects: [] },
+      });
+    }
+
+    // Use canonical read model for consistent data
+    const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
+      order_ids: orderIds,
+      include_debug: true,
     });
 
+    if (poResult.data?.error) {
+      throw new Error(poResult.data.error);
+    }
+
+    let poViews = poResult.data?.orders || [];
+
     // Apply filters
-    let filtered = poViews;
     if (filters.vendor_id) {
-      filtered = filtered.filter(po => po.vendor_id === filters.vendor_id);
+      poViews = poViews.filter(po => po.vendor_id === filters.vendor_id);
     }
+    
+    // CANONICAL: Filter by remaining qty, not status
     if (filters.has_remaining !== false) {
-      filtered = filtered.filter(po => po.total_qty_remaining > 0);
+      poViews = poViews.filter(po => po.total_qty_remaining > 0);
     }
+    
     if (filters.search) {
       const search = filters.search.toLowerCase();
-      filtered = filtered.filter(po => 
+      poViews = poViews.filter(po => 
         po.po_number.toLowerCase().includes(search) ||
         po.vendor_name.toLowerCase().includes(search) ||
         po.lines.some(l => l.part_name.toLowerCase().includes(search))
       );
     }
 
-    // Get unique projects from all lines
-    const allProjects = new Set();
-    filtered.forEach(po => {
+    // Get unique vendors and projects for filter dropdowns
+    const vendorIds = [...new Set(poViews.map(po => po.vendor_id))];
+    const projectIds = new Set();
+    poViews.forEach(po => {
       po.lines.forEach(l => {
-        if (l.project_id) allProjects.add(l.project_id);
+        if (l.project_id) projectIds.add(l.project_id);
       });
     });
 
-    // Summary
+    // Fetch vendor/project names for filter options
+    const [vendors, projects] = await Promise.all([
+      base44.entities.Vendor.list(),
+      base44.entities.Project.list(),
+    ]);
+    const vendorMap = new Map(vendors.map(v => [v.id, v]));
+    const projectMap = new Map(projects.map(p => [p.id, p]));
+
+    // Summary - derived from filtered data (CANONICAL: same dataset)
     const summary = {
-      total_orders: filtered.length,
-      total_lines: filtered.reduce((sum, po) => sum + po.lines.length, 0),
-      total_qty_remaining: filtered.reduce((sum, po) => sum + po.total_qty_remaining, 0),
+      total_orders: poViews.length,
+      total_lines: poViews.reduce((sum, po) => sum + po.total_lines, 0),
+      total_qty_ordered: poViews.reduce((sum, po) => sum + po.total_qty_ordered, 0),
+      total_qty_received: poViews.reduce((sum, po) => sum + po.total_qty_received, 0),
+      total_qty_remaining: poViews.reduce((sum, po) => sum + po.total_qty_remaining, 0),
     };
-
-    // Location options for dropdown
-    const locationOptions = locations.map(l => ({
-      id: l.id,
-      name: l.location_area + (l.bin_description ? ` - ${l.bin_description}` : ''),
-    }));
-
-    // If specific order requested, return single PO detail
-    if (order_id && filtered.length > 0) {
-      return Response.json({
-        success: true,
-        timestamp: new Date().toISOString(),
-        po: filtered[0],
-        locations: locationOptions,
-      });
-    }
 
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
-      orders: filtered,
+      orders: poViews,
       summary,
       locations: locationOptions,
       filter_options: {
-        vendors: [...new Set(filtered.map(po => po.vendor_id))]
-          .map(id => ({ id, vendor_name: vendorMap.get(id)?.vendor_name || 'Unknown' })),
-        projects: [...allProjects].map(id => ({ id, name: projectMap.get(id)?.name || 'Unknown' })),
+        vendors: vendorIds.map(id => ({ 
+          id, 
+          vendor_name: vendorMap.get(id)?.vendor_name || 'Unknown' 
+        })),
+        projects: [...projectIds].map(id => ({ 
+          id, 
+          name: projectMap.get(id)?.name || 'Unknown' 
+        })),
       },
     });
 
