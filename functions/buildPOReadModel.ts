@@ -57,19 +57,20 @@ Deno.serve(async (req) => {
     const projectMap = new Map(projects.map(p => [p.id, p]));
 
     // Determine which orders to fetch
+    // PURE PROJECTION: No filtering here - just fetch requested data
     let orders = [];
     let lineItems = [];
 
     if (order_id) {
-      // Single PO mode
+      // Single PO mode - fetch regardless of status
       orders = await base44.entities.Order.filter({ id: order_id });
       lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id });
     } else if (order_ids && order_ids.length > 0) {
-      // Batch mode
+      // Batch mode - fetch all requested orders regardless of status
       orders = await base44.entities.Order.filter({ id: { $in: order_ids } });
       lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: { $in: order_ids } });
     } else if (project_id) {
-      // Project filter mode - find all orders linked to project's commitments
+      // Project filter mode - find ALL orders linked to project's commitments (no status filter)
       const projectCommitments = commitments.filter(c => c.project_id === project_id);
       const projectCommitmentIds = new Set(projectCommitments.map(c => c.id));
       
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
         li.commitment_id && projectCommitmentIds.has(li.commitment_id)
       );
       
-      // Get unique order IDs
+      // Get unique order IDs - fetch ALL orders (no status filter)
       const orderIds = [...new Set(lineItems.map(li => li.order_id))];
       if (orderIds.length > 0) {
         orders = await base44.entities.Order.filter({ id: { $in: orderIds } });
@@ -93,12 +94,8 @@ Deno.serve(async (req) => {
       const vendor = vendorMap.get(order.vendor_id);
       
       // Get line items for this order
-      let orderLineItems = lineItems.filter(li => li.order_id === order.id);
-      
-      // Optionally exclude cancelled lines
-      if (!include_cancelled) {
-        orderLineItems = orderLineItems.filter(li => li.status !== 'Cancelled');
-      }
+      // PURE PROJECTION: Include all lines, let caller filter if needed
+      const orderLineItems = lineItems.filter(li => li.order_id === order.id);
 
       // Build canonical line view models
       const lines = orderLineItems.map(li => {
@@ -109,6 +106,11 @@ Deno.serve(async (req) => {
         // CANONICAL: qty_ordered and qty_received from line item - IMMUTABLE source
         const qty_ordered = li.qty_ordered ?? 0;
         const qty_received = li.qty_received ?? 0;
+        
+        // DEV GUARD: Warn if qty_ordered is missing (indicates CREATE_PO storage issue)
+        if (include_debug && li.qty_ordered == null) {
+          console.warn(`[DATA_INTEGRITY] Line ${li.id} missing qty_ordered - potential CREATE_PO issue`);
+        }
         
         // CANONICAL: qty_remaining is always derived, never stored
         const qty_remaining = Math.max(0, qty_ordered - qty_received);
@@ -136,8 +138,8 @@ Deno.serve(async (req) => {
           
           // Line status
           status: li.status || 'Ordered',
-          is_fully_received: qty_remaining === 0 && qty_ordered > 0,
-          is_cancelled: li.status === 'Cancelled',
+          is_line_fully_received: qty_remaining === 0 && qty_ordered > 0,
+          is_line_cancelled: li.status === 'Cancelled',
           
           // Notes
           notes: li.notes || null,
@@ -148,11 +150,14 @@ Deno.serve(async (req) => {
         };
       });
 
-      // CANONICAL AGGREGATES - derived from lines, never stored on header
-      const total_qty_ordered = lines.reduce((sum, l) => sum + l.qty_ordered, 0);
-      const total_qty_received = lines.reduce((sum, l) => sum + l.qty_received, 0);
-      const total_qty_remaining = lines.reduce((sum, l) => sum + l.qty_remaining, 0);
-      const total_cost = lines.reduce((sum, l) => sum + l.extended_cost, 0);
+      // CANONICAL AGGREGATES - derived from non-cancelled lines only
+      const activeLines = lines.filter(l => !l.is_line_cancelled);
+      const total_qty_ordered = activeLines.reduce((sum, l) => sum + l.qty_ordered, 0);
+      const total_qty_received = activeLines.reduce((sum, l) => sum + l.qty_received, 0);
+      const total_qty_remaining = activeLines.reduce((sum, l) => sum + l.qty_remaining, 0);
+      const total_cost = activeLines.reduce((sum, l) => sum + l.extended_cost, 0);
+      const total_lines_active = activeLines.length;
+      const total_lines_cancelled = lines.length - activeLines.length;
 
       // Compute progress percentage safely
       const progress_pct = total_qty_ordered > 0 
@@ -187,8 +192,9 @@ Deno.serve(async (req) => {
         order_url: order.order_url,
         notes: order.notes,
         
-        // CANONICAL AGGREGATES
-        total_lines: lines.length,
+        // CANONICAL AGGREGATES (from active lines only)
+        total_lines: total_lines_active,
+        total_lines_cancelled,
         total_qty_ordered,
         total_qty_received,
         total_qty_remaining,
@@ -208,17 +214,28 @@ Deno.serve(async (req) => {
 
       // Add debug diagnostics if requested
       if (include_debug) {
-        // Raw line sums for integrity validation
-        const rawLines = lineItems.filter(li => li.order_id === order.id && li.status !== 'Cancelled');
+        // Raw line sums for integrity validation (active lines only)
+        const rawActiveLines = lineItems.filter(li => li.order_id === order.id && li.status !== 'Cancelled');
+        const rawAllLines = lineItems.filter(li => li.order_id === order.id);
+        
+        // Check for lines missing qty_ordered
+        const linesMissingQtyOrdered = rawAllLines.filter(li => li.qty_ordered == null);
+        if (linesMissingQtyOrdered.length > 0) {
+          console.warn(`[DATA_INTEGRITY] Order ${order.id} has ${linesMissingQtyOrdered.length} lines missing qty_ordered`);
+        }
+        
         poViewModel._debug = {
-          line_count_raw: rawLines.length,
-          line_sum_ordered: rawLines.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0),
-          line_sum_received: rawLines.reduce((sum, li) => sum + (li.qty_received ?? 0), 0),
-          line_sum_remaining: rawLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0),
+          line_count_total: rawAllLines.length,
+          line_count_active: rawActiveLines.length,
+          line_count_cancelled: rawAllLines.length - rawActiveLines.length,
+          lines_missing_qty_ordered: linesMissingQtyOrdered.length,
+          line_sum_ordered: rawActiveLines.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0),
+          line_sum_received: rawActiveLines.reduce((sum, li) => sum + (li.qty_received ?? 0), 0),
+          line_sum_remaining: rawActiveLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0),
           // Integrity checks
-          ordered_matches: rawLines.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0) === total_qty_ordered,
-          received_matches: rawLines.reduce((sum, li) => sum + (li.qty_received ?? 0), 0) === total_qty_received,
-          remaining_matches: rawLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0) === total_qty_remaining,
+          ordered_matches: rawActiveLines.reduce((sum, li) => sum + (li.qty_ordered ?? 0), 0) === total_qty_ordered,
+          received_matches: rawActiveLines.reduce((sum, li) => sum + (li.qty_received ?? 0), 0) === total_qty_received,
+          remaining_matches: rawActiveLines.reduce((sum, li) => sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0)), 0) === total_qty_remaining,
         };
       }
 

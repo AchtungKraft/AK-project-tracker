@@ -68,22 +68,22 @@ Deno.serve(async (req) => {
     }
 
     // LIST MODE: All receivable POs
-    // Fetch all non-cancelled orders
-    const orders = await base44.entities.Order.filter({ status: { $ne: 'Cancelled' } });
-    const orderIds = orders.map(o => o.id);
+    // Fetch ALL orders first (no pre-filtering - let buildPOReadModel project, then we filter)
+    const allOrders = await base44.entities.Order.list();
+    const orderIds = allOrders.map(o => o.id);
 
     if (orderIds.length === 0) {
       return Response.json({
         success: true,
         timestamp: new Date().toISOString(),
         orders: [],
-        summary: { total_orders: 0, total_lines: 0, total_qty_remaining: 0 },
+        summary: { total_orders: 0, total_lines: 0, total_qty_remaining: 0, total_qty_ordered: 0, total_qty_received: 0 },
         locations: locationOptions,
         filter_options: { vendors: [], projects: [] },
       });
     }
 
-    // Use canonical read model for consistent data
+    // Use canonical read model for consistent data (pure projection, no filtering)
     const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
       order_ids: orderIds,
       include_debug: true,
@@ -95,16 +95,24 @@ Deno.serve(async (req) => {
 
     let poViews = poResult.data?.orders || [];
 
-    // Apply filters
-    if (filters.vendor_id) {
-      poViews = poViews.filter(po => po.vendor_id === filters.vendor_id);
-    }
+    // ========================================
+    // VISIBILITY FILTERING (caller responsibility)
+    // ========================================
     
-    // CANONICAL: Filter by remaining qty, not status
+    // 1. Exclude cancelled orders from receiving list
+    poViews = poViews.filter(po => !po.is_cancelled);
+    
+    // 2. Only show POs with remaining qty (receivable)
     if (filters.has_remaining !== false) {
       poViews = poViews.filter(po => po.total_qty_remaining > 0);
     }
     
+    // 3. Optional vendor filter
+    if (filters.vendor_id) {
+      poViews = poViews.filter(po => po.vendor_id === filters.vendor_id);
+    }
+    
+    // 4. Optional search filter
     if (filters.search) {
       const search = filters.search.toLowerCase();
       poViews = poViews.filter(po => 
