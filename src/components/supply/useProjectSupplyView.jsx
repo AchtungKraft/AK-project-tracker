@@ -165,11 +165,11 @@ export function usePOReceivingView(orderId = null, filters = {}) {
       });
       return response.data;
     },
-    // PHASE 1: Extended caching
-    staleTime: 60000,
+    // PHASE 1: No staleTime - trust hard invalidation from forceAppRefresh
+    staleTime: 0,
     gcTime: 300000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true, // Refetch on mount to get fresh data
   });
 
   const invalidate = () => {
