@@ -188,6 +188,13 @@ export default function POReceiving() {
                   </div>
                 </div>
                 
+                {/* DEV: Integrity warning for qty mismatch */}
+                {process.env.NODE_ENV === 'development' && po._debug && po._debug.total_qty_ordered !== po.total_qty_ordered && (
+                  <div className="mt-2 p-2 bg-red-900/30 border border-red-700 rounded text-xs text-red-400">
+                    ⚠ Qty Mismatch: Ordered={po.total_qty_ordered}, Debug Sum={po._debug.total_qty_ordered}
+                  </div>
+                )}
+                
                 {/* Progress bar */}
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -505,7 +512,13 @@ function POReceivingDetail({ po, locations, isLoading, onBack, refetch }) {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono">{line.qty_ordered}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {line.qty_ordered}
+                    {/* DEV: Debug integrity check */}
+                    {process.env.NODE_ENV === 'development' && line._debug_qty_ordered !== undefined && line._debug_qty_ordered !== line.qty_ordered && (
+                      <span className="ml-1 text-xs text-red-400" title={`Debug sum: ${line._debug_qty_ordered}`}>⚠</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right font-mono text-green-400">{line.qty_received}</TableCell>
                   <TableCell className="text-right font-mono text-blue-400">{line.qty_remaining}</TableCell>
                   <TableCell>
