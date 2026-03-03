@@ -841,9 +841,10 @@ async function createPO(ctx, commitment_ids, payload) {
 
     // Create line items and update commitments
     for (const item of items) {
-      // PHASE DATA INTEGRITY: Validate qty_ordered before creation
-      if (!item.qty || item.qty <= 0) {
-        throw new Error(`PO_INVALID_QTY: Cannot create PO line with qty_ordered=${item.qty} for ${item.part.part_name}`);
+      // PHASE DATA INTEGRITY: HARD GUARD - qty_ordered MUST be positive
+      const requestedQty = Number(item.qty);
+      if (!requestedQty || requestedQty <= 0 || !Number.isFinite(requestedQty)) {
+        throw new Error(`CREATE_PO_INVALID_QTY_ORDERED: qty_ordered must be positive, got ${item.qty} for ${item.part.part_name}`);
       }
       
       const lineItem = await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({
@@ -852,17 +853,18 @@ async function createPO(ctx, commitment_ids, payload) {
         commitment_id: item.commitment.id,
         vendor_id: vendorId,
         // CANONICAL: qty_ordered is IMMUTABLE after creation - locked at PO creation time
-        qty_ordered: item.qty,
+        // PHASE 1: SNAPSHOT - this value NEVER changes after creation
+        qty_ordered: requestedQty,
         qty_received: 0,
         // Pricing snapshots - locked at creation
         unit_cost: item.unit_cost,
         unit_retail: item.commitment.unit_retail_snapshot ?? 0,
-        extended_cost: item.unit_cost * item.qty,
+        extended_cost: item.unit_cost * requestedQty,
         status: 'Ordered'
       });
       
-      // Log for audit
-      console.log(`[CREATE_PO] Line created: part=${item.part.part_name}, qty_ordered=${item.qty}, unit_cost=${item.unit_cost}`);
+      // AUDIT LOG: Record the exact qty_ordered written
+      console.log(`[CREATE_PO] Line created: id=${lineItem.id}, part=${item.part.part_name}, qty_ordered=${requestedQty}, unit_cost=${item.unit_cost}`);
 
       // Update commitment
       const current_covered = item.commitment.covered_from_po ?? 0;
@@ -894,11 +896,15 @@ async function createPO(ctx, commitment_ids, payload) {
       created_date: ctx.timestamp
     });
 
+    // Extract project_ids from commitments for cache invalidation
+    const projectIds = [...new Set(items.map(i => i.commitment.project_id).filter(Boolean))];
+    
     created_orders.push({
       order_id: order.id,
       po_number,
       vendor_id: vendorId,
-      line_count: items.length
+      line_count: items.length,
+      project_ids: projectIds, // PHASE 1: Include for forceAppRefresh context extraction
     });
   }
 
