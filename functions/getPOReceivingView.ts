@@ -68,25 +68,24 @@ Deno.serve(async (req) => {
     }
 
     // LIST MODE: Pre-filter orders at DB level to prevent CPU timeout
-    // PHASE 1: Build DB query to exclude cancelled orders and apply vendor filter
+    // Build DB query - exclude only truly cancelled orders, include legacy/null status
     const orderQuery = { status: { $ne: 'Cancelled' } };
-    if (filters.vendor_id) {
+
+    // Vendor filter - guard against "all" sentinel value
+    if (filters?.vendor_id && filters.vendor_id !== 'all') {
       orderQuery.vendor_id = filters.vendor_id;
     }
-    // PHASE 5: Push PO number search to DB when possible
-    if (filters.search) {
-      orderQuery.po_number = { $regex: filters.search, $options: 'i' };
-    }
+    // NOTE: Search stays post-projection only (avoids regex/field-name issues at DB level)
 
-    // PHASE 4: Hard safety limit - receiving UI never needs thousands of POs
+    // Debug logging (temporary - remove after verification)
+    console.log('[POReceiving] orderQuery:', JSON.stringify(orderQuery));
+
+    // Hard safety limit - receiving UI never needs thousands of POs
     const filteredOrders = await base44.entities.Order.filter(orderQuery, '-created_date', 100);
     const orderIds = filteredOrders.map(o => o.id);
 
-    // Fetch vendor/project names for filter options (in parallel with empty-check)
-    const [vendors, projects] = await Promise.all([
-      base44.entities.Vendor.list(),
-      base44.entities.Project.list(),
-    ]);
+    console.log('[POReceiving] filteredOrders count:', filteredOrders.length);
+    console.log('[POReceiving] orderIds:', orderIds.length > 10 ? `${orderIds.length} orders (first 10: ${orderIds.slice(0, 10).join(', ')})` : orderIds.join(', '));
 
     if (orderIds.length === 0) {
       return Response.json({
