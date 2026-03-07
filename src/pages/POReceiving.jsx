@@ -587,7 +587,7 @@ function POReceivingDetail({ po, locations, isLoading, onBack, refetch }) {
           </div>
           <Button 
             onClick={handleReceive}
-            disabled={selectedLines.size === 0 || totalToReceive === 0 || isReceiving}
+            disabled={selectedLines.size === 0 || totalToReceive === 0 || isReceiving || po.total_qty_remaining === 0}
             className="bg-green-600 hover:bg-green-700"
           >
             {isReceiving ? (
