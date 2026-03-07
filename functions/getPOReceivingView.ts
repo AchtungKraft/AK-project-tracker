@@ -137,6 +137,12 @@ Deno.serve(async (req) => {
         if (l.project_id) projectIds.add(l.project_id);
       });
     });
+
+    // Fetch vendor/project names for filter options (only after confirming we have data)
+    const [vendors, projects] = await Promise.all([
+      base44.entities.Vendor.list(),
+      base44.entities.Project.list(),
+    ]);
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
 
