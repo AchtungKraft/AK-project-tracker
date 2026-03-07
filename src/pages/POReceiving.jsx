@@ -65,7 +65,10 @@ export default function POReceiving() {
         po={detailView.po} 
         locations={detailView.locations}
         isLoading={detailView.isLoading}
-        onBack={() => navigate(createPageUrl('POReceiving'))}
+        onBack={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['poReceivingView'] });
+          navigate(createPageUrl('POReceiving'));
+        }}
         refetch={detailView.refetch}
       />
     );
