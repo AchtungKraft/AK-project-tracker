@@ -345,10 +345,22 @@ function POReceivingDetail({ po, locations, isLoading, onBack, refetch }) {
         },
       });
 
+      const totalReceived = lines.reduce((sum, l) => sum + l.qty_received, 0);
       toast.success(`Received ${lines.length} line items`, {
-        description: `Total qty: ${lines.reduce((sum, l) => sum + l.qty_received, 0)}`,
+        description: `Total qty: ${totalReceived}`,
       });
-      refetch();
+
+      // Invalidate all relevant caches so list + supply views refresh
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['poReceivingView'] }),
+        queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] }),
+        queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] }),
+      ]);
+
+      // Auto-navigate back if PO is fully received
+      if (po.total_qty_remaining <= totalReceived) {
+        navigate(createPageUrl('POReceiving'));
+      }
     } catch (error) {
       toast.error('Failed to receive: ' + error.message);
     } finally {
