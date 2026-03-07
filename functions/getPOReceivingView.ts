@@ -67,10 +67,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    // LIST MODE: All receivable POs
-    // Fetch ALL orders first (no pre-filtering - let buildPOReadModel project, then we filter)
-    const allOrders = await base44.entities.Order.list();
-    const orderIds = allOrders.map(o => o.id);
+    // LIST MODE: Pre-filter orders at DB level to prevent CPU timeout
+    // PHASE 1: Build DB query to exclude cancelled orders and apply vendor filter
+    const orderQuery = { status: { $ne: 'Cancelled' } };
+    if (filters.vendor_id) {
+      orderQuery.vendor_id = filters.vendor_id;
+    }
+    // PHASE 5: Push PO number search to DB when possible
+    if (filters.search) {
+      orderQuery.po_number = { $regex: filters.search, $options: 'i' };
+    }
+
+    // PHASE 4: Hard safety limit - receiving UI never needs thousands of POs
+    const filteredOrders = await base44.entities.Order.filter(orderQuery, '-created_date', 100);
+    const orderIds = filteredOrders.map(o => o.id);
+
+    // Fetch vendor/project names for filter options (in parallel with empty-check)
+    const [vendors, projects] = await Promise.all([
+      base44.entities.Vendor.list(),
+      base44.entities.Project.list(),
+    ]);
 
     if (orderIds.length === 0) {
       return Response.json({
@@ -83,10 +99,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use canonical read model for consistent data (pure projection, no filtering)
+    // PHASE 2: Only project relevant POs through buildPOReadModel
     const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
       order_ids: orderIds,
-      include_debug: true,
+      include_debug: false,
     });
 
     if (poResult.data?.error) {
@@ -96,27 +112,19 @@ Deno.serve(async (req) => {
     let poViews = poResult.data?.orders || [];
 
     // ========================================
-    // VISIBILITY FILTERING (caller responsibility)
+    // POST-PROJECTION FILTERING (derived fields only)
     // ========================================
     
-    // 1. Exclude cancelled orders from receiving list
-    poViews = poViews.filter(po => !po.is_cancelled);
-    
-    // 2. Only show POs with remaining qty (receivable)
+    // PHASE 3: Only show POs with remaining qty (depends on line calculations)
     if (filters.has_remaining !== false) {
       poViews = poViews.filter(po => po.total_qty_remaining > 0);
     }
     
-    // 3. Optional vendor filter
-    if (filters.vendor_id) {
-      poViews = poViews.filter(po => po.vendor_id === filters.vendor_id);
-    }
-    
-    // 4. Optional search filter
+    // Search fallback: filter by vendor_name and part_name (not available at DB level)
     if (filters.search) {
       const search = filters.search.toLowerCase();
       poViews = poViews.filter(po => 
-        po.po_number.toLowerCase().includes(search) ||
+        (po.po_number && po.po_number.toLowerCase().includes(search)) ||
         po.vendor_name.toLowerCase().includes(search) ||
         po.lines.some(l => l.part_name.toLowerCase().includes(search))
       );
@@ -130,12 +138,6 @@ Deno.serve(async (req) => {
         if (l.project_id) projectIds.add(l.project_id);
       });
     });
-
-    // Fetch vendor/project names for filter options
-    const [vendors, projects] = await Promise.all([
-      base44.entities.Vendor.list(),
-      base44.entities.Project.list(),
-    ]);
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
 
