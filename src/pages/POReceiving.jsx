@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
  */
 export default function POReceiving() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const orderId = urlParams.get('order_id');
   
