@@ -230,6 +230,8 @@ export default function POReceiving() {
  * POReceivingDetail - Single PO batch receiving interface
  */
 function POReceivingDetail({ po, locations, isLoading, onBack, refetch }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const supplyAction = useSupplyAction();
   const [lineInputs, setLineInputs] = useState({});
   const [selectedLines, setSelectedLines] = useState(new Set());
