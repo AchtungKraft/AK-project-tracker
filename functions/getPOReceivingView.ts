@@ -182,40 +182,23 @@ Deno.serve(async (req) => {
 
     // =============================================
     // LIST MODE: Inline read model (no nested call)
-    // Same 2-round pattern as detail mode with asServiceRole
+    // 2 DB rounds with asServiceRole:
+    //   Round 1: orders + locations (lightweight)
+    //   Round 2: line items scoped to order IDs + reference data
     // =============================================
     const orderQuery = { status: { $ne: 'Cancelled' } };
     if (filters?.vendor_id && filters.vendor_id !== 'all') {
       orderQuery.vendor_id = filters.vendor_id;
     }
 
-    // ROUND 1: Orders + all line items + locations in parallel
-    const [filteredOrders, allLineItems, locations] = await Promise.all([
+    // ROUND 1: Orders + locations in parallel (no line items yet — scope them by order IDs in round 2)
+    const [filteredOrders, locations] = await Promise.all([
       svc.entities.Order.filter(orderQuery, '-created_date', 100),
-      svc.entities.PartPurchaseLineItem.list('-created_date', 500),
       svc.entities.Location.filter({ active: { $ne: false } }),
     ]);
     const tDB1 = Date.now();
 
-    // Index line items by order_id for fast lookup
-    const linesByOrder = new Map();
-    for (const li of allLineItems) {
-      if (!li.order_id) continue;
-      if (!linesByOrder.has(li.order_id)) linesByOrder.set(li.order_id, []);
-      linesByOrder.get(li.order_id).push(li);
-    }
-
-    // Filter to orders that have remaining qty
-    const orderIds = filteredOrders.map(o => o.id);
-    const relevantOrders = filteredOrders.filter(o => {
-      const lines = linesByOrder.get(o.id) || [];
-      const remaining = lines
-        .filter(l => l.status !== 'Cancelled')
-        .reduce((s, l) => s + Math.max(0, (l.qty_ordered ?? 0) - (l.qty_received ?? 0)), 0);
-      return remaining > 0;
-    });
-
-    if (relevantOrders.length === 0) {
+    if (filteredOrders.length === 0) {
       const locationOptions = locations.map(l => ({
         id: l.id,
         name: l.location_area + (l.bin_description ? ` - ${l.bin_description}` : ''),
@@ -232,28 +215,54 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Collect IDs for reference data
-    const partIds = new Set();
+    // Collect order IDs + vendor IDs from orders for round 2 scoping
+    const orderIds = filteredOrders.map(o => o.id);
     const vendorIds = new Set();
-    const commitmentIds = new Set();
-    for (const o of relevantOrders) {
+    for (const o of filteredOrders) {
       if (o.vendor_id) vendorIds.add(o.vendor_id);
-      const lines = linesByOrder.get(o.id) || [];
-      for (const li of lines) {
-        if (li.part_id) partIds.add(li.part_id);
-        if (li.vendor_id) vendorIds.add(li.vendor_id);
-        if (li.commitment_id) commitmentIds.add(li.commitment_id);
-      }
     }
 
-    // ROUND 2: All reference data in parallel
-    const [parts, vendors, commitments, projects] = await Promise.all([
-      partIds.size > 0 ? svc.entities.Part.filter({ id: { $in: [...partIds] } }) : Promise.resolve([]),
+    // ROUND 2: Line items scoped to order IDs + all reference data in parallel
+    const [scopedLineItems, vendors, projects] = await Promise.all([
+      svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } }),
       vendorIds.size > 0 ? svc.entities.Vendor.filter({ id: { $in: [...vendorIds] } }) : Promise.resolve([]),
-      commitmentIds.size > 0 ? svc.entities.PartCommitment.filter({ id: { $in: [...commitmentIds] } }) : Promise.resolve([]),
       svc.entities.Project.list(),
     ]);
     const tDB2 = Date.now();
+
+    // Index line items by order_id for fast lookup
+    const linesByOrder = new Map();
+    for (const li of scopedLineItems) {
+      if (!li.order_id) continue;
+      if (!linesByOrder.has(li.order_id)) linesByOrder.set(li.order_id, []);
+      linesByOrder.get(li.order_id).push(li);
+    }
+
+    // Filter to orders that have remaining qty
+    const relevantOrders = filteredOrders.filter(o => {
+      const lines = linesByOrder.get(o.id) || [];
+      const remaining = lines
+        .filter(l => l.status !== 'Cancelled')
+        .reduce((s, l) => s + Math.max(0, (l.qty_ordered ?? 0) - (l.qty_received ?? 0)), 0);
+      return remaining > 0;
+    });
+
+    if (relevantOrders.length === 0) {
+      const locationOptions = locations.map(l => ({
+        id: l.id,
+        name: l.location_area + (l.bin_description ? ` - ${l.bin_description}` : ''),
+      }));
+      const tEnd = Date.now();
+      console.log(`[POReceiving:list] orders=0 (post-filter) | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms total=${tEnd-t0}ms`);
+      return Response.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        orders: [],
+        summary: { total_orders: 0, total_lines: 0, total_qty_remaining: 0, total_qty_ordered: 0, total_qty_received: 0 },
+        locations: locationOptions,
+        filter_options: { vendors: [], projects: [] },
+      });
+    }
 
     // Build lookup maps
     const partMap = new Map(parts.map(p => [p.id, p]));
