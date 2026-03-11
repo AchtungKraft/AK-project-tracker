@@ -59,8 +59,8 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   const [defaultLocation, setDefaultLocation] = useState(LOCATION_NONE);
   const [isReceiving, setIsReceiving] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
-  // Generation counter - incremented after each receive to force re-init from server data
-  const [generation, setGeneration] = useState(0);
+  // Tracks which PO data snapshot we've initialized from - prevents re-init on every po prop change
+  const initializedForRef = useRef(null);
 
   // Split lines into open and completed
   const { openLines, completedLines } = useMemo(() => {
@@ -70,21 +70,28 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     return { openLines: open, completedLines: completed };
   }, [po?.lines]);
 
-  // Initialize/rebuild line inputs from PO data
-  // Only runs on first load OR after generation changes (post-receive)
-  useEffect(() => {
-    if (!po?.lines) return;
+  // Helper to rebuild local state from PO data
+  const rebuildStateFromPO = useCallback((poData) => {
+    if (!poData?.lines) return;
     const initial = {};
-    po.lines.forEach(line => {
+    poData.lines.forEach(line => {
       initial[line.line_item_id] = {
         receive_qty: line.qty_remaining,
         location_id: LOCATION_NONE,
       };
     });
     setLineInputs(initial);
-    // Select all open lines by default
-    setSelectedLines(new Set(openLines.map(l => l.line_item_id)));
-  }, [generation, po?.order_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const freshOpen = poData.lines.filter(l => l.qty_remaining > 0 && !l.is_line_cancelled);
+    setSelectedLines(new Set(freshOpen.map(l => l.line_item_id)));
+    initializedForRef.current = poData.order_id;
+  }, []);
+
+  // Initialize line inputs ONCE when PO first loads (or when navigating to a different PO)
+  useEffect(() => {
+    if (!po?.order_id) return;
+    if (initializedForRef.current === po.order_id) return; // Already initialized for this PO
+    rebuildStateFromPO(po);
+  }, [po?.order_id, po, rebuildStateFromPO]);
 
   const updateLineInput = useCallback((lineId, field, value) => {
     setLineInputs(prev => ({
