@@ -3,16 +3,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 /** 
  * getPOReceivingView - PO-centric receiving read model
  * 
- * DETAIL MODE: Inlines PO read model construction to eliminate nested function
- * call overhead. Single round of parallel DB queries.
+ * BOTH MODES use inlined read-model logic with asServiceRole queries.
+ * No nested function calls. Exactly 2 parallel DB rounds per mode.
  * 
- * LIST MODE: Uses buildPOReadModel for batch projection (acceptable overhead
- * for the batch path since it processes many POs).
+ * DETAIL MODE (order_id provided):
+ *   Round 1: order, line items, locations
+ *   Round 2: parts, vendors, commitments, projects
+ *   Returns full line-level detail for receiving UI.
+ * 
+ * LIST MODE (no order_id):
+ *   Round 1: orders, line items, locations
+ *   Round 2: parts, vendors, commitments, projects
+ *   Returns slim order summaries — no full line objects in response.
  * 
  * CANONICAL RULES:
  * - qty_remaining = qty_ordered - qty_received (derived, never stored)
  * - qty_ordered is IMMUTABLE after PO creation
  * - Receivability determined by qty_remaining > 0, NOT by status
+ * 
+ * PERFORMANCE TARGETS (warm):
+ *   1–5 POs: <1s | 10–20 POs: <1.5s | 50+ POs: <2.5s
  */
 
 Deno.serve(async (req) => {
