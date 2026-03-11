@@ -337,12 +337,12 @@ Deno.serve(async (req) => {
     const vendorIdsSet = [...new Set(poViews.map(po => po.vendor_id))];
 
     const tEnd = Date.now();
-    console.log(`[POReceiving:list] orders=${poViews.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
+    console.log(`[POReceiving:list] orders=${poViews.length} lines=${scopedLineItems.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
-      orders: ordersSlim,
+      orders: poViews,
       summary,
       locations: locationOptions,
       filter_options: {
