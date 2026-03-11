@@ -12,9 +12,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
  *   Returns full line-level detail for receiving UI.
  * 
  * LIST MODE (no order_id):
- *   Round 1: orders, line items, locations
- *   Round 2: parts, vendors, commitments, projects
- *   Returns slim order summaries — no full line objects in response.
+ *   Round 1: orders, locations
+ *   Round 2: line items (scoped by order IDs), vendors
+ *   Returns slim order-level summaries only — no per-line objects, no parts/commitments.
  * 
  * CANONICAL RULES:
  * - qty_remaining = qty_ordered - qty_received (derived, never stored)
