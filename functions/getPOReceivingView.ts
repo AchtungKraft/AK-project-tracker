@@ -222,11 +222,11 @@ Deno.serve(async (req) => {
       if (o.vendor_id) vendorIds.add(o.vendor_id);
     }
 
-    // ROUND 2: Line items scoped to order IDs + all reference data in parallel
-    const [scopedLineItems, vendors, projects] = await Promise.all([
+    // ROUND 2: Line items scoped to order IDs + vendors in parallel
+    // No parts/commitments/projects needed — list mode only shows order-level summaries
+    const [scopedLineItems, vendors] = await Promise.all([
       svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } }),
       vendorIds.size > 0 ? svc.entities.Vendor.filter({ id: { $in: [...vendorIds] } }) : Promise.resolve([]),
-      svc.entities.Project.list(),
     ]);
     const tDB2 = Date.now();
 
