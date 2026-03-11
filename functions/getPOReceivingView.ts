@@ -264,41 +264,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build lookup maps
-    const partMap = new Map(parts.map(p => [p.id, p]));
+    // Build lookup maps (vendors only — list mode doesn't need parts/commitments)
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
-    const commitmentMap = new Map(commitments.map(c => [c.id, c]));
-    const projectMap = new Map(projects.map(p => [p.id, p]));
 
-    // Build PO view models
+    // Build order-level summaries directly from raw line items (no per-line view models)
     let poViews = relevantOrders.map(order => {
       const vendor = vendorMap.get(order.vendor_id);
       const orderLines = linesByOrder.get(order.id) || [];
 
-      const lines = orderLines.map(li => {
-        const part = partMap.get(li.part_id);
-        const commitment = li.commitment_id ? commitmentMap.get(li.commitment_id) : null;
-        const project = commitment?.project_id ? projectMap.get(commitment.project_id) : null;
-        const qty_ordered = li.qty_ordered ?? 0;
-        const qty_received = li.qty_received ?? 0;
-        const qty_remaining = Math.max(0, qty_ordered - qty_received);
+      // Compute aggregates directly
+      let total_qty_ordered = 0;
+      let total_qty_received = 0;
+      let total_qty_remaining = 0;
+      let activeCount = 0;
+      let openCount = 0;
 
-        return {
-          line_item_id: li.id,
-          part_id: li.part_id,
-          part_name: part?.part_name || 'Unknown Part',
-          qty_ordered, qty_received, qty_remaining,
-          status: li.status || 'Ordered',
-          is_line_cancelled: li.status === 'Cancelled',
-          project_id: commitment?.project_id || null,
-          project_name: project?.name || 'AK Stock',
-        };
-      });
-
-      const activeLines = lines.filter(l => !l.is_line_cancelled);
-      const total_qty_ordered = activeLines.reduce((s, l) => s + l.qty_ordered, 0);
-      const total_qty_received = activeLines.reduce((s, l) => s + l.qty_received, 0);
-      const total_qty_remaining = activeLines.reduce((s, l) => s + l.qty_remaining, 0);
+      for (const li of orderLines) {
+        if (li.status === 'Cancelled') continue;
+        activeCount++;
+        const qo = li.qty_ordered ?? 0;
+        const qr = li.qty_received ?? 0;
+        const rem = Math.max(0, qo - qr);
+        total_qty_ordered += qo;
+        total_qty_received += qr;
+        total_qty_remaining += rem;
+        if (rem > 0) openCount++;
+      }
 
       return {
         order_id: order.id,
@@ -309,23 +300,23 @@ Deno.serve(async (req) => {
         order_date: order.order_date,
         order_number: order.order_number,
         order_url: order.order_url,
-        total_lines: activeLines.length,
+        total_lines: activeCount,
+        open_lines: openCount,
         total_qty_ordered,
         total_qty_received,
         total_qty_remaining,
         progress_pct: total_qty_ordered > 0 ? Math.round((total_qty_received / total_qty_ordered) * 100) : 0,
         pdf_attachments: order.pdf_attachments || [],
-        lines,
       };
     });
 
-    // Post-projection search filter
+    // Post-projection search filter (PO number + vendor name only — no part names in list mode)
     if (filters.search) {
       const search = filters.search.toLowerCase();
       poViews = poViews.filter(po =>
         (po.po_number && po.po_number.toLowerCase().includes(search)) ||
-        po.vendor_name.toLowerCase().includes(search) ||
-        po.lines.some(l => l.part_name.toLowerCase().includes(search))
+        (po.order_number && po.order_number.toLowerCase().includes(search)) ||
+        po.vendor_name.toLowerCase().includes(search)
       );
     }
 
@@ -336,25 +327,6 @@ Deno.serve(async (req) => {
       total_qty_received: poViews.reduce((s, po) => s + po.total_qty_received, 0),
       total_qty_remaining: poViews.reduce((s, po) => s + po.total_qty_remaining, 0),
     };
-
-    // Slim list payloads — no per-line objects, only order-level summaries
-    const ordersSlim = poViews.map(po => ({
-      order_id: po.order_id,
-      po_number: po.po_number,
-      vendor_id: po.vendor_id,
-      vendor_name: po.vendor_name,
-      status: po.status,
-      order_date: po.order_date,
-      order_number: po.order_number,
-      order_url: po.order_url,
-      total_lines: po.total_lines,
-      open_lines: po.lines.filter(l => !l.is_line_cancelled && l.qty_remaining > 0).length,
-      total_qty_ordered: po.total_qty_ordered,
-      total_qty_received: po.total_qty_received,
-      total_qty_remaining: po.total_qty_remaining,
-      progress_pct: po.progress_pct,
-      pdf_attachments: po.pdf_attachments,
-    }));
 
     const locationOptions = locations.map(l => ({
       id: l.id,
