@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import POReceivingDetailLoader from "@/components/receiving/POReceivingDetailLoader";
 import POReceivingListLoader from "@/components/receiving/POReceivingListLoader";
 
