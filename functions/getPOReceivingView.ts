@@ -155,10 +155,33 @@ Deno.serve(async (req) => {
       total_qty_remaining: poViews.reduce((sum, po) => sum + po.total_qty_remaining, 0),
     };
 
+    // Strip full line arrays from list mode — only summary fields needed
+    const ordersSlim = poViews.map(po => ({
+      order_id: po.order_id,
+      po_number: po.po_number,
+      vendor_id: po.vendor_id,
+      vendor_name: po.vendor_name,
+      status: po.status,
+      order_date: po.order_date,
+      order_number: po.order_number,
+      order_url: po.order_url,
+      total_lines: po.total_lines,
+      total_qty_ordered: po.total_qty_ordered,
+      total_qty_received: po.total_qty_received,
+      total_qty_remaining: po.total_qty_remaining,
+      progress_pct: po.progress_pct,
+      pdf_attachments: po.pdf_attachments,
+      // Include minimal line data for open-line count display
+      lines: po.lines?.map(l => ({
+        line_item_id: l.line_item_id,
+        qty_remaining: l.qty_remaining,
+      })),
+    }));
+
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
-      orders: poViews,
+      orders: ordersSlim,
       summary,
       locations: locationOptions,
       filter_options: {
