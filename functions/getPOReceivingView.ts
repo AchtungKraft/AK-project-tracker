@@ -38,14 +38,15 @@ Deno.serve(async (req) => {
     const { order_id, filters = {} } = await req.json();
     const tAuth = Date.now();
 
+    // Service role for ALL entity queries (avoids permission overhead)
+    const svc = base44.asServiceRole;
+
     // =============================================
     // DETAIL MODE: Inline read model (no nested call)
     // 2 DB rounds: round 1 gets order+lines+locations,
     //              round 2 gets all reference data in parallel
     // =============================================
     if (order_id) {
-      // Use service role for entity queries (consistent with buildPOReadModel)
-      const svc = base44.asServiceRole;
 
       // ROUND 1: Core data — order, lines, locations
       const [orderResults, lineItems, locations] = await Promise.all([
