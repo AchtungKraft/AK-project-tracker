@@ -225,12 +225,6 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     const totalReceived = lines.reduce((sum, l) => sum + l.qty_received, 0);
     toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
 
-    // Check optimistic completion
-    const optimisticRemaining = effectivePO.lines.reduce((sum, line) => {
-      const delta = deltas.find(d => d.line_item_id === line.line_item_id);
-      return sum + Math.max(0, line.qty_remaining - (delta?.qty_received || 0));
-    }, 0);
-
     try {
       // ── STEP 2: Fire backend action ──
       // Use direct invoke to skip forceAppRefresh (we handle refresh ourselves)
@@ -263,8 +257,8 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       // ── STEP 4: Navigation decision from FRESH backend data ──
       const freshPO = freshDetailData?.po;
       if (freshPO && freshPO.total_qty_remaining <= 0) {
-        // Invalidate list before navigating
-        queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] });
+        // Invalidate list cache using prefix match (covers all filter variants)
+        queryClient.invalidateQueries({ queryKey: ['poReceivingView', null], exact: false });
         toast.success('PO fully received!', { description: `${effectivePO.po_number} is complete` });
         navigate(createPageUrl('POReceiving'));
         return;
@@ -323,7 +317,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={async () => {
-            await queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] });
+            await queryClient.invalidateQueries({ queryKey: ['poReceivingView', null], exact: false });
             navigate(createPageUrl('POReceiving'));
           }} className="p-2">
             <ArrowLeft className="w-5 h-5" />
@@ -572,8 +566,8 @@ function backgroundInvalidate(queryClient, result) {
     queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] }),
     queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'] }),
     queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
-    // Invalidate list view so it's fresh on return
-    queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] }),
+    // Invalidate list view so it's fresh on return (prefix match covers all filter variants)
+    queryClient.invalidateQueries({ queryKey: ['poReceivingView', null], exact: false }),
   ];
 
   // Scoped invalidations
