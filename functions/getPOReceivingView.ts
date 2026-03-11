@@ -6,15 +6,27 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
  * BOTH MODES use inlined read-model logic with asServiceRole queries.
  * No nested function calls. Exactly 2 parallel DB rounds per mode.
  * 
+ * ═══════════════════════════════════════════════════════════════════
+ * RESPONSE SHAPE CONTRACT — DO NOT MODIFY WITHOUT UPDATING FRONTEND
+ * ═══════════════════════════════════════════════════════════════════
+ * 
  * DETAIL MODE (order_id provided):
  *   Round 1: order, line items, locations
  *   Round 2: parts, vendors, commitments, projects
- *   Returns full line-level detail for receiving UI.
+ *   Returns: { success, timestamp, po: { ...header, lines: [...] }, locations }
+ *   po.lines[] includes full part/project detail for the receiving table.
  * 
  * LIST MODE (no order_id):
  *   Round 1: orders, locations
  *   Round 2: line items (scoped by order IDs), vendors
- *   Returns slim order-level summaries only — no per-line objects, no parts/commitments.
+ *   Returns: { success, timestamp, orders: [...], summary, locations, filter_options }
+ *   orders[] is SUMMARY-ONLY. Each order object contains:
+ *     order_id, po_number, vendor_id, vendor_name, status, order_date,
+ *     order_number, order_url, total_lines, open_lines, total_qty_ordered,
+ *     total_qty_received, total_qty_remaining, progress_pct, pdf_attachments
+ *   ⚠ LIST MODE MUST NOT include per-line objects, parts, commitments, or projects.
+ *   ⚠ Adding those would regress list latency. If a future feature needs them,
+ *     create a separate endpoint or add a mode flag — do NOT bloat the default list.
  * 
  * CANONICAL RULES:
  * - qty_remaining = qty_ordered - qty_received (derived, never stored)
@@ -170,6 +182,8 @@ Deno.serve(async (req) => {
       }));
 
       const tEnd = Date.now();
+      // PERF REGRESSION GUARD: These timing logs are intentionally retained for performance
+      // regression diagnosis. Do not remove. Format: auth | db_round1 | db_round2 | build | total
       console.log(`[POReceiving:detail] order=${order_id} lines=${lineItems.length} parts=${partIds.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
       return Response.json({
@@ -338,6 +352,8 @@ Deno.serve(async (req) => {
     const vendorIdsSet = [...new Set(poViews.map(po => po.vendor_id))];
 
     const tEnd = Date.now();
+    // PERF REGRESSION GUARD: These timing logs are intentionally retained for performance
+    // regression diagnosis. Do not remove. Format: auth | db_round1 | db_round2 | build | total
     console.log(`[POReceiving:list] orders=${poViews.length} lines=${scopedLineItems.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
     return Response.json({

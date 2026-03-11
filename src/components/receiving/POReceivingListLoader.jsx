@@ -5,6 +5,9 @@ import POReceivingList from "./POReceivingList";
 /**
  * Loader wrapper for PO list mode.
  * Isolates the list query so it only fires when in list mode.
+ * 
+ * NOTE: List mode returns SUMMARY-ONLY order objects (no .lines array).
+ * The POReceivingList component must only use order-level aggregate fields.
  */
 export default function POReceivingListLoader() {
   const [searchTerm, setSearchTerm] = useState('');

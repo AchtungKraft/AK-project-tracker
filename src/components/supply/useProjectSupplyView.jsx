@@ -149,8 +149,20 @@ export function useOpsSupplyView(mode = 'ORDERING', filters = {}) {
 /**
  * usePOReceivingView - Hook for PO-centric receiving
  * 
- * If orderId provided, returns single PO detail.
- * Otherwise returns list of receivable POs.
+ * Two distinct return shapes depending on mode:
+ * 
+ * DETAIL MODE (orderId provided):
+ *   Returns: { po, locations, isLoading, refetch, ... }
+ *   po.lines[] contains full per-line detail (parts, projects, quantities).
+ * 
+ * LIST MODE (orderId = null):
+ *   Returns: { orders, summary, locations, filterOptions, isLoading, refetch, ... }
+ *   orders[] is SUMMARY-ONLY — no .lines array, no parts/commitments/projects.
+ *   Supported order fields: order_id, po_number, vendor_id, vendor_name, status,
+ *     order_date, order_number, order_url, total_lines, open_lines,
+ *     total_qty_ordered, total_qty_received, total_qty_remaining, progress_pct,
+ *     pdf_attachments.
+ *   ⚠ Do NOT add per-line data to list mode — it regresses backend latency.
  */
 export function usePOReceivingView(orderId = null, filters = {}) {
   const queryClient = useQueryClient();

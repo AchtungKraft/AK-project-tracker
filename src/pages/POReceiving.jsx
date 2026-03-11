@@ -7,10 +7,13 @@ import POReceivingListLoader from "@/components/receiving/POReceivingListLoader"
  * POReceiving - PO-centric fast receiving page
  * 
  * Two modes:
- * 1. List mode: Shows all receivable POs (no order_id param)
- * 2. Detail mode: Shows single PO for batch receiving (order_id in URL)
+ * 1. List mode (no order_id param): Shows summary-only PO cards.
+ *    Backend returns slim order-level data — NO per-line objects.
+ * 2. Detail mode (order_id in URL): Shows single PO with full line-level
+ *    detail for batch receiving.
  * 
  * Uses useSearchParams for reactive URL tracking — ensures re-render on navigation.
+ * Navigation: list→detail via navigate(), detail→list via navigate() + cache invalidation.
  */
 export default function POReceiving() {
   const [searchParams] = useSearchParams();
