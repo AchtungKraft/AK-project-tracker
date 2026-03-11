@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-/**
+/** 
  * getPOReceivingView - PO-centric receiving read model
  * 
  * DETAIL MODE: Inlines PO read model construction to eliminate nested function
