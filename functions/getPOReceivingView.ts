@@ -328,7 +328,7 @@ Deno.serve(async (req) => {
       total_qty_remaining: poViews.reduce((s, po) => s + po.total_qty_remaining, 0),
     };
 
-    // Slim list payloads (drop full line details)
+    // Slim list payloads — no per-line objects, only order-level summaries
     const ordersSlim = poViews.map(po => ({
       order_id: po.order_id,
       po_number: po.po_number,
@@ -344,7 +344,6 @@ Deno.serve(async (req) => {
       total_qty_remaining: po.total_qty_remaining,
       progress_pct: po.progress_pct,
       pdf_attachments: po.pdf_attachments,
-      lines: po.lines?.map(l => ({ line_item_id: l.line_item_id, qty_remaining: l.qty_remaining })),
     }));
 
     const locationOptions = locations.map(l => ({
