@@ -1,4 +1,5 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
 import POReceivingDetailLoader from "@/components/receiving/POReceivingDetailLoader";
 import POReceivingListLoader from "@/components/receiving/POReceivingListLoader";
 
@@ -9,11 +10,11 @@ import POReceivingListLoader from "@/components/receiving/POReceivingListLoader"
  * 1. List mode: Shows all receivable POs (no order_id param)
  * 2. Detail mode: Shows single PO for batch receiving (order_id in URL)
  * 
- * Each mode renders a separate loader component to avoid firing both queries simultaneously.
+ * Uses useSearchParams for reactive URL tracking — ensures re-render on navigation.
  */
 export default function POReceiving() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const orderId = urlParams.get('order_id');
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get("order_id");
 
   if (orderId) {
     return <POReceivingDetailLoader orderId={orderId} />;
