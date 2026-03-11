@@ -26,6 +26,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
  */
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
