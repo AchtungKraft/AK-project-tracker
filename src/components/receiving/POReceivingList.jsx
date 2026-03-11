@@ -120,7 +120,7 @@ export default function POReceivingList({
           </Card>
         ) : (
           orders?.map(po => {
-            const openLines = po.lines?.filter(l => l.qty_remaining > 0).length || 0;
+            const openLines = po.open_lines ?? po.total_lines ?? 0;
             const isPartial = po.total_qty_received > 0 && po.total_qty_remaining > 0;
             const isUntouched = po.total_qty_received === 0;
 
