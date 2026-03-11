@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     if (order_id) {
       const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
         order_id,
-        include_debug: true,
+        include_debug: false,
       });
 
       if (poResult.data?.error) {
