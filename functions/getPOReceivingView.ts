@@ -174,8 +174,6 @@ Deno.serve(async (req) => {
     // LIST MODE: Inline read model (no nested call)
     // Same 2-round pattern as detail mode with asServiceRole
     // =============================================
-    const svc = base44.asServiceRole;
-
     const orderQuery = { status: { $ne: 'Cancelled' } };
     if (filters?.vendor_id && filters.vendor_id !== 'all') {
       orderQuery.vendor_id = filters.vendor_id;
