@@ -282,14 +282,6 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="w-8 h-8 animate-spin text-gray-500" />
-      </div>
-    );
-  }
-
   if (!effectivePO) {
     return (
       <div className="p-6 text-center">
