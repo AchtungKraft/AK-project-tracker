@@ -192,6 +192,11 @@ export async function forceAppRefresh(queryClient, options = {}) {
       queryKey: ['projectSupplyView'],
       type: refetchActive ? 'active' : 'all'
     }),
+    // PO Receiving views - must refetch after RECEIVE actions
+    queryClient.refetchQueries({ 
+      queryKey: ['poReceivingView'],
+      type: 'active'
+    }),
   );
   
   // CANONICAL FINANCIAL REFETCH - scoped by project ID
