@@ -216,13 +216,16 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
 
       // DETERMINISTIC POST-RECEIVE FLOW:
-      // 1. forceAppRefresh already ran inside useSupplyAction.onSuccess
-      // 2. Now explicitly refetch the PO detail AND list queries
-      // 3. Then inspect fresh data to decide navigation
-      
-      // Refetch PO detail (the current view)
+      // 1. forceAppRefresh already ran inside useSupplyAction.onSuccess (invalidation + refetch)
+      // 2. Now explicitly fetch fresh PO detail data with cache bypass
+      // 3. Rebuild local state from that fresh data
+      // 4. Invalidate list so it's fresh when navigating back
+      // 5. Inspect remaining qty to decide navigation
+
+      // Step 2: Fetch fresh detail data, bypassing any stale cache
+      const detailQueryKey = supplyKeys.poReceiving(po.order_id, {});
       const freshDetailData = await queryClient.fetchQuery({
-        queryKey: ['poReceivingView', po.order_id, '{}'],
+        queryKey: detailQueryKey,
         queryFn: async () => {
           const { base44 } = await import("@/api/base44Client");
           const response = await base44.functions.invoke('getPOReceivingView', {
@@ -231,13 +234,15 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           });
           return response.data;
         },
-        staleTime: 0,
+        staleTime: 0, // Force fresh fetch
       });
 
-      // Also invalidate the list view so it's fresh when navigating back
-      await queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] });
+      // Step 4: Invalidate list query for when we navigate back
+      await queryClient.invalidateQueries({ 
+        queryKey: ['poReceivingView', null],
+      });
 
-      // Check fresh PO state
+      // Step 5: Inspect fresh PO state
       const freshPO = freshDetailData?.po;
       if (freshPO && freshPO.total_qty_remaining <= 0) {
         toast.success('PO fully received!', { description: `${po.po_number} is complete` });
@@ -245,10 +250,11 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
         return;
       }
 
-      // Stay on page - bump generation to rebuild local state from fresh data
-      setGeneration(g => g + 1);
-      // Also trigger the hook refetch to update the po prop
-      refetch();
+      // Step 3: Stay on page — rebuild local state from fresh server data
+      // Clear the initialized flag so rebuildStateFromPO runs when po prop updates
+      initializedForRef.current = null;
+      // Trigger the hook refetch which will update the po prop → triggers useEffect → rebuilds state
+      await refetch();
       
     } catch (error) {
       toast.error('Failed to receive: ' + error.message);
