@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPageUrl } from "@/utils";
-import { useSupplyAction, supplyKeys } from "@/components/supply/useProjectSupplyView";
+import { supplyKeys } from "@/components/supply/useProjectSupplyView";
+import { base44 } from "@/api/base44Client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -18,7 +18,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -38,39 +37,68 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import POReceivingLineRow from "./POReceivingLineRow";
+import POReceivingCompletedLines from "./POReceivingCompletedLines";
 
 const LOCATION_NONE = "__none__";
 
 /**
  * POReceivingDetail - Single PO batch receiving interface
  * 
- * Key design decisions:
- * - Local line input state initializes ONCE on entry, then only rebuilds after successful receive
- * - Uses a "generation" counter to force re-init from fresh server data post-receive
- * - Location selects use "__none__" sentinel instead of null
+ * OPTIMISTIC UPDATE PATTERN:
+ * 1. User clicks Receive
+ * 2. Immediately apply optimistic local state (updated qtys, deselect received lines)
+ * 3. Fire backend action (no await on forceAppRefresh)
+ * 4. Background: fetch fresh PO data to verify/reconcile
+ * 5. Navigation decision uses fresh backend data only
  */
 export default function POReceivingDetail({ po, locations, isLoading, refetch }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const supplyAction = useSupplyAction();
   
   const [lineInputs, setLineInputs] = useState({});
   const [selectedLines, setSelectedLines] = useState(new Set());
   const [defaultLocation, setDefaultLocation] = useState(LOCATION_NONE);
   const [isReceiving, setIsReceiving] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
-  // Tracks which PO data snapshot we've initialized from - prevents re-init on every po prop change
+  // Optimistic PO overlay — applied on top of server PO data for instant UI
+  const [optimisticDeltas, setOptimisticDeltas] = useState(null);
   const initializedForRef = useRef(null);
 
-  // Split lines into open and completed
-  const { openLines, completedLines } = useMemo(() => {
-    if (!po?.lines) return { openLines: [], completedLines: [] };
-    const open = po.lines.filter(l => l.qty_remaining > 0 && !l.is_line_cancelled);
-    const completed = po.lines.filter(l => l.qty_remaining === 0 || l.is_line_cancelled);
-    return { openLines: open, completedLines: completed };
-  }, [po?.lines]);
+  // Merge optimistic deltas on top of server PO data
+  const effectivePO = useMemo(() => {
+    if (!po || !optimisticDeltas) return po;
+    const deltaMap = new Map(optimisticDeltas.map(d => [d.line_item_id, d.qty_received]));
+    const mergedLines = po.lines.map(line => {
+      const delta = deltaMap.get(line.line_item_id);
+      if (delta == null) return line;
+      return {
+        ...line,
+        qty_received: line.qty_received + delta,
+        qty_remaining: Math.max(0, line.qty_remaining - delta),
+      };
+    });
+    const totalReceived = mergedLines.reduce((s, l) => s + l.qty_received, 0);
+    const totalRemaining = mergedLines.reduce((s, l) => s + Math.max(0, l.qty_remaining), 0);
+    const totalOrdered = po.total_qty_ordered || mergedLines.reduce((s, l) => s + l.qty_ordered, 0);
+    return {
+      ...po,
+      lines: mergedLines,
+      total_qty_received: totalReceived,
+      total_qty_remaining: totalRemaining,
+      progress_pct: totalOrdered > 0 ? Math.round((totalReceived / totalOrdered) * 100) : 0,
+    };
+  }, [po, optimisticDeltas]);
 
-  // Helper to rebuild local state from PO data
+  // Split lines into open and completed using effective (optimistic) data
+  const { openLines, completedLines } = useMemo(() => {
+    if (!effectivePO?.lines) return { openLines: [], completedLines: [] };
+    const open = effectivePO.lines.filter(l => l.qty_remaining > 0 && !l.is_line_cancelled);
+    const completed = effectivePO.lines.filter(l => l.qty_remaining === 0 || l.is_line_cancelled);
+    return { openLines: open, completedLines: completed };
+  }, [effectivePO?.lines]);
+
+  // Rebuild local state from PO data
   const rebuildStateFromPO = useCallback((poData) => {
     if (!poData?.lines) return;
     const initial = {};
@@ -86,10 +114,10 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     initializedForRef.current = poData.order_id;
   }, []);
 
-  // Initialize line inputs ONCE when PO first loads (or when navigating to a different PO)
+  // Initialize ONCE when PO first loads or on different PO
   useEffect(() => {
     if (!po?.order_id) return;
-    if (initializedForRef.current === po.order_id) return; // Already initialized for this PO
+    if (initializedForRef.current === po.order_id) return;
     rebuildStateFromPO(po);
   }, [po?.order_id, po, rebuildStateFromPO]);
 
@@ -118,7 +146,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   }, []);
 
   const receiveAllRemaining = useCallback(() => {
-    if (!po?.lines) return;
+    if (!effectivePO?.lines) return;
     const updated = { ...lineInputs };
     openLines.forEach(line => {
       if (updated[line.line_item_id]) {
@@ -127,7 +155,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     });
     setLineInputs(updated);
     selectAllOpen();
-  }, [po?.lines, lineInputs, openLines, selectAllOpen]);
+  }, [effectivePO?.lines, lineInputs, openLines, selectAllOpen]);
 
   const applyDefaultLocation = useCallback(() => {
     if (defaultLocation === LOCATION_NONE) return;
@@ -141,122 +169,119 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     toast.success(`Applied location to ${selectedLines.size} items`);
   }, [defaultLocation, lineInputs, selectedLines]);
 
+  // ─── RECEIVE HANDLER WITH OPTIMISTIC UPDATE ───
   const handleReceive = async () => {
     if (selectedLines.size === 0) {
       toast.error('Select at least one line to receive');
       return;
     }
 
-    // Build and sanitize payload
+    // Build payload
     const lines = [];
-    const skipped = [];
-    
     selectedLines.forEach(lineId => {
       const input = lineInputs[lineId];
-      const line = po.lines.find(l => l.line_item_id === lineId);
+      const line = effectivePO.lines.find(l => l.line_item_id === lineId);
       if (!input || !line) return;
-      
-      // Sanitize qty: must be integer, positive, clamped to remaining
       let qty = Math.floor(Number(input.receive_qty) || 0);
-      if (qty <= 0) { skipped.push({ lineId, reason: 'qty <= 0' }); return; }
-      if (line.qty_remaining <= 0) { skipped.push({ lineId, reason: 'fully received' }); return; }
+      if (qty <= 0 || line.qty_remaining <= 0) return;
       qty = Math.min(qty, line.qty_remaining);
-      
-      // Map location sentinel to null
       const location = input.location_id === LOCATION_NONE ? null : (input.location_id || null);
-      
-      lines.push({
-        line_item_id: lineId,
-        qty_received: qty,
-        location_id: location,
-      });
+      lines.push({ line_item_id: lineId, qty_received: qty, location_id: location });
     });
 
     if (lines.length === 0) {
-      toast.error('No valid quantities to receive. Check that quantities are positive and lines are not fully received.');
+      toast.error('No valid quantities to receive.');
       return;
     }
 
-    // Dev diagnostic logging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[POReceiving] RECEIVE payload:', {
-        order_id: po.order_id,
-        selected_count: selectedLines.size,
-        valid_lines: lines.length,
-        skipped,
-        payload_lines: lines,
-      });
-    }
-
+    // ── STEP 1: Optimistic UI update (INSTANT) ──
     setIsReceiving(true);
+    const deltas = lines.map(l => ({ line_item_id: l.line_item_id, qty_received: l.qty_received }));
+    setOptimisticDeltas(deltas);
+
+    // Optimistically rebuild line inputs for the new remaining qtys
+    const newInputs = { ...lineInputs };
+    const newSelected = new Set();
+    lines.forEach(l => {
+      const serverLine = effectivePO.lines.find(sl => sl.line_item_id === l.line_item_id);
+      if (!serverLine) return;
+      const newRemaining = Math.max(0, serverLine.qty_remaining - l.qty_received);
+      newInputs[l.line_item_id] = { receive_qty: newRemaining, location_id: LOCATION_NONE };
+    });
+    // Keep unaffected open lines selected, auto-select remaining open lines
+    effectivePO.lines.forEach(line => {
+      const delta = deltas.find(d => d.line_item_id === line.line_item_id);
+      const newRemaining = delta ? Math.max(0, line.qty_remaining - delta.qty_received) : line.qty_remaining;
+      if (newRemaining > 0 && !line.is_line_cancelled) {
+        newSelected.add(line.line_item_id);
+        if (!newInputs[line.line_item_id]) {
+          newInputs[line.line_item_id] = { receive_qty: newRemaining, location_id: LOCATION_NONE };
+        }
+      }
+    });
+    setLineInputs(newInputs);
+    setSelectedLines(newSelected);
+
+    const totalReceived = lines.reduce((sum, l) => sum + l.qty_received, 0);
+    toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
+
+    // Check optimistic completion
+    const optimisticRemaining = effectivePO.lines.reduce((sum, line) => {
+      const delta = deltas.find(d => d.line_item_id === line.line_item_id);
+      return sum + Math.max(0, line.qty_remaining - (delta?.qty_received || 0));
+    }, 0);
+
     try {
-      const result = await supplyAction.execute({
+      // ── STEP 2: Fire backend action ──
+      // Use direct invoke to skip forceAppRefresh (we handle refresh ourselves)
+      const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'RECEIVE',
         commitment_ids: [],
-        payload: {
-          order_id: po.order_id,
-          lines,
-        },
+        payload: { order_id: effectivePO.order_id, lines },
+        dry_run: false,
       });
+      const result = response.data;
+      if (result?.error) throw new Error(result.error);
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[POReceiving] RECEIVE result:', {
-          lines_received: result.lines_received,
-          total_qty: result.total_qty_received,
-          order_status: result.order_status,
-          results: result.results?.map(r => ({
-            line: r.line_item_id,
-            qty: r.qty_received,
-            status: r.line_status,
-          })),
-        });
-      }
-
-      const totalReceived = lines.reduce((sum, l) => sum + l.qty_received, 0);
-      toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
-
-      // DETERMINISTIC POST-RECEIVE FLOW:
-      // 1. forceAppRefresh already ran inside useSupplyAction.onSuccess (invalidation + refetch)
-      // 2. Now explicitly fetch fresh PO detail data with cache bypass
-      // 3. Rebuild local state from that fresh data
-      // 4. Invalidate list so it's fresh when navigating back
-      // 5. Inspect remaining qty to decide navigation
-
-      // Step 2: Fetch fresh detail data, bypassing any stale cache
-      const detailQueryKey = supplyKeys.poReceiving(po.order_id, {});
+      // ── STEP 3: Background verification with fresh backend data ──
+      const detailQueryKey = supplyKeys.poReceiving(effectivePO.order_id, {});
       const freshDetailData = await queryClient.fetchQuery({
         queryKey: detailQueryKey,
         queryFn: async () => {
-          const { base44 } = await import("@/api/base44Client");
-          const response = await base44.functions.invoke('getPOReceivingView', {
-            order_id: po.order_id,
+          const res = await base44.functions.invoke('getPOReceivingView', {
+            order_id: effectivePO.order_id,
             filters: {},
           });
-          return response.data;
+          return res.data;
         },
-        staleTime: 0, // Force fresh fetch
+        staleTime: 0,
       });
 
-      // Step 4: Invalidate list query for when we navigate back
-      await queryClient.invalidateQueries({ 
-        queryKey: ['poReceivingView', null],
-      });
+      // Clear optimistic overlay — real data is now in cache
+      setOptimisticDeltas(null);
 
-      // Step 5: Inspect fresh PO state
+      // ── STEP 4: Navigation decision from FRESH backend data ──
       const freshPO = freshDetailData?.po;
       if (freshPO && freshPO.total_qty_remaining <= 0) {
-        toast.success('PO fully received!', { description: `${po.po_number} is complete` });
+        // Invalidate list before navigating
+        queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] });
+        toast.success('PO fully received!', { description: `${effectivePO.po_number} is complete` });
         navigate(createPageUrl('POReceiving'));
         return;
       }
 
-      // Step 3: Stay on page — rebuild local state from fresh server data
-      // Clear the initialized flag so rebuildStateFromPO runs when po prop updates
+      // ── STEP 5: Reconcile — rebuild state from fresh data ──
       initializedForRef.current = null;
-      // Trigger the hook refetch which will update the po prop → triggers useEffect → rebuilds state
       await refetch();
-      
+
+      // ── STEP 6: Background invalidation for other views (non-blocking) ──
+      backgroundInvalidate(queryClient, result);
+
     } catch (error) {
+      // Rollback optimistic state
+      setOptimisticDeltas(null);
+      initializedForRef.current = null;
+      await refetch();
       toast.error('Failed to receive: ' + error.message);
     } finally {
       setIsReceiving(false);
@@ -271,7 +296,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     );
   }
 
-  if (!po) {
+  if (!effectivePO) {
     return (
       <div className="p-6 text-center">
         <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
@@ -286,7 +311,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
 
   const totalToReceive = Array.from(selectedLines).reduce((sum, lineId) => {
     const input = lineInputs[lineId];
-    const line = po.lines.find(l => l.line_item_id === lineId);
+    const line = effectivePO.lines.find(l => l.line_item_id === lineId);
     if (!input || !line || line.qty_remaining <= 0) return sum;
     const qty = Math.min(Math.floor(Number(input.receive_qty) || 0), line.qty_remaining);
     return sum + Math.max(0, qty);
@@ -294,7 +319,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
 
   return (
     <div className="p-6 space-y-6 pb-24">
-      {/* Header - Enhanced */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={async () => {
@@ -305,39 +330,44 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-white font-mono">{po.po_number}</h1>
+              <h1 className="text-xl font-bold text-white font-mono">{effectivePO.po_number}</h1>
               <Badge variant="outline" className={cn(
-                po.status === 'Ordered' && "bg-blue-500/20 text-blue-400 border-blue-500/30",
-                po.status === 'Partial' && "bg-amber-500/20 text-amber-400 border-amber-500/30",
-                po.status === 'Received' && "bg-green-500/20 text-green-400 border-green-500/30",
-                po.status === 'Draft' && "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                effectivePO.status === 'Ordered' && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                effectivePO.status === 'Partial' && "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                effectivePO.status === 'Received' && "bg-green-500/20 text-green-400 border-green-500/30",
+                effectivePO.status === 'Draft' && "bg-gray-500/20 text-gray-400 border-gray-500/30"
               )}>
-                {po.status}
+                {effectivePO.status}
               </Badge>
+              {optimisticDeltas && (
+                <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs animate-pulse">
+                  Syncing...
+                </Badge>
+              )}
             </div>
             <p className="text-gray-400 text-sm">
-              {po.vendor_name} • Ordered {po.order_date || 'N/A'}
-              {po.order_number && ` • Ref: ${po.order_number}`}
+              {effectivePO.vendor_name} • Ordered {effectivePO.order_date || 'N/A'}
+              {effectivePO.order_number && ` • Ref: ${effectivePO.order_number}`}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {po.order_url && (
+          {effectivePO.order_url && (
             <Button variant="outline" size="sm" asChild>
-              <a href={po.order_url} target="_blank" rel="noopener noreferrer">
+              <a href={effectivePO.order_url} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="w-4 h-4 mr-1" />
                 View Order
               </a>
             </Button>
           )}
-          {po.pdf_attachments?.length > 0 && (
+          {effectivePO.pdf_attachments?.length > 0 && (
             <Button variant="outline" size="sm" onClick={() => {
-              if (po.pdf_attachments.length === 1) {
-                window.open(po.pdf_attachments[0].url, '_blank');
+              if (effectivePO.pdf_attachments.length === 1) {
+                window.open(effectivePO.pdf_attachments[0].url, '_blank');
               }
             }}>
               <FileText className="w-4 h-4 mr-1" />
-              {po.pdf_attachments.length} Doc{po.pdf_attachments.length > 1 ? 's' : ''}
+              {effectivePO.pdf_attachments.length} Doc{effectivePO.pdf_attachments.length > 1 ? 's' : ''}
             </Button>
           )}
         </div>
@@ -347,25 +377,25 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       <div className="grid grid-cols-4 gap-3">
         <Card className="bg-gray-900/50 border-gray-700">
           <CardContent className="p-3 text-center">
-            <div className="text-lg font-bold text-white">{po.total_qty_ordered}</div>
+            <div className="text-lg font-bold text-white">{effectivePO.total_qty_ordered}</div>
             <div className="text-xs text-gray-500">Ordered</div>
           </CardContent>
         </Card>
         <Card className="bg-gray-900/50 border-gray-700">
           <CardContent className="p-3 text-center">
-            <div className="text-lg font-bold text-green-400">{po.total_qty_received}</div>
+            <div className="text-lg font-bold text-green-400">{effectivePO.total_qty_received}</div>
             <div className="text-xs text-gray-500">Received</div>
           </CardContent>
         </Card>
         <Card className="bg-gray-900/50 border-gray-700">
           <CardContent className="p-3 text-center">
-            <div className="text-lg font-bold text-blue-400">{po.total_qty_remaining}</div>
+            <div className="text-lg font-bold text-blue-400">{effectivePO.total_qty_remaining}</div>
             <div className="text-xs text-gray-500">Remaining</div>
           </CardContent>
         </Card>
         <Card className="bg-gray-900/50 border-gray-700">
           <CardContent className="p-3 text-center">
-            <div className="text-lg font-bold text-white">{po.progress_pct || 0}%</div>
+            <div className="text-lg font-bold text-white">{effectivePO.progress_pct || 0}%</div>
             <div className="text-xs text-gray-500">Complete</div>
           </CardContent>
         </Card>
@@ -375,7 +405,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
         <div 
           className="h-full bg-green-500 transition-all duration-500"
-          style={{ width: `${po.progress_pct || 0}%` }}
+          style={{ width: `${effectivePO.progress_pct || 0}%` }}
         />
       </div>
 
@@ -453,79 +483,17 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
               </TableRow>
             </TableHeader>
             <TableBody>
-              {openLines.map(line => {
-                const input = lineInputs[line.line_item_id] || { receive_qty: 0, location_id: LOCATION_NONE };
-                const isSelected = selectedLines.has(line.line_item_id);
-
-                return (
-                  <TableRow 
-                    key={line.line_item_id} 
-                    className={cn(
-                      "border-gray-700",
-                      isSelected && "bg-green-900/10"
-                    )}
-                  >
-                    <TableCell>
-                      <Checkbox 
-                        checked={isSelected}
-                        onCheckedChange={() => toggleLine(line.line_item_id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        {line.featured_photo ? (
-                          <img src={line.featured_photo} alt="" className="w-8 h-8 rounded object-contain bg-gray-800" />
-                        ) : (
-                          <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center">
-                            <Package className="w-4 h-4 text-gray-500" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-white text-sm">{line.part_name}</div>
-                          {line.vendor_part_number && (
-                            <div className="text-xs text-gray-500 font-mono">{line.vendor_part_number}</div>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-gray-300">{line.qty_ordered}</TableCell>
-                    <TableCell className="text-right font-mono text-green-400">{line.qty_received}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-blue-400">{line.qty_remaining}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={line.qty_remaining}
-                        value={input.receive_qty}
-                        onChange={(e) => {
-                          const val = Math.min(Math.max(0, parseInt(e.target.value) || 0), line.qty_remaining);
-                          updateLineInput(line.line_item_id, 'receive_qty', val);
-                        }}
-                        className="w-20 h-8 text-center bg-gray-800 border-gray-600"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Select 
-                        value={input.location_id || LOCATION_NONE}
-                        onValueChange={(v) => updateLineInput(line.line_item_id, 'location_id', v)}
-                      >
-                        <SelectTrigger className="h-8 bg-gray-800 border-gray-600">
-                          <SelectValue placeholder="Location" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={LOCATION_NONE}>No location</SelectItem>
-                          {locations?.map(loc => (
-                            <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-400">{line.project_name}</span>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {openLines.map(line => (
+                <POReceivingLineRow
+                  key={line.line_item_id}
+                  line={line}
+                  input={lineInputs[line.line_item_id] || { receive_qty: 0, location_id: LOCATION_NONE }}
+                  isSelected={selectedLines.has(line.line_item_id)}
+                  locations={locations}
+                  onToggle={toggleLine}
+                  onUpdateInput={updateLineInput}
+                />
+              ))}
             </TableBody>
           </Table>
         </Card>
@@ -537,78 +505,13 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
         </Card>
       )}
 
-      {/* Completed Lines Section (collapsible) */}
+      {/* Completed Lines Section */}
       {completedLines.length > 0 && (
-        <div>
-          <button 
-            onClick={() => setShowCompleted(!showCompleted)}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-2"
-          >
-            {showCompleted ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            Fully Received ({completedLines.length} items)
-          </button>
-          
-          {showCompleted && (
-            <Card className="bg-gray-900/30 border-gray-800">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-800 hover:bg-transparent">
-                    <TableHead className="w-10" />
-                    <TableHead>Part</TableHead>
-                    <TableHead className="text-right w-20">Ordered</TableHead>
-                    <TableHead className="text-right w-20">Received</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Project</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {completedLines.map(line => (
-                    <TableRow 
-                      key={line.line_item_id} 
-                      className="border-gray-800 opacity-50"
-                    >
-                      <TableCell>
-                        <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          {line.featured_photo ? (
-                            <img src={line.featured_photo} alt="" className="w-8 h-8 rounded object-contain bg-gray-800" />
-                          ) : (
-                            <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center">
-                              <Package className="w-4 h-4 text-gray-600" />
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-gray-400 text-sm">{line.part_name}</div>
-                            {line.vendor_part_number && (
-                              <div className="text-xs text-gray-600 font-mono">{line.vendor_part_number}</div>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-gray-500">{line.qty_ordered}</TableCell>
-                      <TableCell className="text-right font-mono text-green-600">{line.qty_received}</TableCell>
-                      <TableCell>
-                        <Badge className={cn(
-                          "text-xs",
-                          line.is_line_cancelled 
-                            ? "bg-red-500/20 text-red-400 border-red-500/30" 
-                            : "bg-green-500/20 text-green-400 border-green-500/30"
-                        )}>
-                          {line.is_line_cancelled ? 'Cancelled' : 'Received'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-500">{line.project_name}</span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          )}
-        </div>
+        <POReceivingCompletedLines
+          lines={completedLines}
+          showCompleted={showCompleted}
+          onToggle={() => setShowCompleted(!showCompleted)}
+        />
       )}
 
       {/* Receive Action Footer */}
@@ -641,4 +544,49 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       )}
     </div>
   );
+}
+
+/**
+ * Non-blocking background invalidation for other views.
+ * Fires after the PO detail is already reconciled.
+ * Does not block UI or navigation.
+ */
+function backgroundInvalidate(queryClient, result) {
+  // Collect affected entity IDs from result
+  const partIds = new Set();
+  const projectIds = new Set();
+  if (result?.results) {
+    result.results.forEach(r => {
+      if (r.part_id) partIds.add(r.part_id);
+      if (r.project_id) projectIds.add(r.project_id);
+    });
+  }
+
+  // Fire-and-forget — these queries will refetch when their views are next accessed
+  const invalidations = [
+    queryClient.invalidateQueries({ queryKey: ['parts'] }),
+    queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
+    queryClient.invalidateQueries({ queryKey: ['partCommitments'] }),
+    queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] }),
+    queryClient.invalidateQueries({ queryKey: ['orders'] }),
+    queryClient.invalidateQueries({ queryKey: ['partPurchaseLineItems'] }),
+    queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'] }),
+    queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
+    // Invalidate list view so it's fresh on return
+    queryClient.invalidateQueries({ queryKey: ['poReceivingView', null] }),
+  ];
+
+  // Scoped invalidations
+  partIds.forEach(id => {
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['part', String(id)] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partsInventoryView', String(id)] }));
+  });
+  projectIds.forEach(id => {
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', String(id)] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders', String(id)] }));
+    invalidations.push(queryClient.invalidateQueries({ queryKey: ['billingProcurementStates', String(id)] }));
+  });
+
+  // Non-blocking
+  Promise.all(invalidations).catch(() => {});
 }
