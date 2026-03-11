@@ -339,6 +339,7 @@ Deno.serve(async (req) => {
       order_number: po.order_number,
       order_url: po.order_url,
       total_lines: po.total_lines,
+      open_lines: po.lines.filter(l => !l.is_line_cancelled && l.qty_remaining > 0).length,
       total_qty_ordered: po.total_qty_ordered,
       total_qty_received: po.total_qty_received,
       total_qty_remaining: po.total_qty_remaining,
