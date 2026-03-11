@@ -44,11 +44,14 @@ Deno.serve(async (req) => {
     //              round 2 gets all reference data in parallel
     // =============================================
     if (order_id) {
+      // Use service role for entity queries (consistent with buildPOReadModel)
+      const svc = base44.asServiceRole;
+
       // ROUND 1: Core data — order, lines, locations
       const [orderResults, lineItems, locations] = await Promise.all([
-        base44.entities.Order.filter({ id: order_id }),
-        base44.entities.PartPurchaseLineItem.filter({ order_id }),
-        base44.entities.Location.filter({ active: { $ne: false } }),
+        svc.entities.Order.filter({ id: order_id }),
+        svc.entities.PartPurchaseLineItem.filter({ order_id }),
+        svc.entities.Location.filter({ active: { $ne: false } }),
       ]);
       const tDB1 = Date.now();
 
@@ -63,23 +66,18 @@ Deno.serve(async (req) => {
       const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
 
       // ROUND 2: ALL reference data in ONE parallel batch
-      // Commitments fetched here; project IDs derived and fetched in same round
-      // Since we can't know project_ids before commitments load, we fetch commitments
-      // first within this round, then immediately fetch projects.
-      // But to avoid a 3rd round, we accept fetching a small Project.list() 
-      // which is typically <30 records and fast.
       const [parts, vendors, commitments, projects] = await Promise.all([
         partIds.length > 0
-          ? base44.entities.Part.filter({ id: { $in: partIds } })
+          ? svc.entities.Part.filter({ id: { $in: partIds } })
           : Promise.resolve([]),
         vendorIds.length > 0
-          ? base44.entities.Vendor.filter({ id: { $in: vendorIds } })
+          ? svc.entities.Vendor.filter({ id: { $in: vendorIds } })
           : Promise.resolve([]),
         commitmentIds.length > 0
-          ? base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
+          ? svc.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
           : Promise.resolve([]),
         // Projects: small table, fetched once in parallel — avoids 3rd DB round
-        base44.entities.Project.list(),
+        svc.entities.Project.list(),
       ]);
       const tDB2 = Date.now();
 
