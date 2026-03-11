@@ -40,9 +40,11 @@ Deno.serve(async (req) => {
 
     // =============================================
     // DETAIL MODE: Inline read model (no nested call)
+    // 2 DB rounds: round 1 gets order+lines+locations,
+    //              round 2 gets all reference data in parallel
     // =============================================
     if (order_id) {
-      // PHASE 1: Parallel fetch — order, lines, locations all at once
+      // ROUND 1: Core data — order, lines, locations
       const [orderResults, lineItems, locations] = await Promise.all([
         base44.entities.Order.filter({ id: order_id }),
         base44.entities.PartPurchaseLineItem.filter({ order_id }),
@@ -55,13 +57,18 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'Order not found' }, { status: 404 });
       }
 
-      // Collect unique IDs for targeted reference data fetches
+      // Collect ALL unique IDs for a single parallel reference fetch
       const partIds = [...new Set(lineItems.map(li => li.part_id).filter(Boolean))];
       const vendorIds = [...new Set([order.vendor_id, ...lineItems.map(li => li.vendor_id)].filter(Boolean))];
       const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
 
-      // PHASE 2: Parallel fetch reference data — ONLY needed IDs
-      const [parts, vendors, commitments] = await Promise.all([
+      // ROUND 2: ALL reference data in ONE parallel batch
+      // Commitments fetched here; project IDs derived and fetched in same round
+      // Since we can't know project_ids before commitments load, we fetch commitments
+      // first within this round, then immediately fetch projects.
+      // But to avoid a 3rd round, we accept fetching a small Project.list() 
+      // which is typically <30 records and fast.
+      const [parts, vendors, commitments, projects] = await Promise.all([
         partIds.length > 0
           ? base44.entities.Part.filter({ id: { $in: partIds } })
           : Promise.resolve([]),
@@ -71,15 +78,10 @@ Deno.serve(async (req) => {
         commitmentIds.length > 0
           ? base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
           : Promise.resolve([]),
+        // Projects: small table, fetched once in parallel — avoids 3rd DB round
+        base44.entities.Project.list(),
       ]);
       const tDB2 = Date.now();
-
-      // Collect project IDs from commitments (scoped, not full table scan)
-      const projectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
-      const projects = projectIds.length > 0
-        ? await base44.entities.Project.filter({ id: { $in: projectIds } })
-        : [];
-      const tDB3 = Date.now();
 
       // Build lookup maps
       const partMap = new Map(parts.map(p => [p.id, p]));
@@ -158,7 +160,7 @@ Deno.serve(async (req) => {
       }));
 
       const tEnd = Date.now();
-      console.log(`[POReceiving:detail] order=${order_id} lines=${lineItems.length} | auth=${tAuth-t0}ms db1=${tDB1-tAuth}ms db2=${tDB2-tDB1}ms db3=${tDB3-tDB2}ms build=${tEnd-tDB3}ms total=${tEnd-t0}ms`);
+      console.log(`[POReceiving:detail] order=${order_id} lines=${lineItems.length} parts=${partIds.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
       return Response.json({
         success: true,
