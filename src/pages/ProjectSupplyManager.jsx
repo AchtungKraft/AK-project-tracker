@@ -55,6 +55,7 @@ import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx"
 import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
+import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import { Progress } from "@/components/ui/progress";
@@ -771,41 +772,8 @@ export default function ProjectSupplyManager() {
             </div>
           )}
 
-          {/* Summary Row - GNO-style compact stats */}
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Items</p>
-                <p className="text-xl font-bold text-white">{metrics.totalCommitments}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Planned Retail</p>
-                <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Invoiced</p>
-                <p className="text-xl font-bold text-gray-300 font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
-              </CardContent>
-            </Card>
-            <Card className={`bg-black/40 ${metrics.invoiceOutstanding > 0 ? 'border-amber-700' : 'border-gray-800'}`}>
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Outstanding</p>
-                <p className={`text-xl font-bold font-mono ${metrics.invoiceOutstanding > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
-                  {formatCurrencyUSD(metrics.invoiceOutstanding)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-black/40 border-gray-800">
-              <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Installed</p>
-                <p className="text-xl font-bold text-gray-300">{metrics.installPct}%</p>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Financial Summary - Revenue + Cost Exposure + Capital Breakdown + Cashflow Risk */}
+          <PSMFinancialSummary enrichedCommitments={enrichedCommitments} metrics={metrics} />
 
           {/* PHASE 7 - Financial Bar: Parts Exposure | Invoiced | Paid | Remaining | Credit */}
           <ProjectFinancialBar projectId={projectId} />
