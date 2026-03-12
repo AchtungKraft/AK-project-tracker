@@ -51,8 +51,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
-import BillingSummaryStrip from "@/components/financial/BillingSummaryStrip.jsx";
-import ProjectFinancialBar from "@/components/financial/ProjectFinancialBar";
+// BillingSummaryStrip and ProjectFinancialBar removed — consolidated into PSMFinancialSummary
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
@@ -775,11 +774,7 @@ export default function ProjectSupplyManager() {
           {/* Financial Summary - Revenue + Cost Exposure + Capital Breakdown + Cashflow Risk */}
           <PSMFinancialSummary enrichedCommitments={enrichedCommitments} metrics={metrics} />
 
-          {/* PHASE 7 - Financial Bar: Parts Exposure | Invoiced | Paid | Remaining | Credit */}
-          <ProjectFinancialBar projectId={projectId} />
-
-          {/* Billing Summary Strip - PHASE 10 */}
-          <BillingSummaryStrip projectId={projectId} commitments={supplyItems} />
+          {/* Financial overview consolidated into PSMFinancialSummary above */}
 
           {/* Tabs - FORWARD MODEL ONLY */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
