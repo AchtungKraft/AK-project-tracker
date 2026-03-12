@@ -949,6 +949,7 @@ async function receiveBatch(ctx, payload) {
   if (!order) throw new Error('Order not found');
 
   const results = [];
+  const errors = [];
   let total_received = 0;
 
   for (const line of lines) {
@@ -958,9 +959,14 @@ async function receiveBatch(ctx, payload) {
       continue;
     }
 
-    const result = await receiveSingleLine(ctx, line.line_item_id, qty, line.location_id);
-    results.push(result);
-    total_received += qty;
+    try {
+      const result = await receiveSingleLine(ctx, line.line_item_id, qty, line.location_id);
+      results.push(result);
+      total_received += qty;
+    } catch (lineError) {
+      console.error(`[BATCH_RECEIVE] Line ${line.line_item_id} failed: ${lineError.message}`);
+      errors.push({ line_item_id: line.line_item_id, error: lineError.message });
+    }
   }
 
   // Update order status
