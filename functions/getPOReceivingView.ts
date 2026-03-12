@@ -367,7 +367,7 @@ Deno.serve(async (req) => {
     const tEnd = Date.now();
     // PERF REGRESSION GUARD: These timing logs are intentionally retained for performance
     // regression diagnosis. Do not remove. Format: auth | db_round1 | db_round2 | build | total
-    console.log(`[POReceiving:list] orders=${poViews.length} lines=${scopedLineItems.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
+    console.log(`[POReceiving:list] orders=${poViews.length} lines=${scopedLineItems.length} parts=${allParts.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
     return Response.json({
       success: true,
