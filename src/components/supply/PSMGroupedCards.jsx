@@ -20,8 +20,10 @@ import {
 import {
   ChevronDown, ChevronUp, MoreVertical, ShoppingCart, Package,
   Wrench, Plus, Edit, Trash2, X, AlertTriangle, CheckCircle2,
-  ArrowUpDown, Layers
+  ArrowUpDown, Layers, ExternalLink
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { InventoryStateBadgeSimple, getInventoryStateCounts } from "./InventoryStateBadgeSimple";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
