@@ -1002,7 +1002,8 @@ async function receiveBatch(ctx, payload) {
     order_status: newStatus,
     lines_received: results.length,
     total_qty_received: total_received,
-    results
+    results,
+    errors: errors.length > 0 ? errors : undefined,
   };
 }
 
