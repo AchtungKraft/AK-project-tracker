@@ -237,6 +237,13 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       const result = response.data;
       if (result?.error) throw new Error(result.error);
 
+      // Surface partial failures from batch receive
+      if (result?.errors?.length > 0) {
+        toast.warning(`${result.errors.length} line(s) failed to receive`, {
+          description: result.errors.map(e => e.error).join('; '),
+        });
+      }
+
       // ── STEP 3: Background verification with fresh backend data ──
       const detailQueryKey = supplyKeys.poReceiving(effectivePO.order_id, {});
       const freshDetailData = await queryClient.fetchQuery({
