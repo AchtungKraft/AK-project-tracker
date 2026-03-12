@@ -186,7 +186,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       if (qty <= 0 || line.qty_remaining <= 0) return;
       qty = Math.min(qty, line.qty_remaining);
       const location = input.location_id === LOCATION_NONE ? null : (input.location_id || null);
-      lines.push({ line_item_id: lineId, qty_received: qty, location_id: location });
+      lines.push({ line_item_id: lineId, receive_qty: qty, location_id: location });
     });
 
     if (lines.length === 0) {
@@ -196,7 +196,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
 
     // ── STEP 1: Optimistic UI update (INSTANT) ──
     setIsReceiving(true);
-    const deltas = lines.map(l => ({ line_item_id: l.line_item_id, qty_received: l.qty_received }));
+    const deltas = lines.map(l => ({ line_item_id: l.line_item_id, qty_received: l.receive_qty }));
     setOptimisticDeltas(deltas);
 
     // Optimistically rebuild line inputs for the new remaining qtys
@@ -205,7 +205,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     lines.forEach(l => {
       const serverLine = effectivePO.lines.find(sl => sl.line_item_id === l.line_item_id);
       if (!serverLine) return;
-      const newRemaining = Math.max(0, serverLine.qty_remaining - l.qty_received);
+      const newRemaining = Math.max(0, serverLine.qty_remaining - l.receive_qty);
       newInputs[l.line_item_id] = { receive_qty: newRemaining, location_id: LOCATION_NONE };
     });
     // Keep unaffected open lines selected, auto-select remaining open lines
@@ -222,7 +222,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     setLineInputs(newInputs);
     setSelectedLines(newSelected);
 
-    const totalReceived = lines.reduce((sum, l) => sum + l.qty_received, 0);
+    const totalReceived = lines.reduce((sum, l) => sum + l.receive_qty, 0);
     toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
 
     try {
