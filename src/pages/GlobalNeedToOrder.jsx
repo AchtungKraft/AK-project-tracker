@@ -1,11 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -14,39 +12,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
-  DollarSign, CheckCircle2, XCircle, ChevronDown, ChevronUp, MoreVertical,
-  Plus, RefreshCw, ArrowRight, Truck, Package, Pencil
+  DollarSign, CheckCircle2, RefreshCw, Truck, Package
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { CoverageBadgeInline } from "@/components/parts/CoverageBadge";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/components/supply/useProjectSupplyView";
-import NextActionBadge from "@/components/supply/NextActionBadge";
-import { PrepayStatusBadge } from "@/components/supply/InventoryStateBadge";
-import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
-import ExecutionDataBlock, { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
+import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
+import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
+import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import { cn } from "@/lib/utils";
 
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
  * 
- * ALIGNED WITH ProjectSupplyManager (PSM) - Same canonical data contract
+ * ALIGNED WITH ProjectSupplyManager (PSM) - Uses identical PSMGroupedView component.
  * 
  * DATA SOURCE: getOpsSupplyView with mode='ORDERING'
  * MUTATIONS: Routes through executeSupplyAction (CREATE_PO)
@@ -55,22 +41,9 @@ import { cn } from "@/lib/utils";
  * - required_total, reserved_from_stock, covered_from_po, qty_installed
  * - to_order (computed gap - NEVER derive locally)
  * - coverage_status (FULL/PARTIAL/NONE)
- * - inventory_snapshot.physical_stock_global, .reserved_global_active, .reserved_this_project
- * - billing_status, unit_cost, unit_retail, exposure_gap
- * - next_action, block_reason_code
- * - pricing_integrity_status
+ * - order_id (for "View PO" navigation)
  * 
- * NO LEGACY FIELDS:
- * - NO item.qty_committed
- * - NO item.qty_ordered
- * - NO item.qty_to_order
- * - NO local derivation like: qtyToOrder = qty_committed - qty_ordered
- * 
- * COLUMN ORDER (matches PSM):
- * Checkbox | Part | Category | In Stock | Reserved (G|P) | Needed | To Order | Cost | Retail | Vendor | Payment | Coverage | Pricing | Next Action
- * 
- * CURRENCY FORMAT: formatCurrencyUSD (USA format with thousands separator)
- * NAME RESOLUTION: resolveVendorDisplay / resolveCategoryDisplay (never display IDs)
+ * NO LOCAL DERIVATION of coverage, qty_ordered, or inventory state.
  */
 export default function GlobalNeedToOrder() {
   const navigate = useNavigate();
@@ -85,14 +58,13 @@ export default function GlobalNeedToOrder() {
   const [selectedVendorFilter, setSelectedVendorFilter] = useState(filterVendorId || 'all');
   const [coverageFilter, setCoverageFilter] = useState('all');
   const [prepayFilter, setPrepayFilter] = useState('all');
-  const [expandedGroups, setExpandedGroups] = useState(new Set(['all']));
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [editingPartId, setEditingPartId] = useState(null);
 
-  // Use canonical ops supply view - replaces getGlobalOrderQueue
+  // Use canonical ops supply view
   const { 
     items: needToOrderItems, 
     summary, 
@@ -106,28 +78,20 @@ export default function GlobalNeedToOrder() {
   });
 
   // Supply action dispatcher
-  const supplyAction = useSupplyAction();
   const actionPreview = useSupplyActionPreview();
 
-  // PHASE 6: GNO is a FILTERED view of supply data
-  // MUST exclude: coverage_status === 'FULL' OR to_order === 0
-  // Uses canonical inventory_snapshot fields from read model
+  // CANONICAL: Filter using read model fields only — no local derivation
   const filteredItems = useMemo(() => {
     return needToOrderItems.filter(item => {
-      // PHASE 6 CORE RULE: Exclude fully covered items
       if (item.coverage_status === 'FULL') return false;
-      
-      // PHASE 6 CORE RULE: Exclude items with nothing to order
       if ((item.to_order ?? 0) === 0) return false;
       
-      // Coverage filter using canonical coverage_status
       if (coverageFilter !== 'all') {
         const coverageState = item.coverage_status === 'FULL' ? 'covered' :
                               item.coverage_status === 'PARTIAL' ? 'partial' : 'uncovered';
         if (coverageState !== coverageFilter) return false;
       }
       
-      // Prepay filter
       if (prepayFilter === 'required' && !item.requires_prepay) return false;
       if (prepayFilter === 'not_required' && item.requires_prepay) return false;
 
@@ -135,87 +99,24 @@ export default function GlobalNeedToOrder() {
     });
   }, [needToOrderItems, coverageFilter, prepayFilter]);
 
-  // Group items - using canonical fields from read model
-  const groupedItems = useMemo(() => {
-    const groups = {};
-
-    filteredItems.forEach(item => {
-      let groupKey, groupLabel, groupColor;
-
-      // CANONICAL: Resolve vendor/category names via resolvers - never display IDs
-      const vendorDisplay = resolveVendorDisplay(item.vendor_id, item.vendor_name);
-      const categoryDisplay = resolveCategoryDisplay(item.category_id, item.category_name);
-
-      if (groupMode === 'vendor') {
-        groupKey = item.vendor_id || 'unassigned';
-        groupLabel = vendorDisplay.name;
-        groupColor = '#3B82F6';
-      } else if (groupMode === 'project') {
-        groupKey = item.project_id || 'general';
-        groupLabel = item.project_name || 'General / AK Stock';
-        groupColor = '#EF4444';
-      } else {
-        // Use canonical coverage_status
-        const coverageState = item.coverage_status === 'FULL' ? 'covered' :
-                              item.coverage_status === 'PARTIAL' ? 'partial' : 'uncovered';
-        groupKey = coverageState;
-        groupLabel = coverageState === 'covered' ? '✓ Fully Covered' :
-                     coverageState === 'partial' ? '◐ Partially Covered' : '○ Uncovered';
-        groupColor = coverageState === 'covered' ? '#10B981' :
-                     coverageState === 'partial' ? '#F59E0B' : '#EF4444';
-      }
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = {
-          id: groupKey,
-          label: groupLabel,
-          color: groupColor,
-          items: [],
-          totalQty: 0,
-          totalExposure: 0,
-          totalCost: 0,
-          canOrderCount: 0,
-        };
-      }
-
-      groups[groupKey].items.push(item);
-      // CANONICAL: Use to_order from read model - NO local derivation
-      // Group totals use canonical fields only
-      groups[groupKey].totalQty += item.to_order ?? 0;
-      groups[groupKey].totalExposure += item.exposure_gap ?? 0;
-      // Use planned_cost_total if available, otherwise estimated_cost
-      groups[groupKey].totalCost += item.planned_cost_total ?? item.estimated_cost ?? 0;
-      if (item.is_orderable) groups[groupKey].canOrderCount++;
-    });
-
-    return Object.values(groups).sort((a, b) => {
-      if (groupMode === 'coverage') {
-        const order = { covered: 0, partial: 1, uncovered: 2 };
-        return (order[a.id] || 3) - (order[b.id] || 3);
-      }
-      return a.label.localeCompare(b.label);
-    });
-  }, [filteredItems, groupMode]);
-
-  // Stats from filtered items - using canonical fields from read model ONLY
-  // Group totals use sum(to_order), sum(exposure_gap), sum(planned_cost_total)
+  // Stats from canonical fields
   const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
   const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
   const totalCost = filteredItems.reduce((sum, i) => sum + (i.planned_cost_total ?? i.estimated_cost ?? 0), 0);
   const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
   const blockedCount = filteredItems.filter(i => !i.is_orderable).length;
 
-  // PHASE 2: DEV DRIFT GUARD - Use shared validation function
+  // DEV DRIFT GUARD
   useEffect(() => {
     if (process.env.NODE_ENV === 'development' && filteredItems.length > 0) {
       validateSupplyModelDrift(filteredItems, 'GlobalNeedToOrder');
     }
   }, [filteredItems]);
 
-  // Batch PO creation handler using dispatcher
+  // Batch PO creation handler
   const handleBatchCreatePO = async () => {
     audit.trackClick('batch_create_po', { selected_count: selectedItems.size });
-    const selectedData = getSelectedItemsData();
+    const selectedData = filteredItems.filter(item => selectedItems.has(item.id));
     if (selectedData.length === 0) {
       toast.error('Select items to create PO');
       return;
@@ -224,7 +125,6 @@ export default function GlobalNeedToOrder() {
     const commitment_ids = selectedData.map(i => i.commitment_id);
     
     try {
-      // Preview first
       const preview = await actionPreview.preview({
         action_type: 'CREATE_PO',
         commitment_ids,
@@ -238,7 +138,6 @@ export default function GlobalNeedToOrder() {
       }
 
       audit.trackSuccess('batch_create_po');
-      // Show batch order modal with preview data
       setShowBatchOrderModal(true);
     } catch (error) {
       audit.trackError('batch_create_po', error);
@@ -246,189 +145,41 @@ export default function GlobalNeedToOrder() {
     }
   };
 
-  // Go to receiving after PO creation
-  const handleGoToReceiving = () => {
-    audit.trackClick('navigate_to_receiving');
-    navigate(createPageUrl('POReceiving'));
-  };
-
-  const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
+  // PSM callback handlers — bridge PSM component API to GNO modals
+  const handleCreatePO = (commitment) => {
+    setOrderModalPart({
+      commitment_id: commitment.commitment_id || commitment.id,
+      part_id: commitment.part_id,
+      part_name: commitment.part?.part_name || commitment.part_name,
+      vendor_id: commitment.vendor_id || commitment.vendor?.id,
+      vendor_name: commitment.vendor?.vendor_name || commitment.vendor_name,
+      qty_to_order: commitment.to_order ?? 0,
+      estimated_cost: commitment.estimated_cost,
+      default_cost: commitment.unit_cost,
+      default_retail: commitment.unit_retail,
     });
   };
 
-  // CANONICAL: Selection uses commitment_id exclusively
-  const toggleItemSelection = (commitmentId) => {
-    if (!commitmentId) {
-      console.error('[CANONICAL VIOLATION] toggleItemSelection called with undefined commitmentId');
-      return;
+  const handleDeltaOrder = (commitment) => {
+    setDeltaOrderCommitment(commitment);
+  };
+
+  const handlePartClick = (part, commitment) => {
+    if (part?.id || commitment?.part_id) {
+      setEditingPartId(part?.id || commitment?.part_id);
     }
-    setSelectedItems(prev => {
-      const next = new Set(prev);
-      if (next.has(commitmentId)) next.delete(commitmentId);
-      else next.add(commitmentId);
-      return next;
-    });
   };
 
-  const selectAllInGroup = (groupItems) => {
-    const orderableIds = groupItems.filter(i => i.is_orderable).map(i => i.commitment_id);
-    const allSelected = orderableIds.every(id => selectedItems.has(id));
-    
-    setSelectedItems(prev => {
-      const next = new Set(prev);
-      if (allSelected) {
-        orderableIds.forEach(id => next.delete(id));
-      } else {
-        orderableIds.forEach(id => next.add(id));
-      }
-      return next;
-    });
+  const handleReceive = (commitment) => {
+    if (commitment.order_id) {
+      navigate(createPageUrl('POReceiving') + `?order_id=${commitment.order_id}`);
+    } else {
+      navigate(createPageUrl('POReceiving'));
+    }
   };
 
   const getSelectedItemsData = () => {
-    return filteredItems.filter(item => selectedItems.has(item.commitment_id));
-  };
-
-  // PHASE 4: Import shared ExecutionDataBlock - NO local definition
-  // Uses ExecutionDataBlock from @/components/supply/ExecutionDataBlock
-
-  const renderItem = (item) => {
-    // PHASE 6: PROCUREMENT GUARD - Disable ordering when gap_qty === 0
-    // Use backend is_orderable AND verify coverage_status !== 'FULL'
-    const isOrderable = item.is_orderable === true && item.coverage_status !== 'FULL' && (item.to_order ?? 0) > 0;
-    
-    // CANONICAL: Inventory stats from read model only - NO local derivation
-    const snap = item.inventory_snapshot || {};
-    const reservedProject = snap.reserved_this_project ?? item.reserved_from_stock ?? 0;
-    const needed = item.required_total ?? 0;
-    const toOrder = item.to_order ?? 0;
-
-    // Resolve vendor/category names - NEVER display IDs
-    const vendorDisplay = resolveVendorDisplay(item.vendor_id, item.vendor_name);
-    const categoryDisplay = resolveCategoryDisplay(item.category_id, item.category_name);
-
-    return (
-      <div 
-        key={item.commitment_id}
-        className={cn(
-          "p-3 hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
-          !isOrderable && "opacity-60"
-        )}
-      >
-        {/* Main Row */}
-        <div className="flex items-center gap-3">
-          {/* Checkbox */}
-          <Checkbox
-            checked={selectedItems.has(item.commitment_id)}
-            onCheckedChange={() => toggleItemSelection(item.commitment_id)}
-            disabled={!isOrderable}
-          />
-
-          {/* Part Info */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            {item.featured_photo && (
-              <div className="w-10 h-10 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-                <img src={item.featured_photo} alt="" className="w-full h-full object-contain" />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-white text-sm font-medium truncate">{item.part_name}</p>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                {item.vendor_part_number && <span className="font-mono">{item.vendor_part_number}</span>}
-                {groupMode !== 'project' && item.project_name && <span>· {item.project_name}</span>}
-                <span>· {vendorDisplay.name}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Coverage Badge (canonical: coverage_status) */}
-          <div className="w-24 hidden md:block">
-            <CoverageBadgeInline coverage={{
-              coverage_status: item.coverage_status,
-              gap_qty: toOrder,
-              qty_needed: needed,
-              qty_reserved: reservedProject,
-              qty_ordered: item.covered_from_po ?? 0,
-              qty_installed: item.qty_installed ?? 0,
-            }} />
-          </div>
-
-          {/* Payment/Prepay Status */}
-          <div className="w-20 hidden lg:block">
-            <PrepayStatusBadge 
-              requiresPrepay={item.requires_prepay}
-              billingStatus={item.billing_status}
-            />
-          </div>
-
-          {/* Pricing Integrity */}
-          <div className="w-24 hidden xl:block">
-            <PricingIntegrityBadge status={item.pricing_integrity_status} />
-          </div>
-
-          {/* Next Action */}
-          <NextActionBadge 
-            nextAction={item.next_action} 
-            blockReason={item.block_reason_code}
-            compact
-          />
-
-          {/* Actions Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-              {isOrderable && (
-                <DropdownMenuItem onClick={() => setOrderModalPart({
-                  commitment_id: item.commitment_id,
-                  part_id: item.part_id,
-                  part_name: item.part_name,
-                  vendor_id: item.vendor_id,
-                  vendor_name: vendorDisplay.name,
-                  qty_to_order: toOrder,
-                  estimated_cost: item.estimated_cost,
-                  default_cost: item.unit_cost,
-                  default_retail: item.unit_retail
-                })} className="text-green-400">
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Create PO
-                </DropdownMenuItem>
-              )}
-              {item.covered_from_po > 0 && (
-                <DropdownMenuItem onClick={() => setDeltaOrderCommitment(item)} className="text-purple-400">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Additional Order
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem 
-                onClick={() => navigate(createPageUrl(`ProjectDetail?id=${item.project_id}&tab=parts`))}
-              >
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Go to Project
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-gray-700" />
-              <DropdownMenuItem onClick={() => setEditingPartId(item.part_id)}>
-                <Pencil className="w-4 h-4 mr-2" />
-                Edit Part
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* PHASE 4: Shared Execution Data Block - same component as PSM */}
-        <div className="mt-2 ml-6 max-w-xs">
-          <ExecutionDataBlock item={item} showCoveredBadge={false} />
-        </div>
-      </div>
-    );
+    return filteredItems.filter(item => selectedItems.has(item.id));
   };
 
   return (
@@ -455,26 +206,16 @@ export default function GlobalNeedToOrder() {
               </Button>
               <Button
                 variant="outline"
-                onClick={handleGoToReceiving}
+                onClick={() => navigate(createPageUrl('POReceiving'))}
                 className="border-gray-700 text-white gap-2"
               >
                 <Truck className="w-4 h-4" />
                 Go to Receiving
               </Button>
-              {selectedItems.size > 0 && (
-                <Button
-                  onClick={handleBatchCreatePO}
-                  disabled={actionPreview.isPending}
-                  className="bg-green-600 hover:bg-green-700 gap-2"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  Create Batch PO ({selectedItems.size})
-                </Button>
-              )}
             </div>
           </div>
 
-          {/* Summary Stats - using formatCurrencyUSD for canonical formatting */}
+          {/* Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
@@ -574,28 +315,14 @@ export default function GlobalNeedToOrder() {
                     <SelectItem value="not_required">No Prepay</SelectItem>
                   </SelectContent>
                 </Select>
-
-                <Tabs value={groupMode} onValueChange={setGroupMode}>
-                  <TabsList className="bg-gray-900/50 border border-gray-700">
-                    <TabsTrigger value="vendor" className="data-[state=active]:bg-blue-900/30 gap-1.5">
-                      <Building2 className="w-3.5 h-3.5" />
-                      Vendor
-                    </TabsTrigger>
-                    <TabsTrigger value="project" className="data-[state=active]:bg-red-900/30 gap-1.5">
-                      <FolderKanban className="w-3.5 h-3.5" />
-                      Project
-                    </TabsTrigger>
-                    <TabsTrigger value="coverage" className="data-[state=active]:bg-green-900/30 gap-1.5">
-                      <DollarSign className="w-3.5 h-3.5" />
-                      Coverage
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
               </div>
             </CardContent>
           </Card>
 
-          {/* Grouped Items List */}
+          {/* PSM Summary Strip */}
+          <PSMSummaryStrip items={filteredItems} tab="buy" />
+
+          {/* Grouped Items - identical to PSM */}
           {isLoading ? (
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
@@ -609,82 +336,32 @@ export default function GlobalNeedToOrder() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
-              {groupedItems.map(group => {
-                const isExpanded = expandedGroups.has(group.id) || expandedGroups.has('all');
-                // CANONICAL: Use is_orderable and commitment_id
-                const allOrderable = group.items.filter(i => i.is_orderable);
-                const allSelected = allOrderable.length > 0 && allOrderable.every(i => selectedItems.has(i.commitment_id));
-
-                return (
-                  <Card key={group.id} className="bg-black/40 border-gray-800 overflow-hidden">
-                    <CardHeader 
-                      className="p-3 cursor-pointer hover:bg-gray-800/30 transition-colors"
-                      onClick={() => toggleGroup(group.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={allSelected}
-                            onCheckedChange={() => selectAllInGroup(group.items)}
-                            onClick={(e) => e.stopPropagation()}
-                            disabled={allOrderable.length === 0}
-                          />
-                          {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: group.color }}
-                          />
-                          <div>
-                            <p className="text-white font-medium">{group.label}</p>
-                            <p className="text-xs text-gray-500">
-                              {group.items.length} items · {group.totalQty} qty · 
-                              <span className="text-green-400 ml-1">{group.canOrderCount} ready</span>
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">Exposure</p>
-                            <p className="text-red-400 font-medium">{formatCurrencyUSD(group.totalExposure)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">Est. Cost</p>
-                            <p className="text-yellow-400 font-medium">{formatCurrencyUSD(group.totalCost)}</p>
-                          </div>
-                          {group.canOrderCount > 0 && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-green-600 text-green-400 hover:bg-green-900/30"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // CANONICAL: Use is_orderable and commitment_id
-                                const ids = group.items.filter(i => i.is_orderable).map(i => i.commitment_id);
-                                setSelectedItems(new Set(ids));
-                                setShowBatchOrderModal(true);
-                              }}
-                            >
-                              <ShoppingCart className="w-3 h-3 mr-1" />
-                              Order All
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    {isExpanded && (
-                      <CardContent className="p-0 border-t border-gray-800">
-                        {group.items.map(item => renderItem(item))}
-                      </CardContent>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
+            <PSMGroupedView
+              items={filteredItems}
+              groupMode={groupMode}
+              onGroupModeChange={setGroupMode}
+              selectedItems={selectedItems}
+              setSelectedItems={setSelectedItems}
+              onPartClick={handlePartClick}
+              onCreatePO={handleCreatePO}
+              onReceive={handleReceive}
+              onDeltaOrder={handleDeltaOrder}
+              onBatchPO={handleBatchCreatePO}
+              actionsEnabled={true}
+              tab="buy"
+            />
           )}
         </div>
       </div>
+
+      {/* PSM Floating Action Bar */}
+      <PSMFloatingActionBar
+        selectedCount={selectedItems.size}
+        onClear={() => setSelectedItems(new Set())}
+        onBatchPO={handleBatchCreatePO}
+        isLoading={actionPreview.isPending}
+        tab="buy"
+      />
 
       {/* Modals */}
       {orderModalPart && (
@@ -721,17 +398,16 @@ export default function GlobalNeedToOrder() {
       {deltaOrderCommitment && (
         <DeltaOrderModal
           commitment={{
-            commitment_id: deltaOrderCommitment.commitment_id,
-            commitment_status: deltaOrderCommitment.commitment_status,
+            commitment_id: deltaOrderCommitment.commitment_id || deltaOrderCommitment.id,
+            commitment_status: deltaOrderCommitment.commitment_status || deltaOrderCommitment._raw?.commitment_status,
             required_total: deltaOrderCommitment.required_total,
             covered_from_po: deltaOrderCommitment.covered_from_po,
           }}
-          part={{ id: deltaOrderCommitment.part_id, part_name: deltaOrderCommitment.part_name }}
+          part={{ id: deltaOrderCommitment.part_id, part_name: deltaOrderCommitment.part?.part_name || deltaOrderCommitment.part_name }}
           onClose={() => setDeltaOrderCommitment(null)}
         />
       )}
 
-      {/* Edit Part Modal - same as ProjectSupplyManager */}
       {editingPartId && (
         <PartModal
           partId={editingPartId}
