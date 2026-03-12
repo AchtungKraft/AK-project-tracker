@@ -1,45 +1,131 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { orderKeys } from "@/components/financial/queryKeyFactories";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Package,
   Truck,
-  ExternalLink,
-  CheckCircle2,
-  XCircle,
-  Clock,
+  Search,
   RefreshCw,
-  AlertTriangle,
+  CheckCircle2,
+  ArrowDownWideNarrow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import POReceivingCard from "@/components/receiving/POReceivingCard";
+
+// ── Reuse identical sort/group logic from POReceivingList ──
+
+const SORT_OPTIONS = [
+  { value: "most_remaining", label: "Most Items to Receive" },
+  { value: "newest", label: "Newest Order" },
+  { value: "vendor", label: "Vendor Name" },
+  { value: "partial_first", label: "Partially Received First" },
+];
+
+function sortOrders(orders, sortBy) {
+  const sorted = [...orders];
+  switch (sortBy) {
+    case "most_remaining":
+      return sorted.sort((a, b) => b.total_qty_remaining - a.total_qty_remaining);
+    case "newest":
+      return sorted.sort((a, b) => (b.order_date || "").localeCompare(a.order_date || ""));
+    case "vendor":
+      return sorted.sort((a, b) => (a.vendor_name || "").localeCompare(b.vendor_name || ""));
+    case "partial_first":
+      return sorted.sort((a, b) => {
+        const aPartial = a.total_qty_received > 0 && a.total_qty_remaining > 0 ? 0 : 1;
+        const bPartial = b.total_qty_received > 0 && b.total_qty_remaining > 0 ? 0 : 1;
+        if (aPartial !== bPartial) return aPartial - bPartial;
+        return b.total_qty_remaining - a.total_qty_remaining;
+      });
+    default:
+      return sorted;
+  }
+}
+
+function groupOrders(orders) {
+  const ready = [];
+  const partial = [];
+  const full = [];
+
+  for (const po of orders) {
+    if (po.total_qty_received >= po.total_qty_ordered && po.total_qty_ordered > 0) {
+      full.push(po);
+    } else if (po.total_qty_received > 0 && po.total_qty_remaining > 0) {
+      partial.push(po);
+    } else {
+      ready.push(po);
+    }
+  }
+
+  return { ready, partial, full };
+}
+
+// ── Collapsible group section (same pattern as POReceivingList) ──
+
+function OrderGroup({ title, colorClass, borderClass, orders, onNavigate, defaultCollapsed = false }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  if (orders.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-2 mb-3 group"
+      >
+        <h2 className={cn("text-xs font-semibold uppercase tracking-wider", colorClass)}>
+          {title}
+        </h2>
+        <Badge variant="outline" className="text-[10px] text-gray-400 border-gray-600">
+          {orders.length}
+        </Badge>
+        <span className="text-gray-600 text-xs group-hover:text-gray-400 transition-colors">
+          {collapsed ? "Show" : "Hide"}
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="space-y-3">
+          {orders.map((po) => (
+            <POReceivingCard
+              key={po.order_id}
+              po={po}
+              borderClass={borderClass}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
- * ProjectPurchaseOrders - Project-level PO visibility tab
+ * ProjectPurchaseOrders - Project-level PO tab
  * 
- * Shows all POs tied to this project's commitments:
- * - Before receipt
- * - During partial receipt  
- * - After full receipt
- * - Cancelled (read-only)
+ * Reuses the same sort/group/card system as POReceivingList,
+ * but scoped to a single project's purchase orders.
+ * Receive button navigates to canonical POReceiving detail page.
  */
 export default function ProjectPurchaseOrders({ projectId }) {
   const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("most_remaining");
 
-  // PHASE 5: Use canonical query key factory for consistent cache invalidation
   const { data, isLoading, refetch } = useQuery({
     queryKey: orderKeys.projectPurchaseOrders(projectId),
     queryFn: async () => {
@@ -47,28 +133,63 @@ export default function ProjectPurchaseOrders({ projectId }) {
       return response.data;
     },
     enabled: !!projectId,
-    // No staleTime - trust invalidation from forceAppRefresh
     staleTime: 0,
   });
 
-  const orders = data?.orders || [];
+  const rawOrders = data?.orders || [];
   const summary = data?.summary || {};
 
-  const getStatusBadge = (order) => {
-    if (order.is_cancelled) {
-      return <Badge variant="outline" className="bg-gray-500/20 text-gray-400 border-gray-500/30">Cancelled</Badge>;
-    }
-    if (order.is_fully_received) {
-      return <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">Received</Badge>;
-    }
-    if (order.total_qty_received > 0) {
-      return <Badge variant="outline" className="bg-amber-500/20 text-amber-400 border-amber-500/30">Partial</Badge>;
-    }
-    return <Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">Ordered</Badge>;
-  };
+  // Enrich orders with part_names for POReceivingCard compatibility
+  const enrichedOrders = useMemo(() => {
+    return rawOrders.map(order => {
+      const partNames = [];
+      const seenPartIds = new Set();
+      for (const line of (order.lines || [])) {
+        if (line.is_line_cancelled || !line.part_id || seenPartIds.has(line.part_id)) continue;
+        seenPartIds.add(line.part_id);
+        if (line.part_name && line.part_name !== 'Unknown Part') partNames.push(line.part_name);
+      }
+      return { ...order, part_names: partNames };
+    });
+  }, [rawOrders]);
 
-  const handleReceive = (orderId) => {
-    navigate(createPageUrl('POReceiving') + `?order_id=${orderId}`);
+  // Extract unique vendors for filter dropdown
+  const vendorOptions = useMemo(() => {
+    const map = new Map();
+    for (const order of enrichedOrders) {
+      if (order.vendor_id && order.vendor_name) {
+        map.set(order.vendor_id, { id: order.vendor_id, vendor_name: order.vendor_name });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.vendor_name.localeCompare(b.vendor_name));
+  }, [enrichedOrders]);
+
+  // Apply filters
+  const filteredOrders = useMemo(() => {
+    let result = enrichedOrders;
+
+    if (vendorFilter !== "all") {
+      result = result.filter(o => o.vendor_id === vendorFilter);
+    }
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(o =>
+        (o.po_number && o.po_number.toLowerCase().includes(term)) ||
+        (o.order_number && o.order_number.toLowerCase().includes(term)) ||
+        (o.vendor_name && o.vendor_name.toLowerCase().includes(term))
+      );
+    }
+
+    return result;
+  }, [enrichedOrders, vendorFilter, searchTerm]);
+
+  // Sort and group
+  const sortedOrders = useMemo(() => sortOrders(filteredOrders, sortBy), [filteredOrders, sortBy]);
+  const { ready, partial, full } = useMemo(() => groupOrders(sortedOrders), [sortedOrders]);
+
+  const handleNavigate = (orderId) => {
+    navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`);
   };
 
   if (isLoading) {
@@ -112,102 +233,89 @@ export default function ProjectPurchaseOrders({ projectId }) {
         </Card>
       </div>
 
-      {/* Orders List */}
-      <Card className="bg-gray-900/50 border-gray-700">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-400" />
-            Purchase Orders
-          </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Refresh
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          {orders.length === 0 ? (
-            <div className="p-8 text-center">
+      {/* Filters + Sort */}
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Input
+            placeholder="Search PO number, vendor..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-gray-900 border-gray-700"
+          />
+        </div>
+        <Select value={vendorFilter} onValueChange={setVendorFilter}>
+          <SelectTrigger className="w-48 bg-gray-900 border-gray-700">
+            <SelectValue placeholder="All Vendors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Vendors</SelectItem>
+            {vendorOptions.map((v) => (
+              <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-56 bg-gray-900 border-gray-700">
+            <div className="flex items-center gap-2">
+              <ArrowDownWideNarrow className="w-4 h-4 text-gray-400" />
+              <SelectValue />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="border-gray-700">
+          <RefreshCw className="w-4 h-4 mr-1" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Grouped Order Cards */}
+      {filteredOrders.length === 0 ? (
+        <Card className="bg-gray-900/50 border-gray-700 p-8 text-center">
+          {enrichedOrders.length === 0 ? (
+            <>
               <Package className="w-12 h-12 text-gray-600 mx-auto mb-3" />
               <p className="text-gray-400">No purchase orders for this project</p>
               <p className="text-gray-500 text-sm mt-1">Orders will appear here when parts are ordered</p>
-            </div>
+            </>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-700 hover:bg-transparent">
-                  <TableHead>PO Number</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Lines</TableHead>
-                  <TableHead className="text-right">Ordered</TableHead>
-                  <TableHead className="text-right">Received</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map(order => (
-                  <TableRow 
-                    key={order.order_id} 
-                    className={cn(
-                      "border-gray-700",
-                      order.is_cancelled && "opacity-50"
-                    )}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium text-white">{order.po_number}</span>
-                        {order.order_url && (
-                          <a 
-                            href={order.order_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                      {order.order_number && (
-                        <div className="text-xs text-gray-500">Ref: {order.order_number}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-gray-300">{order.vendor_name}</TableCell>
-                    <TableCell className="text-gray-400 text-sm">{order.order_date || '-'}</TableCell>
-                    <TableCell className="text-center">{getStatusBadge(order)}</TableCell>
-                    <TableCell className="text-right font-mono">{order.total_lines}</TableCell>
-                    <TableCell className="text-right font-mono text-blue-400">{order.total_qty_ordered}</TableCell>
-                    <TableCell className="text-right font-mono text-green-400">{order.total_qty_received}</TableCell>
-                    <TableCell className="text-right font-mono text-gray-300">
-                      ${order.total_cost?.toFixed(2) || '0.00'}
-                    </TableCell>
-                    <TableCell>
-                      {order.is_receivable && !order.is_cancelled && (
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleReceive(order.order_id)}
-                          className="border-green-600 text-green-400 hover:bg-green-600/20"
-                        >
-                          <Truck className="w-3 h-3 mr-1" />
-                          Receive
-                        </Button>
-                      )}
-                      {order.is_fully_received && (
-                        <span className="text-green-500 flex items-center gap-1 text-sm">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Complete
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Search className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400">No orders match your filters</p>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          <OrderGroup
+            title="Ready to Receive"
+            colorClass="text-blue-400"
+            borderClass="border-l-blue-500"
+            orders={ready}
+            onNavigate={handleNavigate}
+          />
+          <OrderGroup
+            title="Partially Received"
+            colorClass="text-amber-400"
+            borderClass="border-l-amber-500"
+            orders={partial}
+            onNavigate={handleNavigate}
+          />
+          <OrderGroup
+            title="Fully Received"
+            colorClass="text-green-400"
+            borderClass="border-l-green-500"
+            orders={full}
+            onNavigate={handleNavigate}
+            defaultCollapsed
+          />
+        </div>
+      )}
 
       {/* Cost Summary */}
       {summary.total_cost > 0 && (
@@ -215,7 +323,7 @@ export default function ProjectPurchaseOrders({ projectId }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-gray-400">Total Parts Cost (this project)</span>
-              <span className="text-xl font-bold text-white">${summary.total_cost?.toFixed(2)}</span>
+              <span className="text-xl font-bold text-white font-mono">${summary.total_cost?.toFixed(2)}</span>
             </div>
           </CardContent>
         </Card>
