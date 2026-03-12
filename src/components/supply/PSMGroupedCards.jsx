@@ -898,7 +898,7 @@ export default function PSMGroupedView({
     // Sort groups
     const sorted = Object.values(result);
     if (groupMode === 'inventory') {
-      const order = { OUT_OF_STOCK: 0, PARTIAL_STOCK: 1, IN_STOCK: 2 };
+      const order = { NEEDS_ORDER: 0, ORDERED: 1, IN_STOCK: 2, OUT_OF_STOCK: 0, PARTIAL_STOCK: 1 };
       sorted.sort((a, b) => (order[a.inventoryState] ?? 3) - (order[b.inventoryState] ?? 3));
     } else {
       sorted.sort((a, b) => a.name.localeCompare(b.name));
