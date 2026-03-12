@@ -188,6 +188,7 @@ export function PSMItemRow({
   vendorsMap,
   tab = 'plan',
 }) {
+  const navigate = useNavigate();
   // PHASE 4: Collapsible execution detail
   const [showDetails, setShowDetails] = useState(false);
   
