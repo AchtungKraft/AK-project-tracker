@@ -339,17 +339,24 @@ export function PSMItemRow({
           </div>
         </div>
 
-        {/* PHASE 3: Inline Financial */}
+        {/* PHASE 3: Inline Financial — Unit + Total Cost/Retail */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
           <div className="text-center">
+            <span className="text-gray-500 block">U/COST</span>
+            <span className="text-gray-400">{formatCurrencyUSD(commitment.unit_cost ?? 0)}</span>
+          </div>
+          <div className="text-center">
+            <span className="text-gray-500 block">U/RETAIL</span>
+            <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail ?? 0)}</span>
+          </div>
+          <div className="text-center">
             <span className="text-gray-500 block">COST</span>
-            <span className="text-gray-300">{formatCurrencyUSD(commitment.planned_cost_total ?? 0)}</span>
+            <span className="text-red-400">{formatCurrencyUSD(commitment.planned_cost_total ?? 0)}</span>
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">RETAIL</span>
             <span className="text-white">{formatCurrencyUSD(commitment.planned_retail_total ?? 0)}</span>
           </div>
-          {/* PHASE 2: Only show EXPOSURE if > 0 */}
           {exposureGap > 0 && (
             <div className="text-center">
               <span className="text-gray-500 block">EXPO</span>
