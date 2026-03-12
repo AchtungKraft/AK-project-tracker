@@ -237,13 +237,15 @@ Deno.serve(async (req) => {
       if (o.vendor_id) vendorIds.add(o.vendor_id);
     }
 
-    // ROUND 2: Line items scoped to order IDs + vendors in parallel
-    // No parts/commitments/projects needed — list mode only shows order-level summaries
-    const [scopedLineItems, vendors] = await Promise.all([
+    // ROUND 2: Line items scoped to order IDs + vendors + parts in parallel
+    // Parts fetched for part_names summary on cards (names only, no full schema)
+    const [scopedLineItems, vendors, allParts] = await Promise.all([
       svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } }),
       vendorIds.size > 0 ? svc.entities.Vendor.filter({ id: { $in: [...vendorIds] } }) : Promise.resolve([]),
+      svc.entities.Part.list('-created_date', 500),
     ]);
     const tDB2 = Date.now();
+    const partNameMap = new Map(allParts.map(p => [p.id, p.part_name]));
 
     // Index line items by order_id for fast lookup
     const linesByOrder = new Map();
