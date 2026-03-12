@@ -446,7 +446,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Package className="w-4 h-4 text-blue-400" />
-              Open Items ({openLines.length})
+              Not Received ({openLines.length})
             </h3>
             <span className="text-xs text-gray-500">{selectedLines.size} selected</span>
           </div>

@@ -28,7 +28,7 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-2"
       >
         {showCompleted ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        Fully Received ({lines.length} items)
+        Received Into Inventory ({lines.length} items)
       </button>
       
       {showCompleted && (
