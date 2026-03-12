@@ -23,7 +23,7 @@ const STATE_CONFIG = {
   },
   ORDERED: {
     label: "Ordered",
-    color: "bg-blue-600/80 text-blue-100 border-blue-500",
+    color: "bg-purple-600/80 text-purple-100 border-purple-500",
     Icon: Truck,
   },
   NEEDS_ORDER: {

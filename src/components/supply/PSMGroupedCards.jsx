@@ -49,10 +49,10 @@ const GROUP_COLORS = {
   category: '#6B7280',    // Gray
   inventory: {
     IN_STOCK: '#10B981',      // Emerald
-    ORDERED: '#3B82F6',       // Blue
+    ORDERED: '#9333EA',       // Purple
     NEEDS_ORDER: '#EF4444',   // Red
     // Legacy aliases
-    PARTIAL_STOCK: '#3B82F6',
+    PARTIAL_STOCK: '#9333EA',
     OUT_OF_STOCK: '#EF4444',
   }
 };
