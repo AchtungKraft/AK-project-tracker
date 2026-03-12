@@ -662,15 +662,15 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
       inventoryState: null,
     };
   } else if (mode === 'inventory') {
-    const toOrder = item.to_order ?? 0;
     const reserved = item.reserved_from_stock ?? 0;
+    const ordered = item.covered_from_po ?? 0;
     
-    if (toOrder === 0) {
+    if (reserved > 0) {
       return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
-    } else if (reserved > 0) {
-      return { key: 'PARTIAL_STOCK', name: '~ Partial Stock', inventoryState: 'PARTIAL_STOCK' };
+    } else if (ordered > 0) {
+      return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
     } else {
-      return { key: 'OUT_OF_STOCK', name: '! Out of Stock', inventoryState: 'OUT_OF_STOCK' };
+      return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
     }
   } else {
     // category (default)
