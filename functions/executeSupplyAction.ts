@@ -955,6 +955,7 @@ async function receiveBatch(ctx, payload) {
   const errors = [];
   const skipped = [];
   let total_received = 0;
+  const affectedPartIds = new Set();
 
   for (const line of lines) {
     // Accept receive_qty (canonical) or qty_received (legacy fallback)
@@ -968,17 +969,41 @@ async function receiveBatch(ctx, payload) {
 
     try {
       console.log(`[BATCH_RECEIVE_LINE] Processing line_item_id=${line.line_item_id}, qty=${qty}, location=${line.location_id || 'default'}`);
-      const result = await receiveSingleLine(ctx, line.line_item_id, qty, line.location_id);
+      const result = await receiveSingleLineForBatch(ctx, line.line_item_id, qty, line.location_id);
       console.log(`[BATCH_RECEIVE_SUCCESS] line_item_id=${line.line_item_id}, qty=${qty}, new_status=${result.line_status}`);
       results.push(result);
       total_received += qty;
+      if (result.part_id) affectedPartIds.add(result.part_id);
     } catch (lineError) {
       console.error(`[BATCH_RECEIVE_ERROR] line_item_id=${line.line_item_id} failed: ${lineError.message}`);
       errors.push({ line_item_id: line.line_item_id, error: lineError.message });
     }
   }
 
-  console.log(`[BATCH_RECEIVE_COMPLETE] processed=${results.length}, skipped=${skipped.length}, errors=${errors.length}, total_qty=${total_received}`);
+  // BATCH OPTIMIZATION: Recompute + rebalance ONCE per affected part (not per line)
+  // This avoids N×2 nested function invocations that risk timeout on large batches
+  for (const partId of affectedPartIds) {
+    try {
+      console.log(`[BATCH_RECEIVE_RECOMPUTE] part_id=${partId}`);
+      const recomputeResult = await ctx.base44.asServiceRole.functions.invoke('recomputePartPhysicalStock', {
+        part_id: partId, dry_run: false
+      });
+      if (recomputeResult.data?.error) {
+        console.error(`[BATCH_RECEIVE_RECOMPUTE_ERROR] part_id=${partId}: ${recomputeResult.data.error}`);
+      }
+      const rebalanceResult = await ctx.base44.asServiceRole.functions.invoke('rebalancePartReservations', {
+        part_id: partId, dry_run: false
+      });
+      if (rebalanceResult.data?.error) {
+        console.error(`[BATCH_RECEIVE_REBALANCE_ERROR] part_id=${partId}: ${rebalanceResult.data.error}`);
+      }
+      ctx.mutations.push({ entity: 'Part', id: partId, action: 'BATCH_RECOMPUTE_REBALANCE' });
+    } catch (postErr) {
+      console.error(`[BATCH_RECEIVE_POST_PROCESS_ERROR] part_id=${partId}: ${postErr.message}`);
+    }
+  }
+
+  console.log(`[BATCH_RECEIVE_COMPLETE] processed=${results.length}, skipped=${skipped.length}, errors=${errors.length}, total_qty=${total_received}, parts_rebalanced=${affectedPartIds.size}`);
 
   // Update order status
   const allLineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
