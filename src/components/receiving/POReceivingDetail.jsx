@@ -240,9 +240,24 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       const result = response.data;
       if (result?.error) throw new Error(result.error);
 
-      // Surface partial failures from batch receive
+      // Surface diagnostic summary
+      console.log('[PO_RECEIVE] Result:', JSON.stringify({
+        lines_submitted: result?.lines_submitted,
+        lines_received: result?.lines_received,
+        lines_skipped: result?.lines_skipped,
+        lines_errored: result?.lines_errored,
+        total_qty_received: result?.total_qty_received,
+        skipped: result?.skipped,
+        errors: result?.errors,
+      }));
+
+      if (result?.skipped?.length > 0) {
+        toast.warning(`${result.skipped.length} line(s) skipped`, {
+          description: result.skipped.map(s => `${s.line_item_id}: ${s.reason}`).join('; '),
+        });
+      }
       if (result?.errors?.length > 0) {
-        toast.warning(`${result.errors.length} line(s) failed to receive`, {
+        toast.error(`${result.errors.length} line(s) failed to receive`, {
           description: result.errors.map(e => e.error).join('; '),
         });
       }
