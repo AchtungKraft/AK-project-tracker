@@ -730,7 +730,7 @@ function PSMSubGroupCard({
   vendorsMap,
   tab,
 }) {
-  const sortedItems = useMemo(() => applySorting(subgroup.items, sortMode), [subgroup.items, sortMode]);
+  const sortedItems = useMemo(() => applySorting(subgroup.items || [], sortMode), [subgroup.items, sortMode]);
   
   // Get subgroup color
   const subgroupColor = subgroupMode === 'vendor' 
