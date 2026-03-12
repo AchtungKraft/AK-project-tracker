@@ -194,6 +194,9 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       return;
     }
 
+    // ── DEBUG: Log outgoing payload ──
+    console.log('[PO_RECEIVE] Payload:', JSON.stringify({ order_id: effectivePO.order_id, lines_count: lines.length, lines }));
+
     // ── STEP 1: Optimistic UI update (INSTANT) ──
     setIsReceiving(true);
     const deltas = lines.map(l => ({ line_item_id: l.line_item_id, qty_received: l.receive_qty }));
