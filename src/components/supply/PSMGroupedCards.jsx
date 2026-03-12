@@ -917,23 +917,23 @@ export default function PSMGroupedView({
       }
     });
 
-    // Sort groups
+    // Sort groups — guard against undefined names
     const sorted = Object.values(result);
     if (groupMode === 'inventory') {
       const order = { NEEDS_ORDER: 0, ORDERED: 1, IN_STOCK: 2, OUT_OF_STOCK: 0, PARTIAL_STOCK: 1 };
       sorted.sort((a, b) => (order[a.inventoryState] ?? 3) - (order[b.inventoryState] ?? 3));
     } else {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      sorted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
 
-    // Sort subgroups within each group
+    // Sort subgroups within each group — guard against undefined names
     sorted.forEach(group => {
-      const subArr = Object.values(group.subgroups);
+      const subArr = Object.values(group.subgroups || {});
       if (subgroupMode === 'inventory') {
         const order = { NEEDS_ORDER: 0, ORDERED: 1, IN_STOCK: 2, OUT_OF_STOCK: 0, PARTIAL_STOCK: 1 };
         subArr.sort((a, b) => (order[a.inventoryState] ?? 3) - (order[b.inventoryState] ?? 3));
       } else {
-        subArr.sort((a, b) => a.name.localeCompare(b.name));
+        subArr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       }
       group.sortedSubgroups = subArr;
     });
