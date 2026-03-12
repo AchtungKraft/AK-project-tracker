@@ -421,10 +421,10 @@ export function PSMItemRow({
             {(commitment.covered_from_po ?? 0) > 0 && commitment.order_id && (
               <DropdownMenuItem 
                 onClick={() => navigate(createPageUrl('POReceiving') + `?order_id=${commitment.order_id}`)}
-                className="text-cyan-400"
+                className="text-purple-400"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
-                View PO
+                View PO{commitment.order_number ? ` (${commitment.order_number})` : ''}
               </DropdownMenuItem>
             )}
             {/* CANONICAL: Install depends ONLY on inventory (reserved > installed), NOT billing status */}

@@ -48,6 +48,13 @@ function determineInventoryState(commitment) {
 }
 
 export function InventoryStateBadgeSimple({ commitment, compact = false, className }) {
+  // Phase 7: Dev diagnostics guard for missing canonical fields
+  if (process.env.NODE_ENV === 'development') {
+    if (commitment.covered_from_po === undefined) console.error('Missing covered_from_po in read model', commitment.id);
+    if (commitment.reserved_from_stock === undefined) console.error('Missing reserved_from_stock in read model', commitment.id);
+    if (commitment.required_total === undefined) console.error('Missing required_total in read model', commitment.id);
+  }
+
   const state = determineInventoryState(commitment);
   const config = STATE_CONFIG[state];
   const Icon = config.Icon;
