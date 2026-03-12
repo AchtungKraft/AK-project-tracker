@@ -399,12 +399,22 @@ Deno.serve(async (req) => {
           needed: Math.max(0, required_total - qty_installed),
         };
 
+        // Derive first order_id for "View PO" navigation
+        const firstOrderId = commitmentLineItems.length > 0
+          ? (commitmentLineItems.find(li => {
+              const o = orderMap.get(li.order_id);
+              return o && ['Draft', 'Ordered', 'Partial', 'Received'].includes(o.status);
+            })?.order_id || commitmentLineItems[0].order_id)
+          : null;
+
         return {
           commitment_id: c.id,
           part_id: c.part_id,
           part_name: part?.part_name || 'Unknown Part',
           vendor_part_number: part?.vendor_part_number || null,
           featured_photo: part?.featured_photo || null,
+          order_id: firstOrderId,
+          order_number: firstOrderId ? (orderMap.get(firstOrderId)?.order_number || orderMap.get(firstOrderId)?.po_number || null) : null,
           project_id: c.project_id,
           project_name: project.name,
           vendor_id: vendor?.id || null,

@@ -366,6 +366,10 @@ export default function ProjectSupplyManager() {
         // PART 3: Inventory location for expanded detail view
         inventory_location: item.inventory_location || item._raw?.inventory_location || null,
         
+        // PO fields for "View PO" navigation
+        order_id: item.order_id ?? null,
+        order_number: item.order_number ?? null,
+        
         // PO line item tracking for receive action - CRITICAL for Receive modal
         order_line_item_ids: item._raw?.order_line_item_ids || item.order_line_item_ids || [],
         
