@@ -1,20 +1,18 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Package, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle2, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
  * InventoryStateBadgeSimple - Build Management Focused Inventory State
  * 
- * PHASE 1 SEMANTIC CORRECTION:
- * Replaces misleading "Covered" semantics with clear inventory state.
+ * Precedence:
+ * 1. reserved_from_stock > 0 → IN STOCK (physically on shelf)
+ * 2. covered_from_po > 0     → ORDERED  (PO placed, awaiting delivery)
+ * 3. otherwise               → NEEDS ORDER
  * 
- * States:
- * - IN STOCK: to_order === 0 AND needed <= (reserved + covered_from_po + qty_installed)
- * - PARTIAL STOCK: to_order > 0 AND reserved_from_stock > 0
- * - OUT OF STOCK: to_order > 0 AND reserved_from_stock === 0
- * 
- * This badge reflects INVENTORY state only. NO payment logic.
+ * Does NOT use physical_stock_global. Does NOT use to_order for primary state.
+ * This badge reflects SUPPLY state only. NO payment logic.
  */
 
 const STATE_CONFIG = {
@@ -23,49 +21,29 @@ const STATE_CONFIG = {
     color: "bg-emerald-600/80 text-emerald-100 border-emerald-500",
     Icon: CheckCircle2,
   },
-  PARTIAL_STOCK: {
-    label: "Partial Stock",
-    color: "bg-amber-600/80 text-amber-100 border-amber-500",
-    Icon: Package,
+  ORDERED: {
+    label: "Ordered",
+    color: "bg-blue-600/80 text-blue-100 border-blue-500",
+    Icon: Truck,
   },
-  OUT_OF_STOCK: {
-    label: "Out of Stock",
+  NEEDS_ORDER: {
+    label: "Needs Order",
     color: "bg-red-600/80 text-red-100 border-red-500",
     Icon: AlertTriangle,
   },
 };
 
 /**
- * Determine inventory state from commitment data
+ * Determine inventory state from commitment data.
+ * Strict precedence: stock → ordered → needs order.
  */
 function determineInventoryState(commitment) {
-  const toOrder = commitment.to_order ?? 0;
-  const reservedFromStock = commitment.reserved_from_stock ?? 0;
-  const coveredFromPO = commitment.covered_from_po ?? 0;
-  const qtyInstalled = commitment.qty_installed ?? 0;
-  const requiredTotal = commitment.required_total ?? 0;
-  
-  // Check if needs (required - installed) is satisfied
-  const needed = Math.max(0, requiredTotal - qtyInstalled);
-  const supplied = reservedFromStock + coveredFromPO;
-  
-  // IN STOCK: No ordering needed and supply covers demand
-  if (toOrder === 0 && supplied >= needed) {
-    return 'IN_STOCK';
-  }
-  
-  // PARTIAL STOCK: Needs ordering but has some reserved
-  if (toOrder > 0 && reservedFromStock > 0) {
-    return 'PARTIAL_STOCK';
-  }
-  
-  // OUT OF STOCK: Needs ordering and no stock reserved
-  if (toOrder > 0) {
-    return 'OUT_OF_STOCK';
-  }
-  
-  // Default: If nothing to order, consider in stock
-  return 'IN_STOCK';
+  const reserved = commitment.reserved_from_stock ?? 0;
+  const ordered = commitment.covered_from_po ?? 0;
+
+  if (reserved > 0) return 'IN_STOCK';
+  if (ordered > 0)  return 'ORDERED';
+  return 'NEEDS_ORDER';
 }
 
 export function InventoryStateBadgeSimple({ commitment, compact = false, className }) {
