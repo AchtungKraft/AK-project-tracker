@@ -573,11 +573,11 @@ export function PSMGroupCard({
           {groupStats.inStock > 0 && (
             <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
           )}
-          {groupStats.partialStock > 0 && (
-            <span className="text-[10px] text-amber-400 font-mono">{groupStats.partialStock}~</span>
+          {groupStats.ordered > 0 && (
+            <span className="text-[10px] text-blue-400 font-mono">{groupStats.ordered}📦</span>
           )}
-          {groupStats.outOfStock > 0 && (
-            <span className="text-[10px] text-red-400 font-mono">{groupStats.outOfStock}!</span>
+          {groupStats.needsOrder > 0 && (
+            <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
           )}
         </div>
 
@@ -1257,11 +1257,11 @@ function PSMGroupCardWithSubgroups({
           {groupStats.inStock > 0 && (
             <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
           )}
-          {groupStats.partialStock > 0 && (
-            <span className="text-[10px] text-amber-400 font-mono">{groupStats.partialStock}~</span>
+          {groupStats.ordered > 0 && (
+            <span className="text-[10px] text-blue-400 font-mono">{groupStats.ordered}📦</span>
           )}
-          {groupStats.outOfStock > 0 && (
-            <span className="text-[10px] text-red-400 font-mono">{groupStats.outOfStock}!</span>
+          {groupStats.needsOrder > 0 && (
+            <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
           )}
         </div>
 
