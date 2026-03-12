@@ -948,26 +948,37 @@ async function receiveBatch(ctx, payload) {
   const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
   if (!order) throw new Error('Order not found');
 
+  console.log(`[BATCH_RECEIVE_START] order_id=${order_id}, lines_count=${lines.length}`);
+  console.log(`[BATCH_RECEIVE_PAYLOAD] ${JSON.stringify(lines.map(l => ({ id: l.line_item_id, receive_qty: l.receive_qty, qty_received: l.qty_received, location_id: l.location_id })))}`);
+
   const results = [];
   const errors = [];
+  const skipped = [];
   let total_received = 0;
 
   for (const line of lines) {
     // Accept receive_qty (canonical) or qty_received (legacy fallback)
     const qty = line.receive_qty ?? line.qty_received ?? 0;
     if (!line.line_item_id || qty <= 0) {
+      const reason = !line.line_item_id ? 'MISSING_LINE_ITEM_ID' : `QTY_ZERO_OR_NEGATIVE (receive_qty=${line.receive_qty}, qty_received=${line.qty_received}, resolved=${qty})`;
+      console.warn(`[BATCH_RECEIVE_SKIPPED] line_item_id=${line.line_item_id || 'null'}, reason=${reason}`);
+      skipped.push({ line_item_id: line.line_item_id || null, reason });
       continue;
     }
 
     try {
+      console.log(`[BATCH_RECEIVE_LINE] Processing line_item_id=${line.line_item_id}, qty=${qty}, location=${line.location_id || 'default'}`);
       const result = await receiveSingleLine(ctx, line.line_item_id, qty, line.location_id);
+      console.log(`[BATCH_RECEIVE_SUCCESS] line_item_id=${line.line_item_id}, qty=${qty}, new_status=${result.line_status}`);
       results.push(result);
       total_received += qty;
     } catch (lineError) {
-      console.error(`[BATCH_RECEIVE] Line ${line.line_item_id} failed: ${lineError.message}`);
+      console.error(`[BATCH_RECEIVE_ERROR] line_item_id=${line.line_item_id} failed: ${lineError.message}`);
       errors.push({ line_item_id: line.line_item_id, error: lineError.message });
     }
   }
+
+  console.log(`[BATCH_RECEIVE_COMPLETE] processed=${results.length}, skipped=${skipped.length}, errors=${errors.length}, total_qty=${total_received}`);
 
   // Update order status
   const allLineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
