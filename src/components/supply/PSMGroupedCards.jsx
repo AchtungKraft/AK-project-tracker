@@ -123,25 +123,25 @@ export function PSMSummaryStrip({ items, tab }) {
           <p className="text-lg font-bold text-emerald-400">{stats.inStock}</p>
         </CardContent>
       </Card>
-      <Card className="bg-black/40 border-amber-900/50">
+      <Card className="bg-black/40 border-blue-900/50">
         <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Partial</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Ordered</p>
           <p className={cn(
             "text-lg font-bold",
-            stats.partialStock > 0 ? "text-amber-400" : "text-gray-500"
+            stats.ordered > 0 ? "text-blue-400" : "text-gray-500"
           )}>
-            {stats.partialStock}
+            {stats.ordered}
           </p>
         </CardContent>
       </Card>
       <Card className="bg-black/40 border-red-900/50">
         <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Out of Stock</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Needs Order</p>
           <p className={cn(
             "text-lg font-bold",
-            stats.outOfStock > 0 ? "text-red-400" : "text-gray-500"
+            stats.needsOrder > 0 ? "text-red-400" : "text-gray-500"
           )}>
-            {stats.outOfStock}
+            {stats.needsOrder}
           </p>
         </CardContent>
       </Card>
