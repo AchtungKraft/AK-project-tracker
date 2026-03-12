@@ -21,7 +21,7 @@ import {
   ArrowDownWideNarrow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import POReceivingCard from "./POReceivingCard";
+import POReceivingCard from "@/components/receiving/POReceivingCard";
 
 const SORT_OPTIONS = [
   { value: "most_remaining", label: "Most Items to Receive" },
