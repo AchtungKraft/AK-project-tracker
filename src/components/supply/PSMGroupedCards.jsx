@@ -1204,6 +1204,11 @@ function PSMGroupCardWithSubgroups({
 }) {
   const items = group.items;
   const hasSubgroups = subgroupMode !== 'none' && group.sortedSubgroups?.length > 0;
+
+  // Local helper — mirrors logic from parent PSMGroupedView
+  const isSubgroupExpanded = (subKey) => {
+    return expandedSubgroups.has('__ALL_EXPANDED__') || expandedSubgroups.has(subKey);
+  };
   
   // Sort items for flat view (when no subgrouping)
   const sortedItems = useMemo(() => applySorting(items, sortMode), [items, sortMode]);
