@@ -251,15 +251,25 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
         errors: result?.errors,
       }));
 
+      // Surface line-level diagnostics
+      const received = result?.lines_received ?? 0;
+      const submitted = result?.lines_submitted ?? 0;
+      const totalQty = result?.total_qty_received ?? 0;
+
       if (result?.skipped?.length > 0) {
         toast.warning(`${result.skipped.length} line(s) skipped`, {
-          description: result.skipped.map(s => `${s.line_item_id}: ${s.reason}`).join('; '),
+          description: result.skipped.map(s => `${s.line_item_id?.slice(-6) || '?'}: ${s.reason}`).join('; '),
         });
       }
       if (result?.errors?.length > 0) {
         toast.error(`${result.errors.length} line(s) failed to receive`, {
-          description: result.errors.map(e => e.error).join('; '),
+          description: result.errors.map(e => `${e.line_item_id?.slice(-6) || '?'}: ${e.error}`).join('; '),
         });
+      }
+      if (received > 0 && received === submitted && !result?.skipped?.length && !result?.errors?.length) {
+        toast.success(`Received ${received} line(s), ${totalQty} units`);
+      } else if (received > 0 && (result?.skipped?.length || result?.errors?.length)) {
+        toast.info(`${received}/${submitted} lines received (${totalQty} units)`);
       }
 
       // ── STEP 3: Background verification with fresh backend data ──
