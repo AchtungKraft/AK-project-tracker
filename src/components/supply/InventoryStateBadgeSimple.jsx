@@ -64,21 +64,31 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
 }
 
 /**
- * Get inventory state counts for summary strip
+ * Get inventory state counts for summary strip.
+ * Returns { inStock, ordered, needsOrder } matching the 3-state model.
+ * Also returns legacy aliases { partialStock, outOfStock } so existing
+ * consumers (PSMSummaryStrip, PSMGroupCard) continue to compile.
  */
 export function getInventoryStateCounts(items) {
   let inStock = 0;
-  let partialStock = 0;
-  let outOfStock = 0;
+  let ordered = 0;
+  let needsOrder = 0;
   
   items.forEach(item => {
     const state = determineInventoryState(item);
     if (state === 'IN_STOCK') inStock++;
-    else if (state === 'PARTIAL_STOCK') partialStock++;
-    else if (state === 'OUT_OF_STOCK') outOfStock++;
+    else if (state === 'ORDERED') ordered++;
+    else if (state === 'NEEDS_ORDER') needsOrder++;
   });
   
-  return { inStock, partialStock, outOfStock };
+  return {
+    inStock,
+    ordered,
+    needsOrder,
+    // Legacy aliases for PSMGroupedCards consumers
+    partialStock: ordered,
+    outOfStock: needsOrder,
+  };
 }
 
 export default InventoryStateBadgeSimple;
