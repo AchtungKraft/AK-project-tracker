@@ -1300,18 +1300,19 @@ function PSMGroupCardWithSubgroups({
           )}
         </div>
 
-        {/* Exposure Total */}
+        {/* Category Exposure Labels — Retail first, then Cost */}
+        <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
+          <span className="text-gray-400">Retail <span className="text-white">{formatCurrencyUSD(items.reduce((s, i) => s + (i.planned_retail_total ?? 0), 0))}</span></span>
+          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalCost)}</span></span>
+        </div>
+
+        {/* Exposure Badge */}
         {groupStats.totalExposure > 0 && (
           <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
             <AlertTriangle className="w-3 h-3 mr-1" />
             {formatCurrencyUSD(groupStats.totalExposure)}
           </Badge>
         )}
-
-        {/* Est Cost */}
-        <span className="text-[10px] text-gray-500 font-mono hidden lg:block">
-          {formatCurrencyUSD(groupStats.totalCost)}
-        </span>
 
         {/* Order All Button */}
         {tab === 'buy' && groupStats.readyCount > 0 && (
