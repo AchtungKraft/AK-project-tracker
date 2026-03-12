@@ -1048,7 +1048,126 @@ async function receiveBatch(ctx, payload) {
 }
 
 /**
- * Receive a single line item
+ * Receive a single line item FOR BATCH mode (lightweight).
+ * Skips recomputePartPhysicalStock + rebalancePartReservations 
+ * (caller does those once per part after the loop).
+ */
+async function receiveSingleLineForBatch(ctx, line_item_id, qty_received, location_id) {
+  const [lineItem] = await ctx.base44.entities.PartPurchaseLineItem.filter({ id: line_item_id });
+  if (!lineItem) throw new Error(`Line item ${line_item_id} not found`);
+
+  const [part] = await ctx.base44.entities.Part.filter({ id: lineItem.part_id });
+  if (!part) throw new Error('Part not found');
+
+  const ordered = lineItem.qty_ordered ?? 0;
+  const already_received = lineItem.qty_received ?? 0;
+  const remaining = Math.max(0, ordered - already_received);
+
+  if (qty_received > remaining) {
+    throw new Error(
+      `RECEIVE_OVERFLOW: Cannot receive ${qty_received} of ${part.part_name}. ` +
+      `Only ${remaining} remaining (ordered=${ordered}, already_received=${already_received})`
+    );
+  }
+  if (qty_received <= 0) {
+    throw new Error(`RECEIVE_INVALID_QTY: qty_received must be positive, got ${qty_received}`);
+  }
+
+  // Location enforcement
+  let effective_location_id = location_id;
+  if (!effective_location_id) {
+    const systemLocations = await ctx.base44.asServiceRole.entities.Location.filter({
+      location_area: 'UNASSIGNED_SYSTEM'
+    });
+    if (systemLocations.length === 0) {
+      const newLoc = await ctx.base44.asServiceRole.entities.Location.create({
+        location_area: 'UNASSIGNED_SYSTEM',
+        description: 'System default location for inventory without explicit assignment',
+        active: true
+      });
+      effective_location_id = newLoc.id;
+    } else {
+      effective_location_id = systemLocations[0].id;
+    }
+  }
+
+  if (ctx.dry_run) {
+    return {
+      preview: { line_item_id, part_name: part.part_name, qty_receiving: qty_received,
+        remaining_after: remaining - qty_received, location_id: effective_location_id }
+    };
+  }
+
+  // Update line item
+  const new_line_received = already_received + qty_received;
+  const line_status = new_line_received >= ordered ? 'Received' : 'Partial';
+  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id, {
+    qty_received: new_line_received, status: line_status
+  });
+  console.log(`[RECEIVE] Line updated: id=${line_item_id}, new_received=${new_line_received}, status=${line_status}`);
+
+  // Upsert InventoryItem
+  const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({
+    part_id: part.id, location_id: effective_location_id
+  });
+  if (existingItems.length > 1) {
+    throw new Error(`INVENTORY_LOCATION_DUPLICATE_ERROR: Found ${existingItems.length} records. Call consolidateInventoryLocations() to fix.`);
+  } else if (existingItems.length === 1) {
+    const existing = existingItems[0];
+    await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
+      quantity_on_hand: (existing.quantity_on_hand ?? 0) + qty_received
+    });
+    ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'RECEIVE_UPDATE' });
+  } else {
+    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+      part_id: part.id, location_id: effective_location_id, quantity_on_hand: qty_received,
+      quantity_reserved: 0, received_date: new Date().toISOString().split('T')[0],
+      notes: `Received from PO line ${line_item_id}`
+    });
+    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'RECEIVE_CREATE' });
+  }
+
+  // Update commitment if linked
+  if (lineItem.commitment_id) {
+    const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
+    if (commitment) {
+      const current_covered = commitment.covered_from_po ?? 0;
+      const new_covered = Math.max(0, current_covered - qty_received);
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, {
+        covered_from_po: new_covered,
+        qty_received: (commitment.qty_received ?? 0) + qty_received,
+        commitment_status: 'received',
+        commitment_version: (commitment.commitment_version ?? 0) + 1
+      });
+      ctx.mutations.push({ entity: 'PartCommitment', id: lineItem.commitment_id, action: 'RECEIVE' });
+    }
+  }
+
+  // NOTE: recomputePartPhysicalStock + rebalancePartReservations are DEFERRED to batch caller
+
+  // Create inventory receipt
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({
+    part_id: part.id, order_id: lineItem.order_id, line_item_id,
+    qty_received, location_id: effective_location_id,
+    received_by: ctx.user.email, received_date: ctx.timestamp
+  });
+
+  ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: line_item_id, action: 'RECEIVE' });
+  ctx.lifecycle_events.push({
+    entity_type: 'Part', entity_id: part.id, event_type: 'INVENTORY_RECEIVED',
+    actor_email: ctx.user.email,
+    details: JSON.stringify({ qty: qty_received, from_po: lineItem.order_id, location_id: effective_location_id }),
+    created_date: ctx.timestamp
+  });
+
+  return {
+    line_item_id, part_id: part.id, part_name: part.part_name,
+    qty_received, line_status
+  };
+}
+
+/**
+ * Receive a single line item (FULL version — used by non-batch callers)
  * 
  * PHASE 14: RECEIVE LOGIC - InventoryItem authoritative
  * 1. Upsert InventoryItem by (part_id, location_id)
