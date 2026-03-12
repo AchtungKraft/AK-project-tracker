@@ -388,6 +388,33 @@ Deno.serve(async (req) => {
         // Inventory snapshot
         inventory_snapshot,
 
+        // Commitment status (canonical)
+        commitment_status: c.commitment_status || 'planned',
+
+        // PSM-compatible nested shape aliases (allows PSMGroupedView to consume this data)
+        part: {
+          id: c.part_id,
+          part_name: part?.part_name || 'Unknown Part',
+          vendor_part_number: part?.vendor_part_number || null,
+          featured_photo: part?.featured_photo || null,
+          order_url: part?.order_url || null,
+        },
+        vendor: vendor ? { id: vendor.id, vendor_name: vendor.vendor_name } : null,
+        categoryId: category?.id || null,
+        categoryObj: category ? { id: category.id, name: category.name } : null,
+        categoryName: category?.name || null,
+        allowed: {
+          canCreatePO: is_orderable,
+          canCreateDeltaOrder: covered_from_po > 0 && to_order === 0,
+          canReceive: on_order_qty > 0,
+          canInstall: available_to_install > 0 && qty_installed < required_total,
+          canReverseInstall: qty_installed > 0,
+          canCancel: c.commitment_status !== 'cancelled',
+          canCreateInvoice: false, // Not relevant in ops context
+        },
+        // Derived billing state for PSM compatibility
+        billing_state: c.billing_status === 'invoiced' ? 'INVOICED' : c.billing_status === 'paid' ? 'PAID' : 'NOT_INVOICED',
+
         // Raw data for mutations
         _raw: {
           commitment_status: c.commitment_status,
