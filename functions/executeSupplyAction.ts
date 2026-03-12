@@ -952,13 +952,15 @@ async function receiveBatch(ctx, payload) {
   let total_received = 0;
 
   for (const line of lines) {
-    if (!line.line_item_id || !line.qty_received || line.qty_received <= 0) {
+    // Accept receive_qty (canonical) or qty_received (legacy fallback)
+    const qty = line.receive_qty ?? line.qty_received ?? 0;
+    if (!line.line_item_id || qty <= 0) {
       continue;
     }
 
-    const result = await receiveSingleLine(ctx, line.line_item_id, line.qty_received, line.location_id);
+    const result = await receiveSingleLine(ctx, line.line_item_id, qty, line.location_id);
     results.push(result);
-    total_received += line.qty_received;
+    total_received += qty;
   }
 
   // Update order status
