@@ -308,6 +308,16 @@ Deno.serve(async (req) => {
         if (rem > 0) openCount++;
       }
 
+      // Collect unique part names for this order (lightweight summary)
+      const partNames = [];
+      const seenPartIds = new Set();
+      for (const li of orderLines) {
+        if (li.status === 'Cancelled' || !li.part_id || seenPartIds.has(li.part_id)) continue;
+        seenPartIds.add(li.part_id);
+        const name = partNameMap.get(li.part_id);
+        if (name) partNames.push(name);
+      }
+
       return {
         order_id: order.id,
         po_number: order.po_number || `PO-${order.id.slice(-6)}`,
@@ -324,6 +334,7 @@ Deno.serve(async (req) => {
         total_qty_remaining,
         progress_pct: total_qty_ordered > 0 ? Math.round((total_qty_received / total_qty_ordered) * 100) : 0,
         pdf_attachments: order.pdf_attachments || [],
+        part_names: partNames,
       };
     });
 
