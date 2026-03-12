@@ -226,7 +226,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     setSelectedLines(newSelected);
 
     const totalReceived = lines.reduce((sum, l) => sum + l.receive_qty, 0);
-    toast.success(`Received ${lines.length} line items (${totalReceived} units)`);
+    toast.success(`Processing ${lines.length} line items (${totalReceived} units)...`);
 
     try {
       // ── STEP 2: Fire backend action ──
