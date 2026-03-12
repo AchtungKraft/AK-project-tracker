@@ -661,34 +661,47 @@ const SUBGROUP_OPTIONS = [
   { value: 'inventory', label: 'Inventory State' },
 ];
 
-// Helper to get grouping info for an item
+// Helper to get grouping info for an item — HARDENED against missing fields
 function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
-  if (mode === 'vendor') {
-    const vendorDisplay = resolveVendorDisplay(item.vendor?.id, item.vendor?.vendor_name || item.vendor_name, vendorsMap);
-    return {
-      key: item.vendor?.id || 'unassigned',
-      name: vendorDisplay.name,
-      inventoryState: null,
-    };
-  } else if (mode === 'inventory') {
-    const reserved = item.reserved_from_stock ?? 0;
-    const ordered = item.covered_from_po ?? 0;
-    
-    if (ordered > 0) {
-      return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
-    } else if (reserved > 0) {
-      return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
+  if (!item) return { key: '_unknown', name: 'Unknown', inventoryState: null };
+
+  try {
+    if (mode === 'vendor') {
+      const vendorId = item.vendor?.id || item.vendor_id || null;
+      const vendorNameRaw = item.vendor?.vendor_name || item.vendor_name || null;
+      const vendorDisplay = resolveVendorDisplay(vendorId, vendorNameRaw, vendorsMap);
+      return {
+        key: vendorId || 'unassigned',
+        name: vendorDisplay?.name || 'No Vendor',
+        inventoryState: null,
+      };
+    } else if (mode === 'inventory') {
+      const reserved = item.reserved_from_stock ?? 0;
+      const ordered = item.covered_from_po ?? 0;
+      
+      if (ordered > 0) {
+        return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
+      } else if (reserved > 0) {
+        return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
+      } else {
+        return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
+      }
     } else {
-      return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
+      // category (default)
+      const catId = item.categoryId || null;
+      const catObj = item.categoryObj || item.categoryName || null;
+      const catDisplay = resolveCategoryDisplay(catId, catObj, categoriesMap);
+      return {
+        key: catId || 'uncategorized',
+        name: catDisplay?.name || 'Uncategorized',
+        inventoryState: null,
+      };
     }
-  } else {
-    // category (default)
-    const catDisplay = resolveCategoryDisplay(item.categoryId, item.categoryObj || item.categoryName, categoriesMap);
-    return {
-      key: item.categoryId || 'uncategorized',
-      name: catDisplay.name,
-      inventoryState: null,
-    };
+  } catch (err) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[getGroupInfo] Error resolving group for item', item.id || item.commitment_id, mode, err);
+    }
+    return { key: '_error', name: 'Unknown', inventoryState: null };
   }
 }
 
