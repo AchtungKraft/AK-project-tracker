@@ -123,12 +123,12 @@ export function PSMSummaryStrip({ items, tab }) {
           <p className="text-lg font-bold text-emerald-400">{stats.inStock}</p>
         </CardContent>
       </Card>
-      <Card className="bg-black/40 border-blue-900/50">
+      <Card className="bg-black/40 border-purple-900/50">
         <CardContent className="p-3 text-center">
           <p className="text-[10px] text-gray-500 uppercase tracking-wide">Ordered</p>
           <p className={cn(
             "text-lg font-bold",
-            stats.ordered > 0 ? "text-blue-400" : "text-gray-500"
+            stats.ordered > 0 ? "text-purple-400" : "text-gray-500"
           )}>
             {stats.ordered}
           </p>
@@ -317,7 +317,7 @@ export function PSMItemRow({
           {(commitment.covered_from_po ?? 0) > 0 && (
             <div className="text-center">
               <span className="text-gray-500 block">ORD</span>
-              <span className="text-blue-400">{commitment.covered_from_po}</span>
+              <span className="text-purple-400">{commitment.covered_from_po}</span>
             </div>
           )}
           <div className="text-center">
@@ -574,7 +574,7 @@ export function PSMGroupCard({
             <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
           )}
           {groupStats.ordered > 0 && (
-            <span className="text-[10px] text-blue-400 font-mono">{groupStats.ordered}📦</span>
+            <span className="text-[10px] text-purple-400 font-mono">{groupStats.ordered}📦</span>
           )}
           {groupStats.needsOrder > 0 && (
             <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
@@ -1258,7 +1258,7 @@ function PSMGroupCardWithSubgroups({
             <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
           )}
           {groupStats.ordered > 0 && (
-            <span className="text-[10px] text-blue-400 font-mono">{groupStats.ordered}📦</span>
+            <span className="text-[10px] text-purple-400 font-mono">{groupStats.ordered}📦</span>
           )}
           {groupStats.needsOrder > 0 && (
             <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
