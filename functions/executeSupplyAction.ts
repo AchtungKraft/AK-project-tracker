@@ -1011,9 +1011,13 @@ async function receiveBatch(ctx, payload) {
   return {
     order_id,
     order_status: newStatus,
+    lines_submitted: lines.length,
     lines_received: results.length,
+    lines_skipped: skipped.length,
+    lines_errored: errors.length,
     total_qty_received: total_received,
     results,
+    skipped: skipped.length > 0 ? skipped : undefined,
     errors: errors.length > 0 ? errors : undefined,
   };
 }
