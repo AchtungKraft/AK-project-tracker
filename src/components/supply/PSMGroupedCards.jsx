@@ -665,10 +665,10 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
     const reserved = item.reserved_from_stock ?? 0;
     const ordered = item.covered_from_po ?? 0;
     
-    if (reserved > 0) {
-      return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
-    } else if (ordered > 0) {
+    if (ordered > 0) {
       return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
+    } else if (reserved > 0) {
+      return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
     } else {
       return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
     }

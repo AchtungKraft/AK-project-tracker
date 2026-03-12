@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
  * InventoryStateBadgeSimple - Build Management Focused Inventory State
  * 
  * Precedence:
- * 1. reserved_from_stock > 0 → IN STOCK (physically on shelf)
- * 2. covered_from_po > 0     → ORDERED  (PO placed, awaiting delivery)
+ * 1. covered_from_po > 0     → ORDERED  (PO placed, awaiting delivery)
+ * 2. reserved_from_stock > 0 → IN STOCK (physically on shelf)
  * 3. otherwise               → NEEDS ORDER
  * 
  * Does NOT use physical_stock_global. Does NOT use to_order for primary state.
@@ -35,14 +35,15 @@ const STATE_CONFIG = {
 
 /**
  * Determine inventory state from commitment data.
- * Strict precedence: stock → ordered → needs order.
+ * PROCUREMENT STATUS PRECEDENCE: ordered → stock → needs order.
+ * ORDERED must override IN STOCK because the user needs to know the part is on a PO.
  */
 function determineInventoryState(commitment) {
   const reserved = commitment.reserved_from_stock ?? 0;
   const ordered = commitment.covered_from_po ?? 0;
 
-  if (reserved > 0) return 'IN_STOCK';
   if (ordered > 0)  return 'ORDERED';
+  if (reserved > 0) return 'IN_STOCK';
   return 'NEEDS_ORDER';
 }
 

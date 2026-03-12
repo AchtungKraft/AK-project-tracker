@@ -337,6 +337,7 @@ Deno.serve(async (req) => {
         featured_photo: part?.featured_photo || null,
         order_url: part?.order_url || null,
         order_id: firstOrderId,
+        order_number: firstOrderId ? (orderMap.get(firstOrderId)?.order_number || orderMap.get(firstOrderId)?.po_number || null) : null,
         project_id: c.project_id,
         project_name: project?.name || 'AK Stock',
         vendor_id: vendor?.id || null,
