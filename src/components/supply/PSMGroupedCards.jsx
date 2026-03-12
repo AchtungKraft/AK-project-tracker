@@ -218,6 +218,15 @@ export function PSMItemRow({
     categoriesMap
   );
 
+  // Phase 5: Dev diagnostics for PO field passthrough
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[PSMItemRow] PO fields', {
+      commitment_id: commitment.commitment_id || commitment.id,
+      order_id: commitment.order_id,
+      order_number: commitment.order_number,
+    });
+  }
+
   // PHASE 6: Disable ordering when gap_qty === 0
   const canOrder = allowed?.canCreatePO && toOrder > 0;
   
