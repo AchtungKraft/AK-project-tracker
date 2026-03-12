@@ -319,11 +319,12 @@ Deno.serve(async (req) => {
         needed: Math.max(0, required_total - qty_installed),
       };
 
-      // Derive first active order_id for "View PO" navigation
+      // Derive first order_id for "View PO" navigation
+      // Include Received status so received items still show PO link
       const firstOrderId = commitmentLineItems.length > 0
         ? commitmentLineItems.find(li => {
             const o = orderMap.get(li.order_id);
-            return o && ['Draft', 'Ordered', 'Partial'].includes(o.status);
+            return o && ['Draft', 'Ordered', 'Partial', 'Received'].includes(o.status);
           })?.order_id || commitmentLineItems[0].order_id
         : null;
 
