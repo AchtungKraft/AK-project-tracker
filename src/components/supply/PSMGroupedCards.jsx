@@ -311,6 +311,12 @@ export function PSMItemRow({
             <span className="text-gray-500 block">REQ</span>
             <span className="text-white">{commitment.required_total ?? 0}</span>
           </div>
+          {(commitment.covered_from_po ?? 0) > 0 && (
+            <div className="text-center">
+              <span className="text-gray-500 block">ORD</span>
+              <span className="text-blue-400">{commitment.covered_from_po}</span>
+            </div>
+          )}
           <div className="text-center">
             <span className="text-gray-500 block">INST</span>
             <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span>
