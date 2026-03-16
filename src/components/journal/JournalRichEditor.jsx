@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import ReactQuill from "react-quill";
 import { base44 } from "@/api/base44Client";
 import { Loader2 } from "lucide-react";
