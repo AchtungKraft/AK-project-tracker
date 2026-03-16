@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // Default templates
 const DEFAULT_TEMPLATES = {
@@ -101,9 +101,11 @@ Deno.serve(async (req) => {
         const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
 
         // Truncate content for email preview
-        const contentPreview = entry.content.length > 500 
-            ? entry.content.substring(0, 500) + '...' 
-            : entry.content;
+        // Support both new content_html and legacy content fields
+        const rawContent = entry.content || (entry.content_html ? entry.content_html.replace(/<[^>]*>/g, '') : '');
+        const contentPreview = rawContent.length > 500 
+            ? rawContent.substring(0, 500) + '...' 
+            : rawContent;
 
         // Send personalized email to each client sequentially to respect rate limits (2 per second)
         const results = [];
