@@ -101,11 +101,19 @@ Deno.serve(async (req) => {
         const closingText = savedTemplate?.closing_text || defaultTpl.closing_text;
 
         // Truncate content for email preview
-        // Support both new content_html and legacy content fields
-        const rawContent = entry.content || (entry.content_html ? entry.content_html.replace(/<[^>]*>/g, '') : '');
+        // Prefer content_html (stripped to text), fall back to legacy content field
+        const htmlStripped = entry.content_html ? entry.content_html.replace(/<[^>]*>/g, '').trim() : '';
+        const rawContent = htmlStripped || entry.content || '';
         const contentPreview = rawContent.length > 500 
             ? rawContent.substring(0, 500) + '...' 
             : rawContent;
+
+        // Normalize links: structured links or legacy url conversion
+        const entryLinks = Array.isArray(entry.links) && entry.links.length > 0
+            ? entry.links
+            : (entry.url && typeof entry.url === 'string' && entry.url.trim())
+                ? [{ name: 'External Link', url: entry.url, type: 'external' }]
+                : [];
 
         // Send personalized email to each client sequentially to respect rate limits (2 per second)
         const results = [];
@@ -163,6 +171,16 @@ Deno.serve(async (req) => {
     <p style="margin: 0; color: #333; white-space: pre-wrap;">${contentPreview}</p>
 </div>
 
+${entryLinks.length > 0 ? `
+<div style="margin: 16px 0;">
+    <p style="color: #666; font-size: 14px; font-weight: bold; margin-bottom: 8px;">Related Links:</p>
+    ${entryLinks.filter(l => l.url).map(l => {
+        const href = l.url.startsWith('http') ? l.url : 'https://' + l.url;
+        return `<p style="margin: 4px 0;"><a href="${href}" style="color: #3b82f6; text-decoration: underline;">${l.name || l.url}</a>${l.description ? ` — ${l.description}` : ''}</p>`;
+    }).join('\n')}
+</div>
+` : ''}
+
 <p style="margin: 30px 0;">
 <a href="${journalUrl}" style="display: inline-block; background-color: #c00; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
 ${buttonText}
@@ -189,7 +207,7 @@ Hi ${contact.name},
 ${bodyIntro}
 
 ${entry.headline ? entry.headline + '\n\n' : ''}${contentPreview}
-
+${entryLinks.length > 0 ? '\nRelated Links:\n' + entryLinks.filter(l => l.url).map(l => `- ${l.name || l.url}: ${l.url.startsWith('http') ? l.url : 'https://' + l.url}`).join('\n') + '\n' : ''}
 View the full update here:
 ${journalUrl}
 

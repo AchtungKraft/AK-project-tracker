@@ -153,7 +153,8 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
     updateMutation.mutate({
       headline,
       content_html: sanitizedHtml,
-      content: plainText, // Keep legacy field updated
+      content: plainText, // Keep legacy field updated for backward compat
+      url: '', // Clear deprecated legacy url field on resave
       photos,
       links: links.filter(l => l.url?.trim()),
       attachments,

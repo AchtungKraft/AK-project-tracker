@@ -13,10 +13,12 @@ export function JournalBodyRenderer({ entry }) {
   if (normalized.content_html) {
     const cleanHtml = sanitizeJournalHtml(normalized.content_html);
     return (
-      <div 
-        className="journal-prose prose prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: cleanHtml }}
-      />
+      <div className="journal-table-wrap">
+        <div 
+          className="journal-prose prose prose-invert max-w-none"
+          dangerouslySetInnerHTML={{ __html: cleanHtml }}
+        />
+      </div>
     );
   }
   
