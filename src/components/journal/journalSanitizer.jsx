@@ -31,12 +31,24 @@ const ALLOWED_ATTRS = {
 export function sanitizeJournalHtml(html) {
   if (!html || typeof html !== 'string') return '';
   
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  // Trim and check for empty/whitespace-only content
+  const trimmed = html.trim();
+  if (!trimmed) return '';
   
-  if (!doc.body) return '';
+  let parser;
+  let doc;
+  try {
+    parser = new DOMParser();
+    doc = parser.parseFromString(trimmed, 'text/html');
+  } catch (e) {
+    console.warn('DOMParser failed in sanitizeJournalHtml:', e);
+    return '';
+  }
+  
+  if (!doc || !doc.body) return '';
   
   function cleanNode(node) {
+    if (!node) return;
     if (node.nodeType === Node.TEXT_NODE) return;
     if (node.nodeType === Node.COMMENT_NODE) {
       node.remove();
@@ -48,12 +60,13 @@ export function sanitizeJournalHtml(html) {
     
     // Remove script, style, iframe, form, and any non-whitelisted tags
     if (!ALLOWED_TAGS.has(tag)) {
-      // Keep children (unwrap), remove the tag itself
       const parent = node.parentNode;
-      while (node.firstChild) {
-        parent.insertBefore(node.firstChild, node);
+      if (parent) {
+        while (node.firstChild) {
+          parent.insertBefore(node.firstChild, node);
+        }
+        parent.removeChild(node);
       }
-      parent.removeChild(node);
       return;
     }
     
@@ -67,14 +80,7 @@ export function sanitizeJournalHtml(html) {
     for (const attr of attrs) {
       const name = attr.name.toLowerCase();
       
-      // Remove event handlers
-      if (name.startsWith('on')) {
-        node.removeAttribute(attr.name);
-        continue;
-      }
-      
-      // Remove style attribute (prevent style injection)
-      if (name === 'style') {
+      if (name.startsWith('on') || name === 'style') {
         node.removeAttribute(attr.name);
         continue;
       }
@@ -84,7 +90,6 @@ export function sanitizeJournalHtml(html) {
         continue;
       }
       
-      // Sanitize href - no javascript: URLs
       if (name === 'href' || name === 'src') {
         const val = attr.value.trim().toLowerCase();
         if (val.startsWith('javascript:') || val.startsWith('data:text')) {
@@ -93,13 +98,12 @@ export function sanitizeJournalHtml(html) {
       }
     }
     
-    // Force safe link attributes
     if (tag === 'a') {
       node.setAttribute('target', '_blank');
       node.setAttribute('rel', 'noopener noreferrer');
     }
     
-    // Recursively clean children (copy to array to avoid mutation issues)
+    // Recursively clean children (snapshot to avoid mutation issues)
     const children = [...node.childNodes];
     for (const child of children) {
       cleanNode(child);
