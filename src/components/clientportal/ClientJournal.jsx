@@ -107,17 +107,13 @@ export default function ClientJournal({ projectId, token, slug }) {
                     </div>
                   )}
 
-                  {/* Structured Links */}
-                  {entry.links?.length > 0 && (
-                    <div className="mb-4">
-                      <JournalLinksRenderer entry={entry} />
-                    </div>
-                  )}
+                  {/* Structured Links (normalizer handles legacy url→links) */}
+                  <div className="mb-4">
+                    <JournalLinksRenderer entry={entry} />
+                  </div>
 
                   {/* Attachments */}
-                  {entry.attachments?.length > 0 && (
-                    <JournalAttachmentsRenderer entry={entry} />
-                  )}
+                  <JournalAttachmentsRenderer entry={entry} />
                 </article>
               ))}
             </div>

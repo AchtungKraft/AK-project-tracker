@@ -21,7 +21,7 @@ const TOOLBAR_OPTIONS = [
   ['bold', 'italic', 'underline', 'strike'],
   [{ list: 'ordered' }, { list: 'bullet' }],
   ['blockquote', 'code-block'],
-  ['link', 'image'],
+  ['link', 'image', 'insertTable'],
   [{ align: [] }],
   ['clean'],
 ];
@@ -30,6 +30,7 @@ export default function JournalRichEditor({ value, onChange, placeholder }) {
   const [uploading, setUploading] = useState(false);
   const quillRef = useRef(null);
   const dropZoneRef = useRef(null);
+  const dragCounterRef = useRef(0);
 
   // Upload a file and return the URL
   const uploadFile = useCallback(async (file) => {
@@ -64,24 +65,37 @@ export default function JournalRichEditor({ value, onChange, placeholder }) {
     quill.setSelection(range.index + 1);
   }, []);
 
-  // Handle drag over
+  // Drag counter approach: prevents flickering on nested elements
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1) {
+      dropZoneRef.current?.classList.add('ring-2', 'ring-red-500/50');
+    }
+  }, []);
+
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.classList.add('ring-2', 'ring-red-500/50');
   }, []);
 
   const handleDragLeave = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.classList.remove('ring-2', 'ring-red-500/50');
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      dropZoneRef.current?.classList.remove('ring-2', 'ring-red-500/50');
+    }
   }, []);
 
   // Handle drop
   const handleDrop = useCallback(async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.classList.remove('ring-2', 'ring-red-500/50');
+    dragCounterRef.current = 0;
+    dropZoneRef.current?.classList.remove('ring-2', 'ring-red-500/50');
     
     const files = Array.from(e.dataTransfer?.files || []);
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
@@ -113,6 +127,15 @@ export default function JournalRichEditor({ value, onChange, placeholder }) {
     }
   }, [uploadFile, insertImage]);
 
+  // Insert a table at cursor position
+  const tableHandler = useCallback(() => {
+    const quill = quillRef.current?.getEditor();
+    if (!quill) return;
+    const range = quill.getSelection(true);
+    const tableHtml = '<table><thead><tr><th>Header 1</th><th>Header 2</th><th>Header 3</th></tr></thead><tbody><tr><td>Cell 1</td><td>Cell 2</td><td>Cell 3</td></tr><tr><td>Cell 4</td><td>Cell 5</td><td>Cell 6</td></tr></tbody></table><p><br></p>';
+    quill.clipboard.dangerouslyPasteHTML(range.index, tableHtml);
+  }, []);
+
   // Custom image handler for the toolbar button
   const imageHandler = useCallback(() => {
     const input = document.createElement('input');
@@ -132,20 +155,22 @@ export default function JournalRichEditor({ value, onChange, placeholder }) {
     };
   }, [uploadFile, insertImage]);
 
-  // Quill modules config with custom image handler
+  // Quill modules config with custom handlers
   const modules = React.useMemo(() => ({
     toolbar: {
       container: TOOLBAR_OPTIONS,
       handlers: {
         image: imageHandler,
+        insertTable: tableHandler,
       },
     },
-  }), [imageHandler]);
+  }), [imageHandler, tableHandler]);
 
   return (
     <div 
       ref={dropZoneRef}
       className="relative rounded-lg transition-all"
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -263,6 +288,24 @@ export default function JournalRichEditor({ value, onChange, placeholder }) {
           color: white;
         }
         .journal-editor .ql-snow .ql-tooltip a {
+          color: rgb(248, 113, 113);
+        }
+        /* Table insert button styling */
+        .journal-editor .ql-insertTable {
+          width: 28px !important;
+          height: 24px !important;
+          position: relative;
+        }
+        .journal-editor .ql-insertTable::after {
+          content: '⊞';
+          font-size: 16px;
+          color: rgb(156, 163, 175);
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        }
+        .journal-editor .ql-insertTable:hover::after {
           color: rgb(248, 113, 113);
         }
       `}</style>

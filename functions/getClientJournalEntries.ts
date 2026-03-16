@@ -32,6 +32,16 @@ function sanitizeHtmlServer(html) {
   clean = clean.replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '');
   clean = clean.replace(/<iframe\b[^>]*\/>/gi, '');
   
+  // Remove object and embed tags
+  clean = clean.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '');
+  clean = clean.replace(/<embed\b[^>]*\/?>/gi, '');
+  
+  // Remove form elements
+  clean = clean.replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '');
+  clean = clean.replace(/<input\b[^>]*\/?>/gi, '');
+  clean = clean.replace(/<textarea\b[^<]*(?:(?!<\/textarea>)<[^<]*)*<\/textarea>/gi, '');
+  clean = clean.replace(/<button\b[^<]*(?:(?!<\/button>)<[^<]*)*<\/button>/gi, '');
+  
   // Remove event handlers (on*)
   clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   
@@ -123,7 +133,7 @@ Deno.serve(async (req) => {
     }
 
     if (!projectId) {
-      return Response.json({ error: 'Project ID is required' }, { status: 400 });
+      return Response.json({ error: 'Project ID is required', entries: [] }, { status: 400 });
     }
 
     // Validate client access using token or slug
@@ -151,7 +161,7 @@ Deno.serve(async (req) => {
     }
 
     if (!access) {
-      return Response.json({ error: 'Unauthorized access' }, { status: 403 });
+      return Response.json({ error: 'Unauthorized access', entries: [] }, { status: 403 });
     }
 
     // Fetch journal entries with client visibility
@@ -179,7 +189,7 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Error fetching client journal entries:', error);
-    return Response.json({ error: error.message }, { 
+    return Response.json({ error: error.message, entries: [] }, { 
       status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
