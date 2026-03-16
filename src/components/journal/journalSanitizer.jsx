@@ -34,6 +34,8 @@ export function sanitizeJournalHtml(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   
+  if (!doc.body) return '';
+  
   function cleanNode(node) {
     if (node.nodeType === Node.TEXT_NODE) return;
     if (node.nodeType === Node.COMMENT_NODE) {
