@@ -15,48 +15,58 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
  * HTML sanitization is done server-side to prevent XSS in the client portal.
  */
 
-// Minimal server-side HTML sanitizer (no DOM available in Deno)
-// Strips script tags, event handlers, and dangerous attributes
+/**
+ * Server-side HTML sanitizer (regex-based, no DOM available in Deno).
+ * 
+ * This is the CANONICAL sanitization layer for content returned to clients.
+ * The frontend has a secondary DOM-based sanitizer for defense-in-depth,
+ * but this backend sanitizer is the primary security boundary.
+ * 
+ * Strips dangerous tags (with content), unsafe attributes, and dangerous URL protocols.
+ */
 function sanitizeHtmlServer(html) {
   if (!html || typeof html !== 'string') return '';
   
   let clean = html;
   
-  // Remove script tags and content
+  // --- Dangerous tags: remove tag AND all content ---
+  // Script, style, iframe, object, embed, applet
   clean = clean.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  
-  // Remove style tags and content
   clean = clean.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-  
-  // Remove iframe tags
-  clean = clean.replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '');
+  clean = clean.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
   clean = clean.replace(/<iframe\b[^>]*\/>/gi, '');
-  
-  // Remove object and embed tags
   clean = clean.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '');
   clean = clean.replace(/<embed\b[^>]*\/?>/gi, '');
+  clean = clean.replace(/<applet\b[^<]*(?:(?!<\/applet>)<[^<]*)*<\/applet>/gi, '');
+  clean = clean.replace(/<link\b[^>]*\/?>/gi, '');
+  clean = clean.replace(/<meta\b[^>]*\/?>/gi, '');
+  clean = clean.replace(/<base\b[^>]*\/?>/gi, '');
   
-  // Remove form elements
+  // Form elements: remove tag AND content
   clean = clean.replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '');
   clean = clean.replace(/<input\b[^>]*\/?>/gi, '');
   clean = clean.replace(/<textarea\b[^<]*(?:(?!<\/textarea>)<[^<]*)*<\/textarea>/gi, '');
   clean = clean.replace(/<button\b[^<]*(?:(?!<\/button>)<[^<]*)*<\/button>/gi, '');
   clean = clean.replace(/<select\b[^<]*(?:(?!<\/select>)<[^<]*)*<\/select>/gi, '');
   
+  // --- Dangerous attributes ---
   // Remove event handlers (on*)
   clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   
-  // Remove javascript: URLs
-  clean = clean.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
-  clean = clean.replace(/href\s*=\s*'javascript:[^']*'/gi, "href='#'");
-  clean = clean.replace(/src\s*=\s*"javascript:[^"]*"/gi, '');
-  clean = clean.replace(/src\s*=\s*'javascript:[^']*'/gi, '');
+  // --- Dangerous URL protocols ---
+  // Block javascript:, vbscript:, file: in href and src
+  clean = clean.replace(/href\s*=\s*"(?:javascript|vbscript|file):[^"]*"/gi, 'href="#"');
+  clean = clean.replace(/href\s*=\s*'(?:javascript|vbscript|file):[^']*'/gi, "href='#'");
+  clean = clean.replace(/src\s*=\s*"(?:javascript|vbscript|file):[^"]*"/gi, '');
+  clean = clean.replace(/src\s*=\s*'(?:javascript|vbscript|file):[^']*'/gi, '');
   
-  // Remove data:text URIs (potential XSS vector)
-  clean = clean.replace(/src\s*=\s*"data:text[^"]*"/gi, '');
-  clean = clean.replace(/src\s*=\s*'data:text[^']*'/gi, '');
+  // Block data: URIs except data:image/* (inline uploaded images in content)
+  clean = clean.replace(/src\s*=\s*"data:(?!image\/)[^"]*"/gi, '');
+  clean = clean.replace(/src\s*=\s*'data:(?!image\/)[^']*'/gi, '');
+  clean = clean.replace(/href\s*=\s*"data:[^"]*"/gi, 'href="#"');
+  clean = clean.replace(/href\s*=\s*'data:[^']*'/gi, "href='#'");
   
-  // Remove style attributes (prevent CSS injection)
+  // --- Style attributes (prevent CSS injection) ---
   clean = clean.replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   
   return clean;
