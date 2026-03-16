@@ -110,7 +110,11 @@ export function sanitizeJournalHtml(html) {
     }
   }
   
-  cleanNode(doc.body);
+  // Clean children of body, not body itself (body isn't in ALLOWED_TAGS and would get unwrapped)
+  const bodyChildren = [...doc.body.childNodes];
+  for (const child of bodyChildren) {
+    cleanNode(child);
+  }
   return doc.body.innerHTML;
 }
 
