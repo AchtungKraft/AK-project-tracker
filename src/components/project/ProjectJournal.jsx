@@ -3,8 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Upload, Loader2, Calendar, X, Paperclip, Link2, Eye, EyeOff } from "lucide-react";
+import { Plus, Upload, Loader2, Calendar, X, Paperclip, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,10 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import JournalEntryDetailModal from "../journal/JournalEntryDetailModal";
 import ImageModal from "../ui/ImageModal";
+import JournalRichEditor from "../journal/JournalRichEditor";
+import JournalLinksEditor from "../journal/JournalLinksEditor";
+import { JournalBodyRenderer, JournalLinksRenderer, JournalAttachmentsRenderer, JournalProseStyles } from "../journal/JournalContentRenderer";
+import { sanitizeJournalHtml } from "../journal/journalSanitizer";
 
 export default function ProjectJournal({ projectId }) {
   const queryClient = useQueryClient();
@@ -29,9 +32,9 @@ export default function ProjectJournal({ projectId }) {
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [newEntry, setNewEntry] = useState({
     headline: "",
-    content: "",
+    content_html: "",
     photos: [],
-    url: "",
+    links: [],
     attachments: [],
     visibility: "internal",
   });
@@ -48,7 +51,6 @@ export default function ProjectJournal({ projectId }) {
     onSuccess: async (createdEntry) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries', projectId] });
       
-      // Send email notification if visibility is client
       if (createdEntry.visibility === 'client') {
         try {
           await base44.functions.invoke('sendJournalEntryEmail', { journalEntryId: createdEntry.id });
@@ -61,7 +63,7 @@ export default function ProjectJournal({ projectId }) {
         toast.success('Journal entry added');
       }
       
-      setNewEntry({ headline: "", content: "", photos: [], url: "", attachments: [], visibility: "internal" });
+      setNewEntry({ headline: "", content_html: "", photos: [], links: [], attachments: [], visibility: "internal" });
       setShowAddEntry(false);
     },
     onError: (error) => {
@@ -79,7 +81,6 @@ export default function ProjectJournal({ projectId }) {
       const uploadPromises = files.map(file => 
         base44.integrations.Core.UploadFile({ file })
       );
-
       const results = await Promise.all(uploadPromises);
       const photoUrls = results.map(r => r.file_url);
       
@@ -135,21 +136,28 @@ export default function ProjectJournal({ projectId }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!newEntry.content.trim()) {
-      toast.error("Journal entry cannot be empty.");
+    
+    // Require some content - either rich HTML or fallback
+    const htmlContent = newEntry.content_html?.replace(/<[^>]*>/g, '').trim();
+    if (!htmlContent) {
+      toast.error("Journal entry content cannot be empty.");
       return;
     }
 
+    // Sanitize HTML before save
+    const sanitizedHtml = sanitizeJournalHtml(newEntry.content_html);
+
     createMutation.mutate({
-            project_id: projectId,
-            headline: newEntry.headline,
-            content: newEntry.content,
-            photos: newEntry.photos,
-            url: newEntry.url,
-            attachments: newEntry.attachments,
-            visibility: newEntry.visibility,
-            entry_date: new Date().toISOString(),
-          });
+      project_id: projectId,
+      headline: newEntry.headline,
+      content_html: sanitizedHtml,
+      content: htmlContent, // Plain text fallback for legacy compatibility
+      photos: newEntry.photos,
+      links: newEntry.links.filter(l => l.url?.trim()), // Only save links with URLs
+      attachments: newEntry.attachments,
+      visibility: newEntry.visibility,
+      entry_date: new Date().toISOString(),
+    });
   };
 
   const sortedEntries = [...entries].sort((a, b) => 
@@ -162,6 +170,7 @@ export default function ProjectJournal({ projectId }) {
 
   return (
     <>
+      <JournalProseStyles />
       <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
         <CardHeader className="border-b border-red-900/30">
           <div className="flex justify-between items-center">
@@ -191,24 +200,18 @@ export default function ProjectJournal({ projectId }) {
 
               <div>
                 <Label className="text-gray-400">Entry Content</Label>
-                <Textarea
-                  value={newEntry.content}
-                  onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })}
-                  placeholder="What happened today?"
-                  className="bg-gray-800 border-gray-700 text-white min-h-[150px]"
-                  required
+                <JournalRichEditor
+                  value={newEntry.content_html}
+                  onChange={(val) => setNewEntry({ ...newEntry, content_html: val })}
+                  placeholder="What happened today? Drop images here..."
                 />
               </div>
 
-              <div>
-                <Label className="text-gray-400">URL (Optional)</Label>
-                <Input
-                  value={newEntry.url}
-                  onChange={(e) => setNewEntry({ ...newEntry, url: e.target.value })}
-                  placeholder="https://example.com"
-                  className="bg-gray-800 border-gray-700 text-white"
-                />
-              </div>
+              {/* Structured Links */}
+              <JournalLinksEditor
+                links={newEntry.links}
+                onChange={(links) => setNewEntry({ ...newEntry, links })}
+              />
 
               <div>
                 <Label className="text-gray-400">Visibility</Label>
@@ -234,7 +237,7 @@ export default function ProjectJournal({ projectId }) {
                 </Select>
               </div>
               
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <input
                   type="file"
                   id="photo-upload"
@@ -259,7 +262,7 @@ export default function ProjectJournal({ projectId }) {
                     ) : (
                       <>
                         <Upload className="mr-2 h-4 w-4" />
-                        Add Photos ({newEntry.photos.length})
+                        Gallery Photos ({newEntry.photos.length})
                       </>
                     )}
                   </Button>
@@ -294,7 +297,7 @@ export default function ProjectJournal({ projectId }) {
                 <Button 
                   type="submit" 
                   className="bg-red-600 hover:bg-red-700"
-                  disabled={createMutation.isPending || !newEntry.content.trim()}
+                  disabled={createMutation.isPending}
                 >
                   {createMutation.isPending ? (
                     <>
@@ -309,7 +312,7 @@ export default function ProjectJournal({ projectId }) {
 
               {newEntry.photos.length > 0 && (
                 <div>
-                  <Label className="text-gray-400">Photos ({newEntry.photos.length})</Label>
+                  <Label className="text-gray-400">Gallery Photos ({newEntry.photos.length})</Label>
                   <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mt-2">
                     {newEntry.photos.map((url, idx) => (
                       <div key={idx} className="relative group">
@@ -401,9 +404,9 @@ export default function ProjectJournal({ projectId }) {
                     )}
                   </div>
 
-                  {/* Content */}
-                  <div className="prose prose-invert max-w-none mb-4">
-                    <p className="text-gray-200 text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                  {/* Content — rich HTML or legacy plain text */}
+                  <div className="mb-4">
+                    <JournalBodyRenderer entry={entry} />
                   </div>
 
                   {/* Photos Grid - 2 columns */}
@@ -430,38 +433,11 @@ export default function ProjectJournal({ projectId }) {
                     </div>
                   )}
 
-                  {/* URL Link */}
-                  {entry.url && (
-                    <a
-                      href={entry.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300 mb-2 px-2 py-1.5 bg-gray-800/50 rounded-lg"
-                    >
-                      <Link2 className="w-4 h-4 flex-shrink-0" />
-                      {entry.url}
-                    </a>
-                  )}
+                  {/* Structured Links */}
+                  <JournalLinksRenderer entry={entry} compact />
 
                   {/* Attachments */}
-                  {entry.attachments && entry.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-800">
-                      {entry.attachments.map((att, idx) => (
-                        <a
-                          key={idx}
-                          href={att.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-2 text-sm text-gray-300 hover:text-white px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
-                        >
-                          <Paperclip className="w-4 h-4" />
-                          {att.name}
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                  <JournalAttachmentsRenderer entry={entry} />
                 </article>
               ))}
             </div>

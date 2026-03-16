@@ -3,9 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Eye, Paperclip, Link2 } from "lucide-react";
+import { Calendar, Eye, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import ImageModal from "@/components/ui/ImageModal";
+import { JournalBodyRenderer, JournalLinksRenderer, JournalAttachmentsRenderer, JournalProseStyles } from "@/components/journal/JournalContentRenderer";
 
 export default function ClientJournal({ projectId, token, slug }) {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -16,7 +17,6 @@ export default function ClientJournal({ projectId, token, slug }) {
     queryKey: ['clientJournalEntries', projectId, token, slug],
     queryFn: async () => {
       const payload = { projectId };
-      // Only include token/slug if they have actual values
       if (token && token !== 'null' && token.trim()) {
         payload.token = token;
       }
@@ -45,6 +45,7 @@ export default function ClientJournal({ projectId, token, slug }) {
 
   return (
     <>
+      <JournalProseStyles />
       <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
         <CardHeader className="border-b border-gray-700">
           <CardTitle className="text-white">Project Journal</CardTitle>
@@ -78,10 +79,12 @@ export default function ClientJournal({ projectId, token, slug }) {
                     <h2 className="text-2xl font-bold text-white mb-4">{entry.headline}</h2>
                   )}
 
-                  <div className="prose prose-invert max-w-none mb-6">
-                    <p className="text-gray-200 text-base leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                  {/* Rich content or legacy plain text */}
+                  <div className="mb-6">
+                    <JournalBodyRenderer entry={entry} />
                   </div>
                   
+                  {/* Gallery photos */}
                   {entry.photos?.length > 0 && (
                     <div className="grid grid-cols-2 gap-3 mb-4">
                       {entry.photos.map((url, idx) => (
@@ -104,33 +107,16 @@ export default function ClientJournal({ projectId, token, slug }) {
                     </div>
                   )}
 
-                  {entry.url && (
-                    <a
-                      href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300 mb-3 px-3 py-2 bg-gray-800/50 rounded-lg"
-                    >
-                      <Link2 className="w-4 h-4" />
-                      {entry.url}
-                    </a>
+                  {/* Structured Links */}
+                  {entry.links?.length > 0 && (
+                    <div className="mb-4">
+                      <JournalLinksRenderer entry={entry} />
+                    </div>
                   )}
 
+                  {/* Attachments */}
                   {entry.attachments?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-800">
-                      {entry.attachments.map((att, idx) => (
-                        <a
-                          key={idx}
-                          href={att.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-sm text-gray-300 hover:text-white px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
-                        >
-                          <Paperclip className="w-4 h-4" />
-                          {att.name}
-                        </a>
-                      ))}
-                    </div>
+                    <JournalAttachmentsRenderer entry={entry} />
                   )}
                 </article>
               ))}

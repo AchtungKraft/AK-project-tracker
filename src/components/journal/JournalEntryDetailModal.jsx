@@ -3,9 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Trash2, Upload, X, Paperclip, Link2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Trash2, Upload, X, Paperclip, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,13 +16,17 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
+import JournalRichEditor from "./JournalRichEditor";
+import JournalLinksEditor from "./JournalLinksEditor";
+import { sanitizeJournalHtml, normalizeJournalEntry, generateLinkId } from "./journalSanitizer";
+import { JournalProseStyles } from "./JournalContentRenderer";
 
 export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
   const queryClient = useQueryClient();
   const [headline, setHeadline] = useState("");
-  const [content, setContent] = useState("");
+  const [contentHtml, setContentHtml] = useState("");
   const [photos, setPhotos] = useState([]);
-  const [url, setUrl] = useState("");
+  const [links, setLinks] = useState([]);
   const [attachments, setAttachments] = useState([]);
   const [visibility, setVisibility] = useState("internal");
   const [uploading, setUploading] = useState(false);
@@ -32,11 +35,26 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
   useEffect(() => {
     if (entry) {
+      const normalized = normalizeJournalEntry(entry);
       setHeadline(entry.headline || "");
-      setContent(entry.content || "");
-      setPhotos(entry.photos || []);
-      setUrl(entry.url || "");
-      setAttachments(entry.attachments || []);
+      
+      // Load content_html if available, otherwise convert legacy content
+      if (entry.content_html) {
+        setContentHtml(entry.content_html);
+      } else if (entry.content) {
+        // Convert legacy plain text to basic HTML for editing
+        const escaped = entry.content
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+        setContentHtml(escaped.split('\n').map(line => `<p>${line || '<br>'}</p>`).join(''));
+      } else {
+        setContentHtml("");
+      }
+      
+      setPhotos(normalized.photos);
+      setLinks(normalized.links);
+      setAttachments(normalized.attachments);
       setVisibility(entry.visibility || "internal");
     }
   }, [entry]);
@@ -46,9 +64,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
     onSuccess: async (updatedEntry, variables) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
       
-      // Send email if visibility is client (either changed to client, or was already client and content updated)
       const nowClient = variables.visibility === 'client';
-      
       if (nowClient) {
         try {
           await base44.functions.invoke('sendJournalEntryEmail', { journalEntryId: entry.id });
@@ -130,11 +146,16 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    const sanitizedHtml = sanitizeJournalHtml(contentHtml);
+    const plainText = contentHtml?.replace(/<[^>]*>/g, '').trim() || '';
+
     updateMutation.mutate({
       headline,
-      content,
+      content_html: sanitizedHtml,
+      content: plainText, // Keep legacy field updated
       photos,
-      url,
+      links: links.filter(l => l.url?.trim()),
       attachments,
       visibility,
       project_id: entry.project_id,
@@ -149,6 +170,7 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
   return (
     <>
+      <JournalProseStyles />
       <Dialog open onOpenChange={onClose}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30 text-white">
           <DialogHeader>
@@ -173,24 +195,18 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
 
             <div>
               <Label>Entry Content</Label>
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="What happened today?"
-                className="bg-gray-800 border-gray-700 text-white min-h-[200px]"
-                required
+              <JournalRichEditor
+                value={contentHtml}
+                onChange={setContentHtml}
+                placeholder="What happened today? Drop images here..."
               />
             </div>
 
-            <div>
-              <Label>URL (Optional)</Label>
-              <Input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
+            {/* Structured Links */}
+            <JournalLinksEditor
+              links={links}
+              onChange={setLinks}
+            />
 
             <div>
               <Label>Visibility</Label>
@@ -214,37 +230,35 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
             </div>
 
             <div>
-              <Label>Photos</Label>
+              <Label>Gallery Photos</Label>
               <div className="mt-2">
                 <input
                   type="file"
-                  id="photo-upload"
+                  id="detail-photo-upload"
                   multiple
                   accept="image/*"
                   onChange={handlePhotoUpload}
                   className="hidden"
                 />
-                <label htmlFor="photo-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="cursor-pointer border-gray-700"
-                    disabled={uploading}
-                    onClick={() => document.getElementById('photo-upload').click()}
-                  >
-                    {uploading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Add Photos
-                      </>
-                    )}
-                  </Button>
-                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="cursor-pointer border-gray-700"
+                  disabled={uploading}
+                  onClick={() => document.getElementById('detail-photo-upload').click()}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Add Photos
+                    </>
+                  )}
+                </Button>
               </div>
 
               {photos.length > 0 && (
@@ -282,31 +296,29 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
               <div className="mt-2">
                 <input
                   type="file"
-                  id="attachment-upload"
+                  id="detail-attachment-upload"
                   onChange={handleAttachmentUpload}
                   className="hidden"
                 />
-                <label htmlFor="attachment-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="cursor-pointer border-gray-700"
-                    disabled={uploadingAttachment}
-                    onClick={() => document.getElementById('attachment-upload').click()}
-                  >
-                    {uploadingAttachment ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Paperclip className="mr-2 h-4 w-4" />
-                        Add Document
-                      </>
-                    )}
-                  </Button>
-                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="cursor-pointer border-gray-700"
+                  disabled={uploadingAttachment}
+                  onClick={() => document.getElementById('detail-attachment-upload').click()}
+                >
+                  {uploadingAttachment ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Paperclip className="mr-2 h-4 w-4" />
+                      Add Document
+                    </>
+                  )}
+                </Button>
               </div>
 
               {attachments.length > 0 && (
@@ -325,9 +337,11 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
                         >
                           {att.name}
                         </a>
-                        <p className="text-xs text-gray-500">
-                          {format(new Date(att.uploaded_date), 'MMM d, yyyy')}
-                        </p>
+                        {att.uploaded_date && (
+                          <p className="text-xs text-gray-500">
+                            {format(new Date(att.uploaded_date), 'MMM d, yyyy')}
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -383,14 +397,6 @@ export default function JournalEntryDetailModal({ entry, onClose, projectId }) {
                   </Button>
                 </div>
               </div>
-              <Button
-                type="button"
-                onClick={onClose}
-                variant="outline"
-                className="w-full border-gray-700"
-              >
-                Close
-              </Button>
             </div>
           </form>
         </DialogContent>

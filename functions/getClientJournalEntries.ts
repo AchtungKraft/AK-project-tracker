@@ -1,7 +1,100 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+
+/**
+ * getClientJournalEntries - Client Portal Journal API
+ * 
+ * Returns normalized journal entries for client-visible content.
+ * 
+ * Normalization rules:
+ * - content_html: sanitized rich HTML if present, null otherwise
+ * - content_fallback: original plain text content
+ * - links: always array, never null. Legacy url normalized into links[].
+ * - photos: always array
+ * - attachments: always array
+ * 
+ * HTML sanitization is done server-side to prevent XSS in the client portal.
+ */
+
+// Minimal server-side HTML sanitizer (no DOM available in Deno)
+// Strips script tags, event handlers, and dangerous attributes
+function sanitizeHtmlServer(html) {
+  if (!html || typeof html !== 'string') return '';
+  
+  let clean = html;
+  
+  // Remove script tags and content
+  clean = clean.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove style tags and content
+  clean = clean.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  
+  // Remove iframe tags
+  clean = clean.replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '');
+  clean = clean.replace(/<iframe\b[^>]*\/>/gi, '');
+  
+  // Remove event handlers (on*)
+  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  
+  // Remove javascript: URLs
+  clean = clean.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  clean = clean.replace(/href\s*=\s*'javascript:[^']*'/gi, "href='#'");
+  clean = clean.replace(/src\s*=\s*"javascript:[^"]*"/gi, '');
+  clean = clean.replace(/src\s*=\s*'javascript:[^']*'/gi, '');
+  
+  // Remove data:text URIs (potential XSS vector)
+  clean = clean.replace(/src\s*=\s*"data:text[^"]*"/gi, '');
+  clean = clean.replace(/src\s*=\s*'data:text[^']*'/gi, '');
+  
+  // Remove style attributes (prevent CSS injection)
+  clean = clean.replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  
+  return clean;
+}
+
+function normalizeEntry(entry) {
+  const normalized = {
+    id: entry.id,
+    headline: entry.headline || null,
+    entry_date: entry.entry_date || entry.created_date,
+    created_date: entry.created_date,
+    updated_date: entry.updated_date,
+    visibility: entry.visibility || 'internal',
+  };
+  
+  // Content: prefer content_html, fallback to content
+  if (entry.content_html) {
+    normalized.content_html = sanitizeHtmlServer(entry.content_html);
+  } else {
+    normalized.content_html = null;
+  }
+  normalized.content = entry.content || '';
+  normalized.content_fallback = entry.content || '';
+  
+  // Photos: always array
+  normalized.photos = Array.isArray(entry.photos) ? entry.photos : [];
+  
+  // Attachments: always array
+  normalized.attachments = Array.isArray(entry.attachments) ? entry.attachments : [];
+  
+  // Links: always array, normalize legacy url
+  if (Array.isArray(entry.links) && entry.links.length > 0) {
+    normalized.links = entry.links;
+  } else if (entry.url && typeof entry.url === 'string' && entry.url.trim()) {
+    normalized.links = [{
+      id: 'legacy-url',
+      name: 'External Link',
+      description: '',
+      url: entry.url,
+      type: 'external',
+    }];
+  } else {
+    normalized.links = [];
+  }
+  
+  return normalized;
+}
 
 Deno.serve(async (req) => {
-  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -16,7 +109,6 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     
-    // Parse request body
     let projectId, token, slug;
     try {
       const body = await req.json();
@@ -46,7 +138,6 @@ Deno.serve(async (req) => {
     }
     
     if (!access && slug && slug !== 'null' && slug.trim() !== '') {
-      // Try to find by client slug
       const clients = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug });
       if (clients.length > 0) {
         const clientId = clients[0].id;
@@ -63,20 +154,22 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized access' }, { status: 403 });
     }
 
-    // Fetch journal entries with client visibility for this project
+    // Fetch journal entries with client visibility
     const journalEntries = await base44.asServiceRole.entities.JournalEntry.filter({
       project_id: projectId,
       visibility: 'client'
     });
 
-    // Sort by entry_date descending (newest first)
-    const sortedEntries = journalEntries.sort((a, b) => 
-      new Date(b.entry_date || b.created_date) - new Date(a.entry_date || a.created_date)
-    );
+    // Normalize and sort
+    const normalizedEntries = journalEntries
+      .map(normalizeEntry)
+      .sort((a, b) => 
+        new Date(b.entry_date || b.created_date) - new Date(a.entry_date || a.created_date)
+      );
 
     return Response.json({
       success: true,
-      entries: sortedEntries
+      entries: normalizedEntries,
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
