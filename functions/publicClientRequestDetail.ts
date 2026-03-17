@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // Centralized request type UI mapping
 const REQUEST_TYPE_UI = {
@@ -15,6 +15,84 @@ const REQUEST_TYPE_UI = {
 const getRequestTypeInfo = (type) => {
     return REQUEST_TYPE_UI[type] || { label: type || "General", color: "#6b7280" };
 };
+
+// ── Server-side comment normalizer (authoritative) ──────────────────
+function normalizeComment(comment, attachments) {
+    const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+
+    const contentHtml = comment.content_html || null;
+    const body = comment.body || '';
+    const contentFallback = comment.content_fallback || body;
+
+    // links: inline first, fall back to attachment-sourced
+    let links = [];
+    if (Array.isArray(comment.links) && comment.links.length > 0) {
+        links = comment.links.map((link, idx) => {
+            if (typeof link === 'string') {
+                return { id: `legacy-${idx}`, name: link, url: link, description: '', type: 'external' };
+            }
+            return {
+                id: link.id || `link-${idx}`,
+                name: link.name || link.url || '',
+                url: link.url || '',
+                description: link.description || '',
+                type: link.type || 'external',
+            };
+        });
+    } else {
+        links = commentAttachments
+            .filter(a => a.attachment_type === 'link')
+            .map((a, idx) => ({
+                id: a.id || `att-link-${idx}`,
+                name: a.label || a.link_url || '',
+                url: a.link_url || '',
+                description: '',
+                type: 'external',
+            }));
+    }
+
+    // photos: inline first, fall back to attachment-sourced
+    let photos = [];
+    if (Array.isArray(comment.photos) && comment.photos.length > 0) {
+        photos = comment.photos.filter(Boolean);
+    } else {
+        photos = commentAttachments
+            .filter(a => a.attachment_type === 'image')
+            .map(a => a.file_url)
+            .filter(Boolean);
+    }
+
+    // files: inline first, fall back to attachment-sourced
+    let files = [];
+    if (Array.isArray(comment.files) && comment.files.length > 0) {
+        files = comment.files.map(f => ({ name: f.name || 'File', url: f.url || '' }));
+    } else {
+        files = commentAttachments
+            .filter(a => a.attachment_type === 'file')
+            .map(a => ({ name: a.label || 'File', url: a.file_url || '' }));
+    }
+
+    return {
+        id: comment.id,
+        request_id: comment.request_id,
+        author_type: comment.author_type,
+        author_id: comment.author_id,
+        content_html: contentHtml,
+        content_fallback: contentFallback,
+        body: body,
+        links,
+        photos,
+        files,
+        visibility: comment.visibility || 'client_visible',
+        target_type: comment.target_type || 'request',
+        target_attachment_id: comment.target_attachment_id || null,
+        posted_at: comment.posted_at,
+        created_date: comment.created_date,
+        created_by: comment.created_by,
+        author: comment.author || null,
+        author_display_name: comment.author_display_name || null,
+    };
+}
 
 Deno.serve(async (req) => {
     const startTime = Date.now();
@@ -95,7 +173,7 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // STEP A continued: Fetch request-scoped data in parallel
+        // Fetch request-scoped data in parallel
         const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, projectClientAccesses] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
@@ -104,43 +182,37 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' })
         ]);
 
-        // STEP B: Derive minimal ID sets from request-scoped data
+        // STEP B: Derive minimal ID sets
         const internalUserIds = new Set();
         const clientContactIds = new Set();
 
-        // From request creator
         if (request.created_by_user_id) internalUserIds.add(request.created_by_user_id);
 
-        // From comments
         commentsRaw.forEach(c => {
             if (c.author_type === 'internal_user' && c.author_id) internalUserIds.add(c.author_id);
             else if (c.author_type === 'client_contact' && c.author_id) clientContactIds.add(c.author_id);
         });
 
-        // From decisions
         decisionsRaw.forEach(d => {
             if (d.decided_by_type === 'internal_user' && d.decided_by_id) internalUserIds.add(d.decided_by_id);
             else if (d.decided_by_type === 'client_contact' && d.decided_by_id) clientContactIds.add(d.decided_by_id);
         });
 
-        // From todo tasks
         todoTasksRaw.forEach(t => {
             if (t.assigned_to_type === 'internal_user' && t.assigned_to_id) internalUserIds.add(t.assigned_to_id);
             else if (t.assigned_to_type === 'client_contact' && t.assigned_to_id) clientContactIds.add(t.assigned_to_id);
         });
 
-        // Add project access contact IDs for assignable list
         projectClientAccesses.forEach(pa => {
             if (pa.client_contact_id) clientContactIds.add(pa.client_contact_id);
         });
 
-        // STEP C: Fetch ONLY referenced users and contacts (batched, not full lists)
+        // STEP C: Fetch ONLY referenced users and contacts
         const [users, clientContacts] = await Promise.all([
             fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
             fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
         ]);
 
-        // For assignable users, fetch Achtung Kraft team members
         const teamMembers = await base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true });
         const akUserIds = teamMembers.filter(tm => tm.user_id).map(tm => tm.user_id);
         const neededAkUserIds = akUserIds.filter(id => !internalUserIds.has(id));
@@ -151,11 +223,10 @@ Deno.serve(async (req) => {
             akUsers = [...users, ...additionalUsers];
         }
 
-        // Build lookup maps with minimal fields
         const userMap = new Map(akUsers.map(u => [u.id, { id: u.id, full_name: u.full_name }]));
         const contactMap = new Map(clientContacts.map(c => [c.id, { id: c.id, name: c.name, active: c.active }]));
 
-        // Sort by timestamps
+        // Sort
         const comments = [...commentsRaw].sort((a, b) => 
             new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
         );
@@ -183,7 +254,7 @@ Deno.serve(async (req) => {
             assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
         }));
 
-        // Build assignable lists from project accesses
+        // Assignable lists
         const projectClientContactIds = projectClientAccesses.map(pa => pa.client_contact_id);
         const projectClients = clientContacts.filter(c => projectClientContactIds.includes(c.id) && c.active !== false);
 
@@ -198,28 +269,20 @@ Deno.serve(async (req) => {
         // Enrich request with creator
         const requestCreator = request.created_by_user_id ? userMap.get(request.created_by_user_id) : null;
 
-        // Enrich and minimize comments
+        // ── NORMALIZED COMMENTS ──────────────────────────────────────
         const enrichedComments = comments.map(c => {
             const author = c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id);
-            return {
-                id: c.id,
-                request_id: c.request_id,
-                author_type: c.author_type,
-                author_id: c.author_id,
-                body: c.body,
-                visibility: c.visibility,
-                posted_at: c.posted_at,
-                created_date: c.created_date,
+            return normalizeComment({
+                ...c,
                 author,
                 author_display_name: author?.full_name || author?.name || 'System'
-            };
+            }, attachments);
         });
 
-        // Enrich and minimize decisions
+        // Enrich decisions
         const enrichedDecisions = decisions.map(d => {
             const decider = d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id);
             
-            // Resolve display name with proper fallback chain
             let decider_display_name = null;
             if (d.decided_by_type === 'client_contact' && contactMap.get(d.decided_by_id)) {
                 decider_display_name = contactMap.get(d.decided_by_id).name;
@@ -249,7 +312,7 @@ Deno.serve(async (req) => {
             };
         });
 
-        // Minimize attachments
+        // Minimize attachments (still needed for image review UI)
         const minimalAttachments = attachments.map(a => ({
             id: a.id,
             request_id: a.request_id,
@@ -266,43 +329,6 @@ Deno.serve(async (req) => {
 
         const executionTime = Date.now() - startTime;
         console.log(`[publicClientRequestDetail] ${executionTime}ms | Users:${users.length} Contacts:${clientContacts.length}`);
-
-        // 🔎 DETAIL STRUCTURED REVIEW DIAGNOSTIC
-        if (['design_review', 'budget_review', 'deliverable_review'].includes(request.request_type)) {
-            const attachmentDecisions = enrichedDecisions.filter(d => d.target_type === 'attachment_image');
-            const requestLevelDecisions = enrichedDecisions.filter(d => d.target_type === 'request');
-            const imageAttachments = minimalAttachments.filter(a => a.attachment_type === 'image');
-            
-            // Check which images have decisions
-            const imageDecisionMap = imageAttachments.map(img => {
-                const imgDecision = attachmentDecisions.find(d => d.target_attachment_id === img.id);
-                return {
-                    attachment_id: img.id,
-                    file_url: img.file_url?.substring(0, 50) + '...',
-                    has_decision: !!imgDecision,
-                    decision: imgDecision?.decision || null
-                };
-            });
-            
-            console.log("🔎 DETAIL STRUCTURED TRACE", {
-                request_id: request.id,
-                type: request.request_type,
-                request_status: request.status,
-                total_attachments: minimalAttachments.length,
-                image_attachments: imageAttachments.length,
-                attachment_decisions: attachmentDecisions.length,
-                request_level_decisions: requestLevelDecisions.length,
-                images_with_decisions: imageDecisionMap.filter(i => i.has_decision).length,
-                images_without_decisions: imageDecisionMap.filter(i => !i.has_decision).length,
-                image_decision_map: imageDecisionMap,
-                all_decisions: enrichedDecisions.map(d => ({
-                    id: d.id,
-                    target_type: d.target_type,
-                    decision: d.decision,
-                    target_attachment_id: d.target_attachment_id
-                }))
-            });
-        }
 
         return Response.json({
             success: true,
@@ -347,13 +373,10 @@ Deno.serve(async (req) => {
     }
 });
 
-// Batched fetch by IDs - uses $in operator for efficient batch queries (NOT N+1)
+// Batched fetch by IDs
 async function fetchByIdsBatched(entity, ids) {
     if (!ids || ids.length === 0) return [];
-    
     const uniqueIds = [...new Set(ids)];
-    
-    // Single query with $in operator - O(1) DB calls instead of O(n)
     try {
         return await entity.filter({ id: { $in: uniqueIds } });
     } catch (error) {

@@ -1,4 +1,92 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+
+// ── Server-side comment normalizer (authoritative) ──────────────────
+function normalizeComment(comment, attachments) {
+    // Gather attachments belonging to this comment
+    const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+
+    // --- content chain: content_html → content_fallback → body ---
+    const contentHtml = comment.content_html || null;
+    const body = comment.body || '';
+    const contentFallback = comment.content_fallback || body;
+
+    // --- links: merge inline + attachment-sourced ---
+    let links = [];
+    if (Array.isArray(comment.links) && comment.links.length > 0) {
+        links = comment.links.map((link, idx) => {
+            if (typeof link === 'string') {
+                return { id: `legacy-${idx}`, name: link, url: link, description: '', type: 'external' };
+            }
+            return {
+                id: link.id || `link-${idx}`,
+                name: link.name || link.url || '',
+                url: link.url || '',
+                description: link.description || '',
+                type: link.type || 'external',
+            };
+        });
+    } else {
+        // Fall back to attachment-sourced links
+        links = commentAttachments
+            .filter(a => a.attachment_type === 'link')
+            .map((a, idx) => ({
+                id: a.id || `att-link-${idx}`,
+                name: a.label || a.link_url || '',
+                url: a.link_url || '',
+                description: '',
+                type: 'external',
+            }));
+    }
+
+    // --- photos: merge inline + attachment-sourced ---
+    let photos = [];
+    if (Array.isArray(comment.photos) && comment.photos.length > 0) {
+        photos = comment.photos.filter(Boolean);
+    } else {
+        photos = commentAttachments
+            .filter(a => a.attachment_type === 'image')
+            .map(a => a.file_url)
+            .filter(Boolean);
+    }
+
+    // --- files: merge inline + attachment-sourced ---
+    let files = [];
+    if (Array.isArray(comment.files) && comment.files.length > 0) {
+        files = comment.files.map(f => ({
+            name: f.name || 'File',
+            url: f.url || '',
+        }));
+    } else {
+        files = commentAttachments
+            .filter(a => a.attachment_type === 'file')
+            .map(a => ({
+                name: a.label || 'File',
+                url: a.file_url || '',
+            }));
+    }
+
+    return {
+        id: comment.id,
+        request_id: comment.request_id,
+        author_type: comment.author_type,
+        author_id: comment.author_id,
+        content_html: contentHtml,
+        content_fallback: contentFallback,
+        body: body,
+        links,
+        photos,
+        files,
+        visibility: comment.visibility || 'client_visible',
+        target_type: comment.target_type || 'request',
+        target_attachment_id: comment.target_attachment_id || null,
+        posted_at: comment.posted_at,
+        created_date: comment.created_date,
+        created_by: comment.created_by,
+        // Enrichment fields (added later)
+        author: comment.author || null,
+        author_display_name: comment.author_display_name || null,
+    };
+}
 
 Deno.serve(async (req) => {
     const startTime = Date.now();
@@ -78,39 +166,33 @@ Deno.serve(async (req) => {
         const clientContactIds = new Set();
         const taskIds = new Set();
 
-        // From request creator
         if (request.created_by_user_id) internalUserIds.add(request.created_by_user_id);
 
-        // From comments
         commentsRaw.forEach(c => {
             if (c.author_type === 'internal_user' && c.author_id) internalUserIds.add(c.author_id);
             else if (c.author_type === 'client_contact' && c.author_id) clientContactIds.add(c.author_id);
         });
 
-        // From decisions
         decisionsRaw.forEach(d => {
             if (d.decided_by_type === 'internal_user' && d.decided_by_id) internalUserIds.add(d.decided_by_id);
             else if (d.decided_by_type === 'client_contact' && d.decided_by_id) clientContactIds.add(d.decided_by_id);
         });
 
-        // From attachments
         attachmentsRaw.forEach(a => {
             if (a.created_by_type === 'internal_user' && a.created_by_id) internalUserIds.add(a.created_by_id);
             else if (a.created_by_type === 'client_contact' && a.created_by_id) clientContactIds.add(a.created_by_id);
         });
 
-        // From todo tasks
         todoTasksRaw.forEach(t => {
             if (t.assigned_to_type === 'internal_user' && t.assigned_to_id) internalUserIds.add(t.assigned_to_id);
             else if (t.assigned_to_type === 'client_contact' && t.assigned_to_id) clientContactIds.add(t.assigned_to_id);
         });
 
-        // From linked tasks
         linkedTasks.forEach(link => {
             if (link.task_id) taskIds.add(link.task_id);
         });
 
-        // STEP C: Fetch project data + referenced people in parallel (batched, not full lists)
+        // STEP C: Fetch project data + referenced people in parallel
         const [
             projects,
             projectClientAccesses,
@@ -124,19 +206,14 @@ Deno.serve(async (req) => {
             projectIdForAccess
                 ? base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess })
                 : Promise.resolve([]),
-            // Fetch ONLY referenced users (batched)
             fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
-            // Fetch ONLY referenced contacts (batched)
             fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
-            // Fetch ONLY linked tasks (batched)
             fetchByIdsBatched(base44.asServiceRole.entities.Task, [...taskIds]),
         ]);
 
-        // Get contact IDs from project accesses for assignable list
         const activeAccesses = projectClientAccesses.filter(pa => pa.access_status === 'active');
         const accessContactIds = activeAccesses.map(pa => pa.client_contact_id).filter(id => !clientContactIds.has(id));
         
-        // Fetch additional contacts for assignable list (only those not already fetched)
         const additionalContacts = accessContactIds.length > 0 
             ? await fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, accessContactIds)
             : [];
@@ -158,25 +235,22 @@ Deno.serve(async (req) => {
             new Date(b.posted_at || b.created_date) - new Date(a.posted_at || a.created_date)
         );
 
-        // Enrich with minimal author/decider info
+        // Enrich request
         const enrichedRequest = { 
             ...request, 
             creator: request.created_by_user_id ? userMap.get(request.created_by_user_id) : null 
         };
 
+        // ── NORMALIZED COMMENTS ──────────────────────────────────────
         const enrichedComments = comments.map(c => {
             const author = c.author_type === 'internal_user' ? userMap.get(c.author_id) : contactMap.get(c.author_id);
-            return {
-                ...c,
-                author,
-                author_display_name: author?.full_name || author?.name || 'System'
-            };
+            const normalized = normalizeComment({ ...c, author, author_display_name: author?.full_name || author?.name || 'System' }, attachments);
+            return normalized;
         });
 
         const enrichedDecisions = decisions.map(d => {
             const decider = d.decided_by_type === 'internal_user' ? userMap.get(d.decided_by_id) : contactMap.get(d.decided_by_id);
             
-            // Resolve display name with proper fallback chain
             let decider_display_name = null;
             if (d.decided_by_type === 'client_contact' && contactMap.get(d.decided_by_id)) {
                 decider_display_name = contactMap.get(d.decided_by_id).name;
@@ -214,11 +288,9 @@ Deno.serve(async (req) => {
             assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
         }));
 
-        // Build assignable lists from project accesses (not global lists)
         const projectClientContactIds = new Set(activeAccesses.map(pa => pa.client_contact_id));
         const projectClients = allClientContacts.filter(c => projectClientContactIds.has(c.id) && c.active !== false);
 
-        // Get primary client slug
         let primaryClientSlug = null;
         for (const access of activeAccesses) {
             const contact = contactMap.get(access.client_contact_id);
@@ -231,11 +303,8 @@ Deno.serve(async (req) => {
             }
         }
 
-        // For assignable users, we need team members - but ONLY fetch if there are project accesses
-        // This is a targeted fetch, not User.list() or TeamMember.list()
         let assignableUsers = [];
         if (projectIdForAccess) {
-            // Fetch team members with user_ids who are Achtung Kraft members
             const teamMembers = await base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true });
             const akUserIds = teamMembers.filter(tm => tm.user_id).map(tm => tm.user_id);
             const neededAkUserIds = akUserIds.filter(id => !userMap.has(id));
@@ -257,14 +326,8 @@ Deno.serve(async (req) => {
         const assignableContacts = projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
 
         const executionTime = Date.now() - startTime;
-        const payloadSize = JSON.stringify({
-            request: enrichedRequest,
-            comments: enrichedComments,
-            decisions: enrichedDecisions,
-            attachments: enrichedAttachments,
-        }).length;
 
-        console.log(`[getInternalFeedbackDetail] ${executionTime}ms | Users:${users.length} Contacts:${allClientContacts.length} | Payload:${Math.round(payloadSize/1024)}KB`);
+        console.log(`[getInternalFeedbackDetail] ${executionTime}ms | Users:${users.length} Contacts:${allClientContacts.length}`);
 
         return Response.json({
             success: true,
@@ -294,13 +357,10 @@ Deno.serve(async (req) => {
     }
 });
 
-// Batched fetch by IDs - uses $in operator for efficient batch queries
+// Batched fetch by IDs
 async function fetchByIdsBatched(entity, ids) {
     if (!ids || ids.length === 0) return [];
-    
     const uniqueIds = [...new Set(ids)];
-    
-    // Single query with $in operator - much more efficient than N+1
     try {
         return await entity.filter({ id: { $in: uniqueIds } });
     } catch (error) {

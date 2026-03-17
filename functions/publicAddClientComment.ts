@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         let token, slug, requestId, comment, attachments;
         
-        // Safely parse request parameters
         try {
             const contentType = req.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -27,7 +26,6 @@ Deno.serve(async (req) => {
                 attachments = body.attachments;
             }
         } catch (e) {
-            // If JSON parsing fails, try URL parameters
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
@@ -83,30 +81,48 @@ Deno.serve(async (req) => {
         }
 
         const access = accesses[0];
-
-        // Generate server-side timestamp
         const currentTimestamp = new Date().toISOString();
 
-        // Create comment (handle both string and object format)
-        const commentBody = typeof comment === 'string' ? comment : comment.body;
-        const newComment = await base44.asServiceRole.entities.ClientFeedbackComment.create({
+        // ── Build normalized comment record ──────────────────────
+        const commentBody = typeof comment === 'string' ? comment : (comment?.body || '');
+        const commentContentHtml = (typeof comment === 'object' && comment?.content_html) ? comment.content_html : null;
+        const commentContentFallback = (typeof comment === 'object' && comment?.content_fallback) ? comment.content_fallback : commentBody;
+
+        const commentData = {
             request_id: requestId,
             author_type: 'client_contact',
             author_id: access.client_contact_id,
             body: commentBody,
+            content_html: commentContentHtml,
+            content_fallback: commentContentFallback,
             visibility: 'client_visible',
             target_type: 'request',
-            posted_at: currentTimestamp
-        });
+            posted_at: currentTimestamp,
+        };
 
-        // Create attachments
+        // Inline photos/files/links from comment object (new path)
+        if (typeof comment === 'object') {
+            if (Array.isArray(comment.photos) && comment.photos.length > 0) {
+                commentData.photos = comment.photos;
+            }
+            if (Array.isArray(comment.files) && comment.files.length > 0) {
+                commentData.files = comment.files;
+            }
+            if (Array.isArray(comment.links) && comment.links.length > 0) {
+                commentData.links = comment.links.filter(l => l && (typeof l === 'string' ? l.trim() : l.url?.trim()));
+            }
+        }
+
+        const newComment = await base44.asServiceRole.entities.ClientFeedbackComment.create(commentData);
+
+        // ── Create attachment entities (backward compat + legacy client path) ──
         const createdAttachments = [];
         if (attachments && attachments.length > 0) {
             const attachmentPromises = attachments.map(att => 
                 base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: newComment.id,
-                    attachment_type: att.attachment_type,
+                    attachment_type: att.attachment_type || att.type,
                     file_url: att.file_url,
                     link_url: att.link_url,
                     label: att.label,
