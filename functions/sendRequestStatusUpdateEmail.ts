@@ -26,6 +26,17 @@ function getLatestTeamComment(comments) {
     .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0] || null;
 }
 
+// Extract safe plain-text summary from a comment (content_fallback → body)
+function getCommentTextSummary(comment) {
+  if (!comment) return null;
+  if (comment.content_fallback?.trim()) return comment.content_fallback.trim();
+  if (comment.body?.trim()) return comment.body.trim();
+  if (comment.content_html) {
+    return comment.content_html.replace(/<[^>]*>/g, '').trim() || null;
+  }
+  return null;
+}
+
 // Replace placeholders in text
 function replacePlaceholders(text, data) {
     if (!text) return '';
@@ -202,7 +213,7 @@ to <strong>${newStatus}</strong>.
 ${latestTeamComment ? `
 <div style="margin-top:16px;padding:14px;background:#1a1a1a;border-left:3px solid #dc2626;">
   <p style="margin:0 0 6px 0;font-weight:bold;color:#fff;">Latest Update From Ächtung Kraft:</p>
-  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${latestTeamComment.body}</p>
+  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${getCommentTextSummary(latestTeamComment) || ''}</p>
 </div>
 ` : ''}
 
@@ -238,7 +249,7 @@ ${request.body || 'No description provided.'}
 
 ${latestTeamComment ? `Latest Update From Ächtung Kraft:
 ---------------------------------
-${latestTeamComment.body}
+${getCommentTextSummary(latestTeamComment) || ''}
 ` : ''}
 View the request:
 ${requestDetailUrl}
@@ -321,7 +332,7 @@ to <strong>${newStatus}</strong>.
 ${latestTeamComment ? `
 <div style="margin-top:16px;padding:14px;background:#1a1a1a;border-left:3px solid #dc2626;">
   <p style="margin:0 0 6px 0;font-weight:bold;color:#fff;">Latest Update From Ächtung Kraft:</p>
-  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${latestTeamComment.body}</p>
+  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${getCommentTextSummary(latestTeamComment) || ''}</p>
 </div>
 ` : ''}
 
