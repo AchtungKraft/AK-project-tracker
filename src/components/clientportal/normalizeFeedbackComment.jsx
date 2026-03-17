@@ -1,8 +1,12 @@
 /**
  * normalizeFeedbackComment — Defensive frontend normalizer.
  *
- * Backend/API is authoritative. This exists solely as a safety net
- * so that the UI never crashes on missing or malformed fields.
+ * ⚠️  LOCK: Must mirror backend normalizeComment() — do not extend independently.
+ *     Any structural changes to the comment shape MUST originate in:
+ *       - functions/getInternalFeedbackDetail.js  normalizeComment()
+ *       - functions/publicClientRequestDetail.js  normalizeComment()
+ *     This file exists solely as a safety net so the UI never crashes
+ *     on missing or malformed fields.
  *
  * Guarantees every comment has:
  *   id, content_html, content_fallback, body, links[], photos[], files[],

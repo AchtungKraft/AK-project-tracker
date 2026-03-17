@@ -15,6 +15,7 @@ const DEFAULT_TEMPLATES = {
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Helper to get latest internal team comment (client-visible only)
+// PHASE 3 HARDENING: Positive match on client_visible, exclude system-generated
 function getLatestTeamComment(comments) {
   if (!comments?.length) return null;
 
@@ -22,7 +23,7 @@ function getLatestTeamComment(comments) {
     .filter(c =>
       c.author_type === 'internal_user' &&
       !c.is_system &&
-      c.visibility !== 'internal_only'
+      (c.visibility === 'client_visible' || !c.visibility)
     )
     .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0] || null;
 }
