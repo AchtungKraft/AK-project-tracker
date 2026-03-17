@@ -296,8 +296,8 @@ Deno.serve(async (req) => {
 
 ${latestTeamComment ? `
 <div style="margin-top:16px;padding:14px;background:#1a1a1a;border-left:3px solid #dc2626;">
-  <p style="margin:0 0 6px 0;font-weight:bold;color:#fff;">Latest Update From Ächtung Kraft:</p>
-  <p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${getCommentTextSummary(latestTeamComment) || ''}</p>
+  <p style="margin:0 0 8px 0;font-weight:bold;color:#fff;">Latest Update From Ächtung Kraft:</p>
+  <div style="margin:0;line-height:1.5;color:#e5e5e5;">${getCommentEmailHtml(latestTeamComment)}</div>
 </div>
 ` : ''}
 
