@@ -5,12 +5,10 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Send, Upload, Link as LinkIcon, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Paperclip, Trash2, RotateCw, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -26,7 +24,7 @@ import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import MobileCollapsibleComposer from "@/components/mobile/MobileCollapsibleComposer";
+import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -38,13 +36,6 @@ export default function ClientFeedbackDetail() {
   const fromHub = urlParams.get('from') === 'hub';
   const hubTab = urlParams.get('tab') || 'awaiting';
 
-  const [newComment, setNewComment] = useState('');
-  const [visibility, setVisibility] = useState('client_visible');
-  const [uploadedPhotos, setUploadedPhotos] = useState([]);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [uploadingImages, setUploadingImages] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [newLinks, setNewLinks] = useState(['']);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [showCreateLinkedTaskModal, setShowCreateLinkedTaskModal] = useState(false);
@@ -145,8 +136,6 @@ export default function ClientFeedbackDetail() {
     );
   };
 
-  const [isAddingComment, setIsAddingComment] = useState(false);
-
   const createAttachmentMutation = useMutation({
     mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
     onSuccess: () => {
@@ -243,53 +232,7 @@ export default function ClientFeedbackDetail() {
     }
   };
 
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    setUploadingImages(true);
-    try {
-      const uploadPromises = files.map((file) =>
-      base44.integrations.Core.UploadFile({ file })
-      );
-      const results = await Promise.all(uploadPromises);
-      const photoUrls = results.map((r) => r.file_url);
-      setUploadedPhotos([...uploadedPhotos, ...photoUrls]);
-      toast.success('Images uploaded');
-      e.target.value = '';
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Failed to upload images');
-    } finally {
-      setUploadingImages(false);
-    }
-  };
-
-  const handleRemovePhoto = (urlToRemove) => {
-    setUploadedPhotos(uploadedPhotos.filter((url) => url !== urlToRemove));
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingFile(true);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      setUploadedFiles([...uploadedFiles, { name: file.name, url: file_url }]);
-      toast.success('File uploaded');
-      e.target.value = '';
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Failed to upload file');
-    } finally {
-      setUploadingFile(false);
-    }
-  };
-
-  const handleRemoveFile = (urlToRemove) => {
-    setUploadedFiles(uploadedFiles.filter((f) => f.url !== urlToRemove));
-  };
+  // Image/file upload handlers removed — now handled by FeedbackCommentComposer
 
   const handleApproveRequest = () => {
     setRequestDecisionType('approved');
@@ -318,47 +261,9 @@ export default function ClientFeedbackDetail() {
     });
   };
 
-  const handleAddComment = async () => {
-    if (!newComment.trim() && newLinks.every((l) => !l.trim()) && uploadedPhotos.length === 0 && uploadedFiles.length === 0) {
-      toast.error('Please enter a comment, add a link, or attach a file');
-      return;
-    }
-
-    if (!user) {
-      toast.error('User not authenticated.');
-      return;
-    }
-
-    setIsAddingComment(true);
-    try {
-      const response = await base44.functions.invoke('addInternalComment', {
-        requestId,
-        body: newComment,
-        visibility,
-        photos: uploadedPhotos,
-        files: uploadedFiles,
-        links: newLinks
-      });
-
-      if (response.data?.success) {
-        // Only invalidate current request detail
-        queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-        setNewComment('');
-        setNewLinks(['']);
-        setUploadedPhotos([]);
-        setUploadedFiles([]);
-        toast.success('Comment added');
-      } else {
-        throw new Error(response.data?.error || 'Failed to add comment');
-      }
-    } catch (error) {
-      console.error('Add comment error:', error);
-      toast.error('Failed to add comment');
-    } finally {
-      setIsAddingComment(false);
-    }
+  const handleCommentAdded = () => {
+    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
   };
-
 
 
   // Memoize expensive calculations to prevent re-computation on every render
