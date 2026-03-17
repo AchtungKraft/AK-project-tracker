@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload } from "lucide-react";
+// Note: Send, Paperclip, LinkIcon removed — now in FeedbackCommentComposer
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
