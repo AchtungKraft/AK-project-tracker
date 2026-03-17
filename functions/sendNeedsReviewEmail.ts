@@ -28,16 +28,118 @@ function getLatestTeamComment(comments) {
     .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0] || null;
 }
 
-// Extract safe plain-text summary from a comment (content_fallback → body)
-function getCommentTextSummary(comment) {
-  if (!comment) return null;
-  // Priority: content_fallback → body → strip HTML from content_html
+// ── HTML → readable email text converter ──────────────────────────────
+// Converts structured content_html into properly formatted plain text
+// for the text/plain email part. Preserves headings, lists, paragraphs.
+function convertHtmlToEmailText(html) {
+  if (!html || typeof html !== 'string') return '';
+  let text = html;
+
+  // 1. Headings → UPPERCASE with spacing
+  text = text.replace(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi, (_, content) => {
+    const clean = content.replace(/<[^>]*>/g, '').trim();
+    return '\n\n' + clean.toUpperCase() + '\n';
+  });
+
+  // 2. Unordered list items → bullet points
+  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, content) => {
+    const clean = content.replace(/<[^>]*>/g, '').trim();
+    return '• ' + clean + '\n';
+  });
+
+  // 3. Remove ul/ol wrappers (items already converted)
+  text = text.replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n');
+
+  // 4. Paragraphs → double newline
+  text = text.replace(/<\/p>/gi, '\n\n');
+  text = text.replace(/<p[^>]*>/gi, '');
+
+  // 5. Line breaks
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+
+  // 6. Strip remaining HTML tags
+  text = text.replace(/<[^>]*>/g, '');
+
+  // 7. Decode HTML entities
+  text = text.replace(/&amp;/g, '&');
+  text = text.replace(/&nbsp;/g, ' ');
+  text = text.replace(/&lt;/g, '<');
+  text = text.replace(/&gt;/g, '>');
+  text = text.replace(/&quot;/g, '"');
+  text = text.replace(/&#39;/g, "'");
+  text = text.replace(/&mdash;/g, '—');
+  text = text.replace(/&ndash;/g, '–');
+
+  // 8. Normalize whitespace: collapse 3+ newlines to 2, trim lines
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.split('\n').map(line => line.trim()).join('\n');
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  return text.trim();
+}
+
+// ── Build email-safe HTML from content_html ──────────────────────────
+// For the HTML email part — sanitize and inline basic styles
+function convertHtmlToEmailHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  let safe = html;
+  // Strip script/style tags entirely
+  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, '');
+  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Add basic inline styles for headings in email context
+  safe = safe.replace(/<h2([^>]*)>/gi, '<h2$1 style="margin:12px 0 4px 0;font-size:16px;color:#fff;">');
+  safe = safe.replace(/<h3([^>]*)>/gi, '<h3$1 style="margin:10px 0 4px 0;font-size:14px;color:#e5e5e5;">');
+  safe = safe.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:4px 0;padding-left:20px;color:#e5e5e5;">');
+  safe = safe.replace(/<li([^>]*)>/gi, '<li$1 style="margin:2px 0;color:#e5e5e5;">');
+  safe = safe.replace(/<p([^>]*)>/gi, '<p$1 style="margin:6px 0;color:#e5e5e5;line-height:1.5;">');
+  safe = safe.replace(/<em([^>]*)>/gi, '<em$1 style="font-style:italic;color:#d4d4d4;">');
+  return safe;
+}
+
+// ── Format structured links for email ────────────────────────────────
+function formatLinksForEmailText(links) {
+  if (!Array.isArray(links) || links.length === 0) return '';
+  const lines = links.map(l => `- ${l.name || l.url}: ${l.url}`);
+  return '\nLinks:\n' + lines.join('\n') + '\n';
+}
+
+function formatLinksForEmailHtml(links) {
+  if (!Array.isArray(links) || links.length === 0) return '';
+  const items = links.map(l =>
+    `<li style="margin:2px 0;"><a href="${l.url}" style="color:#60a5fa;text-decoration:underline;">${l.name || l.url}</a>${l.description ? ' — ' + l.description : ''}</li>`
+  );
+  return `<div style="margin-top:10px;"><p style="margin:0 0 4px 0;font-weight:bold;color:#fff;font-size:12px;">Links:</p><ul style="margin:0;padding-left:20px;">${items.join('')}</ul></div>`;
+}
+
+// ── Get formatted comment content for email ──────────────────────────
+// Priority: content_html → content_fallback → body
+function getCommentEmailText(comment) {
+  if (!comment) return '';
+  if (comment.content_html?.trim()) {
+    let text = convertHtmlToEmailText(comment.content_html);
+    text += formatLinksForEmailText(comment.links);
+    return text;
+  }
   if (comment.content_fallback?.trim()) return comment.content_fallback.trim();
   if (comment.body?.trim()) return comment.body.trim();
-  if (comment.content_html) {
-    return comment.content_html.replace(/<[^>]*>/g, '').trim() || null;
+  return '';
+}
+
+function getCommentEmailHtml(comment) {
+  if (!comment) return '';
+  if (comment.content_html?.trim()) {
+    let html = convertHtmlToEmailHtml(comment.content_html);
+    html += formatLinksForEmailHtml(comment.links);
+    return html;
   }
-  return null;
+  // Fallback: plain text with pre-wrap
+  const text = comment.content_fallback?.trim() || comment.body?.trim() || '';
+  return text ? `<p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${text}</p>` : '';
+}
+
+// Legacy compat alias
+function getCommentTextSummary(comment) {
+  return getCommentEmailText(comment) || null;
 }
 
 // Replace placeholders in text
