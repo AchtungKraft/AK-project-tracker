@@ -39,12 +39,17 @@ function normalizeComment(comment, attachments) {
     }
 
     // --- photos: merge inline + attachment-sourced ---
+    // SAFETY: Exclude SVG to prevent injection (only allow raster image mimes)
+    const isSafeImage = (a) => {
+        if (a.mime_type && a.mime_type.toLowerCase() === 'image/svg+xml') return false;
+        return a.attachment_type === 'image';
+    };
     let photos = [];
     if (Array.isArray(comment.photos) && comment.photos.length > 0) {
         photos = comment.photos.filter(Boolean);
     } else {
         photos = commentAttachments
-            .filter(a => a.attachment_type === 'image')
+            .filter(isSafeImage)
             .map(a => a.file_url)
             .filter(Boolean);
     }
