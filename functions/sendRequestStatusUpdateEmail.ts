@@ -358,6 +358,10 @@ Status changed from ${oldStatus || 'unknown'} to ${newStatus}.
 ${request.title}
 ${request.body || 'No description provided.'}
 
+${latestTeamComment ? `Latest Update From Ächtung Kraft:
+---------------------------------
+${getCommentTextSummary(latestTeamComment) || ''}
+` : ''}
 View the request:
 ${internalUrl}
 
