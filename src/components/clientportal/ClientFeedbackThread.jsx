@@ -17,6 +17,93 @@ import { JournalProseStyles } from "@/components/journal/JournalContentRenderer"
 import { getLinkTypeIcon } from "@/components/journal/JournalLinksEditor";
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 
+// ── CommentContentBlock: unified rendering with proper priority chain ──
+function CommentContentBlock({ comment }) {
+  if (!comment) return null;
+  const c = normalizeFeedbackComment(comment);
+  if (!c) return null;
+
+  const hasHtml = !!c.content_html;
+  const hasFallback = !!c.content_fallback?.trim();
+  const hasBody = !!c.body?.trim();
+
+  return (
+    <>
+      {/* Content: content_html → content_fallback → body */}
+      {hasHtml ? (
+        <div className="mb-3 pl-0 md:pl-10">
+          <div className="journal-table-wrap">
+            <div 
+              className="journal-prose prose prose-invert max-w-none text-sm md:text-base"
+              dangerouslySetInnerHTML={{ __html: sanitizeJournalHtml(c.content_html) }}
+            />
+          </div>
+        </div>
+      ) : hasFallback ? (
+        <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.content_fallback}</p>
+      ) : hasBody ? (
+        <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p>
+      ) : null}
+
+      {/* Structured links */}
+      {c.links.length > 0 && (
+        <div className="pl-0 md:pl-10 mb-3 space-y-1.5">
+          {c.links.map((link, idx) => {
+            const Icon = getLinkTypeIcon(link.type);
+            const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
+            return (
+              <a
+                key={link.id || idx}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2 px-3 py-2 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors group"
+              >
+                <Icon className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0 group-hover:text-red-300" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white group-hover:text-red-300 truncate">{link.name || link.url}</div>
+                  {link.description && <div className="text-xs text-gray-500 truncate">{link.description}</div>}
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Inline photos (from normalized comment, not from attachments entity) */}
+      {c.photos.length > 0 && (
+        <div className="pl-0 md:pl-10 mb-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {c.photos.map((url, idx) => (
+              <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
+                <img src={url} alt="" loading="lazy" className="w-full h-auto object-contain max-h-48" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Inline files */}
+      {c.files.length > 0 && (
+        <div className="pl-0 md:pl-10 mb-3 flex flex-wrap gap-2">
+          {c.files.map((file, idx) => (
+            <a
+              key={idx}
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+            >
+              <FileText className="w-4 h-4" />
+              {file.name}
+            </a>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 // Memoized timeline event card to prevent unnecessary re-renders
 const TimelineEventCard = React.memo(function TimelineEventCard({ 
   event, 
