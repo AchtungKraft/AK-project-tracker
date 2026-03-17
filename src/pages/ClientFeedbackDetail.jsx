@@ -641,6 +641,14 @@ export default function ClientFeedbackDetail() {
             </CardContent>
           </Card>
 
+          {/* Comment Composer — positioned above thread */}
+          <FeedbackCommentComposer
+            requestId={requestId}
+            projectId={projectId}
+            onCommentAdded={handleCommentAdded}
+            isMobile={isMobile}
+          />
+
           {request.request_type === 'todo_list' ? (
             <>
               <ToDoListDisplay
@@ -720,157 +728,6 @@ export default function ClientFeedbackDetail() {
           )}
 
 
-          {/* Comment Composer - Collapsible on mobile */}
-          {isMobile ? (
-            <MobileCollapsibleComposer
-              value={newComment}
-              onChange={setNewComment}
-              onSubmit={handleAddComment}
-              placeholder="Write a comment..."
-              isSubmitting={isAddingComment}
-              onImageUpload={handleImageUpload}
-              onFileUpload={handleFileUpload}
-              uploadingImages={uploadingImages}
-              uploadingFiles={uploadingFile}
-              uploadedPhotos={uploadedPhotos}
-              uploadedFiles={uploadedFiles}
-              onRemovePhoto={handleRemovePhoto}
-              onRemoveFile={handleRemoveFile}
-              links={newLinks}
-              onLinksChange={setNewLinks}
-              visibilitySelector={
-                <Select value={visibility} onValueChange={setVisibility}>
-                  <SelectTrigger className="w-28 bg-gray-800 border-gray-700 text-white h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="client_visible">Client</SelectItem>
-                    <SelectItem value="internal_only">Internal</SelectItem>
-                  </SelectContent>
-                </Select>
-              }
-            />
-          ) : (
-            <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-white">Add Comment</h3>
-                  <Select value={visibility} onValueChange={setVisibility}>
-                    <SelectTrigger className="w-40 bg-gray-800 border-gray-700 text-white h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="client_visible">Client Visible</SelectItem>
-                      <SelectItem value="internal_only">Internal Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Write a comment..."
-                  className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-                />
-
-                {uploadedPhotos.length > 0 && (
-                  <div>
-                    <Label className="text-xs text-gray-400 mb-2 block">Attached Images ({uploadedPhotos.length})</Label>
-                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                      {uploadedPhotos.map((url, idx) => (
-                        <div key={idx} className="relative group">
-                          <div className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
-                            <img src={url} alt={`Upload ${idx + 1}`} loading="lazy" className="max-w-full max-h-full object-contain" />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoto(url)}
-                            className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {uploadedFiles.length > 0 && (
-                  <div>
-                    <Label className="text-xs text-gray-400 mb-2 block">Attached Files ({uploadedFiles.length})</Label>
-                    <div className="space-y-2">
-                      {uploadedFiles.map((file, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
-                          <span className="text-white text-sm truncate">{file.name}</span>
-                          <button type="button" onClick={() => handleRemoveFile(file.url)} className="text-red-400 hover:text-red-300 p-1">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-gray-400">Add Links (optional)</Label>
-                  {newLinks.map((link, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <Input
-                        value={link}
-                        onChange={(e) => {
-                          const updated = [...newLinks];
-                          updated[idx] = e.target.value;
-                          setNewLinks(updated);
-                        }}
-                        placeholder="https://..."
-                        className="bg-gray-800 border-gray-700 text-white"
-                      />
-                      {idx === newLinks.length - 1 && (
-                        <Button size="icon" variant="outline" onClick={() => setNewLinks([...newLinks, ''])} className="border-gray-700">
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input id="internal-image-upload" type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-                  <label htmlFor="internal-image-upload">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={uploadingImages}
-                      className="bg-red-700 text-slate-50 px-3 text-xs font-medium rounded-md h-8 border-gray-700 cursor-pointer"
-                      onClick={() => document.getElementById('internal-image-upload').click()}
-                    >
-                      {uploadingImages ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Uploading...</> : <><Upload className="w-4 h-4 mr-1" />Add Images</>}
-                    </Button>
-                  </label>
-
-                  <input id="internal-file-upload" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip" onChange={handleFileUpload} className="hidden" />
-                  <label htmlFor="internal-file-upload">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={uploadingFile}
-                      className="bg-amber-500 px-3 text-xs font-medium rounded-md h-8 border-gray-700 cursor-pointer"
-                      onClick={() => document.getElementById('internal-file-upload').click()}
-                    >
-                      {uploadingFile ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Uploading...</> : <><Paperclip className="w-4 h-4 mr-1" />Attach File</>}
-                    </Button>
-                  </label>
-
-                  <Button onClick={handleAddComment} disabled={isAddingComment} className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
-                    {isAddingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
-                    Send
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
             </>
           )}
         </div>
