@@ -15,6 +15,7 @@ import { isStructuredReview } from "./reviewBehavior";
 import { sanitizeJournalHtml } from "@/components/journal/journalSanitizer";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
 import { getLinkTypeIcon } from "@/components/journal/JournalLinksEditor";
+import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 
 // Memoized timeline event card to prevent unnecessary re-renders
 const TimelineEventCard = React.memo(function TimelineEventCard({ 
@@ -164,44 +165,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
           )}
         </div>
 
-        {/* Rich HTML content (preferred) or legacy plain text fallback */}
-        {event.comment?.content_html ? (
-          <div className="mb-3 pl-0 md:pl-10">
-            <div className="journal-table-wrap">
-              <div 
-                className="journal-prose prose prose-invert max-w-none text-sm md:text-base"
-                dangerouslySetInnerHTML={{ __html: sanitizeJournalHtml(event.comment.content_html) }}
-              />
-            </div>
-          </div>
-        ) : event.comment?.body ? (
-          <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.comment.body}</p>
-        ) : null}
-
-        {/* Structured links on comment */}
-        {event.comment?.links?.length > 0 && (
-          <div className="pl-0 md:pl-10 mb-3 space-y-1.5">
-            {event.comment.links.map((link, idx) => {
-              const Icon = getLinkTypeIcon(link.type);
-              const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
-              return (
-                <a
-                  key={link.id || idx}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-2 px-3 py-2 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors group"
-                >
-                  <Icon className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0 group-hover:text-red-300" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white group-hover:text-red-300 truncate">{link.name || link.url}</div>
-                    {link.description && <div className="text-xs text-gray-500 truncate">{link.description}</div>}
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        )}
+        {/* Render comment content — priority: content_html → content_fallback → body */}
+        <CommentContentBlock comment={event.comment} />
         {event.decision?.note && (
           <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.decision.note}</p>
         )}
