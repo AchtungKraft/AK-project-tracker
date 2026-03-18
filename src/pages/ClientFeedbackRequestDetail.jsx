@@ -82,7 +82,14 @@ export default function ClientFeedbackRequestDetail() {
         token,
         slug,
         requestId,
-        comment: { body: data.body },
+        comment: {
+          body: data.body,
+          content_html: data.content_html || null,
+          content_fallback: data.content_fallback || data.body,
+          photos: data.photos || [],
+          files: data.files || [],
+          links: data.links || [],
+        },
         attachments: data.attachments || []
       });
       return response.data;
