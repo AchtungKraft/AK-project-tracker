@@ -239,35 +239,39 @@ export default function ClientFeedbackRequestDetail() {
     try {
       const attachments = [];
 
-      // Add photos
+      // Add photos as legacy attachments
       uploadedPhotos.forEach(url => {
-        attachments.push({
-          type: 'image',
-          file_url: url
-        });
+        attachments.push({ type: 'image', file_url: url });
       });
 
-      // Add files
+      // Add files as legacy attachments
       uploadedFiles.forEach(file => {
-        attachments.push({
-          type: 'file',
-          file_url: file.url,
-          label: file.name
-        });
+        attachments.push({ type: 'file', file_url: file.url, label: file.name });
       });
 
-      // Add links
-      newLinks.forEach(link => {
-        if (link.trim()) {
-          attachments.push({
-            type: 'link',
-            link_url: link.trim()
-          });
-        }
+      // Build structured links for inline storage
+      const structuredLinks = newLinks
+        .filter(l => l.trim())
+        .map((url, idx) => ({ id: `link-${idx}`, name: url.trim(), url: url.trim(), description: '', type: 'external' }));
+
+      // Add links as legacy attachments too
+      structuredLinks.forEach(link => {
+        attachments.push({ type: 'link', link_url: link.url });
       });
+
+      // Convert plain text to simple HTML for consistent rendering
+      const plainText = newComment.trim();
+      const contentHtml = plainText 
+        ? '<p>' + plainText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>'
+        : null;
 
       await createCommentMutation.mutateAsync({
         body: newComment,
+        content_html: contentHtml,
+        content_fallback: plainText,
+        photos: uploadedPhotos,
+        files: uploadedFiles,
+        links: structuredLinks,
         attachments
       });
 
