@@ -100,9 +100,15 @@ Deno.serve(async (req) => {
         const commentContentFallback = rawContentFallback || rawBody || null;
         const commentBody = rawBody || rawContentFallback || null;
 
+        console.log('[publicAddClientComment] Input received:', {
+            commentType: typeof comment,
+            isObjectComment,
+            rawKeys: isObjectComment ? Object.keys(comment) : null
+        });
         console.log('[publicAddClientComment] Storing comment:', {
             hasContentHtml: !!commentContentHtml,
             contentHtmlLength: commentContentHtml?.length,
+            contentHtmlPreview: commentContentHtml?.substring(0, 100),
             hasContentFallback: !!commentContentFallback,
             hasBody: !!commentBody
         });
