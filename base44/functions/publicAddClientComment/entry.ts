@@ -140,6 +140,14 @@ Deno.serve(async (req) => {
 
         const newComment = await base44.asServiceRole.entities.ClientFeedbackComment.create(commentData);
 
+        // Verify storage by fetching back
+        console.log('[publicAddClientComment] Created comment ID:', newComment.id);
+        console.log('[publicAddClientComment] Stored content_html:', {
+            hasValue: !!newComment.content_html,
+            length: newComment.content_html?.length,
+            preview: newComment.content_html?.substring(0, 100)
+        });
+
         // ── Create attachment entities (backward compat + legacy client path) ──
         const createdAttachments = [];
         if (attachments && attachments.length > 0) {
