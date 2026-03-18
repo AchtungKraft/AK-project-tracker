@@ -84,9 +84,28 @@ Deno.serve(async (req) => {
         const currentTimestamp = new Date().toISOString();
 
         // ── Build normalized comment record ──────────────────────
-        const commentBody = typeof comment === 'string' ? comment : (comment?.body || '');
-        const commentContentHtml = (typeof comment === 'object' && comment?.content_html) ? comment.content_html : null;
-        const commentContentFallback = (typeof comment === 'object' && comment?.content_fallback) ? comment.content_fallback : commentBody;
+        // Handle both string input (legacy) and object input (modern rich content)
+        const isObjectComment = typeof comment === 'object' && comment !== null;
+        
+        // Extract raw values from input
+        const rawContentHtml = isObjectComment ? (comment.content_html || null) : null;
+        const rawContentFallback = isObjectComment ? (comment.content_fallback || null) : null;
+        const rawBody = isObjectComment ? (comment.body || null) : (typeof comment === 'string' ? comment : null);
+        
+        // Normalize with proper fallback chain:
+        // content_html: store exactly as provided (DO NOT strip/sanitize - frontend handles safety)
+        // content_fallback: content_fallback → body → null
+        // body: body → content_fallback → null (for legacy compatibility)
+        const commentContentHtml = rawContentHtml || null;
+        const commentContentFallback = rawContentFallback || rawBody || null;
+        const commentBody = rawBody || rawContentFallback || null;
+
+        console.log('[publicAddClientComment] Storing comment:', {
+            hasContentHtml: !!commentContentHtml,
+            contentHtmlLength: commentContentHtml?.length,
+            hasContentFallback: !!commentContentFallback,
+            hasBody: !!commentBody
+        });
 
         const commentData = {
             request_id: requestId,
