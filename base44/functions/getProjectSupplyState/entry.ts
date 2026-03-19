@@ -55,14 +55,19 @@ Deno.serve(async (req) => {
     const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const poolIds = pools.map(p => p.id);
 
-    const [allocations, lineItems, installedParts, parts, vendors, locations] = await Promise.all([
+    const [allocations, lineItems, installedParts, parts] = await Promise.all([
       poolIds.length > 0 ? base44.asServiceRole.entities.PoolAllocation.filter({ pool_id: { $in: poolIds } }) : [],
       commitmentIds.length > 0 ? base44.asServiceRole.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }) : [],
       base44.asServiceRole.entities.InstalledPart.filter({ project_id }),
       partIds.length > 0 ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds } }) : [],
-      base44.asServiceRole.entities.Vendor.list(),
-      base44.asServiceRole.entities.Location.list(),
     ]);
+
+    // PERF FIX: Scope vendors to parts' default_vendor_ids (no full Vendor.list())
+    const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    const vendors = vendorIdsFromParts.length > 0
+      ? await base44.asServiceRole.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
+      : [];
+    const locations = []; // Locations not needed for supply state
 
     // Derive orders from line items (no full table scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
@@ -77,7 +82,7 @@ Deno.serve(async (req) => {
     // Build parts lookup
     const partsMap = new Map(parts.map(p => [p.id, p]));
     const vendorsMap = new Map(vendors.map(v => [v.id, v]));
-    const locationsMap = new Map(locations.map(l => [l.id, l]));
+    // locationsMap removed - not needed for supply state computation
     const ordersMap = new Map(orders.map(o => [o.id, o]));
 
     // Calculate total pool balance for funding checks
