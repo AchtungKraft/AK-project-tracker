@@ -256,6 +256,7 @@ Deno.serve(async (req) => {
             details: t.details,
             images: t.images,
             due_date: t.due_date,
+            order: t.order || 0,
             created_date: t.created_date,
             created_by: t.created_by,
             assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
@@ -384,10 +385,12 @@ Deno.serve(async (req) => {
     }
 });
 
-// Batched fetch by IDs
+// Batched fetch by IDs — filters out non-ObjectId values (e.g. service role IDs)
+const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 async function fetchByIdsBatched(entity, ids) {
     if (!ids || ids.length === 0) return [];
-    const uniqueIds = [...new Set(ids)];
+    const uniqueIds = [...new Set(ids)].filter(id => OBJECT_ID_RE.test(id));
+    if (uniqueIds.length === 0) return [];
     try {
         return await entity.filter({ id: { $in: uniqueIds } });
     } catch (error) {

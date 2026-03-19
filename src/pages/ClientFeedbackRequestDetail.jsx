@@ -393,6 +393,7 @@ export default function ClientFeedbackRequestDetail() {
             token={token}
             slug={slug}
             queryKey={['clientRequestDetail', token, slug, requestId]}
+            onImageClick={setSelectedImage}
           />
         ) : threadRequest && (
           <ClientFeedbackThread
