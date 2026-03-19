@@ -92,8 +92,13 @@ Deno.serve(async (req) => {
       commitmentIds.length > 0 
         ? base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
         : Promise.resolve([]),
-      // Projects need to be fetched from commitments
-      base44.entities.Project.list(), // Keep full list for now - usually small
+      // Projects: fetch only those referenced by commitments
+      (() => {
+        const projectIdsFromCommitments = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
+        return projectIdsFromCommitments.length > 0
+          ? base44.entities.Project.filter({ id: { $in: projectIdsFromCommitments } })
+          : Promise.resolve([]);
+      })(),
     ]);
 
     // Build lookup maps
