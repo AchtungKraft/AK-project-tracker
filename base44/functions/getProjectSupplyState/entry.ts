@@ -37,41 +37,37 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    // Fetch all related data in parallel
-    const [
-      projects,
-      requirements,
-      commitments,
-      pools,
-      allocations,
-      charges,
-      lineItems,
-      installedParts,
-      parts,
-      vendors,
-      inventoryItems,
-      locations,
-      orders
-    ] = await Promise.all([
+    // PHASE 1: Fetch project + commitments first to scope subsequent queries
+    const [projects, commitments, pools, charges] = await Promise.all([
       base44.asServiceRole.entities.Project.filter({ id: project_id }),
-      base44.asServiceRole.entities.PartProjectRequirement.filter({ project_id }),
       base44.asServiceRole.entities.PartCommitment.filter({ project_id }),
       base44.asServiceRole.entities.BillingPool.filter({ project_id }),
-      base44.asServiceRole.entities.PoolAllocation.list(),
       base44.asServiceRole.entities.PoolCharge.filter({ project_id }),
-      base44.asServiceRole.entities.PartPurchaseLineItem.list(),
-      base44.asServiceRole.entities.InstalledPart.list(),
-      base44.asServiceRole.entities.Part.list(),
-      base44.asServiceRole.entities.Vendor.list(),
-      base44.asServiceRole.entities.InventoryItem.list(),
-      base44.asServiceRole.entities.Location.list(),
-      base44.asServiceRole.entities.Order.list()
     ]);
 
     const project = projects[0];
     if (!project) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
+
+    // PHASE 2: Scope queries using commitment/pool IDs
+    const commitmentIds = commitments.map(c => c.id);
+    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const poolIds = pools.map(p => p.id);
+
+    const [allocations, lineItems, installedParts, parts, vendors, locations] = await Promise.all([
+      poolIds.length > 0 ? base44.asServiceRole.entities.PoolAllocation.filter({ pool_id: { $in: poolIds } }) : [],
+      commitmentIds.length > 0 ? base44.asServiceRole.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }) : [],
+      base44.asServiceRole.entities.InstalledPart.filter({ project_id }),
+      partIds.length > 0 ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds } }) : [],
+      base44.asServiceRole.entities.Vendor.list(),
+      base44.asServiceRole.entities.Location.list(),
+    ]);
+
+    // Derive orders from line items (no full table scan)
+    const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+    const orders = orderIds.length > 0 ? await base44.asServiceRole.entities.Order.filter({ id: { $in: orderIds } }) : [];
+    const requirements = []; // PartProjectRequirement is deprecated
 
     // Filter related data
     const poolIds = pools.map(p => p.id);
