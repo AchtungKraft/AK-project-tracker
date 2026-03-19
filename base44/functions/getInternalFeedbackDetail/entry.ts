@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ── Server-side comment normalizer (authoritative) ──────────────────
 function normalizeComment(comment, attachments) {
@@ -147,6 +147,7 @@ Deno.serve(async (req) => {
             attachmentsRaw,
             todoTasksRaw,
             linkedTasks,
+            taskGroupsRaw,
         ] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
@@ -154,6 +155,7 @@ Deno.serve(async (req) => {
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
             base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
+            base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId }).catch(() => []),
         ]);
 
         const request = requests[0];
@@ -293,6 +295,9 @@ Deno.serve(async (req) => {
             assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
         }));
 
+        // Sort task groups by sort_order
+        const taskGroups = [...taskGroupsRaw].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
         const projectClientContactIds = new Set(activeAccesses.map(pa => pa.client_contact_id));
         const projectClients = allClientContacts.filter(c => projectClientContactIds.has(c.id) && c.active !== false);
 
@@ -341,6 +346,7 @@ Deno.serve(async (req) => {
             decisions: enrichedDecisions,
             attachments: enrichedAttachments,
             todoTasks: enrichedTodoTasks,
+            taskGroups,
             linkedTasks: linkedTaskDetails,
             project: projects[0] || null,
             users: [...userMap.values()],
