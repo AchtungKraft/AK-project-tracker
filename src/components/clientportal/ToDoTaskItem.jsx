@@ -9,7 +9,6 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import ImageModal from "@/components/ui/ImageModal";
 
 export default function ToDoTaskItem({
   task,
@@ -20,11 +19,10 @@ export default function ToDoTaskItem({
   readOnly = false,
   token,
   slug,
+  onImageClick,
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [imageModalIndex, setImageModalIndex] = useState(0);
 
   const handleToggleComplete = async () => {
     const newComplete = !task.is_complete;
@@ -115,7 +113,7 @@ export default function ToDoTaskItem({
                     key={idx}
                     src={url}
                     alt=""
-                    onClick={() => { setImageModalIndex(idx); setImageModalOpen(true); }}
+                    onClick={() => onImageClick?.(task.images, idx)}
                     className={cn(
                       "w-12 h-12 rounded border object-cover cursor-pointer shrink-0 transition-opacity hover:opacity-80",
                       task.is_complete ? "border-gray-800 opacity-50" : "border-gray-700"
@@ -226,15 +224,6 @@ export default function ToDoTaskItem({
         )}
       </div>
 
-      {/* Image lightbox */}
-      {hasImages && (
-        <ImageModal
-          isOpen={imageModalOpen}
-          onClose={() => setImageModalOpen(false)}
-          images={task.images}
-          initialIndex={imageModalIndex}
-        />
-      )}
     </>
   );
 }

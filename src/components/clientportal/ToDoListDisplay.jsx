@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import TaskGroupHeader from "./TaskGroupHeader";
 import ToDoTaskItem from "./ToDoTaskItem";
+import ImageModal from "@/components/ui/ImageModal";
 
 export default function ToDoListDisplay({
   requestId,
@@ -34,8 +35,15 @@ export default function ToDoListDisplay({
   const [newGroupName, setNewGroupName] = useState("");
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [modalImages, setModalImages] = useState(null);
+  const [modalIndex, setModalIndex] = useState(0);
 
   const isReadOnly = !!(token || slug);
+
+  const handleImageClick = (images, index) => {
+    setModalImages(images);
+    setModalIndex(index);
+  };
 
   // Single source of truth: taskGroups comes from backend via props
   const groups = taskGroups;
@@ -171,6 +179,7 @@ export default function ToDoListDisplay({
         readOnly={isReadOnly}
         token={token}
         slug={slug}
+        onImageClick={handleImageClick}
       />
     ));
 
@@ -411,6 +420,15 @@ export default function ToDoListDisplay({
           )}
         </div>
       </CardContent>
+
+      {/* Single shared image modal */}
+      <ImageModal
+        isOpen={!!modalImages}
+        onClose={() => setModalImages(null)}
+        images={modalImages || []}
+        currentIndex={modalIndex}
+        onNavigate={setModalIndex}
+      />
     </Card>
   );
 }
