@@ -184,10 +184,14 @@ export default function PriorityDashboard() {
     setTempFilters({ selectedTypes: [], statusFilter: 'all', assignedTo: [] });
   }, []);
 
-  // Fetch all task comments in one query to avoid rate limiting
+  // Scope task comments to priority task IDs only
+  const priorityTaskIds = useMemo(() => priorityTasks.map(t => t.id), [priorityTasks]);
   const { data: allTaskComments = [] } = useQuery({
-    queryKey: ['allTaskComments'],
-    queryFn: () => base44.entities.TaskComment.list(),
+    queryKey: ['priorityTaskComments', priorityTaskIds],
+    queryFn: () => priorityTaskIds.length > 0
+      ? base44.entities.TaskComment.filter({ task_id: { $in: priorityTaskIds } })
+      : [],
+    enabled: priorityTaskIds.length > 0,
   });
 
   // Create a map of task_id -> comment count for efficient lookup

@@ -87,9 +87,14 @@ export default function ProjectDetail() {
     enabled: !!projectId,
   });
 
+  // Scope task comments to this project's tasks only
+  const projectTaskIds = useMemo(() => projectTasks.map(t => t.id), [projectTasks]);
   const { data: allTaskComments = [] } = useQuery({
-    queryKey: ['allTaskComments'],
-    queryFn: () => base44.entities.TaskComment.list(),
+    queryKey: ['projectTaskComments', projectId, projectTaskIds],
+    queryFn: () => projectTaskIds.length > 0
+      ? base44.entities.TaskComment.filter({ task_id: { $in: projectTaskIds } })
+      : [],
+    enabled: !!projectId && projectTaskIds.length > 0,
   });
 
   const { data: journalEntries = [] } = useQuery({
