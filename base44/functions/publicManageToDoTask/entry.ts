@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
                     request_id: requestId,
                     title: task.title,
                     is_complete: false,
+                    group_id: task.group_id || null,
                     assigned_to_id: task.assigned_to_id || null,
                     assigned_to_type: task.assigned_to_type || null,
                     details: task.details || null,
@@ -128,6 +129,7 @@ Deno.serve(async (req) => {
                 }
                 if (task.assigned_to_id !== undefined) updateData.assigned_to_id = task.assigned_to_id;
                 if (task.assigned_to_type !== undefined) updateData.assigned_to_type = task.assigned_to_type;
+                if (task.group_id !== undefined) updateData.group_id = task.group_id;
                 if (task.details !== undefined) updateData.details = task.details;
                 if (task.images !== undefined) updateData.images = task.images;
                 if (task.due_date !== undefined) updateData.due_date = task.due_date;
