@@ -14,6 +14,7 @@ import ToDoTaskItem from "./ToDoTaskItem";
 export default function ToDoListDisplay({
   requestId,
   tasks = [],
+  taskGroups: taskGroupsProp,
   assignableUsers = [],
   assignableContacts = [],
   queryKey,
@@ -29,8 +30,8 @@ export default function ToDoListDisplay({
 
   const isReadOnly = !!(token || slug);
 
-  // Fetch groups for this request
-  const { data: groups = [] } = useQuery({
+  // Fetch groups for this request (skip if provided via props, e.g. from backend response)
+  const { data: fetchedGroups = [] } = useQuery({
     queryKey: ["taskGroups", requestId],
     queryFn: async () => {
       const result = await base44.entities.TaskGroup.filter(
@@ -39,9 +40,11 @@ export default function ToDoListDisplay({
       );
       return result;
     },
-    enabled: !!requestId,
+    enabled: !!requestId && !taskGroupsProp,
     staleTime: 30_000,
   });
+
+  const groups = taskGroupsProp || fetchedGroups;
 
   // Group tasks by group_id
   const { groupedTasks, ungroupedTasks } = useMemo(() => {

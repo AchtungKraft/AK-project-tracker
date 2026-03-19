@@ -179,12 +179,13 @@ Deno.serve(async (req) => {
         const access = accesses[0];
 
         // Fetch request-scoped data in parallel
-        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, projectClientAccesses] = await Promise.all([
+        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, projectClientAccesses, taskGroupsRaw] = await Promise.all([
             base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
             base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
-            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' })
+            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' }),
+            base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId }).catch(() => []),
         ]);
 
         // STEP B: Derive minimal ID sets
@@ -246,6 +247,7 @@ Deno.serve(async (req) => {
         const enrichedTodoTasks = todoTasksRaw.map(t => ({
             id: t.id,
             request_id: t.request_id,
+            group_id: t.group_id || null,
             title: t.title,
             is_complete: t.is_complete,
             completed_at: t.completed_at,
@@ -258,6 +260,9 @@ Deno.serve(async (req) => {
             created_by: t.created_by,
             assignee: t.assigned_to_type === 'internal_user' ? userMap.get(t.assigned_to_id) : contactMap.get(t.assigned_to_id)
         }));
+
+        // Sort task groups by sort_order
+        const taskGroups = [...taskGroupsRaw].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
         // Assignable lists
         const projectClientContactIds = projectClientAccesses.map(pa => pa.client_contact_id);
@@ -363,6 +368,7 @@ Deno.serve(async (req) => {
             decisions: enrichedDecisions,
             attachments: minimalAttachments,
             todoTasks: enrichedTodoTasks,
+            taskGroups,
             assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {

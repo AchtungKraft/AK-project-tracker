@@ -387,6 +387,7 @@ export default function ClientFeedbackRequestDetail() {
           <ToDoListDisplay
             requestId={requestId}
             tasks={requestData?.todoTasks || []}
+            taskGroups={requestData?.taskGroups || []}
             assignableUsers={requestData?.assignableUsers || []}
             assignableContacts={requestData?.assignableContacts || []}
             token={token}
