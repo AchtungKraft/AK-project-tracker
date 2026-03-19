@@ -55,12 +55,18 @@ Deno.serve(async (req) => {
     // PERF FIX: Scope parts and vendors to only those referenced by commitments
     const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     
-    const [parts, vendors] = await Promise.all([
-      partIds.length > 0
-        ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds } })
-        : Promise.resolve([]),
-      base44.asServiceRole.entities.Vendor.list(), // vendors are small, keep as list
-    ]);
+    // PERF FIX: Scope vendors to only those referenced by parts (no global Vendor.list())
+    const parts = partIds.length > 0
+      ? await base44.asServiceRole.entities.Part.filter({ id: { $in: partIds } })
+      : [];
+    
+    const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    if (override_vendor_id && !vendorIdsFromParts.includes(override_vendor_id)) {
+      vendorIdsFromParts.push(override_vendor_id);
+    }
+    const vendors = vendorIdsFromParts.length > 0
+      ? await base44.asServiceRole.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
+      : [];
 
     const partMap = new Map(parts.map(p => [p.id, p]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));

@@ -25,9 +25,9 @@ Deno.serve(async (req) => {
     }
 
     // Fetch only essential entities for queue building
-    const [projects, vendors, commitments, pools, inventoryItems] = await Promise.all([
+    // PERF FIX: Removed Vendor.list() global scan - will scope after parts
+    const [projects, commitments, pools, inventoryItems] = await Promise.all([
       base44.entities.Project.list('-created_date', 100),
-      base44.entities.Vendor.list(),
       base44.entities.PartCommitment.filter({ commitment_status: { $ne: 'cancelled' } }),
       base44.entities.BillingPool.filter({ status: { $ne: 'closed' } }),
       base44.entities.InventoryItem.filter({ quantity_on_hand: { $gt: 0 } }),
@@ -37,6 +37,12 @@ Deno.serve(async (req) => {
     const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const parts = partIdsFromCommitments.length > 0
       ? await base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
+      : [];
+
+    // PERF FIX: Scope vendors to only those referenced by parts
+    const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    const vendors = vendorIdsFromParts.length > 0
+      ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
       : [];
 
     // Build lookup maps
