@@ -4,8 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, FolderPlus, ListChecks } from "lucide-react";
+import { Plus, FolderPlus, ListChecks, ChevronDown, ChevronUp, Upload, X, Loader2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import TaskGroupHeader from "./TaskGroupHeader";
@@ -23,7 +24,13 @@ export default function ToDoListDisplay({
 }) {
   const queryClient = useQueryClient();
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDetails, setNewTaskDetails] = useState("");
+  const [newTaskImages, setNewTaskImages] = useState([]);
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("");
   const [newTaskGroupId, setNewTaskGroupId] = useState("__none__");
+  const [showExpandedForm, setShowExpandedForm] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -94,22 +101,51 @@ export default function ToDoListDisplay({
     toast.success("Group deleted");
   };
 
+  // --- Image upload ---
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadingImages(true);
+    const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
+    const results = await Promise.all(uploadPromises);
+    setNewTaskImages(prev => [...prev, ...results.map(r => r.file_url)]);
+    setUploadingImages(false);
+    e.target.value = "";
+  };
+
   // --- Task creation ---
   const handleAddTask = async () => {
     const title = newTaskTitle.trim();
     if (!title) return;
-    await base44.entities.ToDoListTask.create({
+
+    const taskData = {
       request_id: requestId,
       title,
       group_id: newTaskGroupId === "__none__" ? null : newTaskGroupId,
-    });
+    };
+    if (newTaskDetails.trim()) taskData.details = newTaskDetails.trim();
+    if (newTaskImages.length > 0) taskData.images = newTaskImages;
+    if (newTaskDueDate) taskData.due_date = newTaskDueDate;
+    if (newTaskAssignee) {
+      const [type, id] = newTaskAssignee.split(":");
+      taskData.assigned_to_id = id;
+      taskData.assigned_to_type = type;
+    }
+
+    await base44.entities.ToDoListTask.create(taskData);
+    // Reset form
     setNewTaskTitle("");
+    setNewTaskDetails("");
+    setNewTaskImages([]);
+    setNewTaskDueDate("");
+    setNewTaskAssignee("");
+    setShowExpandedForm(false);
     queryClient.invalidateQueries({ queryKey });
     toast.success("Task added");
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleAddTask();
+    if (e.key === "Enter" && !showExpandedForm) handleAddTask();
   };
 
   const completedCount = tasks.filter((t) => t.is_complete).length;
@@ -187,30 +223,139 @@ export default function ToDoListDisplay({
 
         {/* Add Task Form */}
         {!isReadOnly && (
-          <div className="flex items-center gap-2">
-            <Input
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Add a task..."
-              className="h-9 bg-gray-800 border-gray-700 text-white text-sm flex-1"
-            />
-            {groups.length > 0 && (
-              <Select value={newTaskGroupId} onValueChange={setNewTaskGroupId}>
-                <SelectTrigger className="h-9 w-36 bg-gray-800 border-gray-700 text-white text-xs">
-                  <SelectValue placeholder="Group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ungrouped</SelectItem>
-                  {sortedGroups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-2 p-3 bg-gray-800/40 rounded-lg border border-gray-700/50">
+            {/* Row 1: Title + quick add */}
+            <div className="flex items-center gap-2">
+              <Input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Task name..."
+                className="h-9 bg-gray-800 border-gray-700 text-white text-sm flex-1"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowExpandedForm(!showExpandedForm)}
+                className="h-9 text-gray-400 hover:text-white shrink-0"
+                title={showExpandedForm ? "Less options" : "More options"}
+              >
+                {showExpandedForm ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+              <Button size="sm" onClick={handleAddTask} disabled={!newTaskTitle.trim()} className="h-9 bg-red-600 hover:bg-red-700 text-white shrink-0">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Expanded fields */}
+            {showExpandedForm && (
+              <div className="space-y-2 pt-1">
+                {/* Description */}
+                <Textarea
+                  value={newTaskDetails}
+                  onChange={(e) => setNewTaskDetails(e.target.value)}
+                  placeholder="Description (optional)..."
+                  className="bg-gray-800 border-gray-700 text-white text-sm min-h-[60px] resize-none"
+                />
+
+                {/* Row: Group + Assignee + Due Date */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {groups.length > 0 && (
+                    <Select value={newTaskGroupId} onValueChange={setNewTaskGroupId}>
+                      <SelectTrigger className="h-8 w-36 bg-gray-800 border-gray-700 text-white text-xs">
+                        <SelectValue placeholder="Group" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Ungrouped</SelectItem>
+                        {sortedGroups.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  {(assignableUsers.length > 0 || assignableContacts.length > 0) && (
+                    <Select value={newTaskAssignee} onValueChange={setNewTaskAssignee}>
+                      <SelectTrigger className="h-8 w-40 bg-gray-800 border-gray-700 text-white text-xs">
+                        <SelectValue placeholder="Assign to..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assignableUsers.map((u) => (
+                          <SelectItem key={u.id} value={`internal_user:${u.id}`}>
+                            {u.full_name || u.name}
+                          </SelectItem>
+                        ))}
+                        {assignableContacts.map((c) => (
+                          <SelectItem key={c.id} value={`client_contact:${c.id}`}>
+                            {c.name} (Client)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-gray-500" />
+                    <Input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="h-8 w-36 bg-gray-800 border-gray-700 text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Images */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="cursor-pointer">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md text-xs text-gray-300 transition-colors">
+                      {uploadingImages ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      Add Images
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImages}
+                    />
+                  </label>
+                  {newTaskImages.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {newTaskImages.map((url, idx) => (
+                        <div key={idx} className="relative w-12 h-12 rounded border border-gray-700 overflow-hidden group">
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setNewTaskImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-0 right-0 bg-red-600 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
-            <Button size="sm" onClick={handleAddTask} className="h-9 bg-red-600 hover:bg-red-700 text-white">
-              <Plus className="w-4 h-4" />
-            </Button>
+
+            {/* Inline group selector when form is collapsed but groups exist */}
+            {!showExpandedForm && groups.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Select value={newTaskGroupId} onValueChange={setNewTaskGroupId}>
+                  <SelectTrigger className="h-8 w-36 bg-gray-800 border-gray-700 text-white text-xs">
+                    <SelectValue placeholder="Group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ungrouped</SelectItem>
+                    {sortedGroups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
 
