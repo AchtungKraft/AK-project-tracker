@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
 
     // Fetch only required reference data (scoped by IDs)
-    const [parts, vendors, commitments, projects] = await Promise.all([
+    const [parts, vendors, commitments] = await Promise.all([
       partIds.length > 0 
         ? base44.entities.Part.filter({ id: { $in: partIds } })
         : Promise.resolve([]),
@@ -92,14 +92,13 @@ Deno.serve(async (req) => {
       commitmentIds.length > 0 
         ? base44.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
         : Promise.resolve([]),
-      // Projects: fetch only those referenced by commitments
-      (() => {
-        const projectIdsFromCommitments = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
-        return projectIdsFromCommitments.length > 0
-          ? base44.entities.Project.filter({ id: { $in: projectIdsFromCommitments } })
-          : Promise.resolve([]);
-      })(),
     ]);
+
+    // Projects: fetch only those referenced by commitments (separate await to avoid reference error)
+    const projectIdsFromCommitments = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
+    const projects = projectIdsFromCommitments.length > 0
+      ? await base44.entities.Project.filter({ id: { $in: projectIdsFromCommitments } })
+      : [];
 
     // Build lookup maps
     const partMap = new Map(parts.map(p => [p.id, p]));
