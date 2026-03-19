@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import ImageModal from "../ui/ImageModal";
+
 import { isStructuredReview } from "./reviewBehavior";
 import { sanitizeJournalHtml } from "@/components/journal/journalSanitizer";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
@@ -413,11 +413,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
   );
 });
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision, onImageClick: onImageClickProp }) {
   const queryClient = useQueryClient();
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [galleryImages, setGalleryImages] = useState([]);
-  const [galleryIndex, setGalleryIndex] = useState(0);
   const [selectedImageIds, setSelectedImageIds] = useState([]);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewAction, setReviewAction] = useState(null);
@@ -610,10 +607,10 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   }, []);
   
   const handleImageClick = useCallback((url, allImages, idx) => {
-    setGalleryImages(allImages);
-    setGalleryIndex(idx);
-    setSelectedImage(url);
-  }, []);
+    if (onImageClickProp) {
+      onImageClickProp(url, allImages, idx);
+    }
+  }, [onImageClickProp]);
 
   const handleReviewAction = (action) => {
     setReviewAction(action);
@@ -821,21 +818,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         </DialogContent>
       </Dialog>
 
-      <ImageModal
-        isOpen={!!selectedImage}
-        onClose={() => {
-          setSelectedImage(null);
-          setGalleryImages([]);
-          setGalleryIndex(0);
-        }}
-        imageUrl={selectedImage}
-        images={galleryImages}
-        currentIndex={galleryIndex}
-        onNavigate={(newIndex) => {
-          setGalleryIndex(newIndex);
-          setSelectedImage(galleryImages[newIndex]);
-        }}
-      />
     </>
   );
 }

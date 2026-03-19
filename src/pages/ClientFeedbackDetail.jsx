@@ -47,6 +47,8 @@ export default function ClientFeedbackDetail() {
   const [reviewNewImages, setReviewNewImages] = useState([]);
   const [isUploadingReviewImages, setIsUploadingReviewImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
 
   // Track if view has been logged this session to prevent duplicate tracking
@@ -661,6 +663,11 @@ export default function ClientFeedbackDetail() {
                 assignableUsers={assignableUsers}
                 assignableContacts={assignableContacts}
                 queryKey={['internalFeedbackDetail', requestId, projectId]}
+                onImageClick={(images, idx) => {
+                  setGalleryImages(images);
+                  setGalleryIndex(idx);
+                  setSelectedImage(images[idx]);
+                }}
               />
               {/* Show comments thread for ToDo list requests */}
               {threadRequest && (
@@ -692,6 +699,11 @@ export default function ClientFeedbackDetail() {
                   isClientView={false}
                   accessRole={user?.role}
                   request={threadRequest}
+                  onImageClick={(url, allImages, idx) => {
+                    setGalleryImages(allImages || []);
+                    setGalleryIndex(idx || 0);
+                    setSelectedImage(url);
+                  }}
                 />
               )}
             </>
@@ -728,6 +740,11 @@ export default function ClientFeedbackDetail() {
               isClientView={false}
               accessRole={user?.role}
               request={threadRequest}
+              onImageClick={(url, allImages, idx) => {
+                setGalleryImages(allImages || []);
+                setGalleryIndex(idx || 0);
+                setSelectedImage(url);
+              }}
             />
           )}
 
@@ -871,8 +888,18 @@ export default function ClientFeedbackDetail() {
 
       <ImageModal
         isOpen={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
+        onClose={() => {
+          setSelectedImage(null);
+          setGalleryImages([]);
+          setGalleryIndex(0);
+        }}
         imageUrl={selectedImage}
+        images={galleryImages}
+        currentIndex={galleryIndex}
+        onNavigate={(newIndex) => {
+          setGalleryIndex(newIndex);
+          if (galleryImages.length > 0) setSelectedImage(galleryImages[newIndex]);
+        }}
       />
 
       <EditRequestModal
