@@ -20,7 +20,7 @@
  * - Returns structured results with blocked/created breakdown
  */
 
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 Deno.serve(async (req) => {
   try {
@@ -329,7 +329,7 @@ Deno.serve(async (req) => {
         // Track updated commitment
         updatedCommitments.push({
           id: commitment.id,
-          qty_to_order: newQtyToOrder,
+          qty_to_order: new_to_order,
           qty_ordered: newQtyOrdered,
           qty_reserved: commitment.qty_reserved || 0,
           coverage_status: commitment.coverage_status
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
           }),
           after_state: JSON.stringify({
             qty_ordered: newQtyOrdered,
-            qty_to_order: newQtyToOrder,
+            qty_to_order: new_to_order,
             status: newStatus
           }),
           metadata: JSON.stringify({
