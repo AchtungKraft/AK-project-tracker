@@ -69,12 +69,9 @@ Deno.serve(async (req) => {
     const orders = orderIds.length > 0 ? await base44.asServiceRole.entities.Order.filter({ id: { $in: orderIds } }) : [];
     const requirements = []; // PartProjectRequirement is deprecated
 
-    // Filter related data
-    const poolIds = pools.map(p => p.id);
-    const commitmentIds = commitments.map(c => c.id);
-    
-    const projectAllocations = allocations.filter(a => poolIds.includes(a.pool_id));
-    const projectLineItems = lineItems.filter(li => commitmentIds.includes(li.commitment_id));
+    // Data already scoped by query — use directly
+    const projectAllocations = allocations.filter(a => !a.is_reversed);
+    const projectLineItems = lineItems;
     const projectInstalled = installedParts.filter(ip => commitmentIds.includes(ip.commitment_id));
 
     // Build parts lookup
