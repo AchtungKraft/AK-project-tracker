@@ -56,16 +56,16 @@ Deno.serve(async (req) => {
       orders = await base44.entities.Order.filter({ id: { $in: order_ids } });
       lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: { $in: order_ids } });
     } else if (project_id) {
-      // For project mode, we need commitments first to find line items
+      // For project mode: fetch commitments, then scoped line items
       const projectCommitments = await base44.entities.PartCommitment.filter({ project_id });
-      const projectCommitmentIds = new Set(projectCommitments.map(c => c.id));
+      const projectCommitmentIds = projectCommitments.map(c => c.id);
       
-      const allLineItems = await base44.entities.PartPurchaseLineItem.list();
-      lineItems = allLineItems.filter(li => 
-        li.commitment_id && projectCommitmentIds.has(li.commitment_id)
-      );
+      // PERF FIX: Use scoped $in query instead of full list() + filter
+      if (projectCommitmentIds.length > 0) {
+        lineItems = await base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: projectCommitmentIds } });
+      }
       
-      const orderIds = [...new Set(lineItems.map(li => li.order_id))];
+      const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
       if (orderIds.length > 0) {
         orders = await base44.entities.Order.filter({ id: { $in: orderIds } });
       }
