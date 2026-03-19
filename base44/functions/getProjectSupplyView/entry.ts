@@ -60,6 +60,15 @@ Deno.serve(async (req) => {
     const vendors = vendorIdsFromParts.length > 0
       ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
       : [];
+
+    // PHASE 3: Fetch line items scoped to commitments, and invoice lines
+    const commitmentIds = commitments.map(c => c.id);
+    const [lineItems, projectInvoiceLines] = await Promise.all([
+      commitmentIds.length > 0 
+        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+        : [],
+      base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } }),
+    ]);
     
     // PERF FIX: Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
