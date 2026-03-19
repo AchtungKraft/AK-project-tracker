@@ -271,7 +271,7 @@ export default function ToDoTaskItem({
         <div className="flex-1 min-w-0 space-y-1.5">
           {/* Title */}
           <p className={cn(
-            "text-sm font-medium leading-snug",
+            "text-base font-medium leading-snug",
             task.is_complete ? "text-gray-500 line-through" : "text-white"
           )}>
             {task.title}
@@ -280,7 +280,7 @@ export default function ToDoTaskItem({
           {/* Description - 2 lines max */}
           {hasDetails && (
             <p className={cn(
-              "text-xs leading-relaxed line-clamp-2",
+              "text-sm leading-relaxed line-clamp-2",
               task.is_complete ? "text-gray-600" : "text-gray-400"
             )}>
               {task.details}

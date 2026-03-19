@@ -367,7 +367,7 @@ export default function ToDoListDisplay({
             const counts = getGroupCounts(group.id);
             const isExpanded = !collapsedGroups[group.id];
             return (
-              <div key={group.id} className="rounded-xl bg-gray-800/30 border border-gray-700/40 p-3 space-y-2">
+              <div key={group.id} className="rounded-xl bg-gray-800/30 border border-blue-500/30 p-3 space-y-2">
                 <TaskGroupHeader
                   group={group}
                   isExpanded={isExpanded}
@@ -393,7 +393,7 @@ export default function ToDoListDisplay({
 
           {/* Ungrouped section */}
           {ungroupedTasks.length > 0 && (
-            <div className={cn(groups.length > 0 && "rounded-xl bg-gray-800/20 border border-gray-700/30 p-3", "space-y-2")}>
+            <div className={cn(groups.length > 0 && "rounded-xl bg-gray-800/20 border border-blue-500/30 p-3", "space-y-2")}>
               {groups.length > 0 && (
                 <div className="flex items-center gap-2 py-1 px-2">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Ungrouped</span>
