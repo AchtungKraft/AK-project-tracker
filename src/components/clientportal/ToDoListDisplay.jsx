@@ -362,12 +362,12 @@ export default function ToDoListDisplay({
         )}
 
         {/* Grouped Sections */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {sortedGroups.map((group) => {
             const counts = getGroupCounts(group.id);
             const isExpanded = !collapsedGroups[group.id];
             return (
-              <div key={group.id} className="space-y-1.5">
+              <div key={group.id} className="rounded-xl bg-gray-800/30 border border-gray-700/40 p-3 space-y-2">
                 <TaskGroupHeader
                   group={group}
                   isExpanded={isExpanded}
@@ -379,7 +379,7 @@ export default function ToDoListDisplay({
                   readOnly={isReadOnly}
                 />
                 {isExpanded && (
-                  <div className="pl-4 space-y-1.5">
+                  <div className="pl-2 space-y-2 pt-1">
                     {(groupedTasks[group.id] || []).length > 0 ? (
                       renderTaskList(groupedTasks[group.id])
                     ) : (
@@ -393,16 +393,16 @@ export default function ToDoListDisplay({
 
           {/* Ungrouped section */}
           {ungroupedTasks.length > 0 && (
-            <div className="space-y-1.5">
+            <div className={cn(groups.length > 0 && "rounded-xl bg-gray-800/20 border border-gray-700/30 p-3", "space-y-2")}>
               {groups.length > 0 && (
-                <div className="flex items-center gap-2 py-1.5 px-3">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ungrouped</span>
+                <div className="flex items-center gap-2 py-1 px-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Ungrouped</span>
                   <span className="text-xs text-gray-600">
                     {ungroupedTasks.filter((t) => t.is_complete).length}/{ungroupedTasks.length}
                   </span>
                 </div>
               )}
-              <div className={cn(groups.length > 0 && "pl-4", "space-y-1.5")}>
+              <div className={cn(groups.length > 0 && "pl-2", "space-y-2")}>
                 {renderTaskList(ungroupedTasks)}
               </div>
             </div>

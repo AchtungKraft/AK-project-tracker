@@ -36,7 +36,7 @@ export default function TaskGroupHeader({
   };
 
   return (
-    <div className="flex items-center gap-2 py-2 px-3 bg-gray-800/60 rounded-lg border border-gray-700/50 group/header">
+    <div className="flex items-center gap-2 py-2.5 px-3 bg-gray-700/40 rounded-lg border border-gray-600/40 group/header">
       {!readOnly && (
         <GripVertical className="w-4 h-4 text-gray-600 opacity-0 group-hover/header:opacity-100 transition-opacity cursor-grab shrink-0" />
       )}
@@ -63,8 +63,8 @@ export default function TaskGroupHeader({
         </div>
       ) : (
         <>
-          <span className="text-sm font-medium text-white flex-1 min-w-0 truncate">{group.name}</span>
-          <span className="text-xs text-gray-500 shrink-0">
+          <span className="text-sm font-semibold text-gray-100 flex-1 min-w-0 truncate">{group.name}</span>
+          <span className="text-xs text-gray-400 shrink-0 tabular-nums">
             {completedCount}/{taskCount}
           </span>
           {!readOnly && (

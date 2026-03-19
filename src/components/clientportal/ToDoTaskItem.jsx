@@ -256,10 +256,10 @@ export default function ToDoTaskItem({
   // ── VIEW MODE ──
   return (
     <div className={cn(
-      "rounded-lg border transition-colors",
+      "rounded-lg border transition-all duration-150",
       task.is_complete
-        ? "bg-gray-900/30 border-gray-800"
-        : "bg-gray-800/40 border-gray-700/50 hover:border-gray-600/50"
+        ? "bg-gray-900/40 border-gray-800/60"
+        : "bg-gray-800/60 border-gray-700/50 hover:border-gray-500/50 hover:bg-gray-800/80 hover:shadow-md hover:shadow-black/20"
     )}>
       <div className="flex items-start gap-3 p-3">
         <Checkbox
