@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
     }
 
     // Use canonical read model for consistent data (pure projection)
-    const poResult = await base44.asServiceRole.functions.invoke('buildPOReadModel', {
+    // Use user-scoped invoke (not asServiceRole) to avoid 403 on non-admin users
+    const poResult = await base44.functions.invoke('buildPOReadModel', {
       project_id,
       include_debug: include_debug || false,
     });

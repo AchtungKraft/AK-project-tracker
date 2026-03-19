@@ -75,19 +75,18 @@ Deno.serve(async (req) => {
     }
 
     // Fetch related entities only for filtered projects
-    const [statuses, projectTypes, commitments, pools, installedParts] = await Promise.all([
+    // PERF FIX: Removed InstalledPart fetch (unused in calculations, was causing timeout)
+    const [statuses, projectTypes, commitments, pools] = await Promise.all([
       base44.entities.StatusList.list(),
       base44.entities.ProjectType.list(),
       base44.entities.PartCommitment.filter({ project_id: { $in: projectIds } }),
       base44.entities.BillingPool.filter({ project_id: { $in: projectIds } }),
-      base44.entities.InstalledPart.filter({ project_id: { $in: projectIds } }),
     ]);
 
     // Build project metrics
     const projectMetrics = filteredProjects.map(project => {
       const projectCommitments = commitments.filter(c => c.project_id === project.id && c.commitment_status !== 'cancelled');
       const projectPools = pools.filter(p => p.project_id === project.id);
-      const projectInstalled = installedParts.filter(ip => ip.project_id === project.id && !ip.is_reversed);
 
       // Commitment lifecycle counts
       const statusCounts = {
