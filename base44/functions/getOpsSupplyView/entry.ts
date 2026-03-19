@@ -36,40 +36,62 @@ Deno.serve(async (req) => {
     // PERF: Timing start
     const _perfStart = Date.now();
     
-    // PERF FIX: Apply server-side filters to reduce data volume
+    // PHASE 1: Fetch commitments first (scoped filter)
     const commitmentFilter = { commitment_status: { $ne: 'cancelled' } };
     if (filters.project_id) commitmentFilter.project_id = filters.project_id;
     
-    // Fetch core data in parallel - REMOVED pools (deprecated), REMOVED full table scans
-    // PERF FIX: Limit parts to 500 max to prevent timeout
-    const [
-      commitments,
-      parts,
-      projects,
-      vendors,
-      categories,
-    ] = await Promise.all([
-      base44.entities.PartCommitment.filter(commitmentFilter, '-created_date', 1000),
-      base44.entities.Part.list('-created_date', 500),
-      base44.entities.Project.list('-created_date', 100),
-      base44.entities.Vendor.list(),
-      base44.entities.PartCategory.list(),
+    const commitments = await base44.entities.PartCommitment.filter(commitmentFilter, '-created_date', 1000);
+    
+    if (commitments.length === 0) {
+      return Response.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        mode,
+        items: [],
+        summary: { total_items: 0, total_qty_to_order: 0, total_exposure: 0, total_estimated_cost: 0, orderable_count: 0, blocked_count: 0, funding_blocked_count: 0 },
+        filter_options: { projects: [], vendors: [], categories: [] },
+      });
+    }
+    
+    // PHASE 2: Derive scoped IDs from commitments
+    const commitmentIds = commitments.map(c => c.id);
+    const commitmentPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
+    
+    // PHASE 3: Fetch reference data SCOPED by commitment-derived IDs (no global scans)
+    const [parts, projects] = await Promise.all([
+      commitmentPartIds.length > 0
+        ? base44.entities.Part.filter({ id: { $in: commitmentPartIds } })
+        : [],
+      commitmentProjectIds.length > 0
+        ? base44.entities.Project.filter({ id: { $in: commitmentProjectIds } })
+        : [],
     ]);
     
-    // PERF FIX: Scope lineItems to relevant commitments only
-    const commitmentIds = commitments.map(c => c.id);
-    const projectIds = [...new Set(commitments.map(c => c.project_id))];
+    // Derive vendor IDs and category IDs from parts (not global scans)
+    const derivedVendorIds = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    const derivedCategoryIds = [...new Set(parts.map(p => p.part_category_id).filter(Boolean))];
     
+    const [vendors, categories] = await Promise.all([
+      derivedVendorIds.length > 0
+        ? base44.entities.Vendor.filter({ id: { $in: derivedVendorIds } })
+        : [],
+      derivedCategoryIds.length > 0
+        ? base44.entities.PartCategory.filter({ id: { $in: derivedCategoryIds } })
+        : [],
+    ]);
+    
+    // PHASE 4: Fetch line items scoped to commitments, then derive orders
     const [lineItems, projectInvoices] = await Promise.all([
       commitmentIds.length > 0
         ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
         : [],
-      projectIds.length > 0
-        ? base44.entities.ProjectInvoice.filter({ project_id: { $in: projectIds } })
+      commitmentProjectIds.length > 0
+        ? base44.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } })
         : [],
     ]);
     
-    // PERF FIX: Derive orders from line items (no full scan)
+    // Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
     const invoiceIds = projectInvoices.map(i => i.id);
     

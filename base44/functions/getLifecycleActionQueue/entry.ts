@@ -134,22 +134,56 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     include_non_billable = false,
   } = filters;
   
-  // Batch load all required data
-  const [
-    commitments,
-    parts,
-    projects,
-    orders,
-    lineItems,
-    installedParts,
-  ] = await Promise.all([
-    base44.entities.PartCommitment.filter({}),
-    base44.entities.Part.filter({}),
-    base44.entities.Project.filter({}),
-    base44.entities.Order.filter({}),
-    base44.entities.PartPurchaseLineItem.filter({}),
-    base44.entities.InstalledPart.filter({}),
+  // PHASE 1: Fetch commitments first (with optional project scope)
+  const commitmentFilter = {};
+  if (filters.project_id) commitmentFilter.project_id = filters.project_id;
+  
+  const commitments = await base44.entities.PartCommitment.filter(commitmentFilter);
+  
+  if (commitments.length === 0) {
+    return {
+      action_groups: Object.values(ACTION_GROUPS).map(config => ({
+        action_name: Object.entries(ACTION_GROUPS).find(([_, v]) => v.key === config.key)?.[0] || '',
+        ...config,
+        commitments: [],
+        total_value: 0,
+        count: 0,
+      })).filter(g => g.count > 0 || g.key === 'complete'),
+      kpis: { total_commitments: 0, needs_billing_count: 0, needs_billing_value: 0, awaiting_payment_count: 0, awaiting_payment_value: 0, ready_to_order_count: 0, ready_to_order_cost: 0, orders_in_progress_count: 0, ready_to_install_count: 0, blocked_count: 0, complete_count: 0 },
+      resolved_at: new Date().toISOString(),
+    };
+  }
+  
+  // PHASE 2: Derive scoped IDs from commitments
+  const commitmentPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+  const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
+  const commitmentIds = commitments.map(c => c.id);
+  
+  // PHASE 3: Fetch reference data SCOPED by commitment-derived IDs
+  const [parts, projects] = await Promise.all([
+    commitmentPartIds.length > 0
+      ? base44.entities.Part.filter({ id: { $in: commitmentPartIds } })
+      : [],
+    commitmentProjectIds.length > 0
+      ? base44.entities.Project.filter({ id: { $in: commitmentProjectIds } })
+      : [],
   ]);
+  
+  // PHASE 4: Fetch operational data scoped by part/commitment IDs
+  const [lineItems, installedParts] = await Promise.all([
+    commitmentPartIds.length > 0
+      ? base44.entities.PartPurchaseLineItem.filter({ part_id: { $in: commitmentPartIds } })
+      : [],
+    commitmentIds.length > 0
+      ? base44.entities.InstalledPart.filter({ commitment_id: { $in: commitmentIds } })
+      : [],
+  ]);
+  
+  // Derive order IDs from line items (no global Order scan)
+  const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+  const orders = orderIds.length > 0
+    ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+    : [];
 
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));

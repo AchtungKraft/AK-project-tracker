@@ -155,26 +155,51 @@ function daysBetween(date1, date2) {
 // ============================================
 
 async function detectExceptions(base44, filters = {}) {
-  // Fetch all required data in parallel
-  const [
-    installedParts,
-    parts,
-    projects,
-    commitments,
-    orders,
-    lineItems,
-    vendorInvoices,
-    teamMembers,
-  ] = await Promise.all([
-    base44.entities.InstalledPart.filter({}),
-    base44.entities.Part.filter({}),
-    base44.entities.Project.filter({}),
-    base44.entities.PartCommitment.filter({}),
-    base44.entities.Order.filter({}),
-    base44.entities.PartPurchaseLineItem.filter({}),
-    base44.entities.VendorInvoice.filter({}),
-    base44.entities.TeamMember.filter({}),
+  // PHASE 1: Fetch commitments first (with optional project scope)
+  const commitmentFilter = {};
+  if (filters.project_id) commitmentFilter.project_id = filters.project_id;
+  
+  const commitments = await base44.entities.PartCommitment.filter(commitmentFilter);
+  
+  // PHASE 2: Derive scoped IDs from commitments
+  const commitmentPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+  const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
+  const commitmentIds = commitments.map(c => c.id);
+  
+  // PHASE 3: Fetch installed parts scoped by commitment IDs, then derive additional part IDs
+  const installedParts = commitmentIds.length > 0
+    ? await base44.entities.InstalledPart.filter({ commitment_id: { $in: commitmentIds } })
+    : [];
+  
+  // Expand part ID set with any parts from installed parts not already in commitments
+  const installedPartIds = installedParts.map(ip => ip.part_id).filter(Boolean);
+  const installedProjectIds = installedParts.map(ip => ip.project_id).filter(Boolean);
+  const allPartIds = [...new Set([...commitmentPartIds, ...installedPartIds])];
+  const allProjectIds = [...new Set([...commitmentProjectIds, ...installedProjectIds])];
+  
+  // PHASE 4: Fetch reference data SCOPED by derived IDs
+  const [parts, projects] = await Promise.all([
+    allPartIds.length > 0
+      ? base44.entities.Part.filter({ id: { $in: allPartIds } })
+      : [],
+    allProjectIds.length > 0
+      ? base44.entities.Project.filter({ id: { $in: allProjectIds } })
+      : [],
   ]);
+  
+  // PHASE 5: Fetch operational data scoped by part IDs
+  const [lineItems, vendorInvoices] = await Promise.all([
+    allPartIds.length > 0
+      ? base44.entities.PartPurchaseLineItem.filter({ part_id: { $in: allPartIds } })
+      : [],
+    base44.entities.VendorInvoice.filter({}), // VendorInvoice is small and has no part_id filter
+  ]);
+  
+  // Derive order IDs from line items (no global Order scan)
+  const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+  const orders = orderIds.length > 0
+    ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+    : [];
 
   // Build lookup maps
   const partsMap = Object.fromEntries(parts.map(p => [p.id, p]));
