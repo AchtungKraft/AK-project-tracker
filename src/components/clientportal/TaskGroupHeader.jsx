@@ -63,7 +63,7 @@ export default function TaskGroupHeader({
         </div>
       ) : (
         <>
-          <span className="text-sm font-semibold text-gray-100 flex-1 min-w-0 truncate">{group.name}</span>
+          <span className="text-sm font-semibold text-gray-100 flex-1 min-w-0 truncate bg-red-500/10 border border-red-500/30 rounded-md px-2 py-0.5">{group.name}</span>
           <span className="text-xs text-gray-400 shrink-0 tabular-nums">
             {completedCount}/{taskCount}
           </span>
