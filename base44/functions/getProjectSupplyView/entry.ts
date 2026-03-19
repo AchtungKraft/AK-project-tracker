@@ -37,33 +37,29 @@ Deno.serve(async (req) => {
     // PERF: Timing start
     const _perfStart = Date.now();
     
-    // Fetch all required data in parallel (FORWARD MODEL - no pools)
-    // PERF FIX: Scope lineItems and orders to project's commitments
-    // PERF FIX: Limit parts to 500 max to prevent timeout
+    // PHASE 1: Fetch project + commitments first to scope subsequent queries
     const [
       project,
       commitments,
-      parts,
-      vendors,
       categories,
       projectInvoices,
     ] = await Promise.all([
       base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
       base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.Part.list('-created_date', 500),
-      base44.entities.Vendor.list(),
       base44.entities.PartCategory.list(),
       base44.entities.ProjectInvoice.filter({ project_id }),
     ]);
+
+    // PHASE 2: Scope parts and vendors to only those referenced by commitments
+    const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const parts = partIdsFromCommitments.length > 0
+      ? await base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
+      : [];
     
-    // PERF FIX: Only fetch line items for this project's commitments
-    const commitmentIds = commitments.map(c => c.id);
-    const [lineItems, projectInvoiceLines] = await Promise.all([
-      commitmentIds.length > 0 
-        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
-        : [],
-      base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } }),
-    ]);
+    const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    const vendors = vendorIdsFromParts.length > 0
+      ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
+      : [];
     
     // PERF FIX: Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
