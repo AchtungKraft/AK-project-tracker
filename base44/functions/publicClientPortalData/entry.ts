@@ -94,21 +94,26 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // Fetch all feedback data in parallel
-        const [allRequests, allComments, allDecisions, allAttachments] = await Promise.all([
-            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId }),
-            base44.asServiceRole.entities.ClientFeedbackComment.filter({ }, '-created_date', 500),
-            base44.asServiceRole.entities.ClientFeedbackDecision.filter({ }, '-created_date', 500),
-            base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ }, '-created_date', 500)
-        ]);
+        // Fetch requests first to get IDs for scoped queries
+        const allRequests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
 
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
         const requestIds = new Set(visibleRequests.map(r => r.id));
+        const requestIdArray = [...requestIds];
 
-        // Filter to only this project's data
-        const projectComments = allComments.filter(c => requestIds.has(c.request_id));
-        const projectDecisions = allDecisions.filter(d => requestIds.has(d.request_id));
-        const projectAttachments = allAttachments.filter(a => requestIds.has(a.request_id));
+        // Fetch feedback data scoped to this project's requests
+        const [allComments, allDecisions, allAttachments] = requestIdArray.length > 0
+            ? await Promise.all([
+                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500),
+                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500),
+                base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+            ])
+            : [[], [], []];
+
+        // Data is already scoped to this project's requests
+        const projectComments = allComments;
+        const projectDecisions = allDecisions;
+        const projectAttachments = allAttachments;
 
         // Strip unnecessary fields from response to reduce payload size
         // Add derived request_type_label and request_type_color for presentation
