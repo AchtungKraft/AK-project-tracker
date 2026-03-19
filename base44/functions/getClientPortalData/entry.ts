@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 Deno.serve(async (req) => {
     const startTime = Date.now();
@@ -87,23 +87,17 @@ Deno.serve(async (req) => {
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
         const requestIds = visibleRequests.map(r => r.id);
 
-        // PHASE 3: Fetch related data ONLY for these specific request IDs
-        // Use parallel fetches for each request's related data
+        // PHASE 3: Fetch related data scoped to request IDs using $in query
         let projectComments = [];
         let projectDecisions = [];
         let projectAttachments = [];
 
         if (requestIds.length > 0) {
-            // Fetch in parallel for all request IDs
-            const [commentsResults, decisionsResults, attachmentsResults] = await Promise.all([
-                fetchByRequestIds(base44.asServiceRole.entities.ClientFeedbackComment, requestIds),
-                fetchByRequestIds(base44.asServiceRole.entities.ClientFeedbackDecision, requestIds),
-                fetchByRequestIds(base44.asServiceRole.entities.ClientFeedbackAttachment, requestIds)
+            [projectComments, projectDecisions, projectAttachments] = await Promise.all([
+                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
+                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
+                base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
             ]);
-            
-            projectComments = commentsResults;
-            projectDecisions = decisionsResults;
-            projectAttachments = attachmentsResults;
         }
 
         // Strip unnecessary fields from response to reduce payload size
