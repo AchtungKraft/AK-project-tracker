@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import ToDoTaskItem from "./ToDoTaskItem";
 export default function ToDoListDisplay({
   requestId,
   tasks = [],
-  taskGroups: taskGroupsProp,
+  taskGroups = [],
   assignableUsers = [],
   assignableContacts = [],
   queryKey,
@@ -30,21 +30,8 @@ export default function ToDoListDisplay({
 
   const isReadOnly = !!(token || slug);
 
-  // Fetch groups for this request (skip if provided via props, e.g. from backend response)
-  const { data: fetchedGroups = [] } = useQuery({
-    queryKey: ["taskGroups", requestId],
-    queryFn: async () => {
-      const result = await base44.entities.TaskGroup.filter(
-        { request_id: requestId },
-        "sort_order"
-      );
-      return result;
-    },
-    enabled: !!requestId && !taskGroupsProp,
-    staleTime: 30_000,
-  });
-
-  const groups = taskGroupsProp || fetchedGroups;
+  // Single source of truth: taskGroups comes from backend via props
+  const groups = taskGroups;
 
   // Group tasks by group_id
   const { groupedTasks, ungroupedTasks } = useMemo(() => {
@@ -71,6 +58,8 @@ export default function ToDoListDisplay({
   };
 
   // --- Group CRUD ---
+  // All mutations invalidate the parent queryKey so the backend re-fetches
+  // both taskGroups and todoTasks in a single round-trip.
   const handleCreateGroup = async () => {
     const name = newGroupName.trim();
     if (!name) return;
@@ -82,18 +71,18 @@ export default function ToDoListDisplay({
     });
     setNewGroupName("");
     setShowNewGroup(false);
-    queryClient.invalidateQueries({ queryKey: ["taskGroups", requestId] });
+    queryClient.invalidateQueries({ queryKey });
     toast.success("Group created");
   };
 
   const handleRenameGroup = async (groupId, newName) => {
     await base44.entities.TaskGroup.update(groupId, { name: newName });
-    queryClient.invalidateQueries({ queryKey: ["taskGroups", requestId] });
+    queryClient.invalidateQueries({ queryKey });
   };
 
   const handleDeleteGroup = async (groupId) => {
     if (!confirm("Delete this group? Tasks will become ungrouped.")) return;
-    // Ungroup tasks in this group
+    // Ungroup all tasks in this group first
     const tasksInGroup = groupedTasks[groupId] || [];
     await Promise.all(
       tasksInGroup.map((t) =>
@@ -101,7 +90,6 @@ export default function ToDoListDisplay({
       )
     );
     await base44.entities.TaskGroup.delete(groupId);
-    queryClient.invalidateQueries({ queryKey: ["taskGroups", requestId] });
     queryClient.invalidateQueries({ queryKey });
     toast.success("Group deleted");
   };

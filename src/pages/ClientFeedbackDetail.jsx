@@ -107,6 +107,7 @@ export default function ClientFeedbackDetail() {
   const decisions = feedbackDetail?.decisions || [];
   const attachments = feedbackDetail?.attachments || [];
   const todoTasks = feedbackDetail?.todoTasks || [];
+  const taskGroups = feedbackDetail?.taskGroups || [];
   const project = feedbackDetail?.project;
   const linkedTaskDetails = feedbackDetail?.linkedTasks || [];
   const users = feedbackDetail?.users || [];
@@ -656,6 +657,7 @@ export default function ClientFeedbackDetail() {
               <ToDoListDisplay
                 requestId={requestId}
                 tasks={todoTasks}
+                taskGroups={taskGroups}
                 assignableUsers={assignableUsers}
                 assignableContacts={assignableContacts}
                 queryKey={['internalFeedbackDetail', requestId, projectId]}
