@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, User, Calendar, FolderOpen, Pencil, Save, X, Upload, Loader2 } from "lucide-react";
+import { Trash2, User, Calendar, FolderOpen, Pencil, Save, X, Upload, Loader2, GripVertical } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -256,12 +256,15 @@ export default function ToDoTaskItem({
   // ── VIEW MODE ──
   return (
     <div className={cn(
-      "rounded-lg border transition-all duration-150",
+      "rounded-lg border transition-all duration-150 group",
       task.is_complete
         ? "bg-gray-900/40 border-gray-800/60"
         : "bg-gray-800/60 border-gray-700/50 hover:border-gray-500/50 hover:bg-gray-800/80 hover:shadow-md hover:shadow-black/20"
     )}>
       <div className="flex items-start gap-3 p-3">
+        {!readOnly && (
+          <GripVertical className="w-4 h-4 mt-1 text-gray-600 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity cursor-grab shrink-0" />
+        )}
         <Checkbox
           checked={task.is_complete}
           onCheckedChange={handleToggleComplete}

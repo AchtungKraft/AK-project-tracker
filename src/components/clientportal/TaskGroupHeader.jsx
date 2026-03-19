@@ -13,6 +13,7 @@ export default function TaskGroupHeader({
   taskCount,
   completedCount,
   readOnly = false,
+  dragHandleProps,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(group.name);
@@ -38,7 +39,9 @@ export default function TaskGroupHeader({
   return (
     <div className="flex items-center gap-2 py-2.5 px-3 bg-gray-700/40 rounded-lg border-2 border-red-500/30 group/header">
       {!readOnly && (
-        <GripVertical className="w-4 h-4 text-gray-600 opacity-0 group-hover/header:opacity-100 transition-opacity cursor-grab shrink-0" />
+        <div {...dragHandleProps} className="shrink-0">
+          <GripVertical className="w-4 h-4 text-gray-600 opacity-0 group-hover/header:opacity-100 transition-opacity cursor-grab" />
+        </div>
       )}
       
       <button onClick={onToggle} className="shrink-0 text-gray-400 hover:text-white transition-colors">

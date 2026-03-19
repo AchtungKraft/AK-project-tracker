@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FolderPlus, ListChecks, ChevronDown, ChevronUp, Upload, X, Loader2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskGroupHeader from "./TaskGroupHeader";
 import ToDoTaskItem from "./ToDoTaskItem";
 
@@ -41,7 +42,7 @@ export default function ToDoListDisplay({
   // Single source of truth: taskGroups comes from backend via props
   const groups = taskGroups;
 
-  // Group tasks by group_id
+  // Group tasks by group_id, sorted by order
   const { groupedTasks, ungroupedTasks } = useMemo(() => {
     const grouped = {};
     const ungrouped = [];
@@ -54,6 +55,11 @@ export default function ToDoListDisplay({
         ungrouped.push(task);
       }
     }
+    // Sort each group's tasks by order
+    for (const key of Object.keys(grouped)) {
+      grouped[key].sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+    ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0));
     return { groupedTasks: grouped, ungroupedTasks: ungrouped };
   }, [tasks, groups]);
 
@@ -119,10 +125,16 @@ export default function ToDoListDisplay({
     const title = newTaskTitle.trim();
     if (!title) return;
 
+    // Calculate order: put new task at end of its group
+    const targetGroupId = newTaskGroupId === "__none__" ? null : newTaskGroupId;
+    const targetTasks = targetGroupId ? (groupedTasks[targetGroupId] || []) : ungroupedTasks;
+    const maxOrder = targetTasks.reduce((max, t) => Math.max(max, t.order || 0), 0);
+
     const taskData = {
       request_id: requestId,
       title,
-      group_id: newTaskGroupId === "__none__" ? null : newTaskGroupId,
+      group_id: targetGroupId,
+      order: maxOrder + 1,
     };
     if (newTaskDetails.trim()) taskData.details = newTaskDetails.trim();
     if (newTaskImages.length > 0) taskData.images = newTaskImages;
@@ -160,21 +172,105 @@ export default function ToDoListDisplay({
     };
   };
 
-  const renderTaskList = (taskList) =>
-    taskList.map((task) => (
-      <ToDoTaskItem
-        key={task.id}
-        task={task}
-        groups={groups}
-        assignableUsers={assignableUsers}
-        assignableContacts={assignableContacts}
-        queryKey={queryKey}
-        readOnly={isReadOnly}
-        token={token}
-        slug={slug}
-        onImageClick={onImageClick}
-      />
-    ));
+  // --- Drag and Drop ---
+  const handleDragEnd = useCallback(async (result) => {
+    const { source, destination, type } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    if (type === "GROUP") {
+      // Reorder groups
+      const reordered = [...sortedGroups];
+      const [moved] = reordered.splice(source.index, 1);
+      reordered.splice(destination.index, 0, moved);
+
+      // Optimistic update
+      const updates = reordered.map((g, i) => ({ id: g.id, sort_order: i }));
+      queryClient.setQueryData(queryKey, (old) => {
+        if (!old) return old;
+        // Handle both array and object shapes
+        return old;
+      });
+
+      // Persist
+      await Promise.all(
+        updates.map((u) => base44.entities.TaskGroup.update(u.id, { sort_order: u.sort_order }))
+      );
+      queryClient.invalidateQueries({ queryKey });
+      return;
+    }
+
+    if (type === "TASK") {
+      const srcGroupId = source.droppableId === "__ungrouped__" ? null : source.droppableId;
+      const destGroupId = destination.droppableId === "__ungrouped__" ? null : destination.droppableId;
+
+      const srcTasks = [...(srcGroupId ? (groupedTasks[srcGroupId] || []) : ungroupedTasks)];
+      const destTasks = srcGroupId === destGroupId ? srcTasks : [...(destGroupId ? (groupedTasks[destGroupId] || []) : ungroupedTasks)];
+
+      const [movedTask] = srcTasks.splice(source.index, 1);
+      destTasks.splice(destination.index, 0, movedTask);
+
+      // Build update batch for destination list
+      const destUpdates = destTasks.map((t, i) => ({
+        id: t.id,
+        order: i,
+        ...(t.id === movedTask.id ? { group_id: destGroupId } : {}),
+      }));
+
+      // If cross-group, also update source list order
+      const srcUpdates = srcGroupId !== destGroupId
+        ? srcTasks.map((t, i) => ({ id: t.id, order: i }))
+        : [];
+
+      const allUpdates = [...destUpdates, ...srcUpdates];
+      await Promise.all(
+        allUpdates.map((u) => {
+          const data = { order: u.order };
+          if (u.group_id !== undefined) data.group_id = u.group_id;
+          return base44.entities.ToDoListTask.update(u.id, data);
+        })
+      );
+      queryClient.invalidateQueries({ queryKey });
+    }
+  }, [sortedGroups, groupedTasks, ungroupedTasks, queryKey, queryClient]);
+
+  const renderTaskList = (taskList, droppableId) => (
+    <Droppable droppableId={droppableId} type="TASK">
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={cn("space-y-2 min-h-[4px]", snapshot.isDraggingOver && "bg-blue-500/5 rounded-lg")}
+        >
+          {taskList.map((task, index) => (
+            <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={isReadOnly}>
+              {(dragProvided, dragSnapshot) => (
+                <div
+                  ref={dragProvided.innerRef}
+                  {...dragProvided.draggableProps}
+                  {...dragProvided.dragHandleProps}
+                  className={cn(dragSnapshot.isDragging && "opacity-80")}
+                >
+                  <ToDoTaskItem
+                    task={task}
+                    groups={groups}
+                    assignableUsers={assignableUsers}
+                    assignableContacts={assignableContacts}
+                    queryKey={queryKey}
+                    readOnly={isReadOnly}
+                    token={token}
+                    slug={slug}
+                    onImageClick={onImageClick}
+                  />
+                </div>
+              )}
+            </Draggable>
+          ))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
 
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
@@ -362,56 +458,88 @@ export default function ToDoListDisplay({
         )}
 
         {/* Grouped Sections */}
-        <div className="space-y-4">
-          {sortedGroups.map((group) => {
-            const counts = getGroupCounts(group.id);
-            const isExpanded = !collapsedGroups[group.id];
-            return (
-              <div key={group.id} className="rounded-xl bg-gray-800/30 border border-blue-500/30 p-3 space-y-2">
-                <TaskGroupHeader
-                  group={group}
-                  isExpanded={isExpanded}
-                  onToggle={() => toggleGroup(group.id)}
-                  onRename={handleRenameGroup}
-                  onDelete={handleDeleteGroup}
-                  taskCount={counts.total}
-                  completedCount={counts.completed}
-                  readOnly={isReadOnly}
-                />
-                {isExpanded && (
-                  <div className="pl-2 space-y-2 pt-1">
-                    {(groupedTasks[group.id] || []).length > 0 ? (
-                      renderTaskList(groupedTasks[group.id])
-                    ) : (
-                      <p className="text-xs text-gray-600 italic py-2 pl-2">No tasks in this group</p>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="groups-container" type="GROUP">
+            {(provided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
+                {sortedGroups.map((group, groupIndex) => {
+                  const counts = getGroupCounts(group.id);
+                  const isExpanded = !collapsedGroups[group.id];
+                  return (
+                    <Draggable key={group.id} draggableId={`group-${group.id}`} index={groupIndex} isDragDisabled={isReadOnly}>
+                      {(dragProvided, dragSnapshot) => (
+                        <div
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          className={cn(
+                            "rounded-xl bg-gray-800/30 border border-blue-500/30 p-3 space-y-2",
+                            dragSnapshot.isDragging && "shadow-lg shadow-black/40"
+                          )}
+                        >
+                          <TaskGroupHeader
+                            group={group}
+                            isExpanded={isExpanded}
+                            onToggle={() => toggleGroup(group.id)}
+                            onRename={handleRenameGroup}
+                            onDelete={handleDeleteGroup}
+                            taskCount={counts.total}
+                            completedCount={counts.completed}
+                            readOnly={isReadOnly}
+                            dragHandleProps={dragProvided.dragHandleProps}
+                          />
+                          {isExpanded && (
+                            <div className="pl-2 pt-1">
+                              {(groupedTasks[group.id] || []).length > 0 ? (
+                                renderTaskList(groupedTasks[group.id], group.id)
+                              ) : (
+                                <Droppable droppableId={group.id} type="TASK">
+                                  {(emptyProvided, emptySnapshot) => (
+                                    <div
+                                      ref={emptyProvided.innerRef}
+                                      {...emptyProvided.droppableProps}
+                                      className={cn("min-h-[32px] rounded-lg", emptySnapshot.isDraggingOver && "bg-blue-500/5")}
+                                    >
+                                      {!emptySnapshot.isDraggingOver && (
+                                        <p className="text-xs text-gray-600 italic py-2 pl-2">No tasks in this group</p>
+                                      )}
+                                      {emptyProvided.placeholder}
+                                    </div>
+                                  )}
+                                </Droppable>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+
+                {/* Ungrouped section */}
+                {ungroupedTasks.length > 0 && (
+                  <div className={cn(groups.length > 0 && "rounded-xl bg-gray-800/20 border border-blue-500/30 p-3", "space-y-2")}>
+                    {groups.length > 0 && (
+                      <div className="flex items-center gap-2 py-1 px-2">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Ungrouped</span>
+                        <span className="text-xs text-gray-600">
+                          {ungroupedTasks.filter((t) => t.is_complete).length}/{ungroupedTasks.length}
+                        </span>
+                      </div>
                     )}
+                    <div className={cn(groups.length > 0 && "pl-2")}>
+                      {renderTaskList(ungroupedTasks, "__ungrouped__")}
+                    </div>
                   </div>
                 )}
-              </div>
-            );
-          })}
 
-          {/* Ungrouped section */}
-          {ungroupedTasks.length > 0 && (
-            <div className={cn(groups.length > 0 && "rounded-xl bg-gray-800/20 border border-blue-500/30 p-3", "space-y-2")}>
-              {groups.length > 0 && (
-                <div className="flex items-center gap-2 py-1 px-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Ungrouped</span>
-                  <span className="text-xs text-gray-600">
-                    {ungroupedTasks.filter((t) => t.is_complete).length}/{ungroupedTasks.length}
-                  </span>
-                </div>
-              )}
-              <div className={cn(groups.length > 0 && "pl-2", "space-y-2")}>
-                {renderTaskList(ungroupedTasks)}
+                {tasks.length === 0 && (
+                  <p className="text-sm text-gray-500 italic text-center py-4">No tasks yet</p>
+                )}
               </div>
-            </div>
-          )}
-
-          {tasks.length === 0 && (
-            <p className="text-sm text-gray-500 italic text-center py-4">No tasks yet</p>
-          )}
-        </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );
