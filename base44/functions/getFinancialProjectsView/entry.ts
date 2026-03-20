@@ -28,12 +28,14 @@ Deno.serve(async (req) => {
     const _perfStart = Date.now();
 
     // Fetch all required data in parallel
+    // NOTE: These are intentional cross-project global scans for financial overview dashboard.
+    // Acceptable at current scale (<100 projects, <2000 commitments).
     const [projects, projectTypes, commitments, invoices, creditLedger] = await Promise.all([
       base44.entities.Project.filter({ is_system_project: { $ne: true } }),
-      base44.entities.ProjectType.filter({}),
-      base44.entities.PartCommitment.filter({}),
-      base44.entities.ProjectInvoice.filter({}),
-      base44.entities.ProjectCreditLedger.filter({})
+      base44.entities.ProjectType.list(),
+      base44.entities.PartCommitment.list('-created_date', 5000),
+      base44.entities.ProjectInvoice.list('-created_date', 2000),
+      base44.entities.ProjectCreditLedger.list('-created_date', 1000),
     ]);
 
     const projectTypeMap = Object.fromEntries(projectTypes.map(pt => [pt.id, pt]));
