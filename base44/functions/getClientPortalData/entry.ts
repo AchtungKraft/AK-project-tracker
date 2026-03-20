@@ -214,36 +214,4 @@ Deno.serve(async (req) => {
     }
 });
 
-// Helper function to fetch records by request_id efficiently
-// Fetches in parallel for each request ID
-async function fetchByRequestIds(entity, requestIds) {
-    if (!requestIds || requestIds.length === 0) return [];
-    
-    // Deduplicate
-    const uniqueIds = [...new Set(requestIds)];
-    
-    // For small sets, fetch individually in parallel (more efficient than global fetch)
-    if (uniqueIds.length <= 30) {
-        const results = await Promise.all(
-            uniqueIds.map(id => entity.filter({ request_id: id }).catch(() => []))
-        );
-        return results.flat();
-    }
-    
-    // For larger sets, batch into chunks to avoid too many parallel requests
-    const chunkSize = 10;
-    const chunks = [];
-    for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-        chunks.push(uniqueIds.slice(i, i + chunkSize));
-    }
-    
-    const allResults = [];
-    for (const chunk of chunks) {
-        const chunkResults = await Promise.all(
-            chunk.map(id => entity.filter({ request_id: id }).catch(() => []))
-        );
-        allResults.push(...chunkResults.flat());
-    }
-    
-    return allResults;
-}
+// Dead helper removed — replaced by $in batch queries above

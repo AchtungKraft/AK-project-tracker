@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // Default templates
 const DEFAULT_TEMPLATES = {
@@ -209,13 +209,11 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'No active clients found' });
         }
 
-        // Fetch all client contacts
-        const clientContactIds = accesses.map(a => a.client_contact_id);
-        const contactPromises = clientContactIds.map(id => 
-            base44.asServiceRole.entities.ClientContact.filter({ id })
-        );
-        const contactResults = await Promise.all(contactPromises);
-        const contacts = contactResults.flat().filter(Boolean);
+        // Fetch all client contacts via $in batch query
+        const clientContactIds = [...new Set(accesses.map(a => a.client_contact_id).filter(Boolean))];
+        const contacts = clientContactIds.length > 0
+            ? await base44.asServiceRole.entities.ClientContact.filter({ id: { $in: clientContactIds } })
+            : [];
 
         if (contacts.length === 0) {
             console.log(`No client contacts found for project ${project.id}. Skipping email.`);

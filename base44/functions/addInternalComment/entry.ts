@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Phase 5: Already writes content_html, content_fallback, links[], photos[], files[]
 // with backward compatibility for body-only payloads
 
