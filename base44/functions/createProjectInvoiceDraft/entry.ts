@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 /**
  * createProjectInvoiceDraft - PHASE 10 Forward Invoice System
@@ -87,11 +87,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch all referenced commitments and reference data in parallel
-    const [allCommitments, allParts, vendors, categories] = await Promise.all([
+    // Fetch commitments first, then scope parts/vendors to referenced IDs
+    const [allCommitments, categories] = await Promise.all([
       base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.Part.filter({}),
-      base44.entities.Vendor.filter({}),
       base44.entities.PartCategory.filter({}),
     ]);
 
@@ -101,11 +99,18 @@ Deno.serve(async (req) => {
       if (c.part_id) partIds.add(c.part_id);
     }
 
+    const allParts = partIds.size > 0
+      ? await base44.entities.Part.filter({ id: { $in: [...partIds] } })
+      : [];
+
+    const vendorIdsFromParts = [...new Set(allParts.map(p => p.default_vendor_id).filter(Boolean))];
+    const vendors = vendorIdsFromParts.length > 0
+      ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
+      : [];
+
     const partMap = new Map();
     for (const p of allParts) {
-      if (partIds.has(p.id)) {
-        partMap.set(p.id, p);
-      }
+      partMap.set(p.id, p);
     }
 
     const vendorMap = new Map(vendors.map(v => [v.id, v]));

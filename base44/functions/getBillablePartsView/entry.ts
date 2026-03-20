@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 /**
  * PHASE 1 — Canonical Billable Parts View
@@ -31,13 +31,21 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    // Fetch all required data in parallel
-    const [commitments, parts, vendors, categories] = await Promise.all([
+    // Fetch commitments first, then scope parts/vendors to referenced IDs
+    const [commitments, categories] = await Promise.all([
       base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.Part.filter({}),
-      base44.entities.Vendor.filter({}),
       base44.entities.PartCategory.filter({})
     ]);
+
+    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const parts = partIds.length > 0
+      ? await base44.entities.Part.filter({ id: { $in: partIds } })
+      : [];
+
+    const vendorIds = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    const vendors = vendorIds.length > 0
+      ? await base44.entities.Vendor.filter({ id: { $in: vendorIds } })
+      : [];
 
     const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
     const vendorMap = Object.fromEntries(vendors.map(v => [v.id, v]));

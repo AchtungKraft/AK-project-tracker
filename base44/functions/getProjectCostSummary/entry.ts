@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 /**
  * getProjectCostSummary - Forward Model Cost Authority
@@ -41,13 +41,13 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
     
-    // Fetch project - use filter({}) then find to avoid ID format exceptions
+    // Fetch project by ID
     let project = null;
     try {
-      const allProjects = await base44.entities.Project.filter({});
-      project = allProjects.find(p => p.id === project_id);
+      const projects = await base44.entities.Project.filter({ id: project_id });
+      project = projects[0];
     } catch (err) {
-      console.log("Error fetching projects:", err.message);
+      console.log("Error fetching project:", err.message);
     }
     
     if (!project) {
@@ -74,19 +74,19 @@ Deno.serve(async (req) => {
     const commitmentIds = activeCommitments.map(c => c.id);
     const commitmentMap = Object.fromEntries(activeCommitments.map(c => [c.id, c]));
     
-    // Fetch all PO line items and filter by commitment_id
-    const allLineItems = await base44.entities.PartPurchaseLineItem.list();
-    const projectLineItems = allLineItems.filter(li => 
-      li.commitment_id && commitmentIds.includes(li.commitment_id)
-    );
+    // Fetch PO line items scoped to project commitments
+    const projectLineItems = commitmentIds.length > 0
+      ? await base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+      : [];
     
     // Filter to active (non-cancelled) lines only
     const activeLineItems = projectLineItems.filter(li => li.status !== 'Cancelled');
     
     // Get unique order IDs to fetch Order-level freight/tariff
     const orderIds = [...new Set(activeLineItems.map(li => li.order_id).filter(Boolean))];
-    const allOrders = await base44.entities.Order.list();
-    const projectOrders = allOrders.filter(o => orderIds.includes(o.id));
+    const projectOrders = orderIds.length > 0
+      ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+      : [];
     const orderMap = Object.fromEntries(projectOrders.map(o => [o.id, o]));
     
     // Calculate cost rollups from PO LINES ONLY
