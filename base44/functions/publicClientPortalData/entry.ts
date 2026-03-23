@@ -94,6 +94,14 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
+        // Fetch the ClientContact for consent/contact data
+        // If we already fetched via slug lookup, reuse; otherwise fetch by ID
+        let clientContact = slug ? contactResults[0] : null;
+        if (!clientContact) {
+            const contactFetch = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
+            clientContact = contactFetch[0] || null;
+        }
+
         // Fetch requests first to get IDs for scoped queries
         const allRequests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
 
@@ -214,12 +222,25 @@ Deno.serve(async (req) => {
             }
         });
 
+        // Determine consent completion: has at least one opt-in date
+        const hasCompletedConsent = clientContact
+            ? !!(clientContact.opt_in_email_date || clientContact.opt_in_sms_date || clientContact.opt_in_whatsapp_date)
+            : false;
+
         return Response.json({
             success: true,
             access: {
                 id: access.id,
                 access_role: access.access_role,
-                client_contact_id: access.client_contact_id
+                client_contact_id: access.client_contact_id,
+                contact_email: clientContact?.email || null,
+                has_completed_consent: hasCompletedConsent,
+                opt_in_email_date: clientContact?.opt_in_email_date || null,
+                opt_in_sms_date: clientContact?.opt_in_sms_date || null,
+                opt_in_whatsapp_date: clientContact?.opt_in_whatsapp_date || null,
+                phone_sms: (clientContact?.notify_sms && clientContact?.phone) ? clientContact.phone : null,
+                phone_whatsapp: (clientContact?.notify_whatsapp && clientContact?.phone) ? clientContact.phone : null,
+                phone_country_code: null,
             },
             project: minimalProject,
             requests: minimalRequests,
