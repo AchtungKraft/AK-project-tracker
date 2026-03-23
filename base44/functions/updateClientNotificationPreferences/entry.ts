@@ -14,6 +14,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
  * - notify_sms (boolean, optional)
  * - notify_whatsapp (boolean, optional)
  * - phone (string, optional — required if SMS or WhatsApp enabled)
+ * - opt_in_source (string, optional — "admin" or "client", defaults to "client")
+ * - opt_in_method (string, optional — "portal", "admin", or "import", defaults to "portal")
+ * - ip_address (string, optional — explicit IP override for compliance)
  */
 
 Deno.serve(async (req) => {
@@ -30,7 +33,11 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const payload = await req.json();
-    const { clientSlug, shareToken, notify_email, notify_sms, notify_whatsapp, phone } = payload;
+    const { clientSlug, shareToken, notify_email, notify_sms, notify_whatsapp, phone, opt_in_source: explicitSource, opt_in_method: explicitMethod, ip_address: explicitIp } = payload;
+
+    // Resolve opt-in metadata with defaults
+    const resolvedSource = (explicitSource === 'admin' || explicitSource === 'client') ? explicitSource : 'client';
+    const resolvedMethod = (['portal', 'admin', 'import'].includes(explicitMethod)) ? explicitMethod : 'portal';
 
     // Require at least one identification method
     if (!clientSlug && !shareToken) {
@@ -64,10 +71,20 @@ Deno.serve(async (req) => {
     let hasChanges = false;
     const now = new Date().toISOString();
 
-    // Capture IP for compliance (from X-Forwarded-For or connection)
-    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    // Capture IP for compliance — explicit override takes precedence
+    const clientIp = explicitIp
+      || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || req.headers.get('x-real-ip')
       || null;
+
+    // Phone validation guard — must have phone if enabling SMS or WhatsApp
+    const effectiveSms = notify_sms !== undefined ? !!notify_sms : (contact.notify_sms ?? false);
+    const effectiveWhatsapp = notify_whatsapp !== undefined ? !!notify_whatsapp : (contact.notify_whatsapp ?? false);
+    const effectivePhone = phone !== undefined ? phone : (contact.phone || '');
+
+    if ((effectiveSms || effectiveWhatsapp) && !effectivePhone?.trim()) {
+      return Response.json({ error: 'Phone number is required when SMS or WhatsApp notifications are enabled' }, { status: 400 });
+    }
 
     if (notify_email !== undefined) {
       updateData.notify_email = !!notify_email;
@@ -101,20 +118,21 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No preferences provided to update' }, { status: 400 });
     }
 
-    // Set opt-in source and IP for any channel that was toggled ON
+    // Set opt-in metadata for any channel that was newly toggled ON
     const anyOptIn = (notify_email === true && !contact.opt_in_email_date)
       || (notify_sms === true && !contact.opt_in_sms_date)
       || (notify_whatsapp === true && !contact.opt_in_whatsapp_date);
 
     if (anyOptIn) {
-      updateData.opt_in_source = 'client';
+      updateData.opt_in_source = resolvedSource;
+      updateData.opt_in_method = resolvedMethod;
       if (clientIp) {
         updateData.opt_in_ip_address = clientIp;
       }
     }
 
     // Always track last change source
-    updateData.last_opt_in_source = 'client';
+    updateData.last_opt_in_source = resolvedSource;
 
     // Apply update
     await base44.asServiceRole.entities.ClientContact.update(contact.id, updateData);
