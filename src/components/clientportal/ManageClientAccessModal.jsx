@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send } from "lucide-react";
+import CommPrefsDisplay from "@/components/clientportal/CommPrefsDisplay";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
@@ -86,6 +87,30 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
       toast.success('Access revoked');
+    },
+  });
+
+  const [sendingNotifId, setSendingNotifId] = useState(null);
+
+  const sendNotificationMutation = useMutation({
+    mutationFn: ({ clientContactId, accessId }) =>
+      base44.functions.invoke('sendClientAccessNotification', {
+        clientContactId,
+        projectId,
+        accessId,
+      }),
+    onSuccess: (response, variables) => {
+      const data = response.data;
+      if (data.success) {
+        toast.success(`Notification sent via ${data.channels_sent.join(', ')}`);
+        queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
+      }
+      setSendingNotifId(null);
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.error || error.message;
+      toast.error(msg || 'Failed to send notification');
+      setSendingNotifId(null);
     },
   });
 
@@ -287,6 +312,26 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                             </SelectContent>
                           </Select>
                           <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={sendingNotifId === access.id || sendNotificationMutation.isPending}
+                            onClick={() => {
+                              setSendingNotifId(access.id);
+                              sendNotificationMutation.mutate({
+                                clientContactId: access.client_contact_id,
+                                accessId: access.id,
+                              });
+                            }}
+                            className="h-8 text-xs border-gray-700 gap-1"
+                          >
+                            {sendingNotifId === access.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Send className="w-3 h-3" />
+                            )}
+                            Send Access Link
+                          </Button>
+                          <Button
                             size="icon"
                             variant="ghost"
                             onClick={() => revokeAccessMutation.mutate(access.id)}
@@ -296,6 +341,16 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                           </Button>
                         </div>
                       </div>
+
+                      {/* Communication Preferences */}
+                      <CommPrefsDisplay client={client} />
+
+                      {/* Last notification sent */}
+                      {access.last_notification_sent_at && (
+                        <p className="text-[10px] text-gray-500">
+                          Last notification sent: {format(new Date(access.last_notification_sent_at), 'MMM d, yyyy h:mm a')}
+                        </p>
+                      )}
 
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
