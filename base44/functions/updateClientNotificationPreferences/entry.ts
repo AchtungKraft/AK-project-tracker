@@ -62,17 +62,34 @@ Deno.serve(async (req) => {
     // Build update payload — only include fields that were explicitly provided
     const updateData = {};
     let hasChanges = false;
+    const now = new Date().toISOString();
+
+    // Capture IP for compliance (from X-Forwarded-For or connection)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip')
+      || null;
 
     if (notify_email !== undefined) {
       updateData.notify_email = !!notify_email;
+      // Record opt-in timestamp when toggled ON and no existing date
+      if (!!notify_email && !contact.opt_in_email_date) {
+        updateData.opt_in_email_date = now;
+      }
+      // Do NOT clear opt_in_email_date when toggled OFF (preserve history)
       hasChanges = true;
     }
     if (notify_sms !== undefined) {
       updateData.notify_sms = !!notify_sms;
+      if (!!notify_sms && !contact.opt_in_sms_date) {
+        updateData.opt_in_sms_date = now;
+      }
       hasChanges = true;
     }
     if (notify_whatsapp !== undefined) {
       updateData.notify_whatsapp = !!notify_whatsapp;
+      if (!!notify_whatsapp && !contact.opt_in_whatsapp_date) {
+        updateData.opt_in_whatsapp_date = now;
+      }
       hasChanges = true;
     }
     if (phone !== undefined) {
@@ -84,18 +101,19 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No preferences provided to update' }, { status: 400 });
     }
 
-    // Validate phone requirement for SMS/WhatsApp
-    const effectiveSms = notify_sms !== undefined ? !!notify_sms : (contact.notify_sms ?? false);
-    const effectiveWhatsapp = notify_whatsapp !== undefined ? !!notify_whatsapp : (contact.notify_whatsapp ?? false);
-    const effectivePhone = phone !== undefined ? phone : (contact.phone || '');
+    // Set opt-in source and IP for any channel that was toggled ON
+    const anyOptIn = (notify_email === true && !contact.opt_in_email_date)
+      || (notify_sms === true && !contact.opt_in_sms_date)
+      || (notify_whatsapp === true && !contact.opt_in_whatsapp_date);
 
-    if ((effectiveSms || effectiveWhatsapp) && !effectivePhone?.trim()) {
-      return Response.json({
-        error: 'Phone number is required when SMS or WhatsApp notifications are enabled',
-      }, { status: 400 });
+    if (anyOptIn) {
+      updateData.opt_in_source = 'client';
+      if (clientIp) {
+        updateData.opt_in_ip_address = clientIp;
+      }
     }
 
-    // Set opt-in source
+    // Always track last change source
     updateData.last_opt_in_source = 'client';
 
     // Apply update
