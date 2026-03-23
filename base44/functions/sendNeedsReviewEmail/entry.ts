@@ -232,7 +232,14 @@ Deno.serve(async (req) => {
         const results = [];
         for (let i = 0; i < contacts.length; i++) {
             const contact = contacts[i];
-            
+
+            // NOTIFICATION PREFERENCE CHECK: Skip contacts who opted out of email
+            if (contact.notify_email === false) {
+                console.log(`Skipping ${contact.email} - email notifications disabled`);
+                results.push({ contact: contact.email, success: false, skipped: true, reason: 'email_opt_out' });
+                continue;
+            }
+
             // Find the access record for this contact
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) {

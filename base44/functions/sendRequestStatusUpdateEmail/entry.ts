@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // Default templates
 const DEFAULT_TEMPLATES = {
@@ -194,12 +194,22 @@ Deno.serve(async (req) => {
         const clientContactsWithSlugs = [];
         const teamEmails = new Set();
         
-        // Get client contact emails with their slugs
+        // Get client contact emails with their slugs (batch query)
         if (accesses.length > 0) {
-            const contactPromises = accesses.map(async (access) => {
-                const contactResults = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
-                const contact = contactResults[0];
+            const contactIds = [...new Set(accesses.map(a => a.client_contact_id).filter(Boolean))];
+            const allContacts = contactIds.length > 0
+                ? await base44.asServiceRole.entities.ClientContact.filter({ id: { $in: contactIds } })
+                : [];
+            const contactMap = new Map(allContacts.map(c => [c.id, c]));
+
+            for (const access of accesses) {
+                const contact = contactMap.get(access.client_contact_id);
                 if (contact && contact.email) {
+                    // NOTIFICATION PREFERENCE CHECK: Skip contacts who opted out of email
+                    if (contact.notify_email === false) {
+                        console.log(`Skipping ${contact.email} - email notifications disabled`);
+                        continue;
+                    }
                     clientContactsWithSlugs.push({
                         email: contact.email,
                         name: contact.name,
@@ -207,8 +217,7 @@ Deno.serve(async (req) => {
                         token: access.share_token
                     });
                 }
-            });
-            await Promise.all(contactPromises);
+            }
         }
         
         // Add project client email if exists and not already in contacts
@@ -224,13 +233,13 @@ Deno.serve(async (req) => {
             }
         }
         
-        // Get team member emails
+        // Get team member emails (batch query)
         if (project.assigned_team && Array.isArray(project.assigned_team) && project.assigned_team.length > 0) {
-            const teamPromises = project.assigned_team.map(id => 
-                base44.asServiceRole.entities.TeamMember.filter({ id })
-            );
-            const teamResults = await Promise.all(teamPromises);
-            teamResults.flat().forEach(member => {
+            const teamIds = [...new Set(project.assigned_team.filter(Boolean))];
+            const teamMembers = teamIds.length > 0
+                ? await base44.asServiceRole.entities.TeamMember.filter({ id: { $in: teamIds } })
+                : [];
+            teamMembers.forEach(member => {
                 if (member && member.email) teamEmails.add(member.email);
             });
         }

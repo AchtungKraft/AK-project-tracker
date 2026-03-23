@@ -70,13 +70,11 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'No active clients found' });
         }
 
-        // Fetch all client contacts
-        const clientContactIds = accesses.map(a => a.client_contact_id);
-        const contactPromises = clientContactIds.map(id => 
-            base44.asServiceRole.entities.ClientContact.filter({ id })
-        );
-        const contactResults = await Promise.all(contactPromises);
-        const contacts = contactResults.flat().filter(Boolean);
+        // Fetch all client contacts via $in batch query
+        const clientContactIds = [...new Set(accesses.map(a => a.client_contact_id).filter(Boolean))];
+        const contacts = clientContactIds.length > 0
+            ? await base44.asServiceRole.entities.ClientContact.filter({ id: { $in: clientContactIds } })
+            : [];
 
         if (contacts.length === 0) {
             return Response.json({ message: 'No client contacts found' });
@@ -110,6 +108,14 @@ Deno.serve(async (req) => {
         const results = [];
         for (let i = 0; i < contacts.length; i++) {
             const contact = contacts[i];
+
+            // NOTIFICATION PREFERENCE CHECK: Skip contacts who opted out of email
+            if (contact.notify_email === false) {
+                console.log(`Skipping ${contact.email} - email notifications disabled`);
+                results.push({ contact: contact.email, success: false, skipped: true, reason: 'email_opt_out' });
+                continue;
+            }
+
             const access = accesses.find(a => a.client_contact_id === contact.id);
             if (!access) {
                 results.push(null);

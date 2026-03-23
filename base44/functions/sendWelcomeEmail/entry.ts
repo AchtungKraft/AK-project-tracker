@@ -54,6 +54,12 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Access record not found' }, { status: 404 });
         }
 
+        // NOTIFICATION PREFERENCE CHECK: Skip if contact opted out of email
+        if (contact.notify_email === false) {
+            console.log(`Skipping welcome email to ${contact.email} - email notifications disabled`);
+            return Response.json({ success: true, skipped: true, reason: 'email_opt_out' });
+        }
+
         // Fetch email template
         const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'welcome' });
         const savedTemplate = templates[0];
