@@ -22,7 +22,6 @@ const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
 export default function PartsExplorerLayout({ onPartClick }) {
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [categoryPath, setCategoryPath] = useState([]);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [showLeftPane, setShowLeftPane] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,8 +86,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
     ...operationalDataConfig,
   });
 
-  // Build category path
-  useEffect(() => {
+  // Build category path — derived via useMemo to avoid render loops
+  const categoryPath = useMemo(() => {
     if (selectedCategoryId && categories.length > 0) {
       const path = [];
       let currentId = selectedCategoryId;
@@ -100,10 +99,9 @@ export default function PartsExplorerLayout({ onPartClick }) {
         currentId = cat.parent_id;
       }
       
-      setCategoryPath(path);
-    } else {
-      setCategoryPath([]);
+      return path;
     }
+    return [];
   }, [selectedCategoryId, categories]);
 
   const handleCategorySelect = (categoryId) => {

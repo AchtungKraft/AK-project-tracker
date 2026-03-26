@@ -668,7 +668,7 @@ export default function Layout({ children, currentPageName }) {
               // Sectioned navigation for Achtung Kraft members
               <div className="space-y-1">
                 {getNavigationSections().map((section, idx) => (
-                  <React.Fragment key={section.title}>
+                  <div key={section.title} className="contents">
                     {idx > 0 && <div className="my-3 border-t border-gray-700/30" />}
                     <NavSection
                       title={section.title}
@@ -676,7 +676,7 @@ export default function Layout({ children, currentPageName }) {
                       items={section.items}
                       currentPath={location.pathname}
                     />
-                  </React.Fragment>
+                  </div>
                 ))}
               </div>
             ) : (
