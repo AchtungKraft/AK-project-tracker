@@ -19,6 +19,19 @@ import { toast } from "sonner";
 import PartPricingFields from "./PartPricingFields";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
+const buildPartPayload = (formData) => ({
+  part_name: formData.part_name,
+  vendor_part_number: formData.vendor_part_number || null,
+  part_category_id: formData.part_category_id || null,
+  default_vendor_id: formData.vendor_id || null,
+  notes: formData.notes || null,
+  pricing_mode: formData.pricing_mode,
+  cost: Number(formData.default_cost) || 0,
+  photos: formData.photos || [],
+  featured_photo: formData.photos?.[0] || null,
+  ...(formData.pricing_mode === 'manual' ? { retail_override: Number(formData.default_retail) || 0 } : {}),
+});
+
 export default function AddPartModal({ onClose }) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -65,7 +78,11 @@ export default function AddPartModal({ onClose }) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Part.create(data),
+    mutationFn: (data) => {
+      const payload = buildPartPayload(data);
+      console.log("CREATE PART PAYLOAD", payload);
+      return base44.entities.Part.create(payload);
+    },
     onSuccess: async (newPart) => {
       // PHASE 17: Deterministic refresh
       await forceAppRefresh(queryClient, {
@@ -74,8 +91,9 @@ export default function AddPartModal({ onClose }) {
       toast.success('Part created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create part');
+    onError: (error) => {
+      console.error("CREATE PART ERROR", error);
+      toast.error(error?.message || 'Failed to create part');
     }
   });
 
