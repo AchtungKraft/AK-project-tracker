@@ -246,7 +246,9 @@ export default function PartModal({ part, partId, onClose }) {
     if (formData?.pricing_mode === 'matrix' && formData.cost > 0) {
       const fetchMatrixPrice = async () => {
         try {
+          console.log('[MatrixPrice] Fetching for cost:', formData.cost);
           const res = await base44.functions.invoke('computeRetailFromMatrix', { cost: formData.cost });
+          console.log('[MatrixPrice] Response:', { status: 'ok', data: res.data });
           if (res.data?.success) {
             setFormData(prev => ({
               ...prev,
@@ -255,7 +257,12 @@ export default function PartModal({ part, partId, onClose }) {
             }));
           }
         } catch (err) {
-          console.error('Matrix price fetch failed:', err);
+          console.error('[MatrixPrice] Fetch failed:', {
+            target: 'computeRetailFromMatrix',
+            status: err?.response?.status,
+            message: err?.response?.data?.error || err?.message,
+            detail: err?.response?.data
+          });
         }
       };
       // Debounce to avoid excessive calls while typing
@@ -682,6 +689,10 @@ export default function PartModal({ part, partId, onClose }) {
     return (
       <Dialog open={true} onOpenChange={handleClose}>
         <DialogContent className="bg-gray-900 border-red-900/30">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Loading Part</DialogTitle>
+            <DialogDescription className="sr-only">Loading part details...</DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center p-8">
             <Loader2 className="w-8 h-8 animate-spin text-red-500" />
           </div>
@@ -1713,6 +1724,10 @@ export default function PartModal({ part, partId, onClose }) {
       {viewerOpen && formData?.photos?.length > 0 && (
         <Dialog open={true} onOpenChange={closeImageViewer}>
           <DialogContent className="max-w-5xl bg-black/95 border-gray-800 p-0 overflow-hidden">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Part Photo Viewer</DialogTitle>
+              <DialogDescription>Navigate through part photos using arrow keys or click.</DialogDescription>
+            </DialogHeader>
             <div className="relative flex items-center justify-center min-h-[60vh] max-h-[85vh]">
               {/* Left click zone / prev button */}
               {formData.photos.length > 1 && (

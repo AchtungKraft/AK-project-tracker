@@ -16,7 +16,7 @@ export default function PartsBreadcrumb({ path, onNavigate, onClearSelection }) 
       </Button>
 
       {path.map((item, index) => (
-        <React.Fragment key={item.id}>
+        <div key={item.id} className="contents">
           <ChevronRight className="w-4 h-4 text-gray-600" />
           <button
             onClick={() => onNavigate(item.id)}
@@ -32,7 +32,7 @@ export default function PartsBreadcrumb({ path, onNavigate, onClearSelection }) 
           >
             {item.name}
           </button>
-        </React.Fragment>
+        </div>
       ))}
     </div>
   );
