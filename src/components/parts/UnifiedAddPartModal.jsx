@@ -321,7 +321,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   };
 
   return (
-    <>
+    <div className="contents">
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-900 border-red-900/30">
           <DialogHeader>
@@ -472,18 +472,16 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                     <SelectItem value="none">None</SelectItem>
                     {parentCategories.map(parent => {
                       const children = activeCategories.filter(c => c.parent_id === parent.id);
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color }}>{parent.name}</span>
+                      return [
+                        <SelectItem key={parent.id} value={parent.id}>
+                          <span style={{ color: parent.color }}>{parent.name}</span>
+                        </SelectItem>,
+                        ...children.map(child => (
+                          <SelectItem key={child.id} value={child.id}>
+                            <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
                           </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
+                        ))
+                      ];
                     })}
                   </SelectContent>
                 </Select>
@@ -505,18 +503,16 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                     <SelectItem value="none">None</SelectItem>
                     {parentVendors.map(parent => {
                       const children = activeVendors.filter(v => v.parent_id === parent.id);
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                      return [
+                        <SelectItem key={parent.id} value={parent.id}>
+                          <span style={{ color: parent.color }}>{parent.vendor_name}</span>
+                        </SelectItem>,
+                        ...children.map(child => (
+                          <SelectItem key={child.id} value={child.id}>
+                            <span className="ml-4" style={{ color: child.color }}>→ {child.vendor_name}</span>
                           </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="ml-4" style={{ color: child.color }}>→ {child.vendor_name}</span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
+                        ))
+                      ];
                     })}
                   </SelectContent>
                 </Select>
@@ -719,6 +715,6 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
