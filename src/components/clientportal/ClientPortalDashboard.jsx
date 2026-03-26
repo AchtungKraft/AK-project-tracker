@@ -50,21 +50,45 @@ export default function ClientPortalDashboard({ projectId, onCreateRequest, onMa
   const { data: requests = [] } = useQuery({
     queryKey: ['clientFeedbackRequests', projectId],
     queryFn: () => base44.entities.ClientFeedbackRequest.filter({ project_id: projectId }),
+    enabled: !!projectId,
+    staleTime: 30000,
+    gcTime: 120000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const { data: comments = [] } = useQuery({
     queryKey: ['clientFeedbackComments', projectId],
-    queryFn: () => base44.entities.ClientFeedbackComment.list(),
+    queryFn: () => base44.entities.ClientFeedbackComment.filter({ request_id: { $in: requests.map(r => r.id) } }),
+    enabled: !!projectId && requests.length > 0,
+    staleTime: 30000,
+    gcTime: 120000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const { data: decisions = [] } = useQuery({
     queryKey: ['clientFeedbackDecisions', projectId],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list(),
+    queryFn: () => base44.entities.ClientFeedbackDecision.filter({ request_id: { $in: requests.map(r => r.id) } }),
+    enabled: !!projectId && requests.length > 0,
+    staleTime: 30000,
+    gcTime: 120000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['clientFeedbackAttachments', projectId],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
+    queryFn: () => base44.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requests.map(r => r.id) } }),
+    enabled: !!projectId && requests.length > 0,
+    staleTime: 30000,
+    gcTime: 120000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const requestsWithState = useMemo(() => {

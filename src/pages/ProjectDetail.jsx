@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
@@ -21,10 +21,16 @@ import ProjectJournal from "../components/project/ProjectJournal";
 import ProjectClientPortal from "../components/project/ProjectClientPortal";
 import ProjectPurchaseOrders from "../components/project/ProjectPurchaseOrders";
 
+// Stable query defaults for reference data (rarely changes)
+const REF_DATA_OPTS = { staleTime: 60000, gcTime: 300000, retry: 1, refetchOnWindowFocus: false, refetchOnReconnect: false };
+// Stable query defaults for project-scoped data
+const PROJECT_DATA_OPTS = { staleTime: 30000, gcTime: 120000, retry: 1, refetchOnWindowFocus: false, refetchOnReconnect: false };
+
 export default function ProjectDetail() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
-  const urlParams = new URLSearchParams(window.location.search);
+  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const projectId = urlParams.get('id');
   const tabParam = urlParams.get('tab') || 'overview';
   const fromPage = urlParams.get('from');
@@ -45,62 +51,76 @@ export default function ProjectDetail() {
   useEffect(() => {
     const newTab = urlParams.get('tab') || 'overview';
     setActiveTab(newTab);
-  }, [window.location.search]);
+  }, [urlParams]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => base44.entities.Project.filter({ id: projectId }),
     select: (data) => data[0],
-    enabled: !!projectId
+    enabled: !!projectId,
+    staleTime: 30000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
-  // Centralized data fetching to avoid rate limiting
+  // Reference data — shared across all tabs, long staleTime
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
+    ...REF_DATA_OPTS,
   });
 
   const { data: projectTypes = [] } = useQuery({
     queryKey: ['projectTypes'],
     queryFn: () => base44.entities.ProjectType.list(),
+    ...REF_DATA_OPTS,
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
+    ...REF_DATA_OPTS,
   });
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    ...REF_DATA_OPTS,
   });
 
+  // Task data — only fetch when on overview or tasks tab
+  const needsTaskData = activeTab === 'overview' || activeTab === 'tasks';
   const { data: projectTasks = [] } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && needsTaskData,
+    ...PROJECT_DATA_OPTS,
   });
 
   const { data: projectBuckets = [] } = useQuery({
     queryKey: ['projectBuckets', projectId],
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && activeTab === 'tasks',
+    ...PROJECT_DATA_OPTS,
   });
 
-  // Scope task comments to this project's tasks only
+  // Scope task comments to this project — stable key using projectId only
   const projectTaskIds = useMemo(() => projectTasks.map(t => t.id), [projectTasks]);
   const { data: allTaskComments = [] } = useQuery({
-    queryKey: ['projectTaskComments', projectId, projectTaskIds],
+    queryKey: ['projectTaskComments', projectId],
     queryFn: () => projectTaskIds.length > 0
       ? base44.entities.TaskComment.filter({ task_id: { $in: projectTaskIds } })
-      : [],
-    enabled: !!projectId && projectTaskIds.length > 0,
+      : Promise.resolve([]),
+    enabled: !!projectId && needsTaskData && projectTaskIds.length > 0,
+    ...PROJECT_DATA_OPTS,
   });
 
+  // Journal data — only fetch when on journal tab
   const { data: journalEntries = [] } = useQuery({
     queryKey: ['journalEntries', projectId],
     queryFn: () => base44.entities.JournalEntry.filter({ project_id: projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && activeTab === 'journal',
+    ...PROJECT_DATA_OPTS,
   });
 
   // Memoized comment count map
