@@ -15,6 +15,16 @@ import PartTypeSelector from "./PartTypeSelector";
 import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
+const normalizeUrl = (url) => {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+};
+
 export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -184,19 +194,21 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   };
 
   const handleScrapeUrl = async () => {
-    if (!formData.order_url) {
+    const url = normalizeUrl(formData.order_url);
+    if (!url) {
       toast.error('Please enter a URL first');
       return;
     }
     
+    console.log("SCRAPE URL INPUT", url);
     setScraping(true);
     try {
-      const response = await base44.functions.invoke('scrapePartUrl', { url: formData.order_url });
+      const response = await base44.functions.invoke('scrapePartUrl', { url });
+      console.log("SCRAPE RESPONSE", response.data);
       const data = response.data?.data;
       
       if (data) {
-        // Handle images if found
-        const validImages = (data.image_urls || []).filter(url => url && url.startsWith('http'));
+        const validImages = (data.image_urls || []).filter(u => u && u.startsWith('http'));
         
         setFormData(prev => ({
           ...prev,
@@ -204,6 +216,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           vendor_part_number: data.part_number || prev.vendor_part_number,
           notes: data.notes || prev.notes,
           default_cost: data.price ? String(data.price) : prev.default_cost,
+          order_url: url,
           photos: validImages.length > 0 ? [...prev.photos, ...validImages] : prev.photos,
           featured_photo: prev.featured_photo || (validImages.length > 0 ? validImages[0] : prev.featured_photo)
         }));
@@ -222,8 +235,15 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
         toast.error('Could not extract product info from URL');
       }
     } catch (error) {
-      console.error('Scrape error:', error);
-      toast.error('Failed to scrape URL');
+      console.error("SCRAPE ERROR FULL", error);
+      console.error("SCRAPE STATUS", error?.response?.status);
+      console.error("SCRAPE RESPONSE", error?.response?.data);
+      const status = error?.response?.status;
+      if (status === 404) {
+        toast.error('Scrape function not found — check that scrapePartUrl is deployed');
+      } else {
+        toast.error(error?.response?.data?.error || 'Failed to scrape URL');
+      }
     } finally {
       setScraping(false);
     }
