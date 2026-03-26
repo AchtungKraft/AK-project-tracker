@@ -119,7 +119,11 @@ export default function CreateProjectInvoiceModal({
   }, [open, normalizedPreselectedId, initialSelectedItems]);
 
   // Get financial projects data for project dropdown
-  const { data: financialData } = useFinancialProjectsView();
+  const { data: financialData } = useFinancialProjectsView({
+    enabled: open,
+    staleTime: 30000,
+    retry: false,
+  });
   const selectedProjectFinancials = financialData?.projects?.find(
     (p) => p.project_id === selectedProjectId
   );
@@ -743,6 +747,10 @@ export default function CreateProjectInvoiceModal({
         return null;
     }
   };
+
+  // HARD MOUNT GUARD: If modal is not open, render nothing.
+  // This prevents all hooks above from causing query storms when modal is hidden.
+  if (!open) return null;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>

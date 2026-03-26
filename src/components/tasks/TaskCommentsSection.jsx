@@ -21,8 +21,13 @@ export default function TaskCommentsSection({ taskId }) {
 
   const { data: comments = [], isLoading } = useQuery({
     queryKey: ['taskComments', taskId],
-    queryFn: () => base44.entities.TaskComment.filter({ task_id: taskId }),
+    queryFn: () => {
+      if (!taskId) return Promise.resolve([]);
+      return base44.entities.TaskComment.filter({ task_id: taskId });
+    },
     enabled: !!taskId,
+    staleTime: 30000,
+    retry: false,
   });
 
   const createCommentMutation = useMutation({

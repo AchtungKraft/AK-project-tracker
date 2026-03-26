@@ -426,12 +426,14 @@ export default function ProjectInvoices() {
       </Tabs>
 
       {/* Create Invoice Modal - PHASE 1 UNIFIED: Same modal used in ForwardInvoiceDashboard */}
-      <CreateProjectInvoiceModal
-        open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSuccess={handleInvoiceCreated}
-        preselectedProjectId={projectFilter !== "all" ? projectFilter : null}
-      />
+      {showCreateModal && (
+        <CreateProjectInvoiceModal
+          open={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={handleInvoiceCreated}
+          preselectedProjectId={projectFilter !== "all" ? projectFilter : null}
+        />
+      )}
 
       {/* Invoice Detail Drawer */}
       {selectedInvoiceId && (

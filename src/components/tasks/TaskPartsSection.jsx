@@ -52,22 +52,28 @@ export default function TaskPartsSection({
     enabled: !!project?.id,
   });
 
-  // Fetch parts for display
+  // Fetch parts for display — only when we have task links to resolve
   const { data: parts = [] } = useQuery({
     queryKey: ["parts"],
     queryFn: () => base44.entities.Part.filter({ is_archived: { $ne: true } }),
+    enabled: !!task?.id,
+    staleTime: 30000,
   });
 
-  // Fetch inventory items for availability check
+  // Fetch inventory items for availability check — only when we have a project
   const { data: inventoryItems = [] } = useQuery({
     queryKey: ["inventoryItems"],
     queryFn: () => base44.entities.InventoryItem.list(),
+    enabled: !!project?.id,
+    staleTime: 30000,
   });
 
-  // Fetch locations for install source selection
+  // Fetch locations for install source selection — only when we have a project
   const { data: locations = [] } = useQuery({
     queryKey: ["locations"],
     queryFn: () => base44.entities.Location.list(),
+    enabled: !!project?.id,
+    staleTime: 30000,
   });
 
   const partsMap = Object.fromEntries(parts.map((p) => [p.id, p]));

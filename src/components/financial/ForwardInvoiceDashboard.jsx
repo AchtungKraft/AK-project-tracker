@@ -119,7 +119,10 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   }, [normalizedProjectId, invoices]);
   
   // PHASE 2 CANONICAL: Use getBillingAndProcurementStates as single source for exposure/credit
-  const { data: billingData, isLoading: billingLoading, isFetching: billingFetching, dataUpdatedAt } = useBillingAndProcurementStates(normalizedProjectId);
+  const { data: billingData, isLoading: billingLoading, isFetching: billingFetching, dataUpdatedAt } = useBillingAndProcurementStates(
+    normalizedProjectId,
+    { enabled: !!normalizedProjectId }
+  );
   
   // Merge loading states
   const isLoading = invoiceLoading || billingLoading;
@@ -623,12 +626,14 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       />
 
       {/* PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices */}
-      <CreateProjectInvoiceModal
-        open={showCreateInvoiceModal}
-        onClose={() => setShowCreateInvoiceModal(false)}
-        onSuccess={handleInvoiceCreated}
-        preselectedProjectId={projectId}
-      />
+      {showCreateInvoiceModal && (
+        <CreateProjectInvoiceModal
+          open={showCreateInvoiceModal}
+          onClose={() => setShowCreateInvoiceModal(false)}
+          onSuccess={handleInvoiceCreated}
+          preselectedProjectId={projectId}
+        />
+      )}
 
       {/* Credit Allocation Modal */}
       <ApplyCreditModal

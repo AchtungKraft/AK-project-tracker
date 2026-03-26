@@ -54,17 +54,19 @@ export function useBillingAndProcurementStates(projectId, options = {}) {
   const query = useQuery({
     queryKey,
     queryFn: async () => {
-      const filters = normalizedId ? { project_id: normalizedId } : {};
+      if (!normalizedId) return null;
+      const filters = { project_id: normalizedId };
       const response = await base44.functions.invoke("getBillingAndProcurementStates", {
         filters,
       });
       return response.data;
     },
     enabled: Boolean(normalizedId) && options.enabled !== false,
-    // PERF: Safe caching - 15s stale, 60s cache
-    staleTime: 15000,
+    // RATE LIMIT PROTECTION: Generous caching to prevent API storm
+    staleTime: 30000,
     gcTime: 60000,
     refetchOnWindowFocus: false,
+    retry: false,
     ...options,
   });
   

@@ -136,21 +136,29 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const { data: categories = [] } = useQuery({
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
+    staleTime: 60000,
+    retry: false,
   });
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
+    staleTime: 60000,
+    retry: false,
   });
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
+    staleTime: 60000,
+    retry: false,
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+    staleTime: 60000,
+    retry: false,
   });
 
   const { data: userTeamMember } = useQuery({
