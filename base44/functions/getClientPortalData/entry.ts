@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
-// Simple retry wrapper for rate-limit resilience
-async function withRetry(fn, retries = 2, delayMs = 300) {
+// Retry wrapper with higher resilience for rate limits
+async function withRetry(fn, retries = 3, delayMs = 500) {
     try {
         return await fn();
     } catch (err) {
@@ -12,6 +12,11 @@ async function withRetry(fn, retries = 2, delayMs = 300) {
         }
         throw err;
     }
+}
+
+// Safe array coercion — prevents .map crashes when filter returns non-array
+function safeArray(val) {
+    return Array.isArray(val) ? val : [];
 }
 
 // Small delay between sequential calls to avoid bursts
@@ -61,9 +66,9 @@ Deno.serve(async (req) => {
         // --- SEQUENTIAL QUERIES WITH RETRY (rate-limit safe) ---
 
         // 1. Fetch project
-        const projectResults = await withRetry(() =>
+        const projectResults = safeArray(await withRetry(() =>
             base44.asServiceRole.entities.Project.filter({ id: projectId })
-        );
+        ));
         const project = projectResults[0];
         if (!project) {
             return Response.json({ error: 'Project not found' }, { 
@@ -76,9 +81,9 @@ Deno.serve(async (req) => {
         let clientContactId = clientContactIdPassthrough || null;
         if (!clientContactId && slug) {
             await pause();
-            const contactResults = await withRetry(() =>
+            const contactResults = safeArray(await withRetry(() =>
                 base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
-            );
+            ));
             if (contactResults.length === 0) {
                 return Response.json({ error: 'Client contact not found' }, { 
                     status: 404,
@@ -93,9 +98,9 @@ Deno.serve(async (req) => {
         if (token) accessFilter.share_token = token;
         if (clientContactId) accessFilter.client_contact_id = clientContactId;
 
-        const accesses = await withRetry(() =>
+        const accesses = safeArray(await withRetry(() =>
             base44.asServiceRole.entities.ProjectClientAccess.filter(accessFilter)
-        );
+        ));
 
         if (accesses.length === 0) {
             return Response.json({ error: 'No active access found' }, { 
@@ -108,9 +113,9 @@ Deno.serve(async (req) => {
 
         // 4. Fetch requests
         await pause();
-        const allRequests = await withRetry(() =>
+        const allRequests = safeArray(await withRetry(() =>
             base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId })
-        );
+        ));
         
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
         const requestIds = visibleRequests.map(r => r.id);
@@ -120,17 +125,17 @@ Deno.serve(async (req) => {
 
         if (requestIds.length > 0) {
             await pause();
-            projectComments = await withRetry(() =>
+            projectComments = safeArray(await withRetry(() =>
                 base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
-            );
+            ));
             await pause();
-            projectDecisions = await withRetry(() =>
+            projectDecisions = safeArray(await withRetry(() =>
                 base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
-            );
+            ));
             await pause();
-            projectAttachments = await withRetry(() =>
+            projectAttachments = safeArray(await withRetry(() =>
                 base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
-            );
+            ));
         }
 
         // --- BUILD RESPONSE ---
@@ -223,9 +228,24 @@ Deno.serve(async (req) => {
         });
 
     } catch (error) {
-        console.error("Error in getClientPortalData:", error);
-        return Response.json({ error: error.message }, { 
-            status: 500,
+        console.error('UPSTREAM PORTAL FAILURE', {
+            slug,
+            projectId,
+            message: error.message,
+            status: error?.status,
+        });
+        // Never crash the endpoint for client portal reads — return safe empty shape
+        return Response.json({
+            success: false,
+            error: error.message,
+            access: null,
+            project: null,
+            requests: [],
+            comments: [],
+            decisions: [],
+            attachments: []
+        }, { 
+            status: 200,
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
     }
