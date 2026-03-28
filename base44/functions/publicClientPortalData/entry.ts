@@ -1,4 +1,21 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+
+// Simple retry wrapper for rate-limit resilience
+async function withRetry(fn, retries = 2, delayMs = 300) {
+    try {
+        return await fn();
+    } catch (err) {
+        if (retries > 0 && (err?.status === 429 || err?.message?.includes('Rate limit'))) {
+            console.warn('RATE LIMIT RETRY', { retriesLeft: retries, delayMs });
+            await new Promise(r => setTimeout(r, delayMs));
+            return withRetry(fn, retries - 1, delayMs * 2);
+        }
+        throw err;
+    }
+}
+
+// Small delay between sequential calls to avoid bursts
+const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
 
 // Centralized request type UI mapping
 const REQUEST_TYPE_UI = {
@@ -29,7 +46,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        let token, slug, projectId;
+        let token, slug, projectId, clientContactIdPassthrough;
         
         try {
             const contentType = req.headers.get('content-type');
@@ -38,12 +55,14 @@ Deno.serve(async (req) => {
                 token = body.token;
                 slug = body.slug;
                 projectId = body.projectId;
+                clientContactIdPassthrough = body.client_contact_id;
             }
         } catch (e) {
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
             projectId = url.searchParams.get('projectId');
+            clientContactIdPassthrough = url.searchParams.get('client_contact_id');
         }
 
         if ((!token && !slug) || !projectId) {
@@ -53,12 +72,12 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Run initial queries in parallel
-        const [projectResults, contactResults] = await Promise.all([
-            base44.asServiceRole.entities.Project.filter({ id: projectId }),
-            slug ? base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true }) : Promise.resolve([])
-        ]);
+        // --- SEQUENTIAL QUERIES WITH RETRY (rate-limit safe) ---
 
+        // 1. Fetch project
+        const projectResults = await withRetry(() =>
+            base44.asServiceRole.entities.Project.filter({ id: projectId })
+        );
         const project = projectResults[0];
         if (!project) {
             return Response.json({ error: 'Project not found' }, { 
@@ -67,23 +86,32 @@ Deno.serve(async (req) => {
             });
         }
 
-        let clientContactId;
-        if (slug) {
+        // 2. Resolve client contact — skip lookup if ID was passed through from projects page
+        let clientContactId = clientContactIdPassthrough || null;
+        let contactFromSlug = null;
+        if (!clientContactId && slug) {
+            await pause();
+            const contactResults = await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
+            );
             if (contactResults.length === 0) {
                 return Response.json({ error: 'Client contact not found' }, { 
                     status: 404,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
-            clientContactId = contactResults[0].id;
+            contactFromSlug = contactResults[0];
+            clientContactId = contactFromSlug.id;
         }
 
-        // Build filter for ProjectClientAccess
+        // 3. Access check — critical gate, no artificial delay before this
         const filter = { project_id: projectId, access_status: 'active' };
         if (token) filter.share_token = token;
         if (clientContactId) filter.client_contact_id = clientContactId;
 
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
+        const accesses = await withRetry(() =>
+            base44.asServiceRole.entities.ProjectClientAccess.filter(filter)
+        );
 
         if (accesses.length === 0) {
             return Response.json({ error: 'No active access found' }, { 
@@ -94,37 +122,44 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // Fetch the ClientContact for consent/contact data
-        // If we already fetched via slug lookup, reuse; otherwise fetch by ID
-        let clientContact = slug ? contactResults[0] : null;
+        // 4. Fetch ClientContact for consent data — reuse slug lookup if available
+        let clientContact = contactFromSlug;
         if (!clientContact) {
-            const contactFetch = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
+            await pause();
+            const contactFetch = await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id })
+            );
             clientContact = contactFetch[0] || null;
         }
 
-        // Fetch requests first to get IDs for scoped queries
-        const allRequests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
+        // 5. Fetch feedback requests
+        await pause();
+        const allRequests = await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId })
+        );
 
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
-        const requestIds = new Set(visibleRequests.map(r => r.id));
-        const requestIdArray = [...requestIds];
+        const requestIdArray = visibleRequests.map(r => r.id);
 
-        // Fetch feedback data scoped to this project's requests
-        const [allComments, allDecisions, allAttachments] = requestIdArray.length > 0
-            ? await Promise.all([
-                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500),
-                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500),
+        // 6. Fetch feedback data — SEQUENTIAL to avoid rate limit bursts
+        let allComments = [], allDecisions = [], allAttachments = [];
+        if (requestIdArray.length > 0) {
+            await pause();
+            allComments = await withRetry(() =>
+                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+            );
+            await pause();
+            allDecisions = await withRetry(() =>
+                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+            );
+            await pause();
+            allAttachments = await withRetry(() =>
                 base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
-            ])
-            : [[], [], []];
+            );
+        }
 
-        // Data is already scoped to this project's requests
-        const projectComments = allComments;
-        const projectDecisions = allDecisions;
-        const projectAttachments = allAttachments;
+        // --- BUILD RESPONSE ---
 
-        // Strip unnecessary fields from response to reduce payload size
-        // Add derived request_type_label and request_type_color for presentation
         const minimalRequests = visibleRequests.map(r => {
             const typeInfo = getRequestTypeInfo(r.request_type);
             return {
@@ -142,7 +177,7 @@ Deno.serve(async (req) => {
             };
         });
 
-        const minimalComments = projectComments.map(c => ({
+        const minimalComments = allComments.map(c => ({
             id: c.id,
             request_id: c.request_id,
             author_type: c.author_type,
@@ -153,7 +188,7 @@ Deno.serve(async (req) => {
             created_date: c.created_date
         }));
 
-        const minimalDecisions = projectDecisions.map(d => ({
+        const minimalDecisions = allDecisions.map(d => ({
             id: d.id,
             request_id: d.request_id,
             decided_by_type: d.decided_by_type,
@@ -167,7 +202,7 @@ Deno.serve(async (req) => {
             created_date: d.created_date
         }));
 
-        const minimalAttachments = projectAttachments.map(a => ({
+        const minimalAttachments = allAttachments.map(a => ({
             id: a.id,
             request_id: a.request_id,
             comment_id: a.comment_id,
@@ -193,34 +228,6 @@ Deno.serve(async (req) => {
         base44.asServiceRole.entities.ProjectClientAccess.update(access.id, {
             last_viewed_at: new Date().toISOString()
         }).catch(() => {});
-
-        // 🔎 STRUCTURED REVIEW API DIAGNOSTIC
-        const structuredTypes = ['design_review', 'budget_review', 'deliverable_review'];
-        minimalRequests.forEach(r => {
-            if (structuredTypes.includes(r.request_type)) {
-                const reqAttachments = minimalAttachments.filter(a => a.request_id === r.id);
-                const reqDecisions = minimalDecisions.filter(d => d.request_id === r.id);
-                const attachmentLevelDecisions = reqDecisions.filter(d => d.target_type === 'attachment_image');
-                const requestLevelDecisions = reqDecisions.filter(d => d.target_type === 'request');
-                
-                console.log("🔎 STRUCTURED REVIEW API TRACE", {
-                    request_id: r.id,
-                    type: r.request_type,
-                    status: r.status,
-                    attachment_count: reqAttachments.length,
-                    image_attachments: reqAttachments.filter(a => a.attachment_type === 'image').length,
-                    total_decisions: reqDecisions.length,
-                    attachment_level_decisions: attachmentLevelDecisions.length,
-                    request_level_decisions: requestLevelDecisions.length,
-                    decision_breakdown: reqDecisions.map(d => ({
-                        id: d.id,
-                        target_type: d.target_type,
-                        decision: d.decision,
-                        target_attachment_id: d.target_attachment_id
-                    }))
-                });
-            }
-        });
 
         // Determine consent completion: has at least one opt-in date
         const hasCompletedConsent = clientContact

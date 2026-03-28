@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -16,32 +16,21 @@ export default function ClientProjects() {
   const token = urlParams.get('token');
   const slug = urlParams.get('slug');
   
-  const [clientContactId, setClientContactId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // 1. Resolve Token/Slug to ClientContact via backend
-  useEffect(() => {
-    if (!token && !slug) return;
-
-    base44.functions.invoke('publicClientProjects', { token, slug })
-      .then(response => {
-        if (response.data.success) {
-          setClientContactId(response.data.contact.id);
-        }
-      })
-      .catch(error => {
-        console.error('Failed to load client data:', error);
-      });
-  }, [token, slug]);
-
-  // 2. Fetch all client data via backend
+  // Single fetch — no duplicate calls
   const { data: clientData, isLoading: loadingProjects } = useQuery({
     queryKey: ['clientProjects', token, slug],
     queryFn: async () => {
       const response = await base44.functions.invoke('publicClientProjects', { token, slug });
       return response.data;
     },
-    enabled: !!clientContactId,
+    enabled: !!(token || slug),
+    staleTime: 30000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3000),
   });
 
   const clientContact = clientData?.contact;
@@ -50,7 +39,7 @@ export default function ClientProjects() {
   const statusList = clientData?.statuses || [];
   const projectTypes = clientData?.projectTypes || [];
 
-  if ((!token && !slug) || (!clientContactId && !loadingProjects) || loadingProjects) {
+  if ((!token && !slug) || loadingProjects || !clientData?.success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
@@ -94,7 +83,7 @@ export default function ClientProjects() {
               // If we arrived via a User Slug, we might not have a project-specific token in the URL.
               // We need to pass the share_token from the ProjectClientAccess record to the portal.
               const access = accesses.find(a => a.project_id === project.id);
-              const portalLink = createPageUrl("ClientProjectPortal") + `?projectId=${project.id}&` + (slug ? `slug=${slug}` : `token=${access?.share_token}`);
+              const portalLink = createPageUrl("ClientProjectPortal") + `?projectId=${project.id}&` + (slug ? `slug=${slug}&client_contact_id=${clientContact?.id || ''}` : `token=${access?.share_token}`);
               return (
                 <Card key={project.id} className="bg-black/40 backdrop-blur-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-300 overflow-hidden group flex flex-col">
                   {/* Image Section */}

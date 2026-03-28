@@ -1,4 +1,20 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+
+// Simple retry wrapper for rate-limit resilience
+async function withRetry(fn, retries = 2, delayMs = 300) {
+    try {
+        return await fn();
+    } catch (err) {
+        if (retries > 0 && (err?.status === 429 || err?.message?.includes('Rate limit'))) {
+            console.warn('RATE LIMIT RETRY', { retriesLeft: retries, delayMs });
+            await new Promise(r => setTimeout(r, delayMs));
+            return withRetry(fn, retries - 1, delayMs * 2);
+        }
+        throw err;
+    }
+}
+
+const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
 
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
@@ -39,7 +55,9 @@ Deno.serve(async (req) => {
         let contact;
         
         if (slug) {
-            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
+            const contacts = await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
+            );
             if (contacts.length === 0) {
                 return Response.json({ error: 'Invalid slug' }, { 
                     status: 403,
@@ -49,7 +67,9 @@ Deno.serve(async (req) => {
             contact = contacts[0];
             clientContactId = contact.id;
         } else {
-            const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter({ share_token: token, access_status: 'active' });
+            const accesses = await withRetry(() =>
+                base44.asServiceRole.entities.ProjectClientAccess.filter({ share_token: token, access_status: 'active' })
+            );
             if (accesses.length === 0) {
                 return Response.json({ error: 'Invalid token' }, { 
                     status: 403,
@@ -58,7 +78,10 @@ Deno.serve(async (req) => {
             }
             clientContactId = accesses[0].client_contact_id;
             
-            const contacts = await base44.asServiceRole.entities.ClientContact.filter({ id: clientContactId });
+            await pause();
+            const contacts = await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ id: clientContactId })
+            );
             contact = contacts[0];
         }
 
@@ -69,23 +92,35 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Fetch accesses, statuses, and project types in parallel
-        const [accesses, statuses, projectTypes] = await Promise.all([
+        // Sequential fetches with retry to avoid rate limit bursts
+        await pause();
+        const accesses = await withRetry(() =>
             base44.asServiceRole.entities.ProjectClientAccess.filter({ 
                 client_contact_id: clientContactId,
                 access_status: 'active'
-            }),
-            base44.asServiceRole.entities.StatusList.filter({ scope: 'Project', active: true }),
+            })
+        );
+
+        await pause();
+        const statuses = await withRetry(() =>
+            base44.asServiceRole.entities.StatusList.filter({ scope: 'Project', active: true })
+        );
+
+        await pause();
+        const projectTypes = await withRetry(() =>
             base44.asServiceRole.entities.ProjectType.filter({ active: true })
-        ]);
+        );
 
         // Fetch all projects in a single query using $in operator
         const projectIds = accesses.map(a => a.project_id);
+        await pause();
         const projects = projectIds.length > 0 
-            ? await base44.asServiceRole.entities.Project.filter({ id: { $in: projectIds } })
+            ? await withRetry(() =>
+                base44.asServiceRole.entities.Project.filter({ id: { $in: projectIds } })
+              )
             : [];
 
-        // Return minimal data
+        // Return minimal data — include client_contact_id so downstream calls can skip slug lookup
         const minimalContact = {
             id: contact.id,
             name: contact.name,

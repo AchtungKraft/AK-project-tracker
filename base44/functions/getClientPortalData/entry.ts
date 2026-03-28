@@ -1,4 +1,21 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+
+// Simple retry wrapper for rate-limit resilience
+async function withRetry(fn, retries = 2, delayMs = 300) {
+    try {
+        return await fn();
+    } catch (err) {
+        if (retries > 0 && (err?.status === 429 || err?.message?.includes('Rate limit'))) {
+            console.warn('RATE LIMIT RETRY', { retriesLeft: retries, delayMs });
+            await new Promise(r => setTimeout(r, delayMs));
+            return withRetry(fn, retries - 1, delayMs * 2);
+        }
+        throw err;
+    }
+}
+
+// Small delay between sequential calls to avoid bursts
+const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
 
 Deno.serve(async (req) => {
     const startTime = Date.now();
@@ -15,7 +32,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        let token, slug, projectId;
+        let token, slug, projectId, clientContactIdPassthrough;
         
         try {
             const contentType = req.headers.get('content-type');
@@ -24,12 +41,14 @@ Deno.serve(async (req) => {
                 token = body.token;
                 slug = body.slug;
                 projectId = body.projectId;
+                clientContactIdPassthrough = body.client_contact_id;
             }
         } catch (e) {
             const url = new URL(req.url);
             token = url.searchParams.get('token');
             slug = url.searchParams.get('slug');
             projectId = url.searchParams.get('projectId');
+            clientContactIdPassthrough = url.searchParams.get('client_contact_id');
         }
 
         if ((!token && !slug) || !projectId) {
@@ -39,12 +58,12 @@ Deno.serve(async (req) => {
             });
         }
 
-        // PHASE 1: Fetch project and contact in parallel
-        const [projectResults, contactResults] = await Promise.all([
-            base44.asServiceRole.entities.Project.filter({ id: projectId }),
-            slug ? base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true }) : Promise.resolve([])
-        ]);
+        // --- SEQUENTIAL QUERIES WITH RETRY (rate-limit safe) ---
 
+        // 1. Fetch project
+        const projectResults = await withRetry(() =>
+            base44.asServiceRole.entities.Project.filter({ id: projectId })
+        );
         const project = projectResults[0];
         if (!project) {
             return Response.json({ error: 'Project not found' }, { 
@@ -53,8 +72,13 @@ Deno.serve(async (req) => {
             });
         }
 
-        let clientContactId;
-        if (slug) {
+        // 2. Resolve client contact — skip lookup if ID was passed through
+        let clientContactId = clientContactIdPassthrough || null;
+        if (!clientContactId && slug) {
+            await pause();
+            const contactResults = await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
+            );
             if (contactResults.length === 0) {
                 return Response.json({ error: 'Client contact not found' }, { 
                     status: 404,
@@ -64,12 +88,14 @@ Deno.serve(async (req) => {
             clientContactId = contactResults[0].id;
         }
 
-        // Build filter for ProjectClientAccess
+        // 3. Access check — critical gate
         const accessFilter = { project_id: projectId, access_status: 'active' };
         if (token) accessFilter.share_token = token;
         if (clientContactId) accessFilter.client_contact_id = clientContactId;
 
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(accessFilter);
+        const accesses = await withRetry(() =>
+            base44.asServiceRole.entities.ProjectClientAccess.filter(accessFilter)
+        );
 
         if (accesses.length === 0) {
             return Response.json({ error: 'No active access found' }, { 
@@ -80,27 +106,35 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // PHASE 2: Fetch only project-specific requests first
-        const allRequests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId });
+        // 4. Fetch requests
+        await pause();
+        const allRequests = await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId })
+        );
         
-        // Get visible requests and their IDs
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
         const requestIds = visibleRequests.map(r => r.id);
 
-        // PHASE 3: Fetch related data scoped to request IDs using $in query
-        let projectComments = [];
-        let projectDecisions = [];
-        let projectAttachments = [];
+        // 5. Fetch feedback data — SEQUENTIAL to avoid rate limit bursts
+        let projectComments = [], projectDecisions = [], projectAttachments = [];
 
         if (requestIds.length > 0) {
-            [projectComments, projectDecisions, projectAttachments] = await Promise.all([
-                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
-                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
-                base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIds } }, '-created_date', 500),
-            ]);
+            await pause();
+            projectComments = await withRetry(() =>
+                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
+            );
+            await pause();
+            projectDecisions = await withRetry(() =>
+                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
+            );
+            await pause();
+            projectAttachments = await withRetry(() =>
+                base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIds } }, '-created_date', 500)
+            );
         }
 
-        // Strip unnecessary fields from response to reduce payload size
+        // --- BUILD RESPONSE ---
+
         const minimalRequests = visibleRequests.map(r => ({
             id: r.id,
             title: r.title,
@@ -168,16 +202,8 @@ Deno.serve(async (req) => {
             last_viewed_at: new Date().toISOString()
         }).catch(() => {});
 
-        const endTime = Date.now();
-        const executionTime = endTime - startTime;
-
-        // Log performance metrics
-        console.log(`[getClientPortalData] Performance metrics:
-  - Execution time: ${executionTime}ms
-  - Requests: ${visibleRequests.length}
-  - Comments: ${projectComments.length}
-  - Decisions: ${projectDecisions.length}
-  - Attachments: ${projectAttachments.length}`);
+        const executionTime = Date.now() - startTime;
+        console.log(`[getClientPortalData] ${executionTime}ms | ${visibleRequests.length} requests, ${projectComments.length} comments, ${projectDecisions.length} decisions, ${projectAttachments.length} attachments`);
 
         return Response.json({
             success: true,
@@ -191,16 +217,7 @@ Deno.serve(async (req) => {
             requests: minimalRequests,
             comments: minimalComments,
             decisions: minimalDecisions,
-            attachments: minimalAttachments,
-            _debug: {
-                executionTimeMs: executionTime,
-                counts: {
-                    requests: visibleRequests.length,
-                    comments: projectComments.length,
-                    decisions: projectDecisions.length,
-                    attachments: projectAttachments.length
-                }
-            }
+            attachments: minimalAttachments
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
@@ -213,5 +230,3 @@ Deno.serve(async (req) => {
         });
     }
 });
-
-// Dead helper removed — replaced by $in batch queries above

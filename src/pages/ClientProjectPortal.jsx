@@ -76,26 +76,30 @@ export default function ClientProjectPortal() {
   const token = urlParams.get('token');
   const slug = urlParams.get('slug');
   const projectId = urlParams.get('projectId');
+  const clientContactId = urlParams.get('client_contact_id');
   const initialTab = urlParams.get('tab') || 'requests';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('last_activity');
 
-  // Single data fetch - no duplicate calls
+  // Single data fetch — passes client_contact_id to skip duplicate slug lookup
   const { data: portalData, isLoading } = useQuery({
     queryKey: ['clientPortalData', token, slug, projectId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getClientPortalData', { 
         token, 
         slug, 
-        projectId 
+        projectId,
+        client_contact_id: clientContactId || undefined
       });
       return response.data;
     },
     enabled: !!(token || slug) && !!projectId,
-    staleTime: 30_000,
-    gcTime: 300_000,
+    staleTime: 30000,
+    gcTime: 300000,
     refetchOnWindowFocus: false,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3000),
   });
 
   // Fire-and-forget view tracking - non-blocking, debounced
