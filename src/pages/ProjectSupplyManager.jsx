@@ -702,7 +702,7 @@ export default function ProjectSupplyManager() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate(createPageUrl('SupplyLanding'))}
+                onClick={() => window.history.length > 1 ? navigate(-1) : navigate(createPageUrl('SupplyLanding'))}
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
