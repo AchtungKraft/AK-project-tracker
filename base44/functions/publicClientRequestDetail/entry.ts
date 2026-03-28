@@ -1,4 +1,31 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+
+// Retry wrapper with resilience for rate limits
+async function withRetry(fn, retries = 3, delayMs = 500) {
+    let lastError;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastError = err;
+            if (!err?.message?.includes('Rate limit') || i === retries) {
+                throw err;
+            }
+            console.warn('RATE LIMIT RETRY', { retriesLeft: retries - i, delayMs });
+            await new Promise(r => setTimeout(r, delayMs));
+            delayMs *= 2;
+        }
+    }
+    throw lastError;
+}
+
+// Safe array coercion — prevents .map crashes when filter returns non-array
+function safeArray(val) {
+    return Array.isArray(val) ? val : [];
+}
+
+// Small delay between sequential calls to avoid bursts
+const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
 
 // Centralized request type UI mapping
 const REQUEST_TYPE_UI = {
@@ -18,7 +45,7 @@ const getRequestTypeInfo = (type) => {
 
 // ── Server-side comment normalizer (authoritative) ──────────────────
 function normalizeComment(comment, attachments) {
-    const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
+    const commentAttachments = safeArray(attachments).filter(a => a.comment_id === comment.id);
 
     const contentHtml = comment.content_html || null;
     const body = comment.body || '';
@@ -52,7 +79,6 @@ function normalizeComment(comment, attachments) {
     }
 
     // photos: inline first, fall back to attachment-sourced
-    // SAFETY: Exclude SVG to prevent injection (only allow raster image mimes)
     const isSafeImage = (a) => {
         if (a.mime_type && a.mime_type.toLowerCase() === 'image/svg+xml') return false;
         return a.attachment_type === 'image';
@@ -99,6 +125,20 @@ function normalizeComment(comment, attachments) {
     };
 }
 
+// Safe empty response shape
+const EMPTY_RESPONSE = {
+    success: false,
+    access: null,
+    request: null,
+    comments: [],
+    decisions: [],
+    attachments: [],
+    todoTasks: [],
+    taskGroups: [],
+    assignableUsers: [],
+    assignableContacts: []
+};
+
 Deno.serve(async (req) => {
     const startTime = Date.now();
     
@@ -112,9 +152,11 @@ Deno.serve(async (req) => {
         });
     }
 
+    // Declare variables for error handler scope
+    let token, slug, requestId;
+
     try {
         const base44 = createClientFromRequest(req);
-        let token, slug, requestId;
         
         try {
             const contentType = req.headers.get('content-type');
@@ -138,57 +180,96 @@ Deno.serve(async (req) => {
             });
         }
 
-        // STEP A: Fetch request and validate access in parallel
-        const [requestResults, contactResults] = await Promise.all([
-            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
-            slug ? base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true }) : Promise.resolve([])
-        ]);
+        // --- STEP A: Fetch request (sequential, with retry) ---
+        const requestResults = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })
+        ));
+        const request = requestResults[0] || null;
 
-        const request = requestResults[0];
         if (!request) {
-            return Response.json({ error: 'Request not found' }, { 
-                status: 404,
+            return Response.json({ ...EMPTY_RESPONSE, error: 'Request not found' }, { 
+                status: 200,
                 headers: { 'Access-Control-Allow-Origin': '*' }
             });
         }
 
+        // --- STEP B: Resolve contact from slug ---
         let clientContactId;
         if (slug) {
+            await pause();
+            const contactResults = safeArray(await withRetry(() =>
+                base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
+            ));
             if (contactResults.length === 0) {
-                return Response.json({ error: 'Invalid slug' }, { 
-                    status: 403,
+                return Response.json({ ...EMPTY_RESPONSE, error: 'Invalid slug' }, { 
+                    status: 200,
                     headers: { 'Access-Control-Allow-Origin': '*' }
                 });
             }
             clientContactId = contactResults[0].id;
         }
 
+        // --- STEP C: Access check ---
+        await pause();
         const filter = { project_id: request.project_id, access_status: 'active' };
         if (token) filter.share_token = token;
         if (clientContactId) filter.client_contact_id = clientContactId;
 
-        const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
+        const accesses = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ProjectClientAccess.filter(filter)
+        ));
         
         if (accesses.length === 0) {
-            return Response.json({ error: 'Invalid access' }, { 
-                status: 403,
+            return Response.json({ ...EMPTY_RESPONSE, error: 'Invalid access' }, { 
+                status: 200,
                 headers: { 'Access-Control-Allow-Origin': '*' }
             });
         }
 
         const access = accesses[0];
 
-        // Fetch request-scoped data in parallel
-        const [commentsRaw, decisionsRaw, attachmentsRaw, todoTasksRaw, projectClientAccesses, taskGroupsRaw] = await Promise.all([
-            base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
-            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' }),
-            base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId }).catch(() => []),
-        ]);
+        // --- STEP D: Fetch request-scoped data SEQUENTIALLY ---
+        await pause();
+        const commentsRaw = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })
+        ));
 
-        // STEP B: Derive minimal ID sets
+        await pause();
+        const decisionsRaw = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })
+        ));
+
+        await pause();
+        const attachmentsRaw = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })
+        ));
+
+        await pause();
+        let todoTasksRaw = [];
+        try {
+            todoTasksRaw = safeArray(await withRetry(() =>
+                base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })
+            ));
+        } catch (e) {
+            console.warn('ToDoListTask fetch failed (non-fatal):', e.message);
+        }
+
+        await pause();
+        const projectClientAccesses = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' })
+        ));
+
+        await pause();
+        let taskGroupsRaw = [];
+        try {
+            taskGroupsRaw = safeArray(await withRetry(() =>
+                base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })
+            ));
+        } catch (e) {
+            console.warn('TaskGroup fetch failed (non-fatal):', e.message);
+        }
+
+        // --- STEP E: Derive minimal ID sets for user/contact enrichment ---
         const internalUserIds = new Set();
         const clientContactIds = new Set();
 
@@ -213,19 +294,25 @@ Deno.serve(async (req) => {
             if (pa.client_contact_id) clientContactIds.add(pa.client_contact_id);
         });
 
-        // STEP C: Fetch ONLY referenced users and contacts
-        const [users, clientContacts] = await Promise.all([
-            fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
-            fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
-        ]);
+        // --- STEP F: Fetch referenced users and contacts SEQUENTIALLY ---
+        await pause();
+        const users = safeArray(await fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]));
 
-        const teamMembers = await base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true });
+        await pause();
+        const clientContacts = safeArray(await fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]));
+
+        await pause();
+        const teamMembers = safeArray(await withRetry(() =>
+            base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true })
+        ));
+
         const akUserIds = teamMembers.filter(tm => tm.user_id).map(tm => tm.user_id);
         const neededAkUserIds = akUserIds.filter(id => !internalUserIds.has(id));
         
         let akUsers = users;
         if (neededAkUserIds.length > 0) {
-            const additionalUsers = await fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds);
+            await pause();
+            const additionalUsers = safeArray(await fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds));
             akUsers = [...users, ...additionalUsers];
         }
 
@@ -338,8 +425,20 @@ Deno.serve(async (req) => {
             created_date: a.created_date
         }));
 
+        const typeInfo = getRequestTypeInfo(request.request_type);
+
         const executionTime = Date.now() - startTime;
-        console.log(`[publicClientRequestDetail] ${executionTime}ms | Users:${users.length} Contacts:${clientContacts.length}`);
+        console.log('REQUEST DETAIL RESPONSE', {
+            requestId,
+            hasRequest: !!request,
+            requestType: request.request_type || null,
+            commentsCount: enrichedComments.length,
+            decisionsCount: enrichedDecisions.length,
+            attachmentsCount: minimalAttachments.length,
+            todoTasksCount: enrichedTodoTasks.length,
+            taskGroupsCount: taskGroups.length,
+            executionTime
+        });
 
         return Response.json({
             success: true,
@@ -348,23 +447,20 @@ Deno.serve(async (req) => {
                 access_role: access.access_role,
                 client_contact_id: access.client_contact_id
             },
-            request: (() => {
-                const typeInfo = getRequestTypeInfo(request.request_type);
-                return {
-                    id: request.id,
-                    title: request.title,
-                    body: request.body,
-                    request_type: request.request_type,
-                    request_type_label: typeInfo.label,
-                    request_type_color: typeInfo.color,
-                    status: request.status,
-                    due_date: request.due_date,
-                    posted_at: request.posted_at,
-                    project_id: request.project_id,
-                    created_date: request.created_date,
-                    creator: requestCreator
-                };
-            })(),
+            request: {
+                id: request.id,
+                title: request.title,
+                body: request.body,
+                request_type: request.request_type || null,
+                request_type_label: typeInfo.label,
+                request_type_color: typeInfo.color,
+                status: request.status,
+                due_date: request.due_date,
+                posted_at: request.posted_at,
+                project_id: request.project_id,
+                created_date: request.created_date,
+                creator: requestCreator
+            },
             comments: enrichedComments,
             decisions: enrichedDecisions,
             attachments: minimalAttachments,
@@ -377,24 +473,33 @@ Deno.serve(async (req) => {
         });
 
     } catch (error) {
-        console.error("Error in publicClientRequestDetail:", error);
-        return Response.json({ error: error.message }, { 
-            status: 500,
+        console.error('UPSTREAM REQUEST DETAIL FAILURE', {
+            requestId,
+            slug,
+            message: error.message,
+            status: error?.status,
+        });
+        // Never crash the endpoint — return safe empty shape
+        return Response.json({
+            ...EMPTY_RESPONSE,
+            error: error.message
+        }, { 
+            status: 200,
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
     }
 });
 
-// Batched fetch by IDs — filters out non-ObjectId values (e.g. service role IDs)
+// Batched fetch by IDs — filters out non-ObjectId values
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 async function fetchByIdsBatched(entity, ids) {
     if (!ids || ids.length === 0) return [];
     const uniqueIds = [...new Set(ids)].filter(id => OBJECT_ID_RE.test(id));
     if (uniqueIds.length === 0) return [];
     try {
-        return await entity.filter({ id: { $in: uniqueIds } });
+        return safeArray(await withRetry(() => entity.filter({ id: { $in: uniqueIds } })));
     } catch (error) {
-        console.error('fetchByIdsBatched error:', error);
+        console.error('fetchByIdsBatched error:', error.message);
         return [];
     }
 }

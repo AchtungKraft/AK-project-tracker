@@ -60,16 +60,18 @@ export default function ClientFeedbackRequestDetail() {
               requestId, 
               token, 
               slug 
-            }).catch(err => console.error('Failed to track view:', err));
+            }).catch(() => {});
           });
         }
       }
       return response.data;
     },
     enabled: !!requestId && (!!token || !!slug),
-    staleTime: 30_000, // 30 seconds cache
-    gcTime: 300_000, // 5 minutes
+    staleTime: 30000,
+    gcTime: 300000,
     refetchOnWindowFocus: false,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3000),
   });
 
   const request = requestData?.request;
