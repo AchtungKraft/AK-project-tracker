@@ -100,7 +100,7 @@ export default function ProjectDetail() {
   const { data: projectBuckets = [] } = useQuery({
     queryKey: ['projectBuckets', projectId],
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
-    enabled: !!projectId && activeTab === 'tasks',
+    enabled: !!projectId && needsTaskData,
     ...PROJECT_DATA_OPTS,
   });
 
