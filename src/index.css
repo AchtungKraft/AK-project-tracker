@@ -228,3 +228,35 @@ button:focus-visible {
 .comment-html-content ul ul ul {
   list-style-type: square;
 }
+
+/* ───────── LINK BLOCK FORMATTING ───────── */
+.journal-content a,
+.comment-html-content a {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #93c5fd;
+  text-decoration: none;
+  margin-top: 1.25rem;
+}
+.journal-content a:hover,
+.comment-html-content a:hover {
+  text-decoration: underline;
+}
+/* Description text following links */
+.journal-content a + *,
+.comment-html-content a + * {
+  display: block;
+  font-size: 0.85rem;
+  color: #9ca3af;
+  line-height: 1.5;
+  margin-top: 0.25rem;
+  margin-bottom: 0.75rem;
+  max-width: 60ch;
+}
+/* Divider between link blocks */
+.journal-content a:not(:first-of-type),
+.comment-html-content a:not(:first-of-type) {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 0.75rem;
+}
