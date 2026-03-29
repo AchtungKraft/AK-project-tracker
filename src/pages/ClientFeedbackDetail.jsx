@@ -27,6 +27,7 @@ import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
+import HtmlContent from "@/components/shared/HtmlContent";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -604,9 +605,13 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
 
-              {request.body && (
+              {(request.body || request.content_html) && (
                 <div className={cn("bg-gray-800/50 rounded-lg", isMobile ? "p-2" : "p-3")}>
-                  <p className={cn("text-gray-300 whitespace-pre-wrap", isMobile ? "text-sm" : "")}>{request.body}</p>
+                  <HtmlContent
+                    html={request.content_html}
+                    fallback={request.body}
+                    className={isMobile ? "text-sm" : ""}
+                  />
                 </div>
               )}
 

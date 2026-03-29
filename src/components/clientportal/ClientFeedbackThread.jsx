@@ -16,6 +16,7 @@ import { sanitizeJournalHtml } from "@/components/journal/journalSanitizer";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
 import { getLinkTypeIcon } from "@/components/journal/JournalLinksEditor";
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
+import HtmlContent from "@/components/shared/HtmlContent";
 
 // ── CommentContentBlock: unified rendering with proper priority chain ──
 function CommentContentBlock({ comment }) {
@@ -255,7 +256,12 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         {/* Render comment content — priority: content_html → content_fallback → body */}
         <CommentContentBlock comment={event.comment} />
         {event.decision?.note && (
-          <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{event.decision.note}</p>
+          <div className="mb-3 pl-0 md:pl-10 text-sm md:text-base">
+            <HtmlContent
+              html={event.decision.content_html || null}
+              fallback={event.decision.note}
+            />
+          </div>
         )}
 
         {event.type === 'decision' && event.selectedImages?.length > 0 && (
