@@ -268,11 +268,11 @@ export default function VisualEditAgent() {
 		elements.forEach(element => {
 			if (replace) {
 				// For reverts, replace classes completely
-				element.className = classes;
+				element.setAttribute('class', classes);
 			} else {
 				// For normal updates, merge with existing classes
-				const currentClasses = element.className?.baseVal || element.className || '';
-				element.className = twMerge(currentClasses, classes);
+				const currentClasses = element.getAttribute('class') || '';
+				element.setAttribute('class', twMerge(currentClasses, classes));
 			}
 		});
 
