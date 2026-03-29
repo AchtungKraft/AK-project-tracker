@@ -1,14 +1,40 @@
 import { sanitizeJournalHtml } from "@/components/journal/journalSanitizer";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
 
-/**
- * Shared HTML content renderer.
- * Uses the same sanitization pipeline as the client portal for consistent rendering.
- * 
- * Priority: html → fallback → nothing
- * If the content contains HTML tags, renders with prose styling.
- * Otherwise falls back to plain text whitespace-pre-wrap.
- */
+const LIST_INDENT_STYLES = `
+.comment-html-content ol,
+.comment-html-content ul {
+  padding-left: 1.5rem !important;
+  margin-left: 0 !important;
+}
+.comment-html-content ol ol,
+.comment-html-content ul ul,
+.comment-html-content ol ul,
+.comment-html-content ul ol {
+  padding-left: 1.5rem !important;
+}
+.comment-html-content li {
+  margin: 0.25rem 0;
+}
+.comment-html-content ol {
+  list-style-type: decimal;
+}
+.comment-html-content ol ol {
+  list-style-type: lower-alpha;
+}
+.comment-html-content ol ol ol {
+  list-style-type: lower-roman;
+}
+.comment-html-content ul {
+  list-style-type: disc;
+}
+.comment-html-content ul ul {
+  list-style-type: circle;
+}
+.comment-html-content ul ul ul {
+  list-style-type: square;
+}
+`;
 
 function isHtml(str) {
   if (!str) return false;
@@ -24,8 +50,9 @@ export default function HtmlContent({ html, fallback, className = "" }) {
     return (
       <>
         <JournalProseStyles />
+        <style dangerouslySetInnerHTML={{ __html: LIST_INDENT_STYLES }} />
         <div
-          className={`journal-content journal-table-wrap prose prose-invert max-w-none ${className}`}
+          className={`comment-html-content journal-content journal-table-wrap prose prose-invert max-w-none ${className}`}
           dangerouslySetInnerHTML={{ __html: safe }}
         />
       </>

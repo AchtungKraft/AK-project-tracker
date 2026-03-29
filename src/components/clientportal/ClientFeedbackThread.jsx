@@ -33,12 +33,10 @@ function CommentContentBlock({ comment }) {
       {/* Content: content_html → content_fallback → body */}
       {hasHtml ? (
         <div className="mb-3 pl-0 md:pl-10">
-          <div className="journal-table-wrap">
-            <div 
-              className="journal-prose prose prose-invert max-w-none text-sm md:text-base"
-              dangerouslySetInnerHTML={{ __html: sanitizeJournalHtml(c.content_html) }}
-            />
-          </div>
+          <HtmlContent
+            html={c.content_html}
+            className="text-sm md:text-base"
+          />
         </div>
       ) : hasFallback ? (
         <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.content_fallback}</p>
