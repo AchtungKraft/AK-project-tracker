@@ -25,7 +25,7 @@ export default function HtmlContent({ html, fallback, className = "" }) {
       <>
         <JournalProseStyles />
         <div
-          className={`comment-html-content journal-content journal-table-wrap prose prose-invert max-w-none ${className}`}
+          className={`comment-html-content comment-body-html journal-content journal-table-wrap prose prose-invert max-w-none ${className}`}
           dangerouslySetInnerHTML={{ __html: safe }}
         />
       </>
