@@ -232,7 +232,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, o
           service_commitment_id: commitmentId,
           type,
           description: description.trim(),
-          vendor_id: vendorId || null,
+          vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
           cost: parseFloat(cost) || 0,
           billing_rate: parseFloat(billingRate) || 0,
           quantity: parseFloat(quantity) || 1,
@@ -244,7 +244,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, o
           line_item_id: lineItem.id,
           type,
           description: description.trim(),
-          vendor_id: vendorId || null,
+          vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
           cost: parseFloat(cost) || 0,
           billing_rate: parseFloat(billingRate) || 0,
           quantity: parseFloat(quantity) || 1,
@@ -317,7 +317,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, o
                     <SelectValue placeholder="Optional..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={null}>None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {serviceVendors.map(v => (
                       <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                     ))}

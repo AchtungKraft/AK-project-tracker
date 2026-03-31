@@ -5,11 +5,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, ArrowRight, Trash2, ChevronDown, ChevronRight, List } from "lucide-react";
+import { MoreVertical, ArrowRight, Trash2, ChevronDown, ChevronRight, List, Pencil } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceLineItemManager from "@/components/supply/ServiceLineItemManager";
+import EditServiceModal from "@/components/supply/EditServiceModal";
+import DeleteServiceConfirmModal from "@/components/supply/DeleteServiceConfirmModal";
 import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -41,6 +44,8 @@ export default function ServiceCommitmentCard({
   onTotalsChanged,
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = commitment.status || "planned";
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.planned;
   const nextStatus = NEXT_STATUS[status];
@@ -129,10 +134,19 @@ export default function ServiceCommitmentCard({
                 {expanded ? "Hide" : "Show"} Line Items
               </DropdownMenuItem>
               {status !== "billed" && (
-                <DropdownMenuItem onClick={() => onDelete(commitment.id)} className="text-red-400">
-                  <Trash2 className="w-3.5 h-3.5 mr-2" />
-                  Delete
+                <DropdownMenuItem onClick={() => setShowEditModal(true)} className="text-gray-200">
+                  <Pencil className="w-3.5 h-3.5 mr-2" />
+                  Edit Service
                 </DropdownMenuItem>
+              )}
+              {status !== "billed" && (
+                <>
+                  <DropdownMenuSeparator className="bg-gray-700" />
+                  <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -147,6 +161,26 @@ export default function ServiceCommitmentCard({
             onTotalsChanged={onTotalsChanged}
           />
         </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <EditServiceModal
+          commitment={commitment}
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={onTotalsChanged}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <DeleteServiceConfirmModal
+          commitment={commitment}
+          open={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onSuccess={() => onDelete?.(commitment.id, true)}
+        />
       )}
     </div>
   );

@@ -33,6 +33,9 @@ Deno.serve(async (req) => {
       case 'UPDATE_COST':
         result = await updateCost(base44, user, payload);
         break;
+      case 'UPDATE_SERVICE':
+        result = await updateService(base44, user, payload);
+        break;
       case 'DELETE':
         result = await deleteServiceCommitment(base44, user, payload);
         break;
@@ -145,6 +148,35 @@ async function updateCost(base44, user, payload) {
 
   await base44.asServiceRole.entities.ServiceCommitment.update(commitment_id, updates);
   return { commitment_id, updates, action: 'COST_UPDATED' };
+}
+
+// ── UPDATE SERVICE (core fields) ──
+async function updateService(base44, user, payload) {
+  const { commitment_id, service_id, vendor_id, description, notes, quantity } = payload;
+  if (!commitment_id) throw new Error('commitment_id required');
+
+  const [c] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: commitment_id });
+  if (!c) throw new Error('ServiceCommitment not found');
+  if (c.status === 'billed') throw new Error('Cannot edit a billed service commitment');
+
+  const updates = {};
+  if (service_id !== undefined) updates.service_id = service_id;
+  if (vendor_id !== undefined) updates.vendor_id = vendor_id || null;
+  if (description !== undefined) {
+    if (!description.trim()) throw new Error('description cannot be empty');
+    updates.description = description.trim();
+  }
+  if (notes !== undefined) updates.notes = notes || null;
+  if (quantity !== undefined) {
+    if (quantity < 1) throw new Error('quantity must be at least 1');
+    updates.quantity = quantity;
+  }
+
+  if (Object.keys(updates).length === 0) throw new Error('No fields to update');
+
+  await base44.asServiceRole.entities.ServiceCommitment.update(commitment_id, updates);
+  console.log(`[UPDATE_SERVICE] commitment=${commitment_id} by=${user.email} fields=${Object.keys(updates).join(',')}`);
+  return { commitment_id, updates, action: 'SERVICE_UPDATED' };
 }
 
 // ── DELETE ──

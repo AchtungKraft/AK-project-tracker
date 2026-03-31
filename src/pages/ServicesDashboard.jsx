@@ -131,8 +131,12 @@ export default function ServicesDashboard() {
     }
   };
 
-  const handleDelete = async (commitmentId) => {
-    if (!confirm("Delete this service commitment?")) return;
+  // Called after delete confirmation modal succeeds — alreadyDeleted flag from card
+  const handleDelete = async (commitmentId, alreadyDeleted) => {
+    if (alreadyDeleted) {
+      invalidate();
+      return;
+    }
     try {
       await base44.functions.invoke("executeServiceAction", {
         action_type: "DELETE",
