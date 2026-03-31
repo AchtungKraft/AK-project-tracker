@@ -1,1128 +1,404 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * executeSupplyAction - Unified Supply Dispatcher
- * 
- * This is the ONLY entry point for supply mutations.
- * No component may write to commitment/inventory entities directly.
- * 
- * STABILIZATION FIX: All helper functions (rebalance, recompute) are INLINED
- * to avoid nested asServiceRole.functions.invoke() calls that cause 403 errors.
+ * PHASE 1 CANONICAL ALIGNMENT:
+ * - All logic uses canonical: required_total, reserved_from_stock, covered_from_po, qty_installed
+ * - Deprecated fields written for compat ONLY, marked DEPRECATED_COMPAT
+ * - Mismatch warnings logged
  */
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
-  }
-
+  if (req.method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
     const { action_type, commitment_ids, payload = {}, dry_run = false } = await req.json();
-    
-    if (!action_type) {
-      return Response.json({ error: 'action_type required' }, { status: 400 });
-    }
-
-    const timestamp = new Date().toISOString();
-    const context = {
-      base44,
-      user,
-      timestamp,
-      dry_run,
-      lifecycle_events: [],
-      inventory_audit_logs: [],
-      mutations: []
-    };
-
+    if (!action_type) return Response.json({ error: 'action_type required' }, { status: 400 });
+    const ctx = { base44, user, timestamp: new Date().toISOString(), dry_run, lifecycle_events: [], inventory_audit_logs: [], mutations: [], warnings: [] };
     let result;
-
     switch (action_type) {
-      case 'ADJUST_REQUIRED':
-        result = await adjustRequired(context, commitment_ids, payload);
-        break;
-      case 'AUTO_RESERVE':
-        result = await autoReserve(context, commitment_ids, payload);
-        break;
-      case 'CREATE_PO':
-        result = await createPO(context, commitment_ids, payload);
-        break;
-      case 'RECEIVE':
-        result = await receive(context, commitment_ids, payload);
-        break;
-      case 'ADD_STOCK':
-      case 'RECEIVE_STOCK':
-        result = await addStock(context, payload);
-        break;
-      case 'INSTALL':
-        result = await install(context, commitment_ids, payload);
-        break;
-      case 'REVERSE_INSTALL':
-        result = await reverseInstall(context, commitment_ids, payload);
-        break;
-      case 'ALLOCATE_POOL':
-        throw new Error('ALLOCATE_POOL action has been removed. Use InvoiceBatch for billing.');
-      case 'CANCEL_COMMITMENT':
-        result = await cancelCommitment(context, commitment_ids, payload);
-        break;
-      default:
-        return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
+      case 'ADJUST_REQUIRED': result = await adjustRequired(ctx, commitment_ids, payload); break;
+      case 'AUTO_RESERVE': result = await autoReserve(ctx, commitment_ids, payload); break;
+      case 'CREATE_PO': result = await createPO(ctx, commitment_ids, payload); break;
+      case 'RECEIVE': result = await receive(ctx, commitment_ids, payload); break;
+      case 'ADD_STOCK': case 'RECEIVE_STOCK': result = await addStock(ctx, payload); break;
+      case 'INSTALL': result = await install(ctx, commitment_ids, payload); break;
+      case 'REVERSE_INSTALL': result = await reverseInstall(ctx, commitment_ids, payload); break;
+      case 'ALLOCATE_POOL': throw new Error('ALLOCATE_POOL removed. Use InvoiceBatch.');
+      case 'CANCEL_COMMITMENT': result = await cancelCommitment(ctx, commitment_ids, payload); break;
+      default: return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
     }
-
-    // Write lifecycle events if not dry run
-    if (!dry_run && context.lifecycle_events.length > 0) {
-      for (const event of context.lifecycle_events) {
-        if (event.commitment_id) {
-          await base44.asServiceRole.entities.LifecycleEvent.create(event);
-        }
-      }
+    if (!dry_run) {
+      for (const e of ctx.lifecycle_events) { if (e.commitment_id) await base44.asServiceRole.entities.LifecycleEvent.create(e); }
+      for (const l of ctx.inventory_audit_logs) await base44.asServiceRole.entities.InventoryAuditLog.create(l);
     }
-    
-    // Write inventory audit logs if not dry run
-    if (!dry_run && context.inventory_audit_logs && context.inventory_audit_logs.length > 0) {
-      for (const log of context.inventory_audit_logs) {
-        await base44.asServiceRole.entities.InventoryAuditLog.create(log);
-      }
-    }
-
-    const rebalance_occurred = context.mutations.some(m => 
-      m.action === 'RECEIVE' || m.action === 'ADD_STOCK' || m.action === 'REVERSE_INSTALL'
-    );
-    const toast_notification = rebalance_occurred 
-      ? { message: 'Stock auto-allocated to project', type: 'success' }
-      : null;
-
+    if (ctx.warnings.length > 0) console.warn(`[PHASE1] ${action_type}: ${ctx.warnings.map(w => w.msg).join('; ')}`);
     return Response.json({
-      toast_notification,
-      success: true,
-      action_type,
-      dry_run,
-      ...result,
-      lifecycle_events: context.lifecycle_events.length,
-      mutations: context.mutations
+      toast_notification: ctx.mutations.some(m => m.action === 'RECEIVE' || m.action === 'ADD_STOCK' || m.action === 'REVERSE_INSTALL') ? { message: 'Stock auto-allocated to project', type: 'success' } : null,
+      success: true, action_type, dry_run, ...result,
+      lifecycle_events: ctx.lifecycle_events.length, mutations: ctx.mutations,
+      phase1_warnings: ctx.warnings.length > 0 ? ctx.warnings : undefined
     });
-
   } catch (error) {
     console.error("executeSupplyAction error:", error);
-    return Response.json({ 
-      success: false,
-      error: error.message,
-      action_failed: true
-    }, { status: 500 });
+    return Response.json({ success: false, error: error.message, action_failed: true }, { status: 500 });
   }
 });
 
-// ============================================================================
-// INLINED HELPERS (avoid nested function.invoke calls)
-// ============================================================================
+// ── PHASE 1 HELPERS ──
 
-/**
- * INLINED rebalancePartReservations - CANONICAL reservation math
- * Replaces: base44.asServiceRole.functions.invoke('rebalancePartReservations', ...)
- */
-async function inlineRebalance(ctx, part_id, isDryRun) {
+function readCanonical(c, ctx) {
+  const cn = { required_total: c.required_total ?? 0, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
+  if (ctx && c.qty_committed !== undefined && c.qty_committed !== cn.required_total)
+    ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_committed(${c.qty_committed})!=required_total(${cn.required_total})` });
+  if (ctx && c.qty_reserved !== undefined && c.qty_reserved !== cn.reserved_from_stock)
+    ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})` });
+  cn.gap = Math.max(0, cn.required_total - cn.reserved_from_stock - cn.covered_from_po);
+  cn.coverage = cn.reserved_from_stock + cn.covered_from_po;
+  return cn;
+}
+
+function covStatus(req, res, cov) {
+  const t = res + cov; if (t >= req && req > 0) return 'FULLY_COVERED'; if (t > 0) return 'PARTIALLY_COVERED'; return 'NOT_COVERED';
+}
+
+function mapSrc(s) { return ({ SHOP_PURCHASED:'VENDOR', VENDOR:'VENDOR', CLIENT_SUPPLIED:'CLIENT_SUPPLIED', AK_CUSTOM:'AK_CUSTOM', TAKE_OFF:'TAKE_OFF', STOCK:'STOCK' })[s] || 'VENDOR'; }
+
+// ── INLINED REBALANCE ──
+
+async function inlineRebalance(ctx, part_id, isDry) {
   const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: part_id });
   if (!part) throw new Error(`REBALANCE_PART_NOT_FOUND: ${part_id}`);
-
-  const physical_stock = part.physical_stock ?? 0;
-
-  const allCommitments = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
-  const openCommitments = allCommitments.filter(c => 
-    c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed'
-  );
-
-  // Priority sort: highest priority first, then FIFO
-  const priorityOrder = { 'Critical': 4, 'High': 3, 'Normal': 2, 'Low': 1 };
-  openCommitments.sort((a, b) => {
-    const aPriority = priorityOrder[a.priority] || 2;
-    const bPriority = priorityOrder[b.priority] || 2;
-    if (bPriority !== aPriority) return bPriority - aPriority;
-    const aDate = new Date(a.created_date);
-    const bDate = new Date(b.created_date);
-    if (aDate.getTime() !== bDate.getTime()) return aDate - bDate;
-    return (a.id || '').localeCompare(b.id || '');
-  });
-
-  let remaining_stock = physical_stock;
-  const updates = [];
-
-  for (const c of openCommitments) {
-    const required_total = c.required_total ?? 0;
-    const qty_installed = c.qty_installed ?? 0;
-    const covered_from_po = c.covered_from_po ?? 0;
-    const current_reserved = c.reserved_from_stock ?? 0;
-    const current_to_order = c.qty_to_order ?? 0;
-
-    const remaining_required = Math.max(0, required_total - qty_installed);
-    const need_from_stock = Math.max(0, remaining_required - covered_from_po);
-    const new_reserved = Math.min(remaining_stock, need_from_stock);
-    const new_to_order = Math.max(0, remaining_required - new_reserved - covered_from_po);
-
-    remaining_stock = Math.max(0, remaining_stock - new_reserved);
-
-    const needs_update = (new_reserved !== current_reserved) || (new_to_order !== current_to_order);
-
-    if (needs_update) {
-      updates.push({
-        commitment_id: c.id,
-        project_id: c.project_id,
-        required_total,
-        qty_installed,
-        remaining_required,
-        covered_from_po,
-        old_reserved: current_reserved,
-        new_reserved,
-        old_to_order: current_to_order,
-        new_to_order,
-        delta_reserved: new_reserved - current_reserved
-      });
-    }
-
-    // Invariant check
-    const sum = new_reserved + covered_from_po + new_to_order;
-    if (Math.abs(sum - remaining_required) > 0.001) {
-      throw new Error(`REBALANCE_INVARIANT_VIOLATION: commitment=${c.id} sum=${sum} expected=${remaining_required}`);
-    }
+  const phys = part.physical_stock ?? 0;
+  const all = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
+  const open = all.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
+  const prio = { Critical:4, High:3, Normal:2, Low:1 };
+  open.sort((a,b) => { const ap=prio[a.priority]||2, bp=prio[b.priority]||2; if(bp!==ap) return bp-ap; const ad=new Date(a.created_date), bd=new Date(b.created_date); if(ad.getTime()!==bd.getTime()) return ad-bd; return (a.id||'').localeCompare(b.id||''); });
+  let rem = phys; const ups = [];
+  for (const c of open) {
+    const cn = readCanonical(c, ctx);
+    const remReq = Math.max(0, cn.required_total - cn.qty_installed);
+    const need = Math.max(0, remReq - cn.covered_from_po);
+    const newRes = Math.min(rem, need);
+    const newTO = Math.max(0, remReq - newRes - cn.covered_from_po);
+    rem = Math.max(0, rem - newRes);
+    if (newRes !== cn.reserved_from_stock || newTO !== (c.qty_to_order ?? 0))
+      ups.push({ commitment_id:c.id, project_id:c.project_id, required_total:cn.required_total, qty_installed:cn.qty_installed, covered_from_po:cn.covered_from_po, old_reserved:cn.reserved_from_stock, new_reserved:newRes, old_to_order:c.qty_to_order??0, new_to_order:newTO, delta_reserved:newRes-cn.reserved_from_stock });
+    const sum = newRes + cn.covered_from_po + newTO;
+    if (Math.abs(sum - remReq) > 0.001) throw new Error(`REBALANCE_INVARIANT: c=${c.id} sum=${sum} exp=${remReq}`);
   }
-
-  // Over-allocation check
-  const total_reserved = openCommitments.reduce((sum, c) => {
-    const update = updates.find(u => u.commitment_id === c.id);
-    return sum + (update ? update.new_reserved : (c.reserved_from_stock ?? 0));
-  }, 0);
-
-  if (total_reserved > physical_stock + 0.001) {
-    throw new Error(`REBALANCE_OVER_ALLOCATION: physical=${physical_stock} total_reserved=${total_reserved}`);
+  const totRes = open.reduce((s,c) => { const u=ups.find(x=>x.commitment_id===c.id); return s+(u?u.new_reserved:(c.reserved_from_stock??0)); }, 0);
+  if (totRes > phys + 0.001) throw new Error(`REBALANCE_OVER_ALLOC: phys=${phys} tot=${totRes}`);
+  if (!isDry && ups.length > 0) {
+    for (const u of ups) await ctx.base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, { reserved_from_stock:u.new_reserved, qty_reserved:u.new_reserved, qty_to_order:u.new_to_order, last_recomputed_at:ctx.timestamp });
   }
-
-  // Apply updates
-  if (!isDryRun && updates.length > 0) {
-    for (const u of updates) {
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, {
-        reserved_from_stock: u.new_reserved,
-        qty_reserved: u.new_reserved,
-        qty_to_order: u.new_to_order,
-        last_recomputed_at: ctx.timestamp
-      });
-    }
-  }
-
-  return {
-    success: true,
-    part_id,
-    physical_stock,
-    commitments_updated: updates.length,
-    remaining_stock_after: remaining_stock,
-    updates,
-  };
+  return { success:true, part_id, physical_stock:phys, commitments_updated:ups.length, remaining_stock_after:rem, updates:ups };
 }
 
-/**
- * INLINED recomputePartPhysicalStock
- * Replaces: base44.asServiceRole.functions.invoke('recomputePartPhysicalStock', ...)
- */
-async function inlineRecomputePhysicalStock(ctx, part_id, isDryRun) {
-  const [parts, inventoryItems] = await Promise.all([
-    ctx.base44.asServiceRole.entities.Part.filter({ id: part_id }),
-    ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id })
-  ]);
-
-  const part = parts[0];
-  if (!part) throw new Error('Part not found for recompute');
-
-  const computed_physical_stock = inventoryItems.reduce((sum, item) => {
-    return sum + (item.quantity_on_hand ?? 0);
-  }, 0);
-
-  const current_physical_stock = part.physical_stock ?? 0;
-  const needs_update = Math.abs(computed_physical_stock - current_physical_stock) > 0.001;
-
-  if (needs_update && !isDryRun) {
-    await ctx.base44.asServiceRole.entities.Part.update(part_id, {
-      physical_stock: computed_physical_stock
-    });
-  }
-
-  return { computed_physical_stock, current_physical_stock, needs_update, updated: needs_update && !isDryRun };
+async function inlineRecompute(ctx, part_id, isDry) {
+  const [[part], items] = await Promise.all([ctx.base44.asServiceRole.entities.Part.filter({id:part_id}), ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id})]);
+  if (!part) throw new Error('Part not found');
+  const computed = items.reduce((s,i) => s+(i.quantity_on_hand??0), 0);
+  const cur = part.physical_stock ?? 0;
+  const need = Math.abs(computed-cur) > 0.001;
+  if (need && !isDry) await ctx.base44.asServiceRole.entities.Part.update(part_id, { physical_stock:computed });
+  return { computed_physical_stock:computed, current_physical_stock:cur, needs_update:need, updated:need&&!isDry };
 }
 
-// ============================================================================
-// ACTION IMPLEMENTATIONS
-// ============================================================================
-
-function mapSourceType(source_type) {
-  const mapping = {
-    'SHOP_PURCHASED': 'VENDOR', 'VENDOR': 'VENDOR',
-    'CLIENT_SUPPLIED': 'CLIENT_SUPPLIED', 'AK_CUSTOM': 'AK_CUSTOM',
-    'TAKE_OFF': 'TAKE_OFF', 'STOCK': 'STOCK'
-  };
-  return mapping[source_type] || 'VENDOR';
-}
+// ── ACTIONS ──
 
 async function adjustRequired(ctx, commitment_ids, payload) {
-  const { 
-    required_total_delta, required_total_set, new_required_total,
-    source_type = 'SHOP_PURCHASED', project_id, part_id,
-    reopen_if_closed = false
-  } = payload;
+  const { required_total_delta, required_total_set, new_required_total, source_type='SHOP_PURCHASED', project_id, part_id, reopen_if_closed=false } = payload;
+  const effSet = required_total_set ?? new_required_total;
+  if (effSet === undefined && required_total_delta === undefined) throw new Error('required_total_delta or required_total_set required');
+  let cid = commitment_ids?.[0], commitment=null, part=null, isNew=false, wasReopened=false;
 
-  const effectiveRequiredSet = required_total_set ?? new_required_total;
-  
-  if (effectiveRequiredSet === undefined && required_total_delta === undefined) {
-    throw new Error('Either required_total_delta or required_total_set must be provided');
-  }
+  if (cid) { const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); commitment=c; if(!c) throw new Error('Commitment not found'); if(reopen_if_closed&&['closed','cancelled'].includes(c.commitment_status)) wasReopened=true; }
 
-  let commitmentId = commitment_ids?.[0];
-  let commitment = null;
-  let part = null;
-  let isNewCommitment = false;
-  let wasReopened = false;
-
-  if (commitmentId) {
-    const commitments = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-    commitment = commitments[0];
-    if (!commitment) throw new Error('Commitment not found');
-    if (reopen_if_closed && ['closed', 'cancelled'].includes(commitment.commitment_status)) {
-      wasReopened = true;
-    }
-  }
-
-  if (!commitmentId) {
-    if (!project_id || !part_id) throw new Error('Either commitment_id OR (project_id + part_id) required');
-
-    const existingCommitments = await ctx.base44.entities.PartCommitment.filter({
-      project_id, part_id, is_archived: { $ne: true }
-    });
-
-    const activeCommitment = existingCommitments.find(c => !['cancelled', 'closed'].includes(c.commitment_status));
-    const closedCommitment = existingCommitments.find(c => ['cancelled', 'closed'].includes(c.commitment_status));
-
-    if (activeCommitment) {
-      commitment = activeCommitment;
-      commitmentId = commitment.id;
-    } else if (reopen_if_closed && closedCommitment) {
-      commitment = closedCommitment;
-      commitmentId = commitment.id;
-      wasReopened = true;
-    } else {
-      const parts = await ctx.base44.entities.Part.filter({ id: part_id });
-      part = parts[0];
-      if (!part) throw new Error('Part not found');
-
-      const initialRequired = effectiveRequiredSet ?? Math.max(1, required_total_delta ?? 1);
-      
-      if (ctx.dry_run) {
-        isNewCommitment = true;
-      } else {
-        const unit_cost = part.cost || 0;
-        const pricing_mode = part.pricing_mode || 'matrix';
-        let retail_effective = 0;
-        
-        if (pricing_mode === 'manual') {
-          if (!part.retail_override || part.retail_override <= 0) {
-            throw new Error(`PRICING_MODE_INVALID: Part ${part.part_name} has manual mode but no retail_override`);
-          }
-          retail_effective = part.retail_override;
-        } else {
-          retail_effective = Math.round(part.retail_matrix_price || 0);
-        }
-        
-        let pricing_integrity_status = 'ok';
-        if (unit_cost <= 0) pricing_integrity_status = 'missing_cost';
-        else if (retail_effective <= 0) pricing_integrity_status = 'missing_retail';
-        else if (retail_effective < unit_cost) pricing_integrity_status = 'margin_negative';
-        
+  if (!cid) {
+    if (!project_id||!part_id) throw new Error('commitment_id OR (project_id+part_id) required');
+    const ex = await ctx.base44.entities.PartCommitment.filter({ project_id, part_id, is_archived:{$ne:true} });
+    const active = ex.find(c=>!['cancelled','closed'].includes(c.commitment_status));
+    const closed = ex.find(c=>['cancelled','closed'].includes(c.commitment_status));
+    if (active) { commitment=active; cid=commitment.id; }
+    else if (reopen_if_closed && closed) { commitment=closed; cid=commitment.id; wasReopened=true; }
+    else {
+      const [p] = await ctx.base44.entities.Part.filter({id:part_id}); part=p; if(!p) throw new Error('Part not found');
+      const initReq = effSet ?? Math.max(1, required_total_delta ?? 1);
+      if (ctx.dry_run) { isNew=true; }
+      else {
+        const uc=p.cost||0, pm=p.pricing_mode||'matrix';
+        let re=0; if(pm==='manual'){if(!p.retail_override||p.retail_override<=0) throw new Error(`PRICING_MODE_INVALID: ${p.part_name}`); re=p.retail_override;} else re=Math.round(p.retail_matrix_price||0);
+        let pis='ok'; if(uc<=0) pis='missing_cost'; else if(re<=0) pis='missing_retail'; else if(re<uc) pis='margin_negative';
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
-          project_id, part_id,
-          required_total: initialRequired, reserved_from_stock: 0, covered_from_po: 0, qty_installed: 0,
-          supply_source_type: mapSourceType(source_type),
-          qty_committed: initialRequired, qty_reserved: 0, qty_to_order: initialRequired,
-          qty_ordered: 0, qty_received: 0,
-          commitment_status: 'planned', coverage_status: 'NOT_COVERED',
-          source_type: 'manual_attachment', billing_status: 'unbilled',
-          requires_prepay: payload.requires_prepay || false,
-          unit_cost_snapshot: unit_cost, unit_retail_snapshot: retail_effective,
-          planned_cost_total: unit_cost * initialRequired,
-          planned_retail_total: retail_effective * initialRequired,
-          pricing_integrity_status,
-          commitment_version: 1, state_version: 1, last_recomputed_at: ctx.timestamp
+          project_id, part_id, required_total:initReq, reserved_from_stock:0, covered_from_po:0, qty_installed:0,
+          supply_source_type:mapSrc(source_type), qty_committed:initReq, qty_reserved:0, qty_to_order:initReq, qty_ordered:0, qty_received:0,
+          commitment_status:'planned', coverage_status:'NOT_COVERED', source_type:'manual_attachment', billing_status:'unbilled',
+          requires_prepay:payload.requires_prepay||false, unit_cost_snapshot:uc, unit_retail_snapshot:re,
+          planned_cost_total:uc*initReq, planned_retail_total:re*initReq, pricing_integrity_status:pis,
+          commitment_version:1, state_version:1, last_recomputed_at:ctx.timestamp
         });
-
-        commitmentId = commitment.id;
-        isNewCommitment = true;
-        ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CREATE' });
-        ctx.lifecycle_events.push({
-          commitment_id: commitmentId, event_type: 'COMMITMENT_CREATED',
-          trigger_source: 'UNIFIED_ENGINE', triggered_by: ctx.user.email,
-          actor_email: ctx.user.email, part_id, project_id,
-          metadata: JSON.stringify({ required_total: initialRequired, source_type }),
-          event_date: ctx.timestamp
-        });
+        cid=commitment.id; isNew=true;
+        ctx.mutations.push({entity:'PartCommitment',id:cid,action:'CREATE'});
+        ctx.lifecycle_events.push({commitment_id:cid,event_type:'COMMITMENT_CREATED',trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,actor_email:ctx.user.email,part_id,project_id,metadata:JSON.stringify({required_total:initReq,source_type}),event_date:ctx.timestamp});
       }
     }
   }
 
-  if (!commitment && commitmentId) {
-    const commitments = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-    commitment = commitments[0];
-    if (!commitment) throw new Error('Commitment not found');
-    if (reopen_if_closed && ['closed', 'cancelled'].includes(commitment.commitment_status)) {
-      wasReopened = true;
-    }
-  }
+  if (!commitment&&cid) { const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); commitment=c; if(!c) throw new Error('Commitment not found'); if(reopen_if_closed&&['closed','cancelled'].includes(c.commitment_status)) wasReopened=true; }
+  if (!part) { const [p]=await ctx.base44.entities.Part.filter({id:commitment?.part_id||part_id}); part=p; if(!p) throw new Error('Part not found'); }
 
-  if (!part) {
-    const parts = await ctx.base44.entities.Part.filter({ id: commitment?.part_id || part_id });
-    part = parts[0];
-    if (!part) throw new Error('Part not found');
-  }
+  const cn = readCanonical(commitment, ctx);
+  const curReq = cn.required_total;
+  let newReq = effSet!==undefined ? Math.max(0,effSet) : Math.max(0,curReq+(required_total_delta??0));
+  const delta = newReq - curReq;
 
-  const current_required = commitment?.required_total ?? commitment?.qty_committed ?? 0;
-  let new_required;
-  
-  if (effectiveRequiredSet !== undefined) {
-    new_required = Math.max(0, effectiveRequiredSet);
-  } else {
-    new_required = Math.max(0, current_required + (required_total_delta ?? 0));
-  }
-  
-  // Delta commitment model enforcement
-  const delta = new_required - current_required;
-  
-  if (!isNewCommitment && delta > 0 && commitmentId) {
-    const has_lifecycle_progress = 
-      (commitment?.invoiced_qty || 0) > 0 ||
-      (commitment?.qty_installed || 0) > 0 ||
-      (commitment?.covered_from_po || 0) > 0;
-    
-    if (has_lifecycle_progress) {
-      if (ctx.dry_run) {
-        return { preview: { action: 'WILL_CREATE_SCOPE_ADDITION', commitment_id: commitmentId, delta } };
-      }
-      
-      // INLINE scope addition instead of nested function call
-      const unit_cost_snapshot = part.cost || 0;
-      const pricing_mode = part.pricing_mode || 'matrix';
-      let unit_retail_snapshot = 0;
-      if (pricing_mode === 'manual') {
-        unit_retail_snapshot = part.retail_override || 0;
-      } else {
-        unit_retail_snapshot = part.retail_matrix_price || 0;
-      }
-      
-      const scopeCommitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
-        project_id: commitment.project_id, part_id: part.id,
-        required_total: delta, reserved_from_stock: 0, covered_from_po: 0,
-        qty_installed: 0, invoiced_qty: 0, invoiced_amount: 0,
-        billing_status: 'unbilled', commitment_status: 'planned', coverage_status: 'NOT_COVERED',
-        source_type: 'scope_addition', parent_commitment_id: commitmentId,
-        allocation_source: 'manual_commitment',
-        unit_cost_snapshot, unit_retail_snapshot,
-        planned_cost_total: unit_cost_snapshot * delta,
-        planned_retail_total: unit_retail_snapshot * delta,
-        qty_committed: delta, qty_to_order: delta, qty_ordered: 0, qty_received: 0,
-        qty_reserved: 0, qty_allocated: 0, qty_cancelled: 0,
-        supply_source_type: 'VENDOR', order_line_item_ids: [],
-        commitment_version: 1, state_version: 0,
-        last_recomputed_at: ctx.timestamp,
-        requires_prepay: false,
+  // Scope addition for increases with lifecycle progress
+  if (!isNew && delta>0 && cid) {
+    const hasProg = (commitment?.invoiced_qty||0)>0 || cn.qty_installed>0 || cn.covered_from_po>0;
+    if (hasProg) {
+      if (ctx.dry_run) return {preview:{action:'WILL_CREATE_SCOPE_ADDITION',commitment_id:cid,delta}};
+      const ucs=part.cost||0, pm=part.pricing_mode||'matrix', urs=pm==='manual'?(part.retail_override||0):(part.retail_matrix_price||0);
+      const sc = await ctx.base44.asServiceRole.entities.PartCommitment.create({
+        project_id:commitment.project_id, part_id:part.id, required_total:delta, reserved_from_stock:0, covered_from_po:0, qty_installed:0,
+        invoiced_qty:0, invoiced_amount:0, billing_status:'unbilled', commitment_status:'planned', coverage_status:'NOT_COVERED',
+        source_type:'scope_addition', parent_commitment_id:cid, allocation_source:'manual_commitment',
+        unit_cost_snapshot:ucs, unit_retail_snapshot:urs, planned_cost_total:ucs*delta, planned_retail_total:urs*delta,
+        qty_committed:delta, qty_to_order:delta, qty_ordered:0, qty_received:0, qty_reserved:0, qty_allocated:0, qty_cancelled:0,
+        supply_source_type:'VENDOR', order_line_item_ids:[], commitment_version:1, state_version:0, last_recomputed_at:ctx.timestamp, requires_prepay:false
       });
-      
-      ctx.mutations.push({ entity: 'PartCommitment', id: scopeCommitment.id, action: 'SCOPE_ADDITION_CREATE' });
-      
-      return {
-        success: true, action: 'SCOPE_ADDITION_CREATED',
-        parent_commitment_id: commitmentId, new_commitment_id: scopeCommitment.id,
-        new_commitment: scopeCommitment, delta_qty: delta,
-        message: `Created scope addition commitment for +${delta} units.`
-      };
+      ctx.mutations.push({entity:'PartCommitment',id:sc.id,action:'SCOPE_ADDITION_CREATE'});
+      return {success:true,action:'SCOPE_ADDITION_CREATED',parent_commitment_id:cid,new_commitment_id:sc.id,new_commitment:sc,delta_qty:delta,message:`Scope addition +${delta} units.`};
     }
   }
-
-  const covered_from_po = commitment?.covered_from_po ?? 0;
 
   if (ctx.dry_run) {
-    const rebalancePreview = await inlineRebalance(ctx, part.id, true);
-    return {
-      preview: {
-        commitment_id: commitmentId ?? 'NEW', is_new_commitment: isNewCommitment || !commitmentId,
-        project_id: commitment?.project_id || project_id, part_id: part.id,
-        old_required: current_required, new_required, delta: new_required - current_required,
-        covered_from_po, rebalance_preview: rebalancePreview,
-      }
-    };
+    const rp = await inlineRebalance(ctx, part.id, true);
+    return {preview:{commitment_id:cid??'NEW',is_new_commitment:isNew||!cid,project_id:commitment?.project_id||project_id,part_id:part.id,old_required:curReq,new_required:newReq,delta,covered_from_po:cn.covered_from_po,rebalance_preview:rp}};
   }
 
-  // Persist changes
-  const pricing_mode = part.pricing_mode || 'matrix';
-  let retail_effective;
-  if (pricing_mode === 'manual') { retail_effective = part.retail_override || 0; }
-  else { retail_effective = Math.round(part.retail_matrix_price || 0); }
-  
-  const updateData = {
-    required_total: new_required, covered_from_po,
-    supply_source_type: mapSourceType(source_type),
-    qty_committed: new_required,
-    planned_cost_total: (commitment?.unit_cost_snapshot ?? part.cost ?? 0) * new_required,
-    planned_retail_total: (commitment?.unit_retail_snapshot ?? retail_effective) * new_required,
-    commitment_version: (commitment?.commitment_version ?? 0) + 1,
-    state_version: (commitment?.state_version ?? 0) + 1,
-    last_recomputed_at: ctx.timestamp
-  };
+  const pm=part.pricing_mode||'matrix', re=pm==='manual'?(part.retail_override||0):Math.round(part.retail_matrix_price||0);
+  const ud = { required_total:newReq, covered_from_po:cn.covered_from_po, supply_source_type:mapSrc(source_type), qty_committed:newReq,
+    planned_cost_total:(commitment?.unit_cost_snapshot??part.cost??0)*newReq, planned_retail_total:(commitment?.unit_retail_snapshot??re)*newReq,
+    commitment_version:(commitment?.commitment_version??0)+1, state_version:(commitment?.state_version??0)+1, last_recomputed_at:ctx.timestamp };
+  if (wasReopened) { ud.commitment_status='planned'; ud.coverage_status='NOT_COVERED'; ud.cancelled_at=null; ud.cancelled_reason=null; ud.cancelled_by=null; }
+  if (!isNew&&cid) await ctx.base44.asServiceRole.entities.PartCommitment.update(cid, ud);
+  ctx.mutations.push({entity:'PartCommitment',id:cid,action:'ADJUST_REQUIRED'});
 
-  if (wasReopened) {
-    updateData.commitment_status = 'planned';
-    updateData.coverage_status = 'NOT_COVERED';
-    updateData.cancelled_at = null;
-    updateData.cancelled_reason = null;
-    updateData.cancelled_by = null;
-  }
+  const rb = await inlineRebalance(ctx, part.id, false);
+  const uc = rb.updates?.find(u=>u.commitment_id===cid);
+  const fRes=uc?.new_reserved??0, fTO=uc?.new_to_order??0;
 
-  if (!isNewCommitment && commitmentId) {
-    await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, updateData);
-  }
+  if (!isNew && newReq!==curReq) ctx.lifecycle_events.push({commitment_id:cid,event_type:newReq>curReq?'QTY_INCREASED':'QTY_DECREASED',actor_email:ctx.user.email,trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,old_values:JSON.stringify({required_total:curReq}),new_values:JSON.stringify({required_total:newReq,reserved_from_stock:fRes}),part_id:part.id,project_id:commitment?.project_id||project_id,event_date:ctx.timestamp});
 
-  ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'ADJUST_REQUIRED' });
-  
-  // INLINE rebalance (replaces nested function call)
-  const rebalanceResult = await inlineRebalance(ctx, part.id, ctx.dry_run);
-  
-  const updatedCommitment = rebalanceResult.updates?.find(u => u.commitment_id === commitmentId);
-  const final_reserved = updatedCommitment?.new_reserved ?? 0;
-  const final_to_order = updatedCommitment?.new_to_order ?? 0;
-  
-  if (!isNewCommitment && new_required !== current_required) {
-    ctx.lifecycle_events.push({
-      commitment_id: commitmentId,
-      event_type: new_required > current_required ? 'QTY_INCREASED' : 'QTY_DECREASED',
-      actor_email: ctx.user.email, trigger_source: 'UNIFIED_ENGINE', triggered_by: ctx.user.email,
-      old_values: JSON.stringify({ required_total: current_required }),
-      new_values: JSON.stringify({ required_total: new_required, reserved_from_stock: final_reserved }),
-      part_id: part.id, project_id: commitment?.project_id || project_id,
-      event_date: ctx.timestamp
-    });
-  }
-
-  const [project] = await ctx.base44.entities.Project.filter({ id: commitment?.project_id || project_id });
-  const coverage_total = final_reserved + covered_from_po;
-  let coverage_status = 'NOT_COVERED';
-  if (coverage_total >= new_required && new_required > 0) coverage_status = 'FULLY_COVERED';
-  else if (coverage_total > 0) coverage_status = 'PARTIALLY_COVERED';
-  
-  return {
-    success: true, commitment_id: commitmentId, is_new_commitment: isNewCommitment,
-    required_total: new_required, reserved_from_stock: final_reserved,
-    covered_from_po, to_order: final_to_order, coverage_status,
-    project_id: commitment?.project_id || project_id, project_name: project?.name,
-    part_id: part.id, part_name: part.part_name, source_type,
-    next_action: final_to_order > 0 ? 'CREATE_PO' : 'COMPLETE',
-    rebalance_result: rebalanceResult
-  };
+  const [proj]=await ctx.base44.entities.Project.filter({id:commitment?.project_id||project_id});
+  return {success:true,commitment_id:cid,is_new_commitment:isNew,required_total:newReq,reserved_from_stock:fRes,covered_from_po:cn.covered_from_po,to_order:fTO,coverage_status:covStatus(newReq,fRes,cn.covered_from_po),project_id:commitment?.project_id||project_id,project_name:proj?.name,part_id:part.id,part_name:part.part_name,source_type,next_action:fTO>0?'CREATE_PO':'COMPLETE',rebalance_result:rb};
 }
 
 async function autoReserve(ctx, commitment_ids, payload) {
-  if (!commitment_ids || commitment_ids.length === 0) {
-    return { results: [], message: 'No commitments provided' };
-  }
-
-  const partIds = new Set();
-  const commitmentDetails = [];
-  
-  for (const commitmentId of commitment_ids) {
-    const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-    if (!commitment) continue;
-    partIds.add(commitment.part_id);
-    commitmentDetails.push({ commitment_id: commitmentId, part_id: commitment.part_id, old_reserved: commitment.reserved_from_stock ?? 0 });
-  }
-
-  const rebalanceResults = [];
-  for (const part_id of partIds) {
-    const rebalanceResult = await inlineRebalance(ctx, part_id, ctx.dry_run);
-    rebalanceResults.push(rebalanceResult);
-    if (!ctx.dry_run) ctx.mutations.push({ entity: 'Part', id: part_id, action: 'AUTO_RESERVE_REBALANCE' });
-  }
-
-  const results = commitmentDetails.map(cd => {
-    const partRebalance = rebalanceResults.find(r => r.part_id === cd.part_id);
-    const update = partRebalance?.updates?.find(u => u.commitment_id === cd.commitment_id);
-    return {
-      commitment_id: cd.commitment_id, part_id: cd.part_id,
-      old_reserved: cd.old_reserved, new_reserved: update?.new_reserved ?? cd.old_reserved,
-      delta_reserved: update?.delta_reserved ?? 0, rebalanced: !!update
-    };
-  });
-
-  if (!ctx.dry_run) {
-    for (const r of results) {
-      if (r.delta_reserved > 0) {
-        ctx.lifecycle_events.push({
-          commitment_id: r.commitment_id, event_type: 'AUTO_RESERVE',
-          actor_email: ctx.user.email, trigger_source: 'UNIFIED_ENGINE', triggered_by: ctx.user.email,
-          metadata: JSON.stringify({ reserved: r.delta_reserved, via_rebalance: true }),
-          event_date: ctx.timestamp
-        });
-      }
-    }
-  }
-
-  return { results, rebalance_summary: { parts_rebalanced: partIds.size, commitments_updated: results.filter(r => r.delta_reserved !== 0).length } };
+  if (!commitment_ids?.length) return {results:[],message:'No commitments'};
+  const pids=new Set(), dets=[];
+  for (const id of commitment_ids) { const [c]=await ctx.base44.entities.PartCommitment.filter({id}); if(!c) continue; pids.add(c.part_id); dets.push({commitment_id:id,part_id:c.part_id,old_reserved:c.reserved_from_stock??0}); }
+  const rbs=[];
+  for (const pid of pids) { const r=await inlineRebalance(ctx,pid,ctx.dry_run); rbs.push(r); if(!ctx.dry_run) ctx.mutations.push({entity:'Part',id:pid,action:'AUTO_RESERVE_REBALANCE'}); }
+  const results=dets.map(d=>{const pr=rbs.find(r=>r.part_id===d.part_id);const u=pr?.updates?.find(x=>x.commitment_id===d.commitment_id);return{commitment_id:d.commitment_id,part_id:d.part_id,old_reserved:d.old_reserved,new_reserved:u?.new_reserved??d.old_reserved,delta_reserved:u?.delta_reserved??0,rebalanced:!!u};});
+  if(!ctx.dry_run) for(const r of results) if(r.delta_reserved>0) ctx.lifecycle_events.push({commitment_id:r.commitment_id,event_type:'AUTO_RESERVE',actor_email:ctx.user.email,trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,metadata:JSON.stringify({reserved:r.delta_reserved}),event_date:ctx.timestamp});
+  return {results,rebalance_summary:{parts_rebalanced:pids.size,commitments_updated:results.filter(r=>r.delta_reserved!==0).length}};
 }
 
 async function createPO(ctx, commitment_ids, payload) {
-  const { vendor_id, po_prefix = 'AK', vendor_order_data = {} } = payload;
-  
-  if (!commitment_ids || commitment_ids.length === 0) {
-    throw new Error('PO_COMMITMENT_REQUIRED: commitment_ids array is required for CREATE_PO');
+  const {vendor_id,po_prefix='AK',vendor_order_data={}}=payload;
+  if(!commitment_ids?.length) throw new Error('PO_COMMITMENT_REQUIRED');
+  const commitments=await ctx.base44.entities.PartCommitment.filter({id:{$in:commitment_ids}});
+  const vg=new Map(), blocked=[];
+  for (const c of commitments) {
+    const [p]=await ctx.base44.entities.Part.filter({id:c.part_id});
+    if(!p){blocked.push({commitment_id:c.id,reason_code:'PART_NOT_FOUND'});continue;}
+    const ev=vendor_id||p.default_vendor_id;
+    if(!ev) throw new Error(`PO_VENDOR_REQUIRED: ${c.id} (${p.part_name})`);
+    const cn=readCanonical(c,ctx);
+    if(cn.gap<=0){blocked.push({commitment_id:c.id,reason_code:'NO_GAP',gap:0});continue;}
+    if(!vg.has(ev)) vg.set(ev,[]);
+    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:c.unit_cost_snapshot??p.cost??0});
   }
+  if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost}))}))},blocked};
 
-  const commitments = await ctx.base44.entities.PartCommitment.filter({ id: { $in: commitment_ids } });
-  const vendorGroups = new Map();
-  const blocked = [];
+  const created=[];
+  const ds=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  for(const [vid,items] of vg) {
+    let seq=1; const eo=await ctx.base44.entities.Order.filter({po_number:{$regex:`^${po_prefix}_${ds}`}});
+    if(eo.length>0) seq=eo.reduce((m,o)=>Math.max(m,parseInt(o.po_number.split('_')[2]||'0',10)),0)+1;
+    const pn=`${po_prefix}_${ds}_${String(seq).padStart(3,'0')}`;
+    const vd=vendor_order_data[vid]||{};
+    const order=await ctx.base44.asServiceRole.entities.Order.create({po_number:pn,po_prefix:vd.po_prefix||po_prefix,vendor_id:vid,order_number:vd.order_number||null,order_url:vd.order_url||null,order_date:vd.order_date||new Date().toISOString().slice(0,10),eta_date:vd.eta_date||null,notes:vd.notes||null,freight_cost:vd.freight_cost||0,tariff_cost:vd.tariff_cost||0,status:'Draft'});
 
-  for (const commitment of commitments) {
-    const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
-    if (!part) { blocked.push({ commitment_id: commitment.id, reason_code: 'PART_NOT_FOUND' }); continue; }
-
-    const effectiveVendor = vendor_id || part.default_vendor_id;
-    if (!effectiveVendor) {
-      throw new Error(`PO_VENDOR_REQUIRED: Commitment ${commitment.id} (${part.part_name}) has no vendor_id`);
+    for(const item of items) {
+      const rq=Number(item.qty); if(!rq||rq<=0||!Number.isFinite(rq)) throw new Error(`CREATE_PO_INVALID_QTY: ${item.qty}`);
+      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,status:'Ordered'});
+      const curCov=item.commitment.covered_from_po??0, newCov=curCov+item.qty;
+      const cn=readCanonical(item.commitment,ctx);
+      const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov);
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+item.qty,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1});
+      ctx.mutations.push({entity:'PartPurchaseLineItem',id:li.id,action:'CREATE'},{entity:'PartCommitment',id:item.commitment.id,action:'CREATE_PO'});
     }
-
-    const required = commitment.required_total ?? commitment.qty_committed ?? 0;
-    const reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
-    const covered_po = commitment.covered_from_po ?? 0;
-    const gap = Math.max(0, required - reserved - covered_po);
-
-    if (gap <= 0) { blocked.push({ commitment_id: commitment.id, reason_code: 'NO_GAP', gap: 0 }); continue; }
-
-    if (!vendorGroups.has(effectiveVendor)) vendorGroups.set(effectiveVendor, []);
-    vendorGroups.get(effectiveVendor).push({
-      commitment, part, qty: gap,
-      unit_cost: commitment.unit_cost_snapshot ?? part.cost ?? 0
-    });
+    created.push({order_id:order.id,po_number:pn,vendor_id:vid,line_count:items.length,project_ids:[...new Set(items.map(i=>i.commitment.project_id).filter(Boolean))]});
   }
-
-  if (ctx.dry_run) {
-    return {
-      preview: {
-        vendor_groups: Array.from(vendorGroups.entries()).map(([vendorId, items]) => ({
-          vendor_id: vendorId, line_count: items.length,
-          items: items.map(i => ({ commitment_id: i.commitment.id, part_name: i.part.part_name, qty: i.qty, unit_cost: i.unit_cost }))
-        }))
-      }, blocked
-    };
-  }
-
-  const created_orders = [];
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-
-  for (const [vendorId, items] of vendorGroups) {
-    let seq = 1;
-    const existingOrders = await ctx.base44.entities.Order.filter({ po_number: { $regex: `^${po_prefix}_${dateStr}` } });
-    if (existingOrders.length > 0) {
-      const maxSeq = existingOrders.reduce((max, o) => {
-        const parts = o.po_number.split('_');
-        return Math.max(max, parseInt(parts[2] || '0', 10));
-      }, 0);
-      seq = maxSeq + 1;
-    }
-
-    const po_number = `${po_prefix}_${dateStr}_${String(seq).padStart(3, '0')}`;
-    const vendorData = vendor_order_data[vendorId] || {};
-
-    const order = await ctx.base44.asServiceRole.entities.Order.create({
-      po_number, po_prefix: vendorData.po_prefix || po_prefix,
-      vendor_id: vendorId, order_number: vendorData.order_number || null,
-      order_url: vendorData.order_url || null,
-      order_date: vendorData.order_date || new Date().toISOString().slice(0, 10),
-      eta_date: vendorData.eta_date || null, notes: vendorData.notes || null,
-      freight_cost: vendorData.freight_cost || 0, tariff_cost: vendorData.tariff_cost || 0,
-      status: 'Draft'
-    });
-
-    for (const item of items) {
-      const requestedQty = Number(item.qty);
-      if (!requestedQty || requestedQty <= 0 || !Number.isFinite(requestedQty)) {
-        throw new Error(`CREATE_PO_INVALID_QTY_ORDERED: qty must be positive, got ${item.qty}`);
-      }
-      
-      const lineItem = await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({
-        order_id: order.id, part_id: item.part.id, commitment_id: item.commitment.id,
-        vendor_id: vendorId, qty_ordered: requestedQty, qty_received: 0,
-        unit_cost: item.unit_cost, unit_retail: item.commitment.unit_retail_snapshot ?? 0,
-        extended_cost: item.unit_cost * requestedQty, status: 'Ordered'
-      });
-
-      const current_covered = item.commitment.covered_from_po ?? 0;
-      const current_line_ids = item.commitment.order_line_item_ids || [];
-      
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id, {
-        covered_from_po: current_covered + item.qty,
-        qty_ordered: (item.commitment.qty_ordered ?? 0) + item.qty,
-        qty_to_order: 0,
-        order_line_item_ids: [...current_line_ids, lineItem.id],
-        commitment_status: 'ordered',
-        commitment_version: (item.commitment.commitment_version ?? 0) + 1
-      });
-
-      ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: lineItem.id, action: 'CREATE' });
-      ctx.mutations.push({ entity: 'PartCommitment', id: item.commitment.id, action: 'CREATE_PO' });
-    }
-
-    const projectIds = [...new Set(items.map(i => i.commitment.project_id).filter(Boolean))];
-    created_orders.push({ order_id: order.id, po_number, vendor_id: vendorId, line_count: items.length, project_ids });
-  }
-
-  return { created_orders, blocked };
+  return {created_orders:created,blocked};
 }
 
 async function receive(ctx, commitment_ids, payload) {
-  if (payload.order_id && payload.lines) {
-    return receiveBatch(ctx, payload);
-  }
-  const { line_item_id, qty_received, location_id } = payload;
-  if (!line_item_id || qty_received === undefined) throw new Error('line_item_id and qty_received required');
-  return receiveSingleLine(ctx, line_item_id, qty_received, location_id);
+  if(payload.order_id&&payload.lines) return receiveBatch(ctx,payload);
+  const {line_item_id,qty_received,location_id}=payload;
+  if(!line_item_id||qty_received===undefined) throw new Error('line_item_id and qty_received required');
+  return receiveSingleLine(ctx,line_item_id,qty_received,location_id);
 }
 
 async function getOrCreateDefaultLocation(ctx) {
-  const systemLocations = await ctx.base44.asServiceRole.entities.Location.filter({ location_area: 'UNASSIGNED_SYSTEM' });
-  if (systemLocations.length > 0) return systemLocations[0].id;
-  const newLoc = await ctx.base44.asServiceRole.entities.Location.create({
-    location_area: 'UNASSIGNED_SYSTEM', description: 'System default location', active: true
-  });
-  return newLoc.id;
+  const sl=await ctx.base44.asServiceRole.entities.Location.filter({location_area:'UNASSIGNED_SYSTEM'});
+  if(sl.length>0) return sl[0].id;
+  const nl=await ctx.base44.asServiceRole.entities.Location.create({location_area:'UNASSIGNED_SYSTEM',description:'System default',active:true});
+  return nl.id;
 }
 
-async function upsertInventoryItem(ctx, part_id, location_id, qty) {
-  const existingItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id, location_id });
-  if (existingItems.length > 1) throw new Error('INVENTORY_LOCATION_DUPLICATE_ERROR');
-  
-  if (existingItems.length === 1) {
-    const existing = existingItems[0];
-    await ctx.base44.asServiceRole.entities.InventoryItem.update(existing.id, {
-      quantity_on_hand: (existing.quantity_on_hand ?? 0) + qty
-    });
-    ctx.mutations.push({ entity: 'InventoryItem', id: existing.id, action: 'RECEIVE_UPDATE' });
-  } else {
-    const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
-      part_id, location_id, quantity_on_hand: qty, quantity_reserved: 0,
-      received_date: new Date().toISOString().split('T')[0]
-    });
-    ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'RECEIVE_CREATE' });
-  }
+async function upsertInventoryItem(ctx,part_id,location_id,qty) {
+  const ex=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id,location_id});
+  if(ex.length>1) throw new Error('INVENTORY_LOCATION_DUPLICATE');
+  if(ex.length===1){await ctx.base44.asServiceRole.entities.InventoryItem.update(ex[0].id,{quantity_on_hand:(ex[0].quantity_on_hand??0)+qty});ctx.mutations.push({entity:'InventoryItem',id:ex[0].id,action:'RECEIVE_UPDATE'});}
+  else{const inv=await ctx.base44.asServiceRole.entities.InventoryItem.create({part_id,location_id,quantity_on_hand:qty,quantity_reserved:0,received_date:new Date().toISOString().split('T')[0]});ctx.mutations.push({entity:'InventoryItem',id:inv.id,action:'RECEIVE_CREATE'});}
 }
 
-async function receiveBatch(ctx, payload) {
-  const { order_id, lines } = payload;
-  if (!order_id || !lines || lines.length === 0) throw new Error('order_id and lines[] required');
-
-  const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
-  if (!order) throw new Error('Order not found');
-
-  const results = [];
-  const errors = [];
-  const skipped = [];
-  let total_received = 0;
-  const affectedPartIds = new Set();
-
-  for (const line of lines) {
-    const qty = line.receive_qty ?? line.qty_received ?? 0;
-    if (!line.line_item_id || qty <= 0) { skipped.push({ line_item_id: line.line_item_id || null }); continue; }
-
-    try {
-      const result = await receiveSingleLineForBatch(ctx, line.line_item_id, qty, line.location_id);
-      results.push(result);
-      total_received += qty;
-      if (result.part_id) affectedPartIds.add(result.part_id);
-    } catch (lineError) {
-      errors.push({ line_item_id: line.line_item_id, error: lineError.message });
-    }
+async function receiveBatch(ctx,payload) {
+  const {order_id,lines}=payload;
+  if(!order_id||!lines?.length) throw new Error('order_id and lines[] required');
+  const [order]=await ctx.base44.entities.Order.filter({id:order_id}); if(!order) throw new Error('Order not found');
+  const results=[],errors=[],skipped=[]; let totRcv=0; const affParts=new Set();
+  for(const line of lines) {
+    const qty=line.receive_qty??line.qty_received??0;
+    if(!line.line_item_id||qty<=0){skipped.push({line_item_id:line.line_item_id||null});continue;}
+    try{const r=await receiveSingleLineForBatch(ctx,line.line_item_id,qty,line.location_id);results.push(r);totRcv+=qty;if(r.part_id)affParts.add(r.part_id);}
+    catch(e){errors.push({line_item_id:line.line_item_id,error:e.message});}
   }
-
-  // BATCH: Recompute + rebalance ONCE per affected part (INLINED)
-  for (const partId of affectedPartIds) {
-    try {
-      await inlineRecomputePhysicalStock(ctx, partId, false);
-      await inlineRebalance(ctx, partId, false);
-      ctx.mutations.push({ entity: 'Part', id: partId, action: 'BATCH_RECOMPUTE_REBALANCE' });
-    } catch (postErr) {
-      console.error(`[BATCH_POST_PROCESS_ERROR] part_id=${partId}: ${postErr.message}`);
-    }
-  }
-
-  // Update order status
-  const allLineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
-  const allReceived = allLineItems.every(li => (li.qty_received ?? 0) >= (li.qty_ordered ?? 0));
-  const someReceived = allLineItems.some(li => (li.qty_received ?? 0) > 0);
-  const newStatus = allReceived ? 'Received' : (someReceived ? 'Partial' : order.status);
-  
-  if (newStatus !== order.status) {
-    await ctx.base44.asServiceRole.entities.Order.update(order_id, {
-      status: newStatus, received_date: allReceived ? new Date().toISOString().slice(0, 10) : null
-    });
-  }
-
-  return {
-    order_id, order_status: newStatus,
-    lines_received: results.length, lines_skipped: skipped.length,
-    lines_errored: errors.length, total_qty_received: total_received,
-    results, errors: errors.length > 0 ? errors : undefined,
-  };
+  for(const pid of affParts){try{await inlineRecompute(ctx,pid,false);await inlineRebalance(ctx,pid,false);ctx.mutations.push({entity:'Part',id:pid,action:'BATCH_RECOMPUTE_REBALANCE'});}catch(e){console.error(`[BATCH_ERR] ${pid}: ${e.message}`);}}
+  const allLI=await ctx.base44.entities.PartPurchaseLineItem.filter({order_id});
+  const allR=allLI.every(l=>(l.qty_received??0)>=(l.qty_ordered??0)), someR=allLI.some(l=>(l.qty_received??0)>0);
+  const ns=allR?'Received':(someR?'Partial':order.status);
+  if(ns!==order.status) await ctx.base44.asServiceRole.entities.Order.update(order_id,{status:ns,received_date:allR?new Date().toISOString().slice(0,10):null});
+  return {order_id,order_status:ns,lines_received:results.length,lines_skipped:skipped.length,lines_errored:errors.length,total_qty_received:totRcv,results,errors:errors.length>0?errors:undefined};
 }
 
-async function receiveSingleLineForBatch(ctx, line_item_id, qty_received, location_id) {
-  const [lineItem] = await ctx.base44.entities.PartPurchaseLineItem.filter({ id: line_item_id });
-  if (!lineItem) throw new Error(`Line item ${line_item_id} not found`);
-
-  const [part] = await ctx.base44.entities.Part.filter({ id: lineItem.part_id });
-  if (!part) throw new Error('Part not found');
-
-  const ordered = lineItem.qty_ordered ?? 0;
-  const already_received = lineItem.qty_received ?? 0;
-  const remaining = Math.max(0, ordered - already_received);
-
-  if (qty_received > remaining) throw new Error(`RECEIVE_OVERFLOW: Cannot receive ${qty_received}, only ${remaining} remaining`);
-  if (qty_received <= 0) throw new Error('RECEIVE_INVALID_QTY');
-
-  let effective_location_id = location_id || await getOrCreateDefaultLocation(ctx);
-
-  if (ctx.dry_run) return { preview: { line_item_id, part_name: part.part_name, qty_receiving: qty_received } };
-
-  const new_line_received = already_received + qty_received;
-  const line_status = new_line_received >= ordered ? 'Received' : 'Partial';
-  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id, { qty_received: new_line_received, status: line_status });
-
-  await upsertInventoryItem(ctx, part.id, effective_location_id, qty_received);
-
-  // PHASE 0 FIX: Update commitment — covered_from_po does NOT decrease on receiving.
-  // covered_from_po represents "quantity covered by purchase orders" and is set when PO is created.
-  // On receiving, we only update deprecated qty_received for compatibility.
-  if (lineItem.commitment_id) {
-    const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
-    if (commitment) {
-      const updateData = {
-        // CANONICAL: covered_from_po stays unchanged — it was set when PO was created
-        // Deprecated fields updated for compatibility
-        qty_received: (commitment.qty_received ?? 0) + qty_received,
-        commitment_version: (commitment.commitment_version ?? 0) + 1
-      };
-      
-      // Log if covered_from_po is negative (pre-existing corruption)
-      if ((commitment.covered_from_po ?? 0) < 0) {
-        console.warn(`[PHASE0_GUARD] Negative covered_from_po detected on commitment ${commitment.id}: ${commitment.covered_from_po}`);
-      }
-      
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, updateData);
-    }
-  }
-
-  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({
-    part_id: part.id, order_id: lineItem.order_id, line_item_id,
-    qty_received, location_id: effective_location_id,
-    received_by: ctx.user.email, received_date: ctx.timestamp
-  });
-
-  ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: line_item_id, action: 'RECEIVE' });
-
-  return { line_item_id, part_id: part.id, part_name: part.part_name, qty_received, line_status };
+async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_id) {
+  const [li]=await ctx.base44.entities.PartPurchaseLineItem.filter({id:line_item_id}); if(!li) throw new Error(`Line ${line_item_id} not found`);
+  const [part]=await ctx.base44.entities.Part.filter({id:li.part_id}); if(!part) throw new Error('Part not found');
+  const rem=Math.max(0,(li.qty_ordered??0)-(li.qty_received??0));
+  if(qty_received>rem) throw new Error(`RECEIVE_OVERFLOW: ${qty_received}>${rem}`);
+  if(qty_received<=0) throw new Error('RECEIVE_INVALID_QTY');
+  if(!li.commitment_id) ctx.warnings.push({type:'ORPHAN_PO_LINE',id:line_item_id,msg:`PO line ${line_item_id} no commitment_id`});
+  const eloc=location_id||await getOrCreateDefaultLocation(ctx);
+  if(ctx.dry_run) return {preview:{line_item_id,part_name:part.part_name,qty_receiving:qty_received}};
+  const newLR=(li.qty_received??0)+qty_received;
+  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:newLR>=(li.qty_ordered??0)?'Received':'Partial'});
+  await upsertInventoryItem(ctx,part.id,eloc,qty_received);
+  // PHASE 1: covered_from_po NOT modified on receiving
+  if(li.commitment_id){const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});if(c){if((c.covered_from_po??0)<0)ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${c.covered_from_po}`});await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id,{qty_received:(c.qty_received??0)+qty_received,commitment_version:(c.commitment_version??0)+1});}}
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({part_id:part.id,order_id:li.order_id,line_item_id,qty_received,location_id:eloc,received_by:ctx.user.email,received_date:ctx.timestamp});
+  ctx.mutations.push({entity:'PartPurchaseLineItem',id:line_item_id,action:'RECEIVE'});
+  return {line_item_id,part_id:part.id,part_name:part.part_name,qty_received,line_status:newLR>=(li.qty_ordered??0)?'Received':'Partial'};
 }
 
-async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
-  const [lineItem] = await ctx.base44.entities.PartPurchaseLineItem.filter({ id: line_item_id });
-  if (!lineItem) throw new Error(`Line item ${line_item_id} not found`);
-
-  const [part] = await ctx.base44.entities.Part.filter({ id: lineItem.part_id });
-  if (!part) throw new Error('Part not found');
-
-  const ordered = lineItem.qty_ordered ?? 0;
-  const already_received = lineItem.qty_received ?? 0;
-  const remaining = Math.max(0, ordered - already_received);
-
-  if (qty_received > remaining) throw new Error(`RECEIVE_OVERFLOW: Cannot receive ${qty_received}, only ${remaining} remaining`);
-  if (qty_received <= 0) throw new Error('RECEIVE_INVALID_QTY');
-
-  let effective_location_id = location_id || await getOrCreateDefaultLocation(ctx);
-
-  if (ctx.dry_run) {
-    return { preview: { line_item_id, part_name: part.part_name, qty_receiving: qty_received, remaining_after: remaining - qty_received } };
-  }
-
-  const new_line_received = already_received + qty_received;
-  const line_status = new_line_received >= ordered ? 'Received' : 'Partial';
-  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id, { qty_received: new_line_received, status: line_status });
-
-  await upsertInventoryItem(ctx, part.id, effective_location_id, qty_received);
-
-  // INLINED recompute (replaces nested function call)
-  const recomputeResult = await inlineRecomputePhysicalStock(ctx, part.id, false);
-  const new_physical = recomputeResult.computed_physical_stock;
-
-  // PHASE 0 FIX: Update commitment — covered_from_po does NOT decrease on receiving.
-  // covered_from_po represents "quantity covered by purchase orders" and is set when PO is created.
-  if (lineItem.commitment_id) {
-    const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
-    if (commitment) {
-      const updateData = {
-        // CANONICAL: covered_from_po stays unchanged — it was set when PO was created
-        // Deprecated fields updated for compatibility
-        qty_received: (commitment.qty_received ?? 0) + qty_received,
-        commitment_version: (commitment.commitment_version ?? 0) + 1
-      };
-      
-      // Log if covered_from_po is negative (pre-existing corruption)
-      if ((commitment.covered_from_po ?? 0) < 0) {
-        console.warn(`[PHASE0_GUARD] Negative covered_from_po detected on commitment ${commitment.id}: ${commitment.covered_from_po}`);
-      }
-      
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, updateData);
-      ctx.mutations.push({ entity: 'PartCommitment', id: lineItem.commitment_id, action: 'RECEIVE' });
-    }
-  }
-
-  // INLINED rebalance (replaces nested function call)
-  const rebalanceResult = await inlineRebalance(ctx, part.id, false);
-
-  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({
-    part_id: part.id, order_id: lineItem.order_id, line_item_id,
-    qty_received, location_id: effective_location_id,
-    received_by: ctx.user.email, received_date: ctx.timestamp
-  });
-
-  ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: line_item_id, action: 'RECEIVE' });
-  ctx.mutations.push({ entity: 'Part', id: part.id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
-
-  return { line_item_id, part_id: part.id, part_name: part.part_name, qty_received, new_physical_stock: new_physical, line_status };
+async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
+  const [li]=await ctx.base44.entities.PartPurchaseLineItem.filter({id:line_item_id}); if(!li) throw new Error(`Line ${line_item_id} not found`);
+  const [part]=await ctx.base44.entities.Part.filter({id:li.part_id}); if(!part) throw new Error('Part not found');
+  const rem=Math.max(0,(li.qty_ordered??0)-(li.qty_received??0));
+  if(qty_received>rem) throw new Error(`RECEIVE_OVERFLOW: ${qty_received}>${rem}`);
+  if(qty_received<=0) throw new Error('RECEIVE_INVALID_QTY');
+  if(!li.commitment_id) ctx.warnings.push({type:'ORPHAN_PO_LINE',id:line_item_id,msg:`PO line ${line_item_id} no commitment_id`});
+  const eloc=location_id||await getOrCreateDefaultLocation(ctx);
+  if(ctx.dry_run) return {preview:{line_item_id,part_name:part.part_name,qty_receiving:qty_received,remaining_after:rem-qty_received}};
+  const newLR=(li.qty_received??0)+qty_received, ls=newLR>=(li.qty_ordered??0)?'Received':'Partial';
+  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:ls});
+  await upsertInventoryItem(ctx,part.id,eloc,qty_received);
+  const rr=await inlineRecompute(ctx,part.id,false);
+  if(li.commitment_id){const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});if(c){if((c.covered_from_po??0)<0)ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${c.covered_from_po}`});await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id,{qty_received:(c.qty_received??0)+qty_received,commitment_version:(c.commitment_version??0)+1});ctx.mutations.push({entity:'PartCommitment',id:li.commitment_id,action:'RECEIVE'});}}
+  await inlineRebalance(ctx,part.id,false);
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({part_id:part.id,order_id:li.order_id,line_item_id,qty_received,location_id:eloc,received_by:ctx.user.email,received_date:ctx.timestamp});
+  ctx.mutations.push({entity:'PartPurchaseLineItem',id:line_item_id,action:'RECEIVE'},{entity:'Part',id:part.id,action:'PHYSICAL_STOCK_RECOMPUTED'});
+  return {line_item_id,part_id:part.id,part_name:part.part_name,qty_received,new_physical_stock:rr.computed_physical_stock,line_status:ls};
 }
 
-async function install(ctx, commitment_ids, payload) {
-  const { qty_to_install, location_id } = payload;
-  const commitmentId = commitment_ids?.[0];
-  if (!commitmentId || qty_to_install === undefined) throw new Error('commitment_id and qty_to_install required');
+async function install(ctx,commitment_ids,payload) {
+  const {qty_to_install,location_id}=payload; const cid=commitment_ids?.[0];
+  if(!cid||qty_to_install===undefined) throw new Error('commitment_id and qty_to_install required');
+  const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
+  const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
+  const cn=readCanonical(c,ctx);
+  const installable=Math.max(0,cn.reserved_from_stock-cn.qty_installed);
+  const st=c.supply_source_type??'VENDOR', affStock=st!=='CLIENT_SUPPLIED';
+  if(qty_to_install>installable&&affStock) throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable`);
+  if(affStock&&(part.physical_stock??0)<qty_to_install) throw new Error(`NEGATIVE_STOCK: ${qty_to_install}>${part.physical_stock??0}`);
+  if(ctx.dry_run) return {preview:{commitment_id:cid,qty_installing:qty_to_install,installable,affects_stock:affStock}};
 
-  const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-  if (!commitment) throw new Error('Commitment not found');
+  const newInst=cn.qty_installed+qty_to_install, newRes=Math.max(0,cn.reserved_from_stock-qty_to_install);
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInst>=cn.required_total?'installed':c.commitment_status,commitment_version:(c.commitment_version??0)+1});
 
-  const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
-  if (!part) throw new Error('Part not found');
-
-  const reserved = commitment.reserved_from_stock ?? 0;
-  const current_installed = commitment.qty_installed ?? 0;
-  const required = commitment.required_total ?? 0;
-  const installable = Math.max(0, reserved - current_installed);
-  const supply_type = commitment.supply_source_type ?? 'VENDOR';
-  const affects_stock = supply_type !== 'CLIENT_SUPPLIED';
-
-  if (qty_to_install > installable && affects_stock) throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable`);
-
-  if (affects_stock && (part.physical_stock ?? 0) < qty_to_install) {
-    throw new Error(`NEGATIVE_STOCK_ATTEMPT: Cannot install ${qty_to_install}, only ${part.physical_stock ?? 0} in stock`);
+  if(affStock){
+    const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id}); let rem=qty_to_install;
+    if(location_id){const [i]=inv.filter(x=>x.location_id===location_id);if(i){await ctx.base44.asServiceRole.entities.InventoryItem.update(i.id,{quantity_on_hand:Math.max(0,(i.quantity_on_hand??0)-qty_to_install)});rem=0;}}
+    if(rem>0) for(const item of inv.filter(i=>(i.quantity_on_hand??0)>0)){const d=Math.min(item.quantity_on_hand??0,rem);if(d>0){await ctx.base44.asServiceRole.entities.InventoryItem.update(item.id,{quantity_on_hand:(item.quantity_on_hand??0)-d});rem-=d;}if(rem<=0)break;}
+    await inlineRecompute(ctx,part.id,false); await inlineRebalance(ctx,part.id,false);
+    ctx.mutations.push({entity:'Part',id:part.id,action:'PHYSICAL_STOCK_RECOMPUTED'});
   }
-
-  if (ctx.dry_run) return { preview: { commitment_id: commitmentId, qty_installing: qty_to_install, installable, affects_stock } };
-
-  const new_installed = current_installed + qty_to_install;
-  const new_reserved = Math.max(0, reserved - qty_to_install);
-  
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-    qty_installed: new_installed, reserved_from_stock: new_reserved, qty_reserved: new_reserved,
-    commitment_status: new_installed >= required ? 'installed' : commitment.commitment_status,
-    commitment_version: (commitment.commitment_version ?? 0) + 1
-  });
-
-  if (affects_stock) {
-    // Deduct from inventory items
-    const inventoryItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id: part.id });
-    let remaining_to_deduct = qty_to_install;
-    
-    if (location_id) {
-      const [invItem] = inventoryItems.filter(i => i.location_id === location_id);
-      if (invItem) {
-        await ctx.base44.asServiceRole.entities.InventoryItem.update(invItem.id, {
-          quantity_on_hand: Math.max(0, (invItem.quantity_on_hand ?? 0) - qty_to_install)
-        });
-        remaining_to_deduct = 0;
-      }
-    }
-    
-    if (remaining_to_deduct > 0) {
-      for (const item of inventoryItems.filter(i => (i.quantity_on_hand ?? 0) > 0)) {
-        const deduct = Math.min(item.quantity_on_hand ?? 0, remaining_to_deduct);
-        if (deduct > 0) {
-          await ctx.base44.asServiceRole.entities.InventoryItem.update(item.id, {
-            quantity_on_hand: (item.quantity_on_hand ?? 0) - deduct
-          });
-          remaining_to_deduct -= deduct;
-        }
-        if (remaining_to_deduct <= 0) break;
-      }
-    }
-    
-    // INLINED recompute + rebalance
-    await inlineRecomputePhysicalStock(ctx, part.id, false);
-    await inlineRebalance(ctx, part.id, false);
-    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
-  }
-
-  await ctx.base44.asServiceRole.entities.InstalledPart.create({
-    part_id: part.id, project_id: commitment.project_id, commitment_id: commitmentId,
-    qty_installed: qty_to_install, installed_by: ctx.user.email, installed_date: ctx.timestamp
-  });
-
-  ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'INSTALL' });
-
-  return { commitment_id: commitmentId, qty_installed: qty_to_install, total_installed: new_installed, new_reserved };
+  await ctx.base44.asServiceRole.entities.InstalledPart.create({part_id:part.id,project_id:c.project_id,commitment_id:cid,qty_installed:qty_to_install,installed_by:ctx.user.email,installed_date:ctx.timestamp});
+  ctx.mutations.push({entity:'PartCommitment',id:cid,action:'INSTALL'});
+  return {commitment_id:cid,qty_installed:qty_to_install,total_installed:newInst,new_reserved:newRes};
 }
 
-async function reverseInstall(ctx, commitment_ids, payload) {
-  const { qty_to_reverse, reason } = payload;
-  const commitmentId = commitment_ids?.[0];
-  if (!commitmentId || qty_to_reverse === undefined) throw new Error('commitment_id and qty_to_reverse required');
-
-  const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-  if (!commitment) throw new Error('Commitment not found');
-
-  const [part] = await ctx.base44.entities.Part.filter({ id: commitment.part_id });
-  if (!part) throw new Error('Part not found');
-
-  const current_installed = commitment.qty_installed ?? 0;
-  if (qty_to_reverse > current_installed) throw new Error(`Cannot reverse ${qty_to_reverse}, only ${current_installed} installed`);
-
-  const supply_type = commitment.supply_source_type ?? 'VENDOR';
-  const affects_stock = supply_type !== 'CLIENT_SUPPLIED';
-
-  if (ctx.dry_run) return { preview: { commitment_id: commitmentId, qty_reversing: qty_to_reverse, affects_stock } };
-
-  const new_installed = current_installed - qty_to_reverse;
-
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-    qty_installed: new_installed, commitment_status: 'allocated',
-    commitment_version: (commitment.commitment_version ?? 0) + 1
-  });
-
-  if (affects_stock) {
-    // PHASE 0 FIX: Use recompute path instead of directly setting physical_stock
-    // Add stock back via inventory item, then recompute
-    const inventoryItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id: part.id });
-    if (inventoryItems.length > 0) {
-      // Add back to first available inventory item
-      const targetItem = inventoryItems[0];
-      await ctx.base44.asServiceRole.entities.InventoryItem.update(targetItem.id, {
-        quantity_on_hand: (targetItem.quantity_on_hand ?? 0) + qty_to_reverse
-      });
-    } else {
-      // No inventory items exist — create one at default location
-      const defaultLocId = await getOrCreateDefaultLocation(ctx);
-      await ctx.base44.asServiceRole.entities.InventoryItem.create({
-        part_id: part.id, location_id: defaultLocId,
-        quantity_on_hand: qty_to_reverse, quantity_reserved: 0,
-        received_date: new Date().toISOString().split('T')[0],
-        notes: 'Reverse install recovery', source_type: 'reversal'
-      });
-    }
-    
-    // INLINED recompute + rebalance (canonical path)
-    await inlineRecomputePhysicalStock(ctx, part.id, false);
-    await inlineRebalance(ctx, part.id, false);
-    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'REVERSE_INSTALL' });
+async function reverseInstall(ctx,commitment_ids,payload) {
+  const {qty_to_reverse,reason}=payload; const cid=commitment_ids?.[0];
+  if(!cid||qty_to_reverse===undefined) throw new Error('commitment_id and qty_to_reverse required');
+  const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
+  const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
+  const cn=readCanonical(c,ctx);
+  if(qty_to_reverse>cn.qty_installed) throw new Error(`Cannot reverse ${qty_to_reverse}, only ${cn.qty_installed} installed`);
+  const affStock=(c.supply_source_type??'VENDOR')!=='CLIENT_SUPPLIED';
+  if(ctx.dry_run) return {preview:{commitment_id:cid,qty_reversing:qty_to_reverse,affects_stock:affStock}};
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:cn.qty_installed-qty_to_reverse,commitment_status:'allocated',commitment_version:(c.commitment_version??0)+1});
+  if(affStock){
+    const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id});
+    if(inv.length>0) await ctx.base44.asServiceRole.entities.InventoryItem.update(inv[0].id,{quantity_on_hand:(inv[0].quantity_on_hand??0)+qty_to_reverse});
+    else{const dl=await getOrCreateDefaultLocation(ctx);await ctx.base44.asServiceRole.entities.InventoryItem.create({part_id:part.id,location_id:dl,quantity_on_hand:qty_to_reverse,quantity_reserved:0,received_date:new Date().toISOString().split('T')[0],notes:'Reverse install recovery',source_type:'reversal'});}
+    await inlineRecompute(ctx,part.id,false); await inlineRebalance(ctx,part.id,false);
+    ctx.mutations.push({entity:'Part',id:part.id,action:'REVERSE_INSTALL'});
   }
-
-  ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'REVERSE_INSTALL' });
-
-  return { commitment_id: commitmentId, qty_reversed: qty_to_reverse, new_installed };
+  ctx.mutations.push({entity:'PartCommitment',id:cid,action:'REVERSE_INSTALL'});
+  return {commitment_id:cid,qty_reversed:qty_to_reverse,new_installed:cn.qty_installed-qty_to_reverse};
 }
 
-async function cancelCommitment(ctx, commitment_ids, payload) {
-  const { reason } = payload;
-  const commitmentId = commitment_ids?.[0];
-  if (!commitmentId) throw new Error('commitment_id required');
-
-  const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: commitmentId });
-  if (!commitment) throw new Error('Commitment not found');
-  if (commitment.commitment_status === 'cancelled') throw new Error('Already cancelled');
-
-  let cancellation_type = 'before_order';
-  if (commitment.billing_status === 'paid') cancellation_type = 'after_paid';
-  else if (commitment.billing_status === 'invoiced') cancellation_type = 'after_invoice';
-  else if ((commitment.covered_from_po ?? commitment.qty_ordered ?? 0) > 0) cancellation_type = 'before_invoice';
-
-  if (ctx.dry_run) return { preview: { commitment_id: commitmentId, cancellation_type } };
-
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-    commitment_status: 'cancelled', cancelled_at: ctx.timestamp,
-    cancelled_by: ctx.user.email, cancelled_reason: reason, cancellation_type,
-    commitment_version: (commitment.commitment_version ?? 0) + 1
-  });
-
-  const reserved = commitment.reserved_from_stock ?? commitment.qty_reserved ?? 0;
-
-  ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'CANCEL' });
-  
-  // INLINED rebalance
-  const rebalanceResult = await inlineRebalance(ctx, commitment.part_id, false);
-
-  ctx.lifecycle_events.push({
-    commitment_id: commitmentId, event_type: 'COMMITMENT_CANCELLED',
-    trigger_source: 'UNIFIED_ENGINE', triggered_by: ctx.user.email,
-    actor_email: ctx.user.email, part_id: commitment.part_id,
-    project_id: commitment.project_id,
-    metadata: JSON.stringify({ reason, cancellation_type }),
-    event_date: ctx.timestamp
-  });
-
-  return { commitment_id: commitmentId, cancellation_type, stock_released: reserved };
+async function cancelCommitment(ctx,commitment_ids,payload) {
+  const {reason}=payload; const cid=commitment_ids?.[0]; if(!cid) throw new Error('commitment_id required');
+  const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
+  if(c.commitment_status==='cancelled') throw new Error('Already cancelled');
+  const cn=readCanonical(c,ctx);
+  let ct='before_order'; if(c.billing_status==='paid') ct='after_paid'; else if(c.billing_status==='invoiced') ct='after_invoice'; else if(cn.covered_from_po>0) ct='before_invoice';
+  if(ctx.dry_run) return {preview:{commitment_id:cid,cancellation_type:ct}};
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{commitment_status:'cancelled',cancelled_at:ctx.timestamp,cancelled_by:ctx.user.email,cancelled_reason:reason,cancellation_type:ct,commitment_version:(c.commitment_version??0)+1});
+  ctx.mutations.push({entity:'PartCommitment',id:cid,action:'CANCEL'});
+  await inlineRebalance(ctx,c.part_id,false);
+  ctx.lifecycle_events.push({commitment_id:cid,event_type:'COMMITMENT_CANCELLED',trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,actor_email:ctx.user.email,part_id:c.part_id,project_id:c.project_id,metadata:JSON.stringify({reason,cancellation_type:ct}),event_date:ctx.timestamp});
+  return {commitment_id:cid,cancellation_type:ct,stock_released:cn.reserved_from_stock};
 }
 
-async function addStock(ctx, payload) {
-  const { part_id, qty, note, purchase_cost } = payload;
-  let { location_id } = payload;
-
-  if (!part_id) throw new Error('part_id is required for ADD_STOCK');
-  const quantity = Number(qty) || 0;
-  if (quantity <= 0) throw new Error('qty must be a positive number');
-
-  const [part] = await ctx.base44.entities.Part.filter({ id: part_id });
-  if (!part) throw new Error('Part not found');
-
-  if (!location_id) location_id = await getOrCreateDefaultLocation(ctx);
-
-  const old_physical = part.physical_stock ?? 0;
-
-  if (ctx.dry_run) {
-    return { preview: { part_id, part_name: part.part_name, qty_adding: quantity, old_physical_stock: old_physical } };
-  }
-
-  await upsertInventoryItem(ctx, part_id, location_id, quantity);
-
-  // INLINED recompute
-  const recomputeResult = await inlineRecomputePhysicalStock(ctx, part_id, false);
-  const new_physical = recomputeResult.computed_physical_stock;
-  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
-
-  // INLINED rebalance
-  await inlineRebalance(ctx, part_id, false);
-
-  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
-    part_id, action_type: 'ADD_STOCK', qty_delta: quantity,
-    old_qty: old_physical, new_qty: new_physical, location_id,
-    notes: note || null, performed_by: ctx.user.email, performed_at: ctx.timestamp
-  });
-
-  return {
-    success: true, part_id, part_name: part.part_name,
-    qty_added: quantity, old_physical_stock: old_physical, new_physical_stock: new_physical,
-    location_id,
-    invalidation_context: { part_ids: [part_id], invalidateAll: true }
-  };
+async function addStock(ctx,payload) {
+  const {part_id,qty,note,purchase_cost}=payload; let {location_id}=payload;
+  if(!part_id) throw new Error('part_id required'); const quantity=Number(qty)||0; if(quantity<=0) throw new Error('qty must be positive');
+  const [part]=await ctx.base44.entities.Part.filter({id:part_id}); if(!part) throw new Error('Part not found');
+  if(!location_id) location_id=await getOrCreateDefaultLocation(ctx);
+  const oldPhys=part.physical_stock??0;
+  if(ctx.dry_run) return {preview:{part_id,part_name:part.part_name,qty_adding:quantity,old_physical_stock:oldPhys}};
+  await upsertInventoryItem(ctx,part_id,location_id,quantity);
+  const rr=await inlineRecompute(ctx,part_id,false); ctx.mutations.push({entity:'Part',id:part_id,action:'PHYSICAL_STOCK_RECOMPUTED'});
+  await inlineRebalance(ctx,part_id,false);
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({part_id,action_type:'ADD_STOCK',qty_delta:quantity,old_qty:oldPhys,new_qty:rr.computed_physical_stock,location_id,notes:note||null,performed_by:ctx.user.email,performed_at:ctx.timestamp});
+  return {success:true,part_id,part_name:part.part_name,qty_added:quantity,old_physical_stock:oldPhys,new_physical_stock:rr.computed_physical_stock,location_id,invalidation_context:{part_ids:[part_id],invalidateAll:true}};
 }
