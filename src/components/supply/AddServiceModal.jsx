@@ -33,11 +33,13 @@ import { toast } from "sonner";
  *  - onClose: () => void
  *  - onSuccess: () => void
  */
-export default function AddServiceModal({ projectId: lockedProjectId, projectName: lockedProjectName, open, onClose, onSuccess }) {
-  const isProjectLocked = !!lockedProjectId;
+export default function AddServiceModal({ projectId: rawProjectId, projectName: lockedProjectName, open, onClose, onSuccess }) {
+  // Normalize: only valid non-empty string IDs count as locked
+  const lockedProjectId = (rawProjectId !== null && rawProjectId !== undefined && rawProjectId !== "") ? String(rawProjectId) : null;
+  const isProjectLocked = lockedProjectId !== null;
 
   // Debug: confirm context detection
-  console.log('[AddServiceModal] Context:', { lockedProjectId, lockedProjectName, isProjectLocked });
+  console.log('[AddServiceModal] Context:', { rawProjectId, lockedProjectId, lockedProjectName, isProjectLocked });
 
   const [selectedProjectId, setSelectedProjectId] = useState(lockedProjectId || "");
   const [projectSearch, setProjectSearch] = useState("");
@@ -125,7 +127,8 @@ export default function AddServiceModal({ projectId: lockedProjectId, projectNam
   };
 
   const handleSave = async () => {
-    if (!resolvedProjectId) {
+    const effectiveProjectId = resolvedProjectId && resolvedProjectId !== "" ? resolvedProjectId : null;
+    if (!effectiveProjectId) {
       toast.error("Please select a project");
       return;
     }
@@ -136,7 +139,7 @@ export default function AddServiceModal({ projectId: lockedProjectId, projectNam
     setSaving(true);
     const submitPayload = {
       action_type: "CREATE",
-      project_id: resolvedProjectId,
+      project_id: effectiveProjectId,
       service_id: serviceId,
       description,
       vendor_id: vendorId || selectedService?.default_vendor_id || null,
