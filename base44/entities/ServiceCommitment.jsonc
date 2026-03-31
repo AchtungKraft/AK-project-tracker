@@ -16,16 +16,26 @@
     },
     "vendor_id": {
       "type": "string",
-      "description": "Reference to Vendor for this instance"
+      "description": "Reference to ServiceVendor for this instance"
     },
     "estimated_cost": {
       "type": "number",
       "default": 0,
-      "description": "Estimated cost for this service instance"
+      "description": "LEGACY: Single estimated cost. Use ServiceLineItem totals instead."
     },
     "actual_cost": {
       "type": "number",
-      "description": "Actual cost once known (from vendor invoice)"
+      "description": "LEGACY: Actual cost once known. Use ServiceLineItem totals instead."
+    },
+    "total_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "DERIVED: Sum of all ServiceLineItem (cost * quantity)"
+    },
+    "total_billable": {
+      "type": "number",
+      "default": 0,
+      "description": "DERIVED: Sum of all ServiceLineItem (billing_rate * quantity)"
     },
     "quantity": {
       "type": "number",

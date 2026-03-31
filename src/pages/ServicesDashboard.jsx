@@ -53,9 +53,9 @@ export default function ServicesDashboard() {
     queryFn: () => base44.entities.Service.list(),
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ["vendors-active"],
-    queryFn: () => base44.entities.Vendor.filter({ active: true }),
+  const { data: serviceVendors = [] } = useQuery({
+    queryKey: ["serviceVendors"],
+    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
   });
 
   const { data: projects = [] } = useQuery({
@@ -65,7 +65,7 @@ export default function ServicesDashboard() {
 
   // Lookup maps
   const servicesMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services]);
-  const vendorsMap = useMemo(() => new Map(vendors.map(v => [v.id, v])), [vendors]);
+  const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
   const projectsMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
   // Filtered commitments
@@ -88,13 +88,14 @@ export default function ServicesDashboard() {
   // Summary
   const summary = useMemo(() => {
     const byStatus = { planned: 0, ordered: 0, completed: 0, billed: 0 };
-    let totalEstimated = 0, totalActual = 0;
+    let totalCost = 0, totalBillable = 0;
     for (const c of commitments) {
       byStatus[c.status || "planned"]++;
-      totalEstimated += (c.estimated_cost || 0) * (c.quantity || 1);
-      totalActual += ((c.actual_cost ?? c.estimated_cost) || 0) * (c.quantity || 1);
+      totalCost += c.total_cost > 0 ? c.total_cost : ((c.actual_cost ?? c.estimated_cost ?? 0) * (c.quantity || 1));
+      totalBillable += c.total_billable || 0;
     }
-    return { byStatus, totalEstimated, totalActual, total: commitments.length };
+    const margin = totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : 0;
+    return { byStatus, totalCost, totalBillable, margin, total: commitments.length };
   }, [commitments]);
 
   // Unique projects & vendors in commitments for filters
@@ -107,6 +108,10 @@ export default function ServicesDashboard() {
     const ids = [...new Set(commitments.map(c => c.vendor_id).filter(Boolean))];
     return ids.map(id => vendorsMap.get(id)).filter(Boolean);
   }, [commitments, vendorsMap]);
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["allServiceCommitments"] });
+  };
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["allServiceCommitments"] });
@@ -171,7 +176,7 @@ export default function ServicesDashboard() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2">
           <SummaryCard label="Total" value={summary.total} color="text-white" />
           <SummaryCard label="Planned" value={summary.byStatus.planned} color="text-gray-400" />
           <SummaryCard label="Ordered" value={summary.byStatus.ordered} color="text-purple-400" />
@@ -179,7 +184,15 @@ export default function ServicesDashboard() {
           <SummaryCard label="Billed" value={summary.byStatus.billed} color="text-green-400" />
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Total Cost</p>
-            <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(summary.totalActual)}</p>
+            <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(summary.totalCost)}</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-500">Billable</p>
+            <p className="text-lg font-bold text-green-400 font-mono">{formatCurrencyUSD(summary.totalBillable)}</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-500">Margin</p>
+            <p className={`text-lg font-bold ${summary.margin >= 0 ? 'text-green-400' : 'text-red-400'}`}>{summary.margin.toFixed(1)}%</p>
           </div>
         </div>
 
@@ -272,10 +285,10 @@ export default function ServicesDashboard() {
                       <ServiceCommitmentCard
                         commitment={c}
                         serviceName={servicesMap.get(c.service_id)?.name || "Unknown"}
-                        vendorName={vendorsMap.get(c.vendor_id)?.vendor_name}
+                        vendorName={vendorsMap.get(c.vendor_id)?.name}
                         onStatusChange={handleStatusChange}
-                        onEditCost={setEditCostModal}
                         onDelete={handleDelete}
+                        onTotalsChanged={invalidateAll}
                       />
                     </div>
                   </div>

@@ -1,0 +1,57 @@
+{
+  "name": "ServiceVendor",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service vendor name"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shipping",
+        "finishing",
+        "coating",
+        "plating",
+        "fabrication",
+        "upholstery",
+        "electrical",
+        "paint",
+        "machine_work",
+        "inspection",
+        "general",
+        "other"
+      ],
+      "default": "general",
+      "description": "Vendor specialty category"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Primary contact name"
+    },
+    "contact_email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "contact_phone": {
+      "type": "string",
+      "description": "Contact phone"
+    },
+    "address": {
+      "type": "string",
+      "description": "Vendor address"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether vendor is active"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

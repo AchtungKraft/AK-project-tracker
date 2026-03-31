@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -31,17 +31,58 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Inline vendor creation
+  const [showNewVendor, setShowNewVendor] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const [creatingVendor, setCreatingVendor] = useState(false);
+
   const { data: services = [] } = useQuery({
     queryKey: ["services-catalog"],
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ["vendors-active"],
-    queryFn: () => base44.entities.Vendor.filter({ active: true }),
+  const { data: serviceVendors = [] } = useQuery({
+    queryKey: ["serviceVendors"],
+    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
   });
 
   const selectedService = services.find(s => s.id === serviceId);
+
+  // Filter vendors: show allowed vendors for selected service, or all if none set
+  const filteredVendors = useMemo(() => {
+    if (!selectedService?.allowed_vendor_ids?.length) return serviceVendors;
+    return serviceVendors.filter(v => selectedService.allowed_vendor_ids.includes(v.id));
+  }, [selectedService, serviceVendors]);
+
+  // Auto-set vendor when service changes
+  const handleServiceChange = (id) => {
+    setServiceId(id);
+    const svc = services.find(s => s.id === id);
+    if (svc?.default_vendor_id) {
+      setVendorId(svc.default_vendor_id);
+    } else {
+      setVendorId("");
+    }
+  };
+
+  const handleCreateVendor = async () => {
+    if (!newVendorName.trim()) return;
+    setCreatingVendor(true);
+    try {
+      const res = await base44.functions.invoke("executeServiceAction", {
+        action_type: "CREATE_SERVICE_VENDOR",
+        name: newVendorName.trim(),
+      });
+      setVendorId(res.data.vendor.id);
+      toast.success("Vendor created");
+      setShowNewVendor(false);
+      setNewVendorName("");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setCreatingVendor(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!serviceId || !description) {
@@ -80,7 +121,7 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
         <div className="space-y-4 py-2">
           <div>
             <Label className="text-gray-300">Service *</Label>
-            <Select value={serviceId} onValueChange={setServiceId}>
+            <Select value={serviceId} onValueChange={handleServiceChange}>
               <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                 <SelectValue placeholder="Select a service..." />
               </SelectTrigger>
@@ -105,19 +146,37 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
           </div>
 
           <div>
-            <Label className="text-gray-300">Vendor</Label>
-            <Select value={vendorId} onValueChange={setVendorId}>
-              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                <SelectValue placeholder="Select vendor (optional)..." />
-              </SelectTrigger>
-              <SelectContent>
-                {vendors.map(v => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.vendor_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between">
+              <Label className="text-gray-300">Service Vendor</Label>
+              <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowNewVendor(!showNewVendor)}>
+                {showNewVendor ? "Cancel" : "+ New Vendor"}
+              </Button>
+            </div>
+            {showNewVendor ? (
+              <div className="flex gap-2 mt-1">
+                <Input
+                  value={newVendorName}
+                  onChange={e => setNewVendorName(e.target.value)}
+                  placeholder="Vendor name..."
+                  className="bg-gray-800 border-gray-600 text-white"
+                />
+                <Button size="sm" onClick={handleCreateVendor} disabled={creatingVendor || !newVendorName.trim()}>
+                  {creatingVendor ? "..." : "Add"}
+                </Button>
+              </div>
+            ) : (
+              <Select value={vendorId} onValueChange={setVendorId}>
+                <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
+                  <SelectValue placeholder="Select vendor (optional)..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>None</SelectItem>
+                  {filteredVendors.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
