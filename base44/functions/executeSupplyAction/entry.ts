@@ -806,15 +806,25 @@ async function receiveSingleLineForBatch(ctx, line_item_id, qty_received, locati
 
   await upsertInventoryItem(ctx, part.id, effective_location_id, qty_received);
 
+  // PHASE 0 FIX: Update commitment — covered_from_po does NOT decrease on receiving.
+  // covered_from_po represents "quantity covered by purchase orders" and is set when PO is created.
+  // On receiving, we only update deprecated qty_received for compatibility.
   if (lineItem.commitment_id) {
     const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
     if (commitment) {
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, {
-        covered_from_po: Math.max(0, (commitment.covered_from_po ?? 0) - qty_received),
+      const updateData = {
+        // CANONICAL: covered_from_po stays unchanged — it was set when PO was created
+        // Deprecated fields updated for compatibility
         qty_received: (commitment.qty_received ?? 0) + qty_received,
-        commitment_status: 'received',
         commitment_version: (commitment.commitment_version ?? 0) + 1
-      });
+      };
+      
+      // Log if covered_from_po is negative (pre-existing corruption)
+      if ((commitment.covered_from_po ?? 0) < 0) {
+        console.warn(`[PHASE0_GUARD] Negative covered_from_po detected on commitment ${commitment.id}: ${commitment.covered_from_po}`);
+      }
+      
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, updateData);
     }
   }
 
@@ -859,15 +869,24 @@ async function receiveSingleLine(ctx, line_item_id, qty_received, location_id) {
   const recomputeResult = await inlineRecomputePhysicalStock(ctx, part.id, false);
   const new_physical = recomputeResult.computed_physical_stock;
 
+  // PHASE 0 FIX: Update commitment — covered_from_po does NOT decrease on receiving.
+  // covered_from_po represents "quantity covered by purchase orders" and is set when PO is created.
   if (lineItem.commitment_id) {
     const [commitment] = await ctx.base44.entities.PartCommitment.filter({ id: lineItem.commitment_id });
     if (commitment) {
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, {
-        covered_from_po: Math.max(0, (commitment.covered_from_po ?? 0) - qty_received),
+      const updateData = {
+        // CANONICAL: covered_from_po stays unchanged — it was set when PO was created
+        // Deprecated fields updated for compatibility
         qty_received: (commitment.qty_received ?? 0) + qty_received,
-        commitment_status: 'received',
         commitment_version: (commitment.commitment_version ?? 0) + 1
-      });
+      };
+      
+      // Log if covered_from_po is negative (pre-existing corruption)
+      if ((commitment.covered_from_po ?? 0) < 0) {
+        console.warn(`[PHASE0_GUARD] Negative covered_from_po detected on commitment ${commitment.id}: ${commitment.covered_from_po}`);
+      }
+      
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(lineItem.commitment_id, updateData);
       ctx.mutations.push({ entity: 'PartCommitment', id: lineItem.commitment_id, action: 'RECEIVE' });
     }
   }
@@ -993,12 +1012,30 @@ async function reverseInstall(ctx, commitment_ids, payload) {
   });
 
   if (affects_stock) {
-    const new_physical = (part.physical_stock ?? 0) + qty_to_reverse;
-    await ctx.base44.asServiceRole.entities.Part.update(part.id, { physical_stock: new_physical });
-    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'REVERSE_INSTALL' });
+    // PHASE 0 FIX: Use recompute path instead of directly setting physical_stock
+    // Add stock back via inventory item, then recompute
+    const inventoryItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id: part.id });
+    if (inventoryItems.length > 0) {
+      // Add back to first available inventory item
+      const targetItem = inventoryItems[0];
+      await ctx.base44.asServiceRole.entities.InventoryItem.update(targetItem.id, {
+        quantity_on_hand: (targetItem.quantity_on_hand ?? 0) + qty_to_reverse
+      });
+    } else {
+      // No inventory items exist — create one at default location
+      const defaultLocId = await getOrCreateDefaultLocation(ctx);
+      await ctx.base44.asServiceRole.entities.InventoryItem.create({
+        part_id: part.id, location_id: defaultLocId,
+        quantity_on_hand: qty_to_reverse, quantity_reserved: 0,
+        received_date: new Date().toISOString().split('T')[0],
+        notes: 'Reverse install recovery', source_type: 'reversal'
+      });
+    }
     
-    // INLINED rebalance
+    // INLINED recompute + rebalance (canonical path)
+    await inlineRecomputePhysicalStock(ctx, part.id, false);
     await inlineRebalance(ctx, part.id, false);
+    ctx.mutations.push({ entity: 'Part', id: part.id, action: 'REVERSE_INSTALL' });
   }
 
   ctx.mutations.push({ entity: 'PartCommitment', id: commitmentId, action: 'REVERSE_INSTALL' });
