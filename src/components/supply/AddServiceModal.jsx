@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -19,10 +20,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, FolderKanban, Search } from "lucide-react";
 import { toast } from "sonner";
 
-export default function AddServiceModal({ projectId, open, onClose, onSuccess }) {
+/**
+ * AddServiceModal - Create a ServiceCommitment for a project.
+ *
+ * Props:
+ *  - projectId: string | null — when provided, project is locked (project-scoped context)
+ *  - projectName: string | null — display name when project is locked
+ *  - open: boolean
+ *  - onClose: () => void
+ *  - onSuccess: () => void
+ */
+export default function AddServiceModal({ projectId: lockedProjectId, projectName: lockedProjectName, open, onClose, onSuccess }) {
+  const isProjectLocked = !!lockedProjectId;
+
+  const [selectedProjectId, setSelectedProjectId] = useState(lockedProjectId || "");
+  const [projectSearch, setProjectSearch] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [description, setDescription] = useState("");
   const [vendorId, setVendorId] = useState("");
@@ -46,6 +61,13 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
     queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
   });
 
+  // Only fetch projects when not locked to a project
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects-for-service-modal"],
+    queryFn: () => base44.entities.Project.list("-created_date", 200),
+    enabled: !isProjectLocked,
+  });
+
   const selectedService = services.find(s => s.id === serviceId);
 
   // Filter vendors: show allowed vendors for selected service, or all if none set
@@ -53,6 +75,21 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
     if (!selectedService?.allowed_vendor_ids?.length) return serviceVendors;
     return serviceVendors.filter(v => selectedService.allowed_vendor_ids.includes(v.id));
   }, [selectedService, serviceVendors]);
+
+  // Filter projects by search
+  const filteredProjects = useMemo(() => {
+    if (!projectSearch) return projects;
+    const term = projectSearch.toLowerCase();
+    return projects.filter(p =>
+      p.name?.toLowerCase().includes(term) ||
+      p.client_name?.toLowerCase().includes(term)
+    );
+  }, [projects, projectSearch]);
+
+  const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
+  const resolvedProjectName = isProjectLocked
+    ? lockedProjectName
+    : projects.find(p => p.id === selectedProjectId)?.name;
 
   // Auto-set vendor when service changes
   const handleServiceChange = (id) => {
@@ -85,6 +122,10 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
   };
 
   const handleSave = async () => {
+    if (!resolvedProjectId) {
+      toast.error("Please select a project");
+      return;
+    }
     if (!serviceId || !description) {
       toast.error("Service and description are required");
       return;
@@ -93,7 +134,7 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
     try {
       await base44.functions.invoke("executeServiceAction", {
         action_type: "CREATE",
-        project_id: projectId,
+        project_id: resolvedProjectId,
         service_id: serviceId,
         description,
         vendor_id: vendorId || selectedService?.default_vendor_id || null,
@@ -101,7 +142,7 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
         quantity: parseInt(quantity) || 1,
         notes,
       });
-      toast.success("Service added");
+      toast.success("Service added to project");
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -115,10 +156,62 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-white">Add Service to Project</DialogTitle>
+          <DialogTitle className="text-white">Create Service for Project</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto">
+          {/* ── Section 1: Project Association ── */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FolderKanban className="w-4 h-4 text-blue-400" />
+              <Label className="text-gray-300 font-medium">Project *</Label>
+            </div>
+            {isProjectLocked ? (
+              <div className="bg-gray-800/70 border border-gray-700 rounded-md px-3 py-2 flex items-center gap-2">
+                <Badge variant="outline" className="border-blue-600/50 text-blue-400 text-xs">Locked</Badge>
+                <span className="text-white text-sm">{lockedProjectName || "Project"}</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <Input
+                    placeholder="Search projects..."
+                    value={projectSearch}
+                    onChange={e => setProjectSearch(e.target.value)}
+                    className="pl-10 bg-gray-800 border-gray-600 text-white"
+                  />
+                </div>
+                <div className="max-h-36 overflow-y-auto border border-gray-700 rounded-md bg-gray-900/50">
+                  {filteredProjects.length === 0 ? (
+                    <p className="text-xs text-gray-500 p-3 text-center">No projects found</p>
+                  ) : (
+                    filteredProjects.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelectedProjectId(p.id)}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-800 last:border-b-0 ${
+                          selectedProjectId === p.id
+                            ? "bg-blue-900/40 text-white"
+                            : "text-gray-300 hover:bg-gray-800"
+                        }`}
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        {p.client_name && <span className="text-gray-500 ml-2 text-xs">— {p.client_name}</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+                {!selectedProjectId && (
+                  <p className="text-xs text-amber-400">⚠ You must select a project before adding a service</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-gray-700/50" />
+
+          {/* ── Section 2: Service Selection ── */}
           <div>
             <Label className="text-gray-300">Service *</Label>
             <Select value={serviceId} onValueChange={handleServiceChange}>
@@ -145,6 +238,9 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
             />
           </div>
 
+          <div className="border-t border-gray-700/50" />
+
+          {/* ── Section 3: Vendor Selection ── */}
           <div>
             <div className="flex items-center justify-between">
               <Label className="text-gray-300">Service Vendor</Label>
@@ -179,6 +275,9 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
             )}
           </div>
 
+          <div className="border-t border-gray-700/50" />
+
+          {/* ── Section 4: Cost & Quantity ── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-gray-300">Estimated Cost</Label>
@@ -219,7 +318,7 @@ export default function AddServiceModal({ projectId, open, onClose, onSuccess })
           <Button variant="outline" onClick={onClose} className="border-gray-600">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving || !serviceId || !description}>
+          <Button onClick={handleSave} disabled={saving || !resolvedProjectId || !serviceId || !description}>
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
             Add Service
           </Button>

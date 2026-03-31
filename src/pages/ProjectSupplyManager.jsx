@@ -893,7 +893,7 @@ export default function ProjectSupplyManager() {
 
             {/* Services tab - Project services (shipping, plating, etc.) */}
             <TabsContent value="services" className="mt-4">
-              <ProjectServicesSection projectId={projectId} />
+              <ProjectServicesSection projectId={projectId} projectName={project?.name} />
             </TabsContent>
 
             <TabsContent value="buy" className="mt-4 space-y-4">

@@ -10,7 +10,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceCommitmentCard from "@/components/supply/ServiceCommitmentCard";
 import AddServiceModal from "@/components/supply/AddServiceModal";
 
-export default function ProjectServicesSection({ projectId }) {
+export default function ProjectServicesSection({ projectId, projectName }) {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -171,6 +171,7 @@ export default function ProjectServicesSection({ projectId }) {
       {showAddModal && (
         <AddServiceModal
           projectId={projectId}
+          projectName={projectName}
           open={showAddModal}
           onClose={() => setShowAddModal(false)}
           onSuccess={invalidate}

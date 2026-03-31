@@ -145,8 +145,8 @@ export default function ServicesDashboard() {
     }
   };
 
-  const handleAddService = (projectId) => {
-    setAddModalProjectId(projectId || (projects[0]?.id ?? null));
+  const handleAddService = () => {
+    setAddModalProjectId(null);
     setShowAddModal(true);
   };
 
@@ -168,7 +168,7 @@ export default function ServicesDashboard() {
             <Button onClick={() => refetch()} variant="outline" size="sm" className="border-gray-700 text-white">
               <RefreshCw className="w-4 h-4" />
             </Button>
-            <Button onClick={() => handleAddService(null)} size="sm" className="gap-1">
+            <Button onClick={() => handleAddService()} size="sm" className="gap-1">
               <Plus className="w-4 h-4" />
               Add Service
             </Button>
@@ -250,7 +250,7 @@ export default function ServicesDashboard() {
                 <SelectContent>
                   <SelectItem value="all">All Vendors</SelectItem>
                   {vendorsInUse.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -266,7 +266,7 @@ export default function ServicesDashboard() {
                 <CardContent className="p-8 text-center">
                   <Truck className="w-12 h-12 mx-auto mb-3 text-gray-600" />
                   <p className="text-gray-400">No service commitments found</p>
-                  <Button variant="outline" size="sm" className="mt-3 border-gray-700 text-white" onClick={() => handleAddService(null)}>
+                  <Button variant="outline" size="sm" className="mt-3 border-gray-700 text-white" onClick={() => handleAddService()}>
                     <Plus className="w-4 h-4 mr-1" /> Add Service
                   </Button>
                 </CardContent>
@@ -275,17 +275,12 @@ export default function ServicesDashboard() {
               <div className="space-y-2">
                 {filtered.map(c => (
                   <div key={c.id} className="relative">
-                    {/* Project tag */}
-                    <div className="absolute -top-1 left-3 z-10">
-                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-gray-600 text-gray-400 bg-gray-900">
-                        {projectsMap.get(c.project_id)?.name || "Unknown Project"}
-                      </Badge>
-                    </div>
-                    <div className="pt-2">
+                    <div className="pt-0">
                       <ServiceCommitmentCard
                         commitment={c}
                         serviceName={servicesMap.get(c.service_id)?.name || "Unknown"}
                         vendorName={vendorsMap.get(c.vendor_id)?.name}
+                        projectName={projectsMap.get(c.project_id)?.name}
                         onStatusChange={handleStatusChange}
                         onDelete={handleDelete}
                         onTotalsChanged={invalidateAll}
@@ -304,31 +299,14 @@ export default function ServicesDashboard() {
         </Tabs>
       </div>
 
-      {/* Add Modal */}
-      {showAddModal && addModalProjectId && (
+      {/* Add Modal — unified: handles both project-scoped and global */}
+      {showAddModal && (
         <AddServiceModal
-          projectId={addModalProjectId}
+          projectId={null}
+          projectName={null}
           open={showAddModal}
           onClose={() => { setShowAddModal(false); setAddModalProjectId(null); }}
           onSuccess={invalidate}
-        />
-      )}
-
-      {/* Add Modal - project picker when no project preselected */}
-      {showAddModal && !addModalProjectId && (
-        <ProjectPickerForService
-          projects={projects}
-          onSelect={(pid) => { setAddModalProjectId(pid); }}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
-
-      {/* Edit Cost */}
-      {editCostModal && (
-        <EditCostModalGlobal
-          commitment={editCostModal}
-          onClose={() => setEditCostModal(null)}
-          onSuccess={() => { invalidate(); setEditCostModal(null); }}
         />
       )}
     </div>
@@ -344,39 +322,7 @@ function SummaryCard({ label, value, color }) {
   );
 }
 
-function ProjectPickerForService({ projects, onSelect, onClose }) {
-  const [search, setSearch] = useState("");
-  const filtered = projects.filter(p =>
-    !search || p.name?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-4 space-y-3" onClick={e => e.stopPropagation()}>
-        <h3 className="text-white font-semibold">Select Project</h3>
-        <Input
-          placeholder="Search projects..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="bg-gray-800 border-gray-600 text-white"
-        />
-        <div className="max-h-64 overflow-y-auto space-y-1">
-          {filtered.map(p => (
-            <button
-              key={p.id}
-              onClick={() => onSelect(p.id)}
-              className="w-full text-left px-3 py-2 rounded hover:bg-gray-800 text-gray-200 text-sm transition-colors"
-            >
-              {p.name}
-              {p.client_name && <span className="text-gray-500 ml-2">— {p.client_name}</span>}
-            </button>
-          ))}
-        </div>
-        <Button variant="outline" onClick={onClose} className="w-full border-gray-600">Cancel</Button>
-      </div>
-    </div>
-  );
-}
+// ProjectPickerForService removed — project selection is now built into AddServiceModal
 
 function EditCostModalGlobal({ commitment, onClose, onSuccess }) {
   const [estimated, setEstimated] = useState(String(commitment.estimated_cost || ""));

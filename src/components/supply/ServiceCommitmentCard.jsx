@@ -10,6 +10,7 @@ import {
 import { MoreVertical, ArrowRight, Trash2, ChevronDown, ChevronRight, List } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceLineItemManager from "@/components/supply/ServiceLineItemManager";
+import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
   planned: { label: "Planned", color: "bg-gray-600 text-gray-100" },
@@ -34,6 +35,7 @@ export default function ServiceCommitmentCard({
   commitment,
   serviceName,
   vendorName,
+  projectName,
   onStatusChange,
   onDelete,
   onTotalsChanged,
@@ -73,7 +75,13 @@ export default function ServiceCommitmentCard({
               {cfg.label}
             </Badge>
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
+            {projectName && (
+              <span className="flex items-center gap-1 text-blue-400">
+                <FolderKanban className="w-3 h-3" />
+                {projectName}
+              </span>
+            )}
             <span>{serviceName}</span>
             {vendorName && <span>• {vendorName}</span>}
             {commitment.quantity > 1 && <span>• Qty: {commitment.quantity}</span>}
