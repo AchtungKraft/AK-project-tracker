@@ -78,14 +78,14 @@ export default function PartModal({ part, partId, onClose }) {
   const initializedPartIdRef = useRef(null);
   
   // Dev diagnostic for tracking part switches
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.debug('[PartModal] effectivePartId:', effectivePartId);
   }
   
   // PHASE 3: Section health monitor - detect stuck queries
   const sectionHealthRef = useRef({});
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
+    if (!import.meta.env.DEV) return;
     const checkStuckQueries = () => {
       const queryCache = queryClient.getQueryCache();
       const stuckThreshold = 4000; // 4 seconds
@@ -231,7 +231,7 @@ export default function PartModal({ part, partId, onClose }) {
   
   // DEV: Phase 1C - Track state overwrites
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
+    if (!import.meta.env.DEV) return;
     console.log('[UPLOAD_DEBUG C] formData.photos changed:', {
       formDataPhotosLength: formData?.photos?.length || 0,
       activePartPhotosLength: activePart?.photos?.length || 0,
@@ -399,7 +399,7 @@ export default function PartModal({ part, partId, onClose }) {
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: async () => {
       // DEV: Phase 1E - Verify DB persisted photos
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         try {
           const [verifyPart] = await base44.entities.Part.filter({ id: activePart.id });
           console.log('[UPLOAD_DEBUG E] After save, DB photos:', {
@@ -471,7 +471,7 @@ export default function PartModal({ part, partId, onClose }) {
     const files = Array.from(e.target.files || []);
     
     // DEV: Phase 1A - Log to confirm onChange fires
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log('[UPLOAD_DEBUG A] onChange fired:', {
         fileCount: files.length,
         fileNames: files.map(f => f.name),
@@ -498,7 +498,7 @@ export default function PartModal({ part, partId, onClose }) {
         const newFeatured = prev.featured_photo || (updatedPhotos.length > 0 ? updatedPhotos[0] : '');
         
         // DEV: Phase 1B - Confirm state update
-        if (process.env.NODE_ENV === 'development') {
+        if (import.meta.env.DEV) {
           console.log('[UPLOAD_DEBUG B] State update:', {
             prevPhotosLength: prev.photos?.length || 0,
             newPhotosLength: updatedPhotos.length,
@@ -672,7 +672,7 @@ export default function PartModal({ part, partId, onClose }) {
     };
 
     // DEV: Phase 1D - Confirm save payload includes photos
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log('[UPLOAD_DEBUG D] Save payload:', {
         photosLength: updatePayload.photos?.length || 0,
         featured_photo: updatePayload.featured_photo,

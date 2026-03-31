@@ -160,7 +160,7 @@ export function resolveInventoryForCommitment(commitment, partInventoryMap) {
  * @param {Object} canonical - Values from canonical resolver
  */
 export function validateInventoryConsistency(source, partId, displayed, canonical) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const mismatches = [];
   

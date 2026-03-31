@@ -130,6 +130,28 @@ Deno.serve(async (req) => {
 
         const project = projectMap.get(c.project_id);
 
+        // Determine next action based on canonical quantities
+        let next_action = 'COMPLETE';
+        if (to_order > 0 && on_order > 0) {
+          // Some ordered but gap still remains
+          next_action = 'RECEIVE';
+        } else if (to_order > 0) {
+          // Nothing on order yet, need to buy
+          next_action = 'CREATE_PO';
+        } else if (on_order > 0) {
+          // Fully covered by PO but awaiting delivery
+          next_action = 'RECEIVE';
+        } else if (reserved > installed) {
+          // Stock in hand, ready to install
+          next_action = 'INSTALL';
+        } else if (reserved === 0 && required > 0 && installed < required) {
+          // Need stock allocation first
+          const physicalStock = part.physical_stock ?? 0;
+          const totalAllocated = partCommitments.reduce((s, pc) => s + (pc.reserved_from_stock ?? 0), 0);
+          const globalAvailable = Math.max(0, physicalStock - totalAllocated);
+          next_action = globalAvailable > 0 ? 'ALLOCATE' : 'CREATE_PO';
+        }
+
         commitmentsByProject.push({
           commitment_id: c.id,
           project_id: c.project_id,
@@ -144,7 +166,7 @@ Deno.serve(async (req) => {
           billing_status: c.billing_status,
           coverage_pct,
           coverage_status: coverage_pct >= 100 ? 'FULLY_COVERED' : (coverage_pct > 0 ? 'PARTIALLY_COVERED' : 'NOT_COVERED'),
-          next_action: to_order > 0 ? 'CREATE_PO' : (reserved > installed ? 'INSTALL' : 'COMPLETE'),
+          next_action,
           created_date: c.created_date
         });
       }

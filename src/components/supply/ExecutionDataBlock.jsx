@@ -105,7 +105,7 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
  * Logs warnings to console in development - does NOT throw in production.
  */
 export function validateSupplyModelDrift(items, sourceName = 'Unknown') {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   items.forEach(item => {
     const inv = item.inventory_snapshot || {};

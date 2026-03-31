@@ -50,7 +50,7 @@ import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/componen
 import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
 
 // DEV guardrails
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV) {
   window.__INVOICEBATCH_REMOVED__ = true;
   window.__CANONICAL_INVOICE_MODAL__ = 'CreateProjectInvoiceModal';
   registerInvoiceCreationSurface('CreateProjectInvoiceModal');
@@ -320,7 +320,7 @@ export default function CreateProjectInvoiceModal({
       };
 
       // DEV GUARDRAIL: Log canonical invoice creation
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         guardInvoiceMutation('createProjectInvoiceDraft', 'CreateProjectInvoiceModal');
       }
 

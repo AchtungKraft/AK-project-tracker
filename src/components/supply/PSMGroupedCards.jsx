@@ -220,7 +220,7 @@ export function PSMItemRow({
   );
 
   // Phase 5: Dev diagnostics for PO field passthrough
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('[PSMItemRow] PO fields', {
       commitment_id: commitment.commitment_id || commitment.id,
       order_id: commitment.order_id,
@@ -237,7 +237,7 @@ export function PSMItemRow({
   const billingState = commitment.billing_state || 'NOT_INVOICED';
 
   // PHASE 2: Install Eligibility Debug Trace (dev only)
-  if (process.env.NODE_ENV === 'development' && part?.part_name?.includes('Air Conditioning')) {
+  if (import.meta.env.DEV && part?.part_name?.includes('Air Conditioning')) {
     console.log("INSTALL DEBUG - A/C Part", {
       part: part?.part_name,
       reserved_from_stock: commitment.reserved_from_stock,
@@ -712,7 +712,7 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
       };
     }
   } catch (err) {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.warn('[getGroupInfo] Error resolving group for item', item.id || item.commitment_id, mode, err);
     }
     return { key: '_error', name: 'Unknown', inventoryState: null };

@@ -7,7 +7,7 @@ import { base44 } from "@/api/base44Client";
  * Dev-mode logging + analytics tracking for production debugging
  */
 
-const DEV_MODE = process.env.NODE_ENV === 'development';
+const DEV_MODE = import.meta.env.DEV;
 
 // In-memory action log for admin panel
 const actionLog = [];

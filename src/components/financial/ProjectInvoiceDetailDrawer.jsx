@@ -199,7 +199,7 @@ export default function ProjectInvoiceDetailDrawer({
     setIsSubmitting(true);
     try {
       // DEV GUARDRAIL: Track canonical mutation call
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         guardInvoiceMutation('markInvoiceSent', 'ProjectInvoiceDetailDrawer');
       }
 
@@ -240,7 +240,7 @@ export default function ProjectInvoiceDetailDrawer({
     setIsSubmitting(true);
     try {
       // DEV GUARDRAIL: Track canonical mutation call
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         guardInvoiceMutation('markInvoicePaid', 'ProjectInvoiceDetailDrawer');
       }
 

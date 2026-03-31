@@ -188,7 +188,7 @@ export async function bulkSetPaid(commitment_ids, invoice_batch_id, options = {}
  * Call this in useProjectInvoiceView to warn on non-canonical values
  */
 export function warnOnNonCanonicalStatus(commitments, source = 'unknown') {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const nonCanonical = commitments.filter(c => !isCanonicalBillingStatus(c.billing_status));
   

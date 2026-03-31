@@ -319,7 +319,7 @@ export async function forceAppRefresh(queryClient, options = {}) {
   await Promise.all(refetches);
   
   // Log in development
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('[forceAppRefresh] Completed:', {
       partIds,
       projectIds,

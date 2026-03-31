@@ -16,7 +16,7 @@
 // GLOBAL DEV FLAGS (set by components on mount)
 // ============================================
 
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   // Track which invoice creation surfaces are active
   window.__INVOICE_CREATION_SURFACES__ = window.__INVOICE_CREATION_SURFACES__ || new Set();
   
@@ -50,7 +50,7 @@ export const VIOLATION_TYPES = {
  * Log an architecture violation (DEV only)
  */
 export function logViolation(type, details) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const violation = {
     type,
@@ -73,7 +73,7 @@ export function logViolation(type, details) {
  * Warn if invoice history fields are used for exposure calculation
  */
 export function guardExposureCalculation(source, data, operation) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const historyFields = [
     'invoices',
@@ -99,7 +99,7 @@ export function guardExposureCalculation(source, data, operation) {
  * Validate that exposure comes from canonical source
  */
 export function validateExposureSource(source, exposureValue, sourceFunction) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const canonicalSources = [
     'getBillingAndProcurementStates',
@@ -124,7 +124,7 @@ export function validateExposureSource(source, exposureValue, sourceFunction) {
  * Detect raw query key arrays that should use factories
  */
 export function guardQueryKey(key, component) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   // Known factory-managed key prefixes
   const managedPrefixes = [
@@ -179,7 +179,7 @@ export function guardQueryKey(key, component) {
  * Warn if projectId normalization returns empty string
  */
 export function guardProjectIdNormalization(input, output, source) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   if (output === '') {
     logViolation(VIOLATION_TYPES.EMPTY_STRING_PROJECT_ID, {
@@ -199,7 +199,7 @@ export function guardProjectIdNormalization(input, output, source) {
  * Register an invoice creation surface (call on component mount)
  */
 export function registerInvoiceCreationSurface(surfaceName) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   window.__INVOICE_CREATION_SURFACES__ = window.__INVOICE_CREATION_SURFACES__ || new Set();
   window.__INVOICE_CREATION_SURFACES__.add(surfaceName);
@@ -218,7 +218,7 @@ export function registerInvoiceCreationSurface(surfaceName) {
  * Guard against direct invoice mutation calls
  */
 export function guardInvoiceMutation(functionName, callingComponent) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const invoiceMutationFunctions = [
     'createProjectInvoiceDraft',
@@ -251,7 +251,7 @@ export function guardInvoiceMutation(functionName, callingComponent) {
  * Guard against calling deprecated functions
  */
 export function guardDeprecatedFunction(functionName, replacement, callingComponent) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const deprecatedFunctions = {
     'getGlobalOrderQueue': 'getOpsSupplyView',
@@ -277,7 +277,7 @@ export function guardDeprecatedFunction(functionName, replacement, callingCompon
  * Print violation summary to console
  */
 export function printViolationSummary() {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   
   const violations = window.__ARCHITECTURE_VIOLATIONS__ || [];
   
@@ -307,7 +307,7 @@ export function printViolationSummary() {
 // AUTO-RUN SUMMARY ON PAGE LOAD (DEV)
 // ============================================
 
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   // Print summary after page settles
   setTimeout(() => {
     printViolationSummary();

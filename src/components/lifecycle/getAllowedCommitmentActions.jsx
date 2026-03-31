@@ -192,7 +192,7 @@ export function getAllowedCommitmentActions(commitment) {
   }
   
   // TRACE: Debug logging for specific commitment
-  if (process.env.NODE_ENV === 'development' && commitment?.id === '699bcdbc64c5d88332d0e0c7') {
+  if (import.meta.env.DEV && commitment?.id === '699bcdbc64c5d88332d0e0c7') {
     console.log("🔍 LIFECYCLE TRACE - Heating Pipe", commitment?.id, {
       required_total: effectiveRequired,
       invoiced_qty: commitmentInvoicedQty,

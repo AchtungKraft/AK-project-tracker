@@ -69,41 +69,6 @@ export default function VendorInvoiceModal({
   const effectiveProject = project || fetchedProject;
   const isForwardModel = effectiveProject?.financial_model_version === 'forward';
 
-  // HARD BLOCK: Render blocked UI for forward projects
-  if (isForwardModel) {
-    return (
-      <Dialog open onOpenChange={onClose}>
-        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Ban className="w-5 h-5 text-red-400" />
-              Not Available
-            </DialogTitle>
-            <DialogDescription>
-              This feature is not available for forward model projects.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-6 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
-              <Ban className="w-8 h-8 text-red-400" />
-            </div>
-            <p className="text-gray-300 mb-2">
-              Vendor Invoice is not available for forward model projects.
-            </p>
-            <p className="text-sm text-gray-500">
-              Forward model uses Order header for freight/tariff costs and InvoiceBatch for client billing.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={onClose} className="w-full">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   // Fetch PO line items
   const { data: lineItems = [] } = useQuery({
     queryKey: ['purchaseLineItems', order?.id],
@@ -403,6 +368,41 @@ export default function VendorInvoiceModal({
       toast.error(`Failed to save: ${error.message}`);
     }
   });
+
+  // HARD BLOCK: Render blocked UI for forward projects (after all hooks)
+  if (isForwardModel) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-400" />
+              Not Available
+            </DialogTitle>
+            <DialogDescription>
+              This feature is not available for forward model projects.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <Ban className="w-8 h-8 text-red-400" />
+            </div>
+            <p className="text-gray-300 mb-2">
+              Vendor Invoice is not available for forward model projects.
+            </p>
+            <p className="text-sm text-gray-500">
+              Forward model uses Order header for freight/tariff costs and InvoiceBatch for client billing.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>

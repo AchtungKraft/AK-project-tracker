@@ -55,7 +55,34 @@ export default function CreatePoolModal({ projectId, project, onClose, onSuccess
 
   const canSubmit = poolName.trim().length > 0;
 
-  // HARD BLOCK: Render blocked UI for forward projects
+  const createPoolMutation = useMutation({
+    mutationFn: async () => {
+      return await CommitmentActions.createBillingPool({
+        project_id: projectId,
+        pool_name: poolName.trim(),
+        invoiced_amount: invoicedAmount || 0,
+        notes: notes.trim() || undefined,
+      });
+    },
+    onSuccess: async (result) => {
+      await forceAppRefresh(queryClient, {
+        projectIds: [projectId],
+      });
+      toast.success(`Pool "${poolName}" created successfully`);
+      onSuccess?.(result);
+      onClose();
+    },
+    onError: (error) => {
+      toast.error('Failed to create pool: ' + error.message);
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    createPoolMutation.mutate();
+  };
+
+  // HARD BLOCK: Render blocked UI for forward projects (after all hooks)
   if (isForwardModel) {
     return (
       <Dialog open onOpenChange={onClose}>
@@ -86,34 +113,6 @@ export default function CreatePoolModal({ projectId, project, onClose, onSuccess
       </Dialog>
     );
   }
-
-  const createPoolMutation = useMutation({
-    mutationFn: async () => {
-      return await CommitmentActions.createBillingPool({
-        project_id: projectId,
-        pool_name: poolName.trim(),
-        invoiced_amount: invoicedAmount || 0,
-        notes: notes.trim() || undefined,
-      });
-    },
-    onSuccess: async (result) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        projectIds: [projectId],
-      });
-      toast.success(`Pool "${poolName}" created successfully`);
-      onSuccess?.(result);
-      onClose();
-    },
-    onError: (error) => {
-      toast.error('Failed to create pool: ' + error.message);
-    },
-  });
-
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    createPoolMutation.mutate();
-  };
 
   return (
     <Dialog open onOpenChange={onClose}>

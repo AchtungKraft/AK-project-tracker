@@ -61,7 +61,7 @@ import { assertPrimitiveQueryKey } from "@/components/dev/queryKeyGuard";
 export const normalizeProjectId = (projectId) => {
   if (projectId === null || projectId === undefined || projectId === '' || projectId === 'all') {
     // DEV GUARDRAIL: Warn if empty string was passed
-    if (process.env.NODE_ENV === 'development' && projectId === '') {
+    if (import.meta.env.DEV && projectId === '') {
       console.warn('[QUERY_KEY_GUARDRAIL] normalizeProjectId received empty string - returning null');
     }
     return null;
@@ -88,7 +88,7 @@ export const normalizeId = (id) => {
  * Call this in useQuery hooks to detect drift
  */
 export const validateQueryKeyFactory = (key, factoryName, component) => {
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     // Check if key looks like a factory-generated key
     if (!Array.isArray(key)) {
       console.error(`[QUERY_KEY_VIOLATION] ${component}: Key is not an array:`, key);
@@ -102,7 +102,7 @@ export const validateQueryKeyFactory = (key, factoryName, component) => {
  * DEV: Warn if invoice history fields are used for exposure calculation
  */
 export const warnIfInvoiceHistoryUsedForExposure = (source, field) => {
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     const historyFields = ['invoices', 'invoice_count', 'total_invoiced', 'paid_amount'];
     if (historyFields.includes(field)) {
       console.warn(
@@ -117,7 +117,7 @@ export const warnIfInvoiceHistoryUsedForExposure = (source, field) => {
  * DEV: Warn if raw query key array is detected
  */
 export const warnIfRawQueryKey = (key, component) => {
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     // This would be called from a linting step or manual audit
     console.warn(
       `[RAW_KEY_VIOLATION] ${component}: Using raw query key instead of factory:`, key
@@ -129,7 +129,7 @@ export const warnIfRawQueryKey = (key, component) => {
  * DEV diagnostic logger - logs query key usage for debugging
  */
 export const logQueryKeyUsage = (component, keyName, key, dataUpdatedAt, canonicalTotals) => {
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log(`[QueryKey] ${component}:`, {
       keyName,
       queryKey: key,

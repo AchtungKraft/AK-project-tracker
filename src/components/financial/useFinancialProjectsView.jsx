@@ -42,7 +42,7 @@ export function useBillingAndProcurementStates(projectId, options = {}) {
   const queryKey = billingKeys.states(normalizedId);
   
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log("[useBillingAndProcurementStates] Init:", {
       rawProjectId: projectId,
       normalizedId,
@@ -71,7 +71,7 @@ export function useBillingAndProcurementStates(projectId, options = {}) {
   });
   
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === 'development' && query.data) {
+  if (import.meta.env.DEV && query.data) {
     logQueryKeyUsage(
       'useBillingAndProcurementStates',
       'billingKeys.states',

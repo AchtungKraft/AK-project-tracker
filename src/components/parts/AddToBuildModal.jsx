@@ -82,7 +82,7 @@ export default function AddToBuildModal({ part, onClose }) {
       );
 
       // DEV GUARDRAIL: Check for duplicates - should never happen
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         const duplicates = existingCommitments.filter(
           c => c.project_id === formData.project_id
         );

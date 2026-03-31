@@ -13,7 +13,7 @@
  * });
  */
 
-const IS_DEV = process.env.NODE_ENV === 'development';
+const IS_DEV = import.meta.env.DEV;
 
 // Track active queries to detect duplicates
 const activeQueries = new Map();

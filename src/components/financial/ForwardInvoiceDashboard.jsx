@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 
 // DEV guardrail
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV) {
   window.__INVOICEBATCH_REMOVED__ = true;
 }
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,7 +112,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   
   // DEV: Log invoice data only in development
   React.useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log("INVOICE PROJECT ID:", normalizedProjectId);
       console.log("INVOICE LIST:", invoices?.length ?? 0);
     }
@@ -139,7 +139,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
 
   // DEV diagnostic logging - only in development
   React.useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log("[ForwardInvoiceDashboard] Query State:", {
         normalizedProjectId,
         invoiceCount: invoices?.length ?? 0,

@@ -88,7 +88,7 @@ export default function MobileCommitmentCard({
   const available = commitment?.inventory_snapshot?.available ?? 0;
   
   // PHASE 7: DEV GUARD - Validate inventory consistency
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     const displayed = { in_stock: inStock, reserved, available };
     const canonical = { physical_stock: inStock, reserved_global: reserved, available_global: available };
     validateInventoryConsistency('MobileCommitmentCard', commitment?.part_id, displayed, canonical);

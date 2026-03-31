@@ -696,7 +696,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
   const normalizedProjectFilter = normalizeProjectId(projectFilter);
   
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === "development") {
+  if (import.meta.env.DEV) {
     console.log("[InvoiceWorkbench] Query State:", {
       rawProjectId: projectId,
       normalizedProjectId,

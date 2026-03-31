@@ -21,7 +21,7 @@
  */
 
 export function assertPrimitiveQueryKey(key) {
-  if (process.env.NODE_ENV !== "development") return;
+  if (!import.meta.env.DEV) return;
 
   key.forEach((segment, index) => {
     const type = typeof segment;

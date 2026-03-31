@@ -65,38 +65,6 @@ export default function AllocatePoolModal({
   // Fetch pools for project (only for legacy model)
   const isLegacyActive = !isForwardModel;
 
-  // HARD BLOCK: Render blocked UI for forward projects
-  if (isForwardModel) {
-    return (
-      <Dialog open onOpenChange={onClose}>
-        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Ban className="w-5 h-5 text-red-400" />
-              Not Available
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-6 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
-              <Ban className="w-8 h-8 text-red-400" />
-            </div>
-            <p className="text-gray-300 mb-2">
-              Pool Allocation is not available for forward model projects.
-            </p>
-            <p className="text-sm text-gray-500">
-              Forward model uses Invoice Batches for client billing. Use the Invoice Workbench instead.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={onClose} className="w-full">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   // Fetch pools for project
   const { data: pools = [], isLoading: poolsLoading } = useQuery({
     queryKey: ['projectPools', projectId],
@@ -122,7 +90,6 @@ export default function AllocatePoolModal({
   });
 
   // Calculate pool data with allocations
-  // NULL SAFETY: All pool fields use ?? 0
   const poolsWithData = useMemo(() => {
     return pools.map(pool => {
       const poolAllocations = allocations.filter(a => 
@@ -191,7 +158,6 @@ export default function AllocatePoolModal({
       });
     },
     onSuccess: async (data) => {
-      // PHASE 17: Deterministic refresh
       await forceAppRefresh(queryClient, {
         projectIds: [projectId],
         commitmentIds: commitment?.id ? [commitment.id] : [],
@@ -210,6 +176,38 @@ export default function AllocatePoolModal({
       toast.error(`Allocation failed: ${error.message}`);
     }
   });
+
+  // HARD BLOCK: Render blocked UI for forward projects (after all hooks)
+  if (isForwardModel) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-400" />
+              Not Available
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-900/30 flex items-center justify-center">
+              <Ban className="w-8 h-8 text-red-400" />
+            </div>
+            <p className="text-gray-300 mb-2">
+              Pool Allocation is not available for forward model projects.
+            </p>
+            <p className="text-sm text-gray-500">
+              Forward model uses Invoice Batches for client billing. Use the Invoice Workbench instead.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>

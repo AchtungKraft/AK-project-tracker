@@ -52,7 +52,7 @@ function validateItemContract(item, index) {
   }
   
   // Warn about missing fields in dev
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     const missingGrouping = groupingFields.filter(f => !item[f]);
     const missingFinancial = financialFields.filter(f => item[f] === undefined);
     
