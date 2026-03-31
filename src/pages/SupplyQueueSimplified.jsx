@@ -451,7 +451,7 @@ export default function SupplyQueueSimplified() {
                                 const needed = Math.max(0, (commitment.required_total ?? 0) - (commitment.qty_installed ?? 0));
                                 
                                 // PHASE 7: DEV GUARD - Validate inventory consistency
-                                if (process.env.NODE_ENV === 'development') {
+                                if (import.meta.env.DEV) {
                                   const displayed = { in_stock: inStock, reserved: reservedGlobal, available: partInv.available_global_active ?? 0 };
                                   const canonical = { physical_stock: inStock, reserved_global: reservedGlobal, available_global: partInv.available_global_active ?? 0 };
                                   validateInventoryConsistency('SupplyQueueSimplified', part?.id, displayed, canonical);

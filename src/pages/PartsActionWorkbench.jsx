@@ -60,7 +60,7 @@ import { lifecycleKeys, billingKeys, creditKeys } from "@/components/financial/q
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 // DEV guardrail
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV) {
   window.__INVOICEBATCH_REMOVED__ = true;
   window.__CANONICAL_INVOICE_MODAL__ = 'CreateProjectInvoiceModal';
 }
@@ -620,7 +620,7 @@ export default function PartsActionWorkbench() {
   const currentTabConfig = ACTION_TAB_CONFIG[activeTab] || ACTION_TAB_CONFIG.invoice_client;
 
   // DEV ONLY: Runtime schema validation
-  if (process.env.NODE_ENV === 'development' && currentGroup?.commitments?.length > 0) {
+  if (import.meta.env.DEV && currentGroup?.commitments?.length > 0) {
     const sample = currentGroup.commitments[0];
     console.log('[DEV] PartsActionWorkbench - Sample commitment shape:', sample);
     

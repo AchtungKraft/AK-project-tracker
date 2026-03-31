@@ -108,7 +108,7 @@ export default function GlobalNeedToOrder() {
 
   // DEV DRIFT GUARD
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development' && filteredItems.length > 0) {
+    if (import.meta.env.DEV && filteredItems.length > 0) {
       validateSupplyModelDrift(filteredItems, 'GlobalNeedToOrder');
     }
   }, [filteredItems]);

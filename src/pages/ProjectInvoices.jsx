@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 
 // DEV guardrail
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV) {
   window.__INVOICEBATCH_REMOVED__ = true;
 }
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,7 +116,7 @@ export default function ProjectInvoices() {
   });
 
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === "development") {
+  if (import.meta.env.DEV) {
     console.log("[ProjectInvoices] Query State:", {
       normalizedProjectId,
       invoiceQueryKey,

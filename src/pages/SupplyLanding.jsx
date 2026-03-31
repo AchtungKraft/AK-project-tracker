@@ -81,7 +81,7 @@ export default function SupplyLanding() {
         searchTerm: debouncedSearch,
         statusFilter: statusFilter === 'all' ? null : statusFilter,
       });
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.log(`[PERF] getPortfolioSupplyState ${Date.now() - _start}ms`, {
           projects: response.data?.projects?.length
         });

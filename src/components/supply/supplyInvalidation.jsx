@@ -240,7 +240,7 @@ export function invalidateSupplyQueries(queryClient, context = {}) {
   });
 
   // Log invalidation for debugging
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('[supplyInvalidation] Invalidated queries:', {
       part_ids,
       project_ids,

@@ -20,7 +20,7 @@
  */
 
 // Development mode assertions
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = import.meta.env.DEV;
 
 /**
  * Assert that TaskCard is not receiving mutation handlers directly

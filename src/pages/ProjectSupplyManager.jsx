@@ -97,7 +97,7 @@ export default function ProjectSupplyManager() {
   } = useProjectSupplyView(projectId);
   
   // DEV diagnostic logging
-  if (process.env.NODE_ENV === "development") {
+  if (import.meta.env.DEV) {
     console.log("[ProjectSupplyManager] Query State:", {
       normalizedProjectId: projectId,
       queryKey: ['projectSupplyView', projectId],
@@ -238,7 +238,7 @@ export default function ProjectSupplyManager() {
       }
       
       // PHASE 2: DEV GUARD - Use shared drift validation
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         validateSupplyModelDrift([item], 'ProjectSupplyManager');
         
         const displayed = {

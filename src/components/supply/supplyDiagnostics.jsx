@@ -226,7 +226,7 @@ export function diagnoseCommitment(item, sourceName = 'Unknown') {
  * Run full diagnostic on array of commitment items
  */
 export function diagnoseSupplyItems(items, sourceName = 'Unknown') {
-  if (process.env.NODE_ENV !== 'development') {
+  if (!import.meta.env.DEV) {
     return null;
   }
   
@@ -307,7 +307,7 @@ export function diagnoseSupplyItems(items, sourceName = 'Unknown') {
  * Store PSM diagnostics for later cross-view comparison
  */
 export function storePSMDiagnostics(projectId, items) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   PSM_DIAGNOSTIC_STORE.set(projectId, items);
 }
 
@@ -315,7 +315,7 @@ export function storePSMDiagnostics(projectId, items) {
  * Store GNO diagnostics for later cross-view comparison
  */
 export function storeGNODiagnostics(items) {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (!import.meta.env.DEV) return;
   GNO_DIAGNOSTIC_STORE.items = items;
 }
 
@@ -323,7 +323,7 @@ export function storeGNODiagnostics(items) {
  * Compare views for same commitment IDs
  */
 export function compareViews(psmItems, gnoItems, targetProjectId = null) {
-  if (process.env.NODE_ENV !== 'development') {
+  if (!import.meta.env.DEV) {
     return null;
   }
   
@@ -453,7 +453,7 @@ export function compareViews(psmItems, gnoItems, targetProjectId = null) {
  * Run cross-view comparison using stored data
  */
 export function runCrossViewComparison(projectId) {
-  if (process.env.NODE_ENV !== 'development') {
+  if (!import.meta.env.DEV) {
     return null;
   }
   
@@ -569,7 +569,7 @@ export function traceInventorySource(item, sourceName) {
  * Analyze inventory source patterns across all items
  */
 export function analyzeInventorySources(items, sourceName) {
-  if (process.env.NODE_ENV !== 'development') return null;
+  if (!import.meta.env.DEV) return null;
   
   const traces = items.map(item => traceInventorySource(item, sourceName));
   
@@ -656,7 +656,7 @@ export function getUIFieldMapping() {
  * Run complete forensic diagnostic report
  */
 export function runFullDiagnosticReport(psmItems, gnoItems, projectId) {
-  if (process.env.NODE_ENV !== 'development') {
+  if (!import.meta.env.DEV) {
     console.warn('[DIAGNOSTIC] Disabled in production');
     return null;
   }
