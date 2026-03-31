@@ -1,0 +1,35 @@
+{
+  "name": "ServicePurchaseLineItem",
+  "type": "object",
+  "properties": {
+    "service_commitment_id": {
+      "type": "string",
+      "description": "Reference to ServiceCommitment"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Cost for this line item"
+    },
+    "invoice_reference": {
+      "type": "string",
+      "description": "Vendor invoice number"
+    },
+    "received_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date service was received/completed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Line item notes"
+    }
+  },
+  "required": [
+    "service_commitment_id"
+  ]
+}

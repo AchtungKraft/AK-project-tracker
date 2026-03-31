@@ -58,9 +58,10 @@ import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
+import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { Receipt, Download, ClipboardList } from "lucide-react";
+import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -109,7 +110,7 @@ export default function ProjectSupplyManager() {
   }
 
   // FORWARD MODEL ONLY - No legacy support
-  const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'orders', 'report'];
+  const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'orders', 'services', 'report'];
   
   const rawTab = urlParams.get('tab');
   // Remap legacy fund tab to invoice
@@ -811,6 +812,10 @@ export default function ProjectSupplyManager() {
                 <ClipboardList className="w-4 h-4" />
                 Purchase Orders
               </TabsTrigger>
+              <TabsTrigger value="services" className="data-[state=active]:bg-amber-900/30 gap-1.5">
+                <TruckIcon className="w-4 h-4" />
+                Services
+              </TabsTrigger>
               <TabsTrigger value="report" className="data-[state=active]:bg-red-900/30 gap-1.5">
                 <FileText className="w-4 h-4" />
                 Report
@@ -884,6 +889,11 @@ export default function ProjectSupplyManager() {
             {/* Purchase Orders tab - All project POs */}
             <TabsContent value="orders" className="mt-4">
               <ProjectPurchaseOrders projectId={projectId} />
+            </TabsContent>
+
+            {/* Services tab - Project services (shipping, plating, etc.) */}
+            <TabsContent value="services" className="mt-4">
+              <ProjectServicesSection projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="buy" className="mt-4 space-y-4">

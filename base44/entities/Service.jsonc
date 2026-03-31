@@ -1,0 +1,44 @@
+{
+  "name": "Service",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service name (e.g. UPS Shipping, Chrome Plating)"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shipping",
+        "finishing",
+        "coating",
+        "plating",
+        "fabrication",
+        "upholstery",
+        "electrical",
+        "paint",
+        "machine_work",
+        "inspection",
+        "other"
+      ],
+      "default": "other",
+      "description": "Service category"
+    },
+    "default_vendor_id": {
+      "type": "string",
+      "description": "Reference to preferred Vendor"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the service"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether service is active in catalog"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

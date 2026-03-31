@@ -1,0 +1,75 @@
+{
+  "name": "ServiceCommitment",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "service_id": {
+      "type": "string",
+      "description": "Reference to Service catalog entry"
+    },
+    "description": {
+      "type": "string",
+      "description": "Instance description (e.g. Shipment #2, Chrome plating batch)"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor for this instance"
+    },
+    "estimated_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Estimated cost for this service instance"
+    },
+    "actual_cost": {
+      "type": "number",
+      "description": "Actual cost once known (from vendor invoice)"
+    },
+    "quantity": {
+      "type": "number",
+      "default": 1,
+      "description": "Quantity (usually 1 for services)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "ordered",
+        "completed",
+        "billed"
+      ],
+      "default": "planned",
+      "description": "Service commitment lifecycle status"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "ordered_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When service was ordered"
+    },
+    "completed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When service was completed"
+    },
+    "billed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When service was billed to client"
+    },
+    "invoice_reference": {
+      "type": "string",
+      "description": "Client invoice reference"
+    }
+  },
+  "required": [
+    "project_id",
+    "service_id",
+    "description"
+  ]
+}
