@@ -44,51 +44,67 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // 3. Identify and sort needy commitments
-      const needyCommitments = partCommitments.filter(c => 
-        (c.required_total || 0) > (c.reserved_from_stock || 0) &&
-        !c.is_archived && 
-        c.commitment_status !== 'cancelled' && 
-        c.commitment_status !== 'closed'
-      );
+      // 3. Identify and sort needy commitments (COVERAGE-SAFE)
+      // Gap = required_total - reserved_from_stock - covered_from_po
+      // Only include commitments where gap > 0
+      const needyCommitments = partCommitments.filter(c => {
+        if (c.is_archived || c.commitment_status === 'cancelled' || c.commitment_status === 'closed') return false;
+        const required = c.required_total || 0;
+        const reserved = c.reserved_from_stock || 0;
+        const covered = c.covered_from_po || 0;
+        const gap = required - reserved - covered;
+        return gap > 0;
+      });
       
       const sortedNeedyCommitments = _.sortBy(needyCommitments, c => new Date(c.created_date));
 
-      // 4. Allocate available stock
+      // 4. Allocate available stock (COVERAGE-SAFE)
       for (const commitment of sortedNeedyCommitments) {
         if (available_stock <= 0) {
           break; // No more stock for this part
         }
 
-        const needed_qty = (commitment.required_total || 0) - (commitment.reserved_from_stock || 0);
-        const qty_to_allocate = Math.min(available_stock, needed_qty);
+        const required = commitment.required_total || 0;
+        const reserved_before = commitment.reserved_from_stock || 0;
+        const covered_po = commitment.covered_from_po || 0;
+        const gap = required - reserved_before - covered_po;
+
+        // Skip if fully covered by PO or no gap
+        if (gap <= 0) continue;
+
+        const qty_to_allocate = Math.min(available_stock, gap);
+
+        // Invariant validation: ensure no over-allocation
+        const new_reserved = reserved_before + qty_to_allocate;
+        if (new_reserved + covered_po > required) {
+          summary.logs.push(`INVARIANT VIOLATION PREVENTED: Part ${partId}, commitment ${commitment.id} — reserved(${new_reserved}) + covered_po(${covered_po}) = ${new_reserved + covered_po} > required(${required}). Skipping.`);
+          continue;
+        }
 
         if (qty_to_allocate > 0) {
-          const log_message = `Part ${partId} (Avail: ${available_stock.toFixed(2)}): Allocating ${qty_to_allocate.toFixed(2)} to commitment ${commitment.id} (Needed: ${needed_qty.toFixed(2)})`;
+          const log_message = `Part ${partId} (Avail: ${available_stock.toFixed(2)}): Allocating ${qty_to_allocate.toFixed(2)} to commitment ${commitment.id} | required=${required} reserved_before=${reserved_before} covered_po=${covered_po} gap=${gap}`;
           summary.logs.push(log_message);
 
           if (!dry_run) {
-            const previous_reserved = commitment.reserved_from_stock || 0;
-            const new_reserved = previous_reserved + qty_to_allocate;
 
             try {
               // Update commitment
               await base44.asServiceRole.entities.PartCommitment.update(
-                { id: commitment.id },
+                commitment.id,
                 { reserved_from_stock: new_reserved },
               );
 
               // Create audit log
-              await base44.asServiceRole.entities.CommitmentAuditLog.create([{
+              await base44.asServiceRole.entities.CommitmentAuditLog.create({
                 commitment_id: commitment.id,
                 action_type: 'qty_change',
-                previous_values: { reserved_from_stock: previous_reserved },
+                previous_values: { reserved_from_stock: reserved_before },
                 new_values: { reserved_from_stock: new_reserved },
                 trigger_source: 'manual',
                 triggered_by: user.email,
                 actor_email: user.email,
-                notes: 'Backfill allocation after receiving',
-              }]);
+                notes: `Backfill allocation: gap=${gap}, allocated=${qty_to_allocate}, covered_po=${covered_po}`,
+              });
 
               summary.commitments_updated++;
               summary.total_qty_allocated += qty_to_allocate;
