@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Loader2, FolderKanban, Search } from "lucide-react";
+import { Plus, Loader2, FolderKanban } from "lucide-react";
+import GroupedProjectSelector from "@/components/supply/GroupedProjectSelector";
 import { toast } from "sonner";
 
 /**
@@ -66,12 +67,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
   });
 
-  // Only fetch projects when not locked to a project
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects-for-service-modal"],
-    queryFn: () => base44.entities.Project.list("-created_date", 200),
-    enabled: !isProjectLocked,
-  });
+  // Projects are fetched inside GroupedProjectSelector when not locked
 
   const selectedService = services.find(s => s.id === serviceId);
 
@@ -81,20 +77,9 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     return serviceVendors.filter(v => selectedService.allowed_vendor_ids.includes(v.id));
   }, [selectedService, serviceVendors]);
 
-  // Filter projects by search
-  const filteredProjects = useMemo(() => {
-    if (!projectSearch) return projects;
-    const term = projectSearch.toLowerCase();
-    return projects.filter(p =>
-      p.name?.toLowerCase().includes(term) ||
-      p.client_name?.toLowerCase().includes(term)
-    );
-  }, [projects, projectSearch]);
+
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
-  const resolvedProjectName = isProjectLocked
-    ? lockedProjectName
-    : projects.find(p => p.id === selectedProjectId)?.name;
 
   // Auto-set vendor when service changes
   const handleServiceChange = (id) => {
@@ -181,35 +166,12 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <Input
-                    placeholder="Search projects..."
-                    value={projectSearch}
-                    onChange={e => setProjectSearch(e.target.value)}
-                    className="pl-10 bg-gray-800 border-gray-600 text-white"
-                  />
-                </div>
-                <div className="max-h-36 overflow-y-auto border border-gray-700 rounded-md bg-gray-900/50">
-                  {filteredProjects.length === 0 ? (
-                    <p className="text-xs text-gray-500 p-3 text-center">No projects found</p>
-                  ) : (
-                    filteredProjects.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedProjectId(p.id)}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-800 last:border-b-0 ${
-                          selectedProjectId === p.id
-                            ? "bg-blue-900/40 text-white"
-                            : "text-gray-300 hover:bg-gray-800"
-                        }`}
-                      >
-                        <span className="font-medium">{p.name}</span>
-                        {p.client_name && <span className="text-gray-500 ml-2 text-xs">— {p.client_name}</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
+                <GroupedProjectSelector
+                  selectedProjectId={selectedProjectId}
+                  onSelect={setSelectedProjectId}
+                  searchTerm={projectSearch}
+                  onSearchChange={setProjectSearch}
+                />
                 {!selectedProjectId && (
                   <p className="text-xs text-amber-400">⚠ You must select a project before adding a service</p>
                 )}
