@@ -36,6 +36,9 @@ Deno.serve(async (req) => {
       case 'UPDATE_SERVICE':
         result = await updateService(base44, user, payload);
         break;
+      case 'REASSIGN_PROJECT':
+        result = await reassignProject(base44, user, payload);
+        break;
       case 'DELETE':
         result = await deleteServiceCommitment(base44, user, payload);
         break;
@@ -268,6 +271,46 @@ async function deleteLineItem(base44, user, payload) {
   const totals = await recomputeTotals(base44, commitmentId);
 
   return { line_item_id, commitment_id: commitmentId, totals, action: 'LINE_ITEM_DELETED' };
+}
+
+// ── REASSIGN PROJECT ──
+async function reassignProject(base44, user, payload) {
+  const { commitment_id, new_project_id } = payload;
+  if (!commitment_id || !new_project_id) throw new Error('commitment_id and new_project_id required');
+
+  // Admin-only check
+  if (user.role !== 'admin') {
+    throw new Error('Only admins can reassign services to different projects');
+  }
+
+  const [c] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: commitment_id });
+  if (!c) throw new Error('ServiceCommitment not found');
+  if (c.status === 'billed') throw new Error('Cannot reassign a billed service commitment');
+
+  const old_project_id = c.project_id;
+  if (old_project_id === new_project_id) {
+    return { commitment_id, message: 'Project unchanged', action: 'NO_CHANGE' };
+  }
+
+  // Verify new project exists
+  const [newProject] = await base44.asServiceRole.entities.Project.filter({ id: new_project_id });
+  if (!newProject) throw new Error('Target project not found');
+
+  // Update the commitment
+  await base44.asServiceRole.entities.ServiceCommitment.update(commitment_id, {
+    project_id: new_project_id,
+  });
+
+  // Audit log
+  console.log(`[REASSIGN_PROJECT] commitment=${commitment_id} from=${old_project_id} to=${new_project_id} by=${user.email}`);
+
+  return {
+    commitment_id,
+    old_project_id,
+    new_project_id,
+    new_project_name: newProject.name,
+    action: 'PROJECT_REASSIGNED',
+  };
 }
 
 // ── CREATE SERVICE VENDOR (inline) ──
