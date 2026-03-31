@@ -2,10 +2,13 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveNextAction } from "./CommitmentNextAction";
 import CommitmentNextAction from "./CommitmentNextAction";
 import { formatCurrencyUSD } from "./pricingHelpers";
+import { computeCommitmentPriority, getActionExplanation, getBlockerStatus, PRIORITY_CONFIG } from "./commitmentPriority";
 
 /**
  * CommitmentActionCard - Task-oriented commitment display
@@ -42,6 +45,10 @@ export default function CommitmentActionCard({
   const part = commitment.part;
   const isComplete = action === 'COMPLETE';
   const isCancelled = commitment.commitment_status === 'cancelled';
+  const priority = computeCommitmentPriority(commitment);
+  const prioConfig = PRIORITY_CONFIG[priority.level];
+  const blocker = getBlockerStatus(commitment);
+  const explanation = getActionExplanation(commitment);
 
   // Border color based on next action
   const borderColor = {
@@ -81,12 +88,30 @@ export default function CommitmentActionCard({
         onClick={() => onPartClick?.(part, commitment)}
         className="flex-1 min-w-0 text-left hover:text-gray-300"
       >
-        <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+          {priority.level !== 'LOW' && (
+            <Badge variant="outline" className={cn("text-[8px] px-1 py-0 leading-tight", prioConfig.color)}>
+              {prioConfig.label}
+            </Badge>
+          )}
+          {blocker.isBlocked && (
+            <TooltipProvider><Tooltip><TooltipTrigger asChild>
+              <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+            </TooltipTrigger><TooltipContent className="bg-gray-800 border-gray-700 max-w-[220px]"><p className="text-xs text-red-400">{blocker.reasons.join(', ')}</p></TooltipContent></Tooltip></TooltipProvider>
+          )}
+          {!blocker.isBlocked && blocker.isAtRisk && (
+            <TooltipProvider><Tooltip><TooltipTrigger asChild>
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+            </TooltipTrigger><TooltipContent className="bg-gray-800 border-gray-700 max-w-[220px]"><p className="text-xs text-amber-400">{blocker.reasons.join(', ')}</p></TooltipContent></Tooltip></TooltipProvider>
+          )}
+        </div>
         <div className="flex items-center gap-1 text-[10px] text-gray-500 truncate">
           {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
           {showProject && commitment.project_name && (
             <><span>·</span><span className="text-blue-400/70 truncate">{commitment.project_name}</span></>
           )}
+          {explanation && !compact && <><span>·</span><span className="italic text-gray-600 truncate">{explanation}</span></>}
         </div>
       </button>
 

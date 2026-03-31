@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Package, MapPin, Box, ChevronDown, ChevronRight, Archive } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import ImageGallery from "./ImageGallery";
 import PartActionsDropdown from "./PartActionsDropdown";

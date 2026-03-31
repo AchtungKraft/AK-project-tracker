@@ -98,13 +98,14 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
   const statuses = sharedStatuses || fetchedStatuses;
 
   // Create a map of task_id -> comment count for efficient lookup
-  const commentCountByTaskId = sharedCommentCount || React.useMemo(() => {
+  const computedCommentCount = React.useMemo(() => {
     const map = {};
     fetchedTaskComments.forEach(comment => {
       map[comment.task_id] = (map[comment.task_id] || 0) + 1;
     });
     return map;
   }, [fetchedTaskComments]);
+  const commentCountByTaskId = sharedCommentCount || computedCommentCount;
 
   // Filter out completed tasks from Kanban view
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);

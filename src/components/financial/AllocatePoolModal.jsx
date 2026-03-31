@@ -42,6 +42,9 @@ export default function AllocatePoolModal({
   onSuccess
 }) {
   const queryClient = useQueryClient();
+  const [selectedPoolId, setSelectedPoolId] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
 
   // ============================================
   // HARD BLOCK: Forward model projects cannot use PoolAllocation
@@ -58,6 +61,9 @@ export default function AllocatePoolModal({
 
   const effectiveProject = project || fetchedProject;
   const isForwardModel = effectiveProject?.financial_model_version === 'forward';
+
+  // Fetch pools for project (only for legacy model)
+  const isLegacyActive = !isForwardModel;
 
   // HARD BLOCK: Render blocked UI for forward projects
   if (isForwardModel) {
@@ -90,10 +96,6 @@ export default function AllocatePoolModal({
       </Dialog>
     );
   }
-
-  const [selectedPoolId, setSelectedPoolId] = useState(null);
-  const [amount, setAmount] = useState('');
-  const [notes, setNotes] = useState('');
 
   // Fetch pools for project
   const { data: pools = [], isLoading: poolsLoading } = useQuery({

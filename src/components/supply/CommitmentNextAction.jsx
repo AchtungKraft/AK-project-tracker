@@ -2,8 +2,9 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Layers, Ban } from "lucide-react";
+import { ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Layers, Ban, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getActionExplanation, getBlockerStatus } from "./commitmentPriority";
 
 /**
  * CommitmentNextAction - Determines and renders the single primary next action
@@ -73,10 +74,15 @@ export function NextActionBadgeInline({ commitment, className }) {
   const cfg = NEXT_ACTIONS[action];
   if (!cfg) return null;
   const Icon = cfg.icon;
+  const { isBlocked, isAtRisk } = getBlockerStatus(commitment);
   return (
-    <Badge variant="outline" className={cn(cfg.badgeColor, "text-[9px] gap-1 font-normal", className)}>
-      <Icon className="w-3 h-3" /> {cfg.label}
-    </Badge>
+    <div className={cn("flex items-center gap-1", className)}>
+      <Badge variant="outline" className={cn(cfg.badgeColor, "text-[9px] gap-1 font-normal")}>
+        <Icon className="w-3 h-3" /> {cfg.label}
+      </Badge>
+      {isBlocked && <AlertCircle className="w-3 h-3 text-red-500" />}
+      {!isBlocked && isAtRisk && <AlertTriangle className="w-3 h-3 text-amber-500" />}
+    </div>
   );
 }
 
@@ -109,8 +115,8 @@ export default function CommitmentNextAction({ commitment, onAction, isLoading, 
             {qty > 0 && <span className="text-[10px] opacity-75">({qty})</span>}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="left" className="bg-gray-800 border-gray-700">
-          <p className="text-xs">{reason}</p>
+        <TooltipContent side="left" className="bg-gray-800 border-gray-700 max-w-[260px]">
+          <p className="text-xs">{getActionExplanation(commitment)}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

@@ -4,10 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Layers, ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Search, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { Layers, ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Search, RefreshCw, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CommitmentActionCard from "./CommitmentActionCard";
 import { resolveNextAction } from "./CommitmentNextAction";
+import { sortByPriority, getBlockerStatus, computeCommitmentPriority } from "./commitmentPriority";
+import { formatCurrencyUSD } from "./pricingHelpers";
 
 /**
  * GlobalActionQueue - Groups all commitments by next action across projects.
@@ -33,23 +35,33 @@ export default function GlobalActionQueue({
   onAction,
   onPartClick,
   onBatchPO,
+  onBatchAllocate,
+  onBatchInstall,
   selectedItems,
   onItemSelect,
   isLoading,
   projects = [],
+  vendors = [],
   searchTerm,
   onSearchChange,
   projectFilter,
   onProjectFilterChange,
+  vendorFilter,
+  onVendorFilterChange,
+  priorityFilter,
+  onPriorityFilterChange,
 }) {
   const [expandedGroups, setExpandedGroups] = useState(new Set(['ALLOCATE', 'CREATE_PO', 'RECEIVE', 'INSTALL']));
   const [hideComplete, setHideComplete] = useState(true);
 
-  // Group items by next action
-  const grouped = useMemo(() => {
+  // Group items by next action, apply filters, sort by priority
+  const { grouped, blockedCount, atRiskCount, totalRetail } = useMemo(() => {
     const groups = {};
     ACTION_GROUPS.forEach(g => { groups[g.key] = []; });
     groups['OTHER'] = [];
+    let blocked = 0;
+    let atRisk = 0;
+    let retail = 0;
 
     let filtered = items;
     if (searchTerm) {
@@ -63,15 +75,32 @@ export default function GlobalActionQueue({
     if (projectFilter && projectFilter !== 'all') {
       filtered = filtered.filter(i => i.project_id === projectFilter);
     }
+    if (vendorFilter && vendorFilter !== 'all') {
+      filtered = filtered.filter(i => (i.part?.default_vendor_id || i.vendor_id) === vendorFilter);
+    }
+    if (priorityFilter && priorityFilter !== 'all') {
+      filtered = filtered.filter(i => computeCommitmentPriority(i).level === priorityFilter);
+    }
 
     for (const item of filtered) {
       if (item.commitment_status === 'cancelled') continue;
       const { action } = resolveNextAction(item);
       if (groups[action]) groups[action].push(item);
       else groups['OTHER'] = groups['OTHER'] || [];
+      
+      const bs = getBlockerStatus(item);
+      if (bs.isBlocked) blocked++;
+      else if (bs.isAtRisk) atRisk++;
+      retail += item.planned_retail_total ?? 0;
     }
-    return groups;
-  }, [items, searchTerm, projectFilter]);
+
+    // Sort each group by priority (highest first)
+    for (const key of Object.keys(groups)) {
+      groups[key] = sortByPriority(groups[key]);
+    }
+
+    return { grouped: groups, blockedCount: blocked, atRiskCount: atRisk, totalRetail: retail };
+  }, [items, searchTerm, projectFilter, vendorFilter, priorityFilter]);
 
   const toggleGroup = (key) => {
     setExpandedGroups(prev => {
@@ -101,6 +130,21 @@ export default function GlobalActionQueue({
             </Badge>
           );
         })}
+        {blockedCount > 0 && (
+          <Badge variant="outline" className="gap-1 text-xs bg-red-900/40 text-red-400 border-red-700/50">
+            <AlertCircle className="w-3 h-3" /> Blocked: {blockedCount}
+          </Badge>
+        )}
+        {atRiskCount > 0 && (
+          <Badge variant="outline" className="gap-1 text-xs bg-amber-900/40 text-amber-400 border-amber-700/50">
+            <AlertTriangle className="w-3 h-3" /> At Risk: {atRiskCount}
+          </Badge>
+        )}
+        {totalRetail > 0 && (
+          <Badge variant="outline" className="gap-1 text-xs text-gray-400 border-gray-700">
+            Total: {formatCurrencyUSD(totalRetail)}
+          </Badge>
+        )}
       </div>
 
       {/* Action groups */}
@@ -129,7 +173,7 @@ export default function GlobalActionQueue({
                 <span className="text-sm font-semibold text-white flex-1">{group.label}</span>
                 <Badge className={cn("text-[10px]", group.bgColor, group.textColor)}>{groupItems.length}</Badge>
 
-                {/* Batch PO button for ordering group */}
+                {/* Batch action buttons per group */}
                 {group.key === 'CREATE_PO' && groupItems.length > 0 && onBatchPO && (
                   <Button
                     size="sm"
@@ -138,6 +182,26 @@ export default function GlobalActionQueue({
                     onClick={(e) => { e.stopPropagation(); onBatchPO(groupItems); }}
                   >
                     <ShoppingCart className="w-3 h-3 mr-1" /> Batch PO ({groupItems.length})
+                  </Button>
+                )}
+                {group.key === 'ALLOCATE' && groupItems.length > 0 && onBatchAllocate && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-cyan-700 text-cyan-400 hover:bg-cyan-900/30 h-6 text-[10px]"
+                    onClick={(e) => { e.stopPropagation(); onBatchAllocate(groupItems); }}
+                  >
+                    <Layers className="w-3 h-3 mr-1" /> Batch Allocate ({groupItems.length})
+                  </Button>
+                )}
+                {group.key === 'INSTALL' && groupItems.length > 0 && onBatchInstall && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-700 text-emerald-400 hover:bg-emerald-900/30 h-6 text-[10px]"
+                    onClick={(e) => { e.stopPropagation(); onBatchInstall(groupItems); }}
+                  >
+                    <Wrench className="w-3 h-3 mr-1" /> Batch Install ({groupItems.length})
                   </Button>
                 )}
               </div>

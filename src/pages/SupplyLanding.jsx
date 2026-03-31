@@ -33,6 +33,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import GlobalActionQueue from "@/components/supply/GlobalActionQueue";
+import { useSupplyAction } from "@/components/supply/useSupplyAction";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
@@ -51,6 +52,10 @@ export default function SupplyLanding() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewMode, setViewMode] = useState('projects'); // 'projects' | 'actions'
+  const [vendorFilter, setVendorFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const supplyAction = useSupplyAction({ showSuccessToast: true });
 
   // Check admin status
   useEffect(() => {
@@ -219,6 +224,9 @@ export default function SupplyLanding() {
               </TabsTrigger>
               <TabsTrigger value="actions" className="data-[state=active]:bg-blue-900/30 gap-1.5">
                 <AlertTriangle className="w-4 h-4" /> Action Queue
+                {(portfolioData?.all_commitments?.length || 0) > 0 && (
+                  <Badge className="ml-1 text-[9px] bg-blue-900/50 text-blue-400">{portfolioData?.all_commitments?.length}</Badge>
+                )}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -259,6 +267,36 @@ export default function SupplyLanding() {
                     </Select>
                   </>
                 )}
+                {viewMode === 'actions' && (
+                  <>
+                    <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                      <SelectTrigger className="w-[130px] bg-gray-900/50 border-gray-700 text-white h-9"><SelectValue placeholder="Priority" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Priority</SelectItem>
+                        <SelectItem value="HIGH">High</SelectItem>
+                        <SelectItem value="MEDIUM">Medium</SelectItem>
+                        <SelectItem value="LOW">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={vendorFilter} onValueChange={setVendorFilter}>
+                      <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700 text-white h-9"><SelectValue placeholder="Vendor" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Vendors</SelectItem>
+                        {(() => {
+                          const vendorSet = new Map();
+                          (portfolioData?.all_commitments || []).forEach(c => {
+                            const vId = c.part?.default_vendor_id || c.vendor_id;
+                            const vName = c.vendor_name || c.part?.vendor_name;
+                            if (vId && vName) vendorSet.set(vId, vName);
+                          });
+                          return Array.from(vendorSet.entries()).sort((a,b) => a[1].localeCompare(b[1])).map(([id, name]) => (
+                            <SelectItem key={id} value={id}>{name}</SelectItem>
+                          ));
+                        })()}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -270,6 +308,52 @@ export default function SupplyLanding() {
               projects={projects}
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
+              projectFilter={statusFilter !== 'all' ? null : undefined}
+              vendorFilter={vendorFilter}
+              onVendorFilterChange={setVendorFilter}
+              priorityFilter={priorityFilter}
+              onPriorityFilterChange={setPriorityFilter}
+              selectedItems={selectedItems}
+              onItemSelect={(id) => setSelectedItems(prev => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              })}
+              onAction={(commitment, action, qty) => {
+                if (action === 'ALLOCATE') {
+                  supplyAction.autoReserve(commitment.id);
+                } else if (action === 'INSTALL') {
+                  supplyAction.install(commitment.id, { qty: qty || 1 });
+                } else if (action === 'CREATE_PO') {
+                  navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${commitment.project_id}&tab=buy`);
+                }
+              }}
+              onPartClick={(part) => {
+                if (part?.id) navigate(createPageUrl('PartsTracker') + `?part_id=${part.id}`);
+              }}
+              onBatchPO={(items) => {
+                if (items.length > 0) {
+                  const projectId = items[0].project_id;
+                  navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${projectId}&tab=buy`);
+                }
+              }}
+              onBatchAllocate={async (items) => {
+                const ids = items.map(i => i.id).filter(Boolean);
+                if (ids.length > 0) {
+                  toast.info(`Allocating ${ids.length} items...`);
+                  await supplyAction.autoReserve(ids);
+                }
+              }}
+              onBatchInstall={async (items) => {
+                for (const item of items) {
+                  const installable = Math.max(0, (item.reserved_from_stock ?? 0) - (item.qty_installed ?? 0));
+                  if (installable > 0 && item.id) {
+                    await supplyAction.install(item.id, { qty: installable });
+                  }
+                }
+                toast.success(`Installed ${items.length} items`);
+              }}
+              isLoading={supplyAction.isPending}
             />
           )}
 

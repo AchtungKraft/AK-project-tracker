@@ -32,15 +32,26 @@ export default function VendorInvoiceModal({
   const queryClient = useQueryClient();
   const isEditing = !!existingInvoice;
 
+  const [invoice, setInvoice] = useState(existingInvoice || {
+    invoice_number: '',
+    invoice_date: format(new Date(), 'yyyy-MM-dd'),
+    vendor_id: order?.vendor_id,
+    order_id: order?.id,
+    freight_cost: 0,
+    tax_cost: 0,
+    invoice_status: 'draft',
+    notes: '',
+  });
+
+  const [invoiceLines, setInvoiceLines] = useState([]);
+
   // ============================================
   // HARD BLOCK: Forward model projects cannot use VendorInvoice
   // ============================================
-  // If project not passed as prop, fetch it from order's commitments
   const { data: fetchedProject } = useQuery({
     queryKey: ['project-for-vendor-invoice', order?.id],
     queryFn: async () => {
       if (!order?.id) return null;
-      // Get a commitment from this order to find the project
       const lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: order.id });
       if (lineItems.length === 0) return null;
       const commitmentId = lineItems[0].commitment_id;
@@ -93,17 +104,6 @@ export default function VendorInvoiceModal({
     );
   }
 
-  const [invoice, setInvoice] = useState(existingInvoice || {
-    invoice_number: '',
-    invoice_date: format(new Date(), 'yyyy-MM-dd'),
-    vendor_id: order?.vendor_id,
-    order_id: order?.id,
-    freight_cost: 0,
-    tax_cost: 0,
-    invoice_status: 'draft',
-    notes: '',
-  });
-
   // Fetch PO line items
   const { data: lineItems = [] } = useQuery({
     queryKey: ['purchaseLineItems', order?.id],
@@ -129,23 +129,6 @@ export default function VendorInvoiceModal({
       return all.filter(ili => ili.invoice_id === existingInvoice?.id);
     },
     enabled: !!existingInvoice?.id,
-  });
-
-  // Initialize invoice lines from PO or existing
-  const [invoiceLines, setInvoiceLines] = useState(() => {
-    if (existingLineItems.length > 0) {
-      return existingLineItems;
-    }
-    return lineItems.map(li => ({
-      purchase_line_item_id: li.id,
-      part_id: li.part_id,
-      qty_invoiced: li.qty_ordered || 0,
-      actual_unit_cost: li.unit_price || li.unit_cost || 0,
-      extended_cost: (li.qty_ordered || 0) * (li.unit_price || li.unit_cost || 0),
-      freight_allocation: 0,
-      tariff_allocation: 0,
-      is_cost_locked: !!li.cost_locked_at,
-    }));
   });
 
   // Update lines when lineItems load

@@ -177,9 +177,6 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const queryClient = useQueryClient();
-  
-  // Guard against undefined commitment
-  if (!commitment) return null;
 
   // Use canonical supply action dispatcher
   const mutation = useMutation({
@@ -230,6 +227,9 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
       setPendingAction(null);
     }
   });
+
+  // Guard against undefined commitment
+  if (!commitment) return null;
 
   const handleIncrement = () => {
     setPendingAction({ action_type: ACTION_TYPES.INCREASE_QTY, qty_delta: 1 });
@@ -390,15 +390,6 @@ export default function CommitmentQuantityManager({
   onClose, 
   onSuccess 
 }) {
-  // Guard against undefined commitment
-  if (!commitment) {
-    return (
-      <div className="p-4 text-center text-gray-400">
-        No commitment selected
-      </div>
-    );
-  }
-  
   const [activeAction, setActiveAction] = useState(null);
   const [qtyInput, setQtyInput] = useState(1);
   const [targetProjectId, setTargetProjectId] = useState('');
@@ -517,7 +508,7 @@ export default function CommitmentQuantityManager({
 
   // Calculate constraints - use canonical fields with legacy fallback
   const constraints = useMemo(() => {
-    if (!commitment) return {};
+    if (!commitment) return { maxDecrease: 0, maxCancelUnordered: 0, maxSplit: 0, maxMove: 0 };
     
     const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
     const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
@@ -525,11 +516,20 @@ export default function CommitmentQuantityManager({
     
     return {
       maxDecrease: required_total - Math.max(covered_from_po, qty_installed),
-      maxCancelUnordered: Math.max(0, required_total - (commitment.reserved_from_stock ?? 0) - covered_from_po), // gap
+      maxCancelUnordered: Math.max(0, required_total - (commitment.reserved_from_stock ?? 0) - covered_from_po),
       maxSplit: required_total - 1,
       maxMove: required_total - qty_installed
     };
   }, [commitment]);
+
+  // Guard against undefined commitment (after all hooks)
+  if (!commitment) {
+    return (
+      <div className="p-4 text-center text-gray-400">
+        No commitment selected
+      </div>
+    );
+  }
 
   const actions = [
     {
@@ -576,8 +576,6 @@ export default function CommitmentQuantityManager({
       disabledReason: 'Need at least 2 qty to split'
     }
   ];
-
-  if (!commitment) return null;
 
   return (
     <div className="space-y-6">

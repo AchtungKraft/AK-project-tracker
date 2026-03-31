@@ -33,7 +33,10 @@ import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
  */
 export default function CreatePoolModal({ projectId, project, onClose, onSuccess }) {
   const queryClient = useQueryClient();
-  
+  const [poolName, setPoolName] = useState("Main Pool");
+  const [invoicedAmount, setInvoicedAmount] = useState(0);
+  const [notes, setNotes] = useState("");
+
   // ============================================
   // HARD BLOCK: Forward model projects cannot use BillingPool
   // ============================================
@@ -49,6 +52,8 @@ export default function CreatePoolModal({ projectId, project, onClose, onSuccess
 
   const effectiveProject = project || fetchedProject;
   const isForwardModel = effectiveProject?.financial_model_version === 'forward';
+
+  const canSubmit = poolName.trim().length > 0;
 
   // HARD BLOCK: Render blocked UI for forward projects
   if (isForwardModel) {
@@ -81,12 +86,6 @@ export default function CreatePoolModal({ projectId, project, onClose, onSuccess
       </Dialog>
     );
   }
-
-  const [poolName, setPoolName] = useState("Main Pool");
-  const [invoicedAmount, setInvoicedAmount] = useState(0);
-  const [notes, setNotes] = useState("");
-
-  const canSubmit = poolName.trim().length > 0;
 
   const createPoolMutation = useMutation({
     mutationFn: async () => {

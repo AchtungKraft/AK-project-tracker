@@ -3,8 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Package, ShoppingCart, Truck, Wrench, CheckCircle2, AlertTriangle, Filter } from "lucide-react";
+import { Package, ShoppingCart, Truck, Wrench, CheckCircle2, AlertTriangle, AlertCircle, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getBlockerStatus } from "./commitmentPriority";
 
 /**
  * ProjectSupplySummaryBar - Canonical project-level supply summary
@@ -35,6 +36,7 @@ export default function ProjectSupplySummaryBar({ items = [], activeFilter, onFi
   const stats = useMemo(() => {
     let totalRequired = 0, totalReserved = 0, totalOnOrder = 0, totalInstalled = 0, totalGap = 0;
     let needsAction = 0, waitingPO = 0, readyInstall = 0, complete = 0;
+    let blockedCount = 0, atRiskCount = 0;
 
     for (const item of items) {
       const rt = item.required_total ?? 0;
@@ -54,10 +56,14 @@ export default function ProjectSupplySummaryBar({ items = [], activeFilter, onFi
       else if (installable > 0) readyInstall++;
       else if (cfp > 0 && rfs === 0) waitingPO++;
       else if (gap > 0) needsAction++;
+
+      const bs = getBlockerStatus(item);
+      if (bs.isBlocked) blockedCount++;
+      else if (bs.isAtRisk) atRiskCount++;
     }
 
     const progressPct = totalRequired > 0 ? Math.round((totalInstalled / totalRequired) * 100) : 0;
-    return { totalRequired, totalReserved, totalOnOrder, totalInstalled, totalGap, needsAction, waitingPO, readyInstall, complete, progressPct, totalItems: items.length };
+    return { totalRequired, totalReserved, totalOnOrder, totalInstalled, totalGap, needsAction, waitingPO, readyInstall, complete, progressPct, totalItems: items.length, blockedCount, atRiskCount };
   }, [items]);
 
   return (
@@ -108,6 +114,24 @@ export default function ProjectSupplySummaryBar({ items = [], activeFilter, onFi
               onClick={() => onFilterChange?.(activeFilter === 'complete' ? null : 'complete')}
               active={activeFilter === 'complete'}
             />
+            {stats.blockedCount > 0 && (
+              <MetricPill
+                label="Blocked" value={stats.blockedCount}
+                color="text-red-400 bg-red-900/30"
+                icon={AlertCircle}
+                onClick={() => onFilterChange?.(activeFilter === 'blocked' ? null : 'blocked')}
+                active={activeFilter === 'blocked'}
+              />
+            )}
+            {stats.atRiskCount > 0 && (
+              <MetricPill
+                label="At Risk" value={stats.atRiskCount}
+                color="text-amber-400 bg-amber-900/30"
+                icon={AlertTriangle}
+                onClick={() => onFilterChange?.(activeFilter === 'at_risk' ? null : 'at_risk')}
+                active={activeFilter === 'at_risk'}
+              />
+            )}
           </div>
         </div>
       </CardContent>
@@ -131,6 +155,14 @@ export function filterByActionCategory(items, filterKey) {
       case 'waiting_po': return cfp > 0 && rfs === 0 && !(qi >= rt && rt > 0);
       case 'ready_install': return installable > 0 && !(qi >= rt && rt > 0);
       case 'complete': return qi >= rt && rt > 0;
+      case 'blocked': {
+        const bs = getBlockerStatus(item);
+        return bs.isBlocked;
+      }
+      case 'at_risk': {
+        const bs = getBlockerStatus(item);
+        return bs.isAtRisk && !bs.isBlocked;
+      }
       default: return true;
     }
   });

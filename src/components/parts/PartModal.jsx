@@ -1615,7 +1615,7 @@ export default function PartModal({ part, partId, onClose }) {
             onClose={async () => {
               setShowAddInventoryModal(false);
               // PHASE 16: Invalidate + explicit refetch
-              invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+              await forceAppRefresh(queryClient, { partIds: [activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['inventoryLocations', activePart.id] });
               await refetchInventory();
@@ -1630,7 +1630,7 @@ export default function PartModal({ part, partId, onClose }) {
             onClose={async () => {
               setShowAddToBuildModal(false);
               // PHASE 16: Invalidate + explicit refetch
-              invalidateSupplyQueries(queryClient, { part_ids: [activePart.id] });
+              await forceAppRefresh(queryClient, { partIds: [activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
               await refetchInventory();
             }}
