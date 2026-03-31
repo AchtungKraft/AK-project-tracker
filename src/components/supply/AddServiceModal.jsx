@@ -36,6 +36,9 @@ import { toast } from "sonner";
 export default function AddServiceModal({ projectId: lockedProjectId, projectName: lockedProjectName, open, onClose, onSuccess }) {
   const isProjectLocked = !!lockedProjectId;
 
+  // Debug: confirm context detection
+  console.log('[AddServiceModal] Context:', { lockedProjectId, lockedProjectName, isProjectLocked });
+
   const [selectedProjectId, setSelectedProjectId] = useState(lockedProjectId || "");
   const [projectSearch, setProjectSearch] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -131,17 +134,19 @@ export default function AddServiceModal({ projectId: lockedProjectId, projectNam
       return;
     }
     setSaving(true);
+    const submitPayload = {
+      action_type: "CREATE",
+      project_id: resolvedProjectId,
+      service_id: serviceId,
+      description,
+      vendor_id: vendorId || selectedService?.default_vendor_id || null,
+      estimated_cost: parseFloat(estimatedCost) || 0,
+      quantity: parseInt(quantity) || 1,
+      notes,
+    };
+    console.log('[AddServiceModal] Submit payload:', submitPayload);
     try {
-      await base44.functions.invoke("executeServiceAction", {
-        action_type: "CREATE",
-        project_id: resolvedProjectId,
-        service_id: serviceId,
-        description,
-        vendor_id: vendorId || selectedService?.default_vendor_id || null,
-        estimated_cost: parseFloat(estimatedCost) || 0,
-        quantity: parseInt(quantity) || 1,
-        notes,
-      });
+      await base44.functions.invoke("executeServiceAction", submitPayload);
       toast.success("Service added to project");
       onSuccess?.();
       onClose();
@@ -266,7 +271,7 @@ export default function AddServiceModal({ projectId: lockedProjectId, projectNam
                   <SelectValue placeholder="Select vendor (optional)..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={null}>None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {filteredVendors.map(v => (
                     <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                   ))}
