@@ -814,7 +814,7 @@ export default function ProjectSupplyManager() {
               </TabsTrigger>
               <TabsTrigger value="services" className="data-[state=active]:bg-amber-900/30 gap-1.5">
                 <TruckIcon className="w-4 h-4" />
-                Services
+                Services (Non-Inventory)
               </TabsTrigger>
               <TabsTrigger value="report" className="data-[state=active]:bg-red-900/30 gap-1.5">
                 <FileText className="w-4 h-4" />

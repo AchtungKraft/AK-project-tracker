@@ -161,6 +161,7 @@ const getNavigationSections = () => {
         { title: "Supply Dashboard", url: createPageUrl("SupplyLanding"), icon: Layers },
         { title: "Order Queue", url: createPageUrl("GlobalNeedToOrder"), icon: Truck },
         { title: "PO Receiving", url: createPageUrl("POReceiving"), icon: Package },
+        { title: "Services", url: createPageUrl("ServicesDashboard"), icon: Truck },
         { title: "Action Workbench", url: createPageUrl("PartsActionWorkbench"), icon: Flame },
       ],
     },

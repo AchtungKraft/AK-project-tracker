@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2, Package } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2, Package, Truck } from "lucide-react";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +20,7 @@ import ProjectTasks from "../components/project/ProjectTasks";
 import ProjectJournal from "../components/project/ProjectJournal";
 import ProjectClientPortal from "../components/project/ProjectClientPortal";
 import ProjectPurchaseOrders from "../components/project/ProjectPurchaseOrders";
+import ProjectServicesSection from "../components/supply/ProjectServicesSection";
 
 // Stable query defaults for reference data (rarely changes)
 const REF_DATA_OPTS = { staleTime: 60000, gcTime: 300000, retry: 1, refetchOnWindowFocus: false, refetchOnReconnect: false };
@@ -238,6 +239,13 @@ export default function ProjectDetail() {
               Purchase Orders
             </TabsTrigger>
             <TabsTrigger 
+              value="services"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Truck className="w-4 h-4" />
+              Services
+            </TabsTrigger>
+            <TabsTrigger 
               value="supply"
               className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
               onClick={(e) => {
@@ -298,6 +306,12 @@ export default function ProjectDetail() {
                   <Package className="w-4 h-4" /> Purchase Orders
                 </DropdownMenuItem>
                 <DropdownMenuItem 
+                  onClick={() => setActiveTab('services')}
+                  className={`gap-2 ${activeTab === 'services' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <Truck className="w-4 h-4" /> Services
+                </DropdownMenuItem>
+                <DropdownMenuItem 
                   onClick={() => navigate(createPageUrl("ProjectSupplyManager") + `?project_id=${projectId}`)}
                   className="gap-2 text-gray-300"
                 >
@@ -325,6 +339,10 @@ export default function ProjectDetail() {
 
           <TabsContent value="purchaseorders" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectPurchaseOrders projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="services" className={isMobile ? 'mt-3' : 'mt-6'}>
+            <ProjectServicesSection projectId={projectId} />
           </TabsContent>
         </Tabs>
       </div>
