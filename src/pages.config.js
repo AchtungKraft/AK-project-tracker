@@ -88,6 +88,7 @@ import TasksExplorer from './pages/TasksExplorer';
 import TechSpecs from './pages/TechSpecs';
 import TestDataCleanup from './pages/TestDataCleanup';
 import WiringAuditDashboard from './pages/WiringAuditDashboard';
+import DataAlignmentDashboard from './pages/DataAlignmentDashboard';
 import __Layout from './Layout.jsx';
 
 
@@ -133,6 +134,7 @@ export const PAGES = {
     "TechSpecs": TechSpecs,
     "TestDataCleanup": TestDataCleanup,
     "WiringAuditDashboard": WiringAuditDashboard,
+    "DataAlignmentDashboard": DataAlignmentDashboard,
 }
 
 export const pagesConfig = {
