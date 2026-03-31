@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * getPortfolioSupplyState - Canonical read model for portfolio-level supply metrics
@@ -239,11 +239,31 @@ Deno.serve(async (req) => {
       }
     });
 
+    // PHASE 4: Build lightweight commitment rows for global action queue
+    const projectMap = new Map(filteredProjects.map(p => [p.id, p]));
+    const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const parts = partIds.length > 0 ? await base44.entities.Part.filter({ id: { $in: partIds.slice(0, 200) } }) : [];
+    const partMap = new Map(parts.map(p => [p.id, p]));
+    const allCommitments = commitments.filter(c => c.commitment_status !== 'cancelled').map(c => {
+      const part = partMap.get(c.part_id);
+      const proj = projectMap.get(c.project_id);
+      return {
+        id: c.id, commitment_id: c.id, project_id: c.project_id, part_id: c.part_id,
+        project_name: proj?.name || 'Unknown', commitment_status: c.commitment_status,
+        required_total: c.required_total ?? 0, reserved_from_stock: c.reserved_from_stock ?? 0,
+        covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0,
+        planned_retail_total: c.planned_retail_total ?? 0, planned_cost_total: c.planned_cost_total ?? 0,
+        part: part ? { id: part.id, part_name: part.part_name, vendor_part_number: part.vendor_part_number, featured_photo: part.featured_photo } : { part_name: 'Unknown' },
+        inventory_snapshot: { available_global_active: part ? Math.max(0, (part.physical_stock ?? 0) - (part.allocated_stock ?? 0)) : 0 },
+      };
+    });
+
     return Response.json({
       success: true,
       timestamp: new Date().toISOString(),
       portfolio: portfolioTotals,
       projects: finalProjects,
+      all_commitments: allCommitments,
     });
 
   } catch (error) {

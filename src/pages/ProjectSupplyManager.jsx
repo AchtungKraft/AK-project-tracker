@@ -53,6 +53,7 @@ import { validateInventoryConsistency } from "@/components/supply/inventoryResol
 import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
 // BillingSummaryStrip and ProjectFinancialBar removed — consolidated into PSMFinancialSummary
 import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
+import ProjectSupplySummaryBar, { filterByActionCategory } from "@/components/supply/ProjectSupplySummaryBar";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
@@ -150,6 +151,8 @@ export default function ProjectSupplyManager() {
   
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  // Phase 4: Action filter for summary bar
+  const [actionFilter, setActionFilter] = useState(null);
 
   // =====================================================================
   // CANONICAL READ MODEL - Already loaded above for tab routing
@@ -427,6 +430,11 @@ export default function ProjectSupplyManager() {
     // Apply status dropdown filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(c => c.commitment_status === statusFilter);
+    }
+
+    // Phase 4: Apply action category filter from summary bar
+    if (actionFilter) {
+      filtered = filterByActionCategory(filtered, actionFilter);
     }
 
     return filtered;
@@ -834,6 +842,13 @@ export default function ProjectSupplyManager() {
                   />
                 </div>
               </div>
+
+              {/* Phase 4: Project Supply Summary Bar with action filters */}
+              <ProjectSupplySummaryBar
+                items={enrichedCommitments.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed')}
+                activeFilter={actionFilter}
+                onFilterChange={setActionFilter}
+              />
 
               {/* Summary Strip */}
               <PSMSummaryStrip items={getFilteredCommitments('plan')} tab="plan" />

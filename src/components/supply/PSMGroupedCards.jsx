@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { InventoryStateBadgeSimple, getInventoryStateCounts } from "./InventoryStateBadgeSimple";
+import { NextActionBadgeInline } from "./CommitmentNextAction";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
@@ -368,6 +369,11 @@ export function PSMItemRow({
         {/* PHASE 1: Inventory State Badge */}
         <div className="flex-shrink-0 hidden md:block">
           <InventoryStateBadgeSimple commitment={commitment} />
+        </div>
+
+        {/* PHASE 4: Next Action Badge */}
+        <div className="flex-shrink-0 hidden lg:block">
+          <NextActionBadgeInline commitment={commitment} />
         </div>
 
         {/* Lifecycle Status - Show only non-PLANNED statuses (PLANNED is redundant with stock badge) */}

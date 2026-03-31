@@ -29,8 +29,10 @@ import {
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel.jsx";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
+import GlobalActionQueue from "@/components/supply/GlobalActionQueue";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
@@ -48,6 +50,7 @@ export default function SupplyLanding() {
   const [sortBy, setSortBy] = useState('exposure');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewMode, setViewMode] = useState('projects'); // 'projects' | 'actions'
 
   // Check admin status
   useEffect(() => {
@@ -208,6 +211,18 @@ export default function SupplyLanding() {
             </Card>
           </div>
 
+          {/* View Toggle */}
+          <Tabs value={viewMode} onValueChange={setViewMode}>
+            <TabsList className="bg-black/40 border border-gray-800">
+              <TabsTrigger value="projects" className="data-[state=active]:bg-gray-700 gap-1.5">
+                <Layers className="w-4 h-4" /> Projects
+              </TabsTrigger>
+              <TabsTrigger value="actions" className="data-[state=active]:bg-blue-900/30 gap-1.5">
+                <AlertTriangle className="w-4 h-4" /> Action Queue
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           {/* Filters */}
           <Card className="bg-black/40 border-gray-800">
             <CardContent className="p-3">
@@ -215,40 +230,50 @@ export default function SupplyLanding() {
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                   <Input
-                    placeholder="Search projects..."
-                    value={searchTerm}
+                    placeholder="Search projects..." value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 bg-gray-900/50 border-gray-700 text-white h-9"
                   />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700 text-white h-9">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Projects</SelectItem>
-                    <SelectItem value="active">With Commitments</SelectItem>
-                    <SelectItem value="alerts">With Alerts</SelectItem>
-                    <SelectItem value="funding_blocked">Funding Blocked</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700 text-white h-9">
-                    <ArrowUpDown className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="exposure">Highest Exposure</SelectItem>
-                    <SelectItem value="coverage">Lowest Coverage</SelectItem>
-                    <SelectItem value="install">Most Installed</SelectItem>
-                    <SelectItem value="commitments">Most Items</SelectItem>
-                  </SelectContent>
-                </Select>
+                {viewMode === 'projects' && (
+                  <>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700 text-white h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Projects</SelectItem>
+                        <SelectItem value="active">With Commitments</SelectItem>
+                        <SelectItem value="alerts">With Alerts</SelectItem>
+                        <SelectItem value="funding_blocked">Funding Blocked</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-[150px] bg-gray-900/50 border-gray-700 text-white h-9">
+                        <ArrowUpDown className="w-4 h-4 mr-2" /><SelectValue placeholder="Sort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="exposure">Highest Exposure</SelectItem>
+                        <SelectItem value="coverage">Lowest Coverage</SelectItem>
+                        <SelectItem value="install">Most Installed</SelectItem>
+                        <SelectItem value="commitments">Most Items</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
 
           {/* Projects Table */}
+          {viewMode === 'actions' && (
+            <GlobalActionQueue
+              items={portfolioData?.all_commitments || []}
+              projects={projects}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+            />
+          )}
+
+          {viewMode === 'projects' && (
           <Card className="bg-black/40 border-gray-800">
             <CardContent className="p-0">
               {isLoading ? (
@@ -335,6 +360,8 @@ export default function SupplyLanding() {
               )}
             </CardContent>
           </Card>
+
+          )}
 
           {/* Admin-only Danger Zone */}
           {isAdmin && (

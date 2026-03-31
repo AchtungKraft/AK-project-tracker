@@ -350,13 +350,6 @@ const MobileOffCanvasMenu = ({ isOpen, onClose, navigationItems, currentPath }) 
 };
 
 export default function Layout({ children, currentPageName }) {
-  // Hide layout for client portal pages (no auth required)
-  const isClientPortalPage = ['ClientProjects', 'ClientProjectPortal', 'ClientFeedbackRequestDetail'].includes(currentPageName);
-  
-  if (isClientPortalPage) {
-    return <>{children}</>;
-  }
-  
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [teamMember, setTeamMember] = useState(null);
@@ -366,6 +359,9 @@ export default function Layout({ children, currentPageName }) {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  // Hide layout for client portal pages (no auth required)
+  const isClientPortalPage = ['ClientProjects', 'ClientProjectPortal', 'ClientFeedbackRequestDetail'].includes(currentPageName);
 
   useEffect(() => {
     const fetchUserAndTeamMember = async () => {
@@ -400,6 +396,11 @@ export default function Layout({ children, currentPageName }) {
     };
     fetchUserAndTeamMember();
   }, [location.pathname, viewAsCompany]);
+
+  // Early return for client portal pages (after all hooks)
+  if (isClientPortalPage) {
+    return <>{children}</>;
+  }
 
   const handleViewAsChange = (company) => {
     if (company === 'achtung_kraft') {
