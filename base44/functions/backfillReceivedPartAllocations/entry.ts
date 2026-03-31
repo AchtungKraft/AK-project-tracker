@@ -123,6 +123,24 @@ Deno.serve(async (req) => {
       }
     }
     
+    // Final audit: verify no violations were introduced
+    if (!dry_run && summary.commitments_updated > 0) {
+      const postCheck = [];
+      const updatedCommitments = await base44.asServiceRole.entities.PartCommitment.list('-updated_date', 100);
+      for (const c of updatedCommitments) {
+        const req = c.required_total || 0;
+        const res = c.reserved_from_stock || 0;
+        const cov = c.covered_from_po || 0;
+        if (res + cov > req + 0.001) {
+          postCheck.push({ commitment_id: c.id, required_total: req, reserved_from_stock: res, covered_from_po: cov, total: res + cov, overallocation: (res + cov) - req });
+        }
+      }
+      if (postCheck.length > 0) {
+        summary.post_audit_violations = postCheck;
+        summary.logs.push(`POST-AUDIT: ${postCheck.length} invariant violations detected after backfill`);
+      }
+    }
+
     return new Response(JSON.stringify(summary), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (error) {

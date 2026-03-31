@@ -49,12 +49,25 @@ Deno.serve(async (req) => {
 
 // ── PHASE 1 HELPERS ──
 
+function checkSupplyInvariant(commitmentId, required, reserved, covered, ctx, source) {
+  const total = reserved + covered;
+  if (total > required + 0.001) {
+    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${commitmentId} reserved(${reserved})+covered_po(${covered})=${total} > required(${required})`;
+    console.error(msg);
+    if (ctx) ctx.warnings.push({ type: 'INVARIANT_VIOLATION', id: commitmentId, msg, source });
+    return { violated: true, overallocation: total - required, corrected_reserved: Math.max(0, required - covered) };
+  }
+  return { violated: false };
+}
+
 function readCanonical(c, ctx) {
   const cn = { required_total: c.required_total ?? 0, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
   if (ctx && c.qty_committed !== undefined && c.qty_committed !== cn.required_total)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_committed(${c.qty_committed})!=required_total(${cn.required_total})` });
   if (ctx && c.qty_reserved !== undefined && c.qty_reserved !== cn.reserved_from_stock)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})` });
+  // Check invariant on read
+  checkSupplyInvariant(c.id, cn.required_total, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical');
   cn.gap = Math.max(0, cn.required_total - cn.reserved_from_stock - cn.covered_from_po);
   cn.coverage = cn.reserved_from_stock + cn.covered_from_po;
   return cn;
@@ -81,7 +94,13 @@ async function inlineRebalance(ctx, part_id, isDry) {
     const cn = readCanonical(c, ctx);
     const remReq = Math.max(0, cn.required_total - cn.qty_installed);
     const need = Math.max(0, remReq - cn.covered_from_po);
-    const newRes = Math.min(rem, need);
+    let newRes = Math.min(rem, need);
+    // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po <= required_total
+    const invCheck = checkSupplyInvariant(c.id, cn.required_total, newRes, cn.covered_from_po, ctx, 'inlineRebalance');
+    if (invCheck.violated) {
+      newRes = invCheck.corrected_reserved;
+      console.warn(`[REBALANCE_INVARIANT_CORRECTED] c=${c.id}: reserved corrected from ${Math.min(rem, need)} to ${newRes}`);
+    }
     const newTO = Math.max(0, remReq - newRes - cn.covered_from_po);
     rem = Math.max(0, rem - newRes);
     if (newRes !== cn.reserved_from_stock || newTO !== (c.qty_to_order ?? 0))

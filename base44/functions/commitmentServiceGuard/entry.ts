@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * CommitmentServiceGuard - Platform-Level Mutation Enforcement
@@ -52,7 +52,9 @@ const PROTECTED_ENTITIES = {
     allowDelete: false,
     conditionalLocks: [
       { field: 'commitment_status', lockFields: ['qty_committed', 'unit_retail_snapshot'], condition: (val) => val === 'cancelled' }
-    ]
+    ],
+    // Supply invariant: reserved_from_stock + covered_from_po <= required_total
+    supplyInvariantCheck: true
   },
   PartPurchaseLineItem: {
     sensitiveFields: ['status'],
@@ -200,12 +202,31 @@ async function validateMutation(base44, params) {
     return result;
   }
 
-  // Check conditional locks (need to fetch current record)
-  if (protection.conditionalLocks.length > 0 && recordId) {
+  // Check conditional locks and supply invariant (need to fetch current record)
+  if ((protection.conditionalLocks.length > 0 || protection.supplyInvariantCheck) && recordId) {
     try {
       const records = await base44.asServiceRole.entities[entityName].filter({ id: recordId });
       const record = records[0];
       
+      // Supply invariant check for PartCommitment
+      if (record && protection.supplyInvariantCheck && entityName === 'PartCommitment') {
+        const proposed_required = updates?.required_total ?? record.required_total ?? 0;
+        const proposed_reserved = updates?.reserved_from_stock ?? record.reserved_from_stock ?? 0;
+        const proposed_covered = updates?.covered_from_po ?? record.covered_from_po ?? 0;
+        const total_coverage = proposed_reserved + proposed_covered;
+        if (total_coverage > proposed_required + 0.001) {
+          result.allowed = false;
+          result.violations.push({
+            type: 'SUPPLY_INVARIANT_VIOLATION',
+            message: `reserved_from_stock(${proposed_reserved}) + covered_from_po(${proposed_covered}) = ${total_coverage} > required_total(${proposed_required})`,
+            current: { required_total: record.required_total, reserved_from_stock: record.reserved_from_stock, covered_from_po: record.covered_from_po },
+            proposed: { required_total: proposed_required, reserved_from_stock: proposed_reserved, covered_from_po: proposed_covered },
+            overallocation: total_coverage - proposed_required
+          });
+          logSecurityWarning('SUPPLY_INVARIANT_VIOLATION', entityName, recordId, callerSource, { proposed_reserved, proposed_covered, proposed_required, overallocation: total_coverage - proposed_required });
+        }
+      }
+
       if (record) {
         for (const lock of protection.conditionalLocks) {
           const lockValue = record[lock.field];

@@ -8,7 +8,23 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 const ACTIONS = { INCREASE_QTY:'INCREASE_QTY', DECREASE_QTY:'DECREASE_QTY', REALLOCATE_TO_PROJECT:'REALLOCATE_TO_PROJECT', CANCEL_UNORDERED_QTY:'CANCEL_UNORDERED_QTY', SPLIT_COMMITMENT:'SPLIT_COMMITMENT', MERGE_COMMITMENTS:'MERGE_COMMITMENTS' };
 
-function readCn(c) { const r={required_total:c.required_total??0,reserved_from_stock:c.reserved_from_stock??0,covered_from_po:c.covered_from_po??0,qty_installed:c.qty_installed??0}; r.gap=Math.max(0,r.required_total-r.reserved_from_stock-r.covered_from_po); return r; }
+function checkSupplyInvariant(cid, required, reserved, covered, source) {
+  const total = reserved + covered;
+  if (total > required + 0.001) {
+    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${cid} reserved(${reserved})+covered_po(${covered})=${total} > required(${required})`;
+    console.error(msg);
+    return { violated: true, overallocation: total - required, corrected_reserved: Math.max(0, required - covered) };
+  }
+  return { violated: false };
+}
+
+function readCn(c) {
+  const r={required_total:c.required_total??0,reserved_from_stock:c.reserved_from_stock??0,covered_from_po:c.covered_from_po??0,qty_installed:c.qty_installed??0};
+  // Check invariant on read
+  checkSupplyInvariant(c.id, r.required_total, r.reserved_from_stock, r.covered_from_po, 'readCn');
+  r.gap=Math.max(0,r.required_total-r.reserved_from_stock-r.covered_from_po);
+  return r;
+}
 function detectMM(c) { const cn=readCn(c),mm=[]; if(c.qty_committed!==undefined&&c.qty_committed!==cn.required_total) mm.push(`qty_committed(${c.qty_committed})!=required_total(${cn.required_total})`); if(c.qty_reserved!==undefined&&c.qty_reserved!==cn.reserved_from_stock) mm.push(`qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})`); if(mm.length) console.warn(`[PHASE1_MM] ${c.id}: ${mm.join(', ')}`); }
 function covSt(req,res,cov) { const t=res+cov; if(t>=req&&req>0) return 'FULLY_COVERED'; if(t>0) return 'PARTIALLY_COVERED'; return 'NOT_COVERED'; }
 
@@ -131,7 +147,22 @@ Deno.serve(async (req) => {
 
     if (result.success && !dry_run) {
       const [uc] = await base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
-      if (uc) { const cn=readCn(uc); return Response.json({ok:true,...result,action_type,commitment:{id:uc.id,required_total:cn.required_total,reserved_from_stock:cn.reserved_from_stock,covered_from_po:cn.covered_from_po,qty_installed:cn.qty_installed,qty_committed:uc.qty_committed,qty_to_order:uc.qty_to_order,coverage_status:uc.coverage_status}}); }
+      if (uc) {
+        const cn=readCn(uc);
+        // Post-mutation invariant enforcement
+        const inv = checkSupplyInvariant(uc.id, cn.required_total, cn.reserved_from_stock, cn.covered_from_po, `mutateQty:${action_type}`);
+        if (inv.violated) {
+          console.error(`[MUTATE_QTY_INVARIANT] Auto-correcting commitment ${uc.id}: reserved ${cn.reserved_from_stock} -> ${inv.corrected_reserved}`);
+          await base44.asServiceRole.entities.PartCommitment.update(uc.id, {
+            reserved_from_stock: inv.corrected_reserved,
+            qty_reserved: inv.corrected_reserved,
+            integrity_warning: true,
+            integrity_warning_details: `INVARIANT_CORRECTED after ${action_type}: reserved reduced from ${cn.reserved_from_stock} to ${inv.corrected_reserved}`,
+          });
+          cn.reserved_from_stock = inv.corrected_reserved;
+        }
+        return Response.json({ok:true,...result,action_type,invariant_corrected:inv.violated,commitment:{id:uc.id,required_total:cn.required_total,reserved_from_stock:cn.reserved_from_stock,covered_from_po:cn.covered_from_po,qty_installed:cn.qty_installed,qty_committed:uc.qty_committed,qty_to_order:uc.qty_to_order,coverage_status:uc.coverage_status}});
+      }
     }
     return Response.json({ ok: result.success, ...result, action_type });
   } catch (error) {
