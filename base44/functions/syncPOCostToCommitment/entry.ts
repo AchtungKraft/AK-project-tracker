@@ -6,13 +6,14 @@
  * Optionally triggers retail recalculation from matrix.
  * 
  * HARD RULE: Does NOT overwrite if commitment has manual pricing override
- * (pricing_integrity_status === 'overridden_retail' indicates manual retail,
- *  but cost sync still applies unless explicitly blocked).
  * 
- * Can be called:
- * - After PO creation (from createPurchaseOrdersFromCommitments)
- * - After PO line edit (from SYNC_PO_COST action)
- * - Standalone for bulk re-sync
+ * HARDENED: Uses service role only — no auth.me() dependency.
+ * Can be safely called from:
+ *   - PO creation (from createPurchaseOrdersFromCommitments)
+ *   - PO line edit (from SYNC_PO_COST action)
+ *   - Backfill function
+ *   - Manual SYNC action
+ *   - Other backend functions (service-to-service)
  * 
  * Input: { commitment_ids: string[] }  (or single commitment_id)
  * Output: { synced: [...], skipped: [...], errors: [...] }
@@ -22,8 +23,16 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    // HARDENED: Try user auth for logging, but don't require it.
+    // This allows service-role calls (from other functions, automations, backfills) to work.
+    let actorEmail = 'system';
+    try {
+      const user = await base44.auth.me();
+      if (user?.email) actorEmail = user.email;
+    } catch (_e) {
+      // No user context — called from service role / automation. That's fine.
+    }
 
     const payload = await req.json();
     const commitmentIds = payload.commitment_ids || (payload.commitment_id ? [payload.commitment_id] : []);
@@ -33,7 +42,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'commitment_ids or commitment_id required' }, { status: 400 });
     }
 
-    const result = await syncCosts(base44, user, commitmentIds, skipRetailUpdate);
+    const result = await syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate);
     return Response.json({ success: true, ...result });
   } catch (error) {
     console.error('syncPOCostToCommitment error:', error);
@@ -42,12 +51,13 @@ Deno.serve(async (req) => {
 });
 
 /**
- * Core sync logic — exported pattern for inline use from other functions
+ * Core sync logic
  */
-async function syncCosts(base44, user, commitmentIds, skipRetailUpdate = false) {
+async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = false) {
   const synced = [];
   const skipped = [];
   const errors = [];
+  const auditLogs = [];
 
   // Fetch all commitments
   const commitments = await base44.asServiceRole.entities.PartCommitment.filter({
@@ -150,26 +160,35 @@ async function syncCosts(base44, user, commitmentIds, skipRetailUpdate = false) 
       costChanged = true;
     }
 
-    // Update retail if null/zero AND cost changed AND matrix available
+    // Retail sync — respect retail_override flag
     const currentRetail = commitment.unit_retail_snapshot ?? 0;
     let retailUpdated = false;
     
     if (!skipRetailUpdate && costChanged && matrixTiers && matrixTiers.length > 0) {
-      // Only auto-set retail if it's currently missing/zero OR if pricing_integrity_status suggests it's estimated
-      const shouldUpdateRetail = currentRetail <= 0 || 
-        commitment.pricing_integrity_status === 'estimated_cost' ||
-        commitment.pricing_integrity_status === 'missing_cost' ||
-        commitment.pricing_integrity_status === 'missing_retail';
+      // RETAIL ENFORCEMENT: Only update retail if NOT manually overridden
+      if (commitment.retail_override === true) {
+        // Manual retail — never overwrite, just recalc margin
+        if (currentRetail > 0) {
+          updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
+        }
+      } else {
+        // Matrix retail — always recompute when cost changes
+        const shouldUpdateRetail = currentRetail <= 0 || 
+          commitment.pricing_integrity_status === 'estimated_cost' ||
+          commitment.pricing_integrity_status === 'missing_cost' ||
+          commitment.pricing_integrity_status === 'missing_retail' ||
+          commitment.pricing_integrity_status === 'ok'; // Recompute even if 'ok' since cost changed
 
-      if (shouldUpdateRetail) {
-        const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
-        if (retailResult) {
-          updates.unit_retail_snapshot = retailResult.retail;
-          updates.planned_retail_total = retailResult.retail * (commitment.required_total || 0);
-          updates.margin_pct = retailResult.retail > 0
-            ? Math.round(((retailResult.retail - weightedAvgCost) / retailResult.retail) * 10000) / 100
-            : 0;
-          retailUpdated = true;
+        if (shouldUpdateRetail) {
+          const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
+          if (retailResult) {
+            updates.unit_retail_snapshot = retailResult.retail;
+            updates.planned_retail_total = retailResult.retail * (commitment.required_total || 0);
+            updates.margin_pct = retailResult.retail > 0
+              ? Math.round(((retailResult.retail - weightedAvgCost) / retailResult.retail) * 10000) / 100
+              : 0;
+            retailUpdated = true;
+          }
         }
       }
     }
@@ -198,7 +217,20 @@ async function syncCosts(base44, user, commitmentIds, skipRetailUpdate = false) 
     // Apply updates
     await base44.asServiceRole.entities.PartCommitment.update(cid, updates);
 
-    console.log(`[SYNC_PO_COST] commitment=${cid} old_cost=${oldCost} new_cost=${updates.unit_cost_snapshot ?? oldCost} retail_updated=${retailUpdated} by=${user.email}`);
+    console.log(`[SYNC_PO_COST] commitment=${cid} old_cost=${oldCost} new_cost=${updates.unit_cost_snapshot ?? oldCost} retail_updated=${retailUpdated} actor=${actorEmail}`);
+
+    // Audit log
+    auditLogs.push({
+      commitment_id: cid,
+      action_type: 'update',
+      trigger_source: 'sync',
+      triggered_by: actorEmail,
+      actor_email: actorEmail,
+      previous_values: { unit_cost_snapshot: oldCost, unit_retail_snapshot: currentRetail },
+      new_values: { unit_cost_snapshot: updates.unit_cost_snapshot ?? oldCost, unit_retail_snapshot: updates.unit_retail_snapshot ?? currentRetail },
+      notes: `Cost sync from PO. Weighted avg: ${weightedAvgCost}. Retail ${retailUpdated ? 'recalculated' : 'unchanged'}.`,
+      timestamp: new Date().toISOString(),
+    });
 
     synced.push({
       commitment_id: cid,
@@ -211,6 +243,15 @@ async function syncCosts(base44, user, commitmentIds, skipRetailUpdate = false) 
       retail_updated: retailUpdated,
       pricing_integrity_status: updates.pricing_integrity_status,
     });
+  }
+
+  // Write audit logs
+  for (const log of auditLogs) {
+    try {
+      await base44.asServiceRole.entities.CommitmentAuditLog.create(log);
+    } catch (e) {
+      console.warn(`[SYNC_AUDIT] Failed to write audit log: ${e.message}`);
+    }
   }
 
   return { synced, skipped, errors, total: commitmentIds.length };

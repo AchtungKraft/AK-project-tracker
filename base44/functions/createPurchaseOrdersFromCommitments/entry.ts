@@ -71,7 +71,21 @@ Deno.serve(async (req) => {
         cost_src = (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (part?.cost > 0) ? 'part_cost' : (part?.default_cost > 0) ? 'default_estimate' : 'missing';
         if (unit_cost <= 0) cost_review = true;
       }
-      if (unit_cost <= 0) console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
+      if (unit_cost <= 0) {
+        console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
+        // Audit: log zero-cost PO creation
+        try {
+          await base44.asServiceRole.entities.CommitmentAuditLog.create({
+            commitment_id: c.id,
+            action_type: 'create',
+            trigger_source: 'manual',
+            triggered_by: user.email,
+            actor_email: user.email,
+            notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${part?.part_name}. Cost source: ${cost_src}`,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (_e) { /* audit is best-effort */ }
+      }
       eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: gap, unit_cost, cost_src, cost_review });
     }
 
@@ -140,12 +154,13 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.LifecycleEvent.create({ event_type: 'PO_CREATED', commitment_id: c.id, project_id, part_id: part.id, order_id: order.id, line_item_id: li.id, vendor_id: vid, qty_delta: qty_to_order, before_state: JSON.stringify({ covered_from_po: curCov, status: c.commitment_status }), after_state: JSON.stringify({ covered_from_po: newCov, qty_to_order: newTO, status: ns }), metadata: JSON.stringify({ po_number: poNum, unit_cost, extended_cost: unit_cost * qty_to_order }), actor_email: user.email, actor_id: user.id, is_reversible: false });
       }
 
-      // Post-PO: Trigger retail update for commitments missing retail
+      // Post-PO: Always trigger cost sync to ensure commitment pricing is up-to-date
+      // syncPOCostToCommitment is hardened (no auth dependency) — safe for service role calls
       for (const cid of commitmentIdsForCostSync) {
         try {
           await base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: cid, skip_retail_update: false });
         } catch (e) {
-          console.warn(`[PO_COST_SYNC] Retail sync failed for ${cid}: ${e.message}`);
+          console.warn(`[PO_COST_SYNC] Sync failed for ${cid}: ${e.message}`);
         }
       }
 

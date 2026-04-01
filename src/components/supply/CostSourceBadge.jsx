@@ -74,7 +74,7 @@ export default function CostSourceBadge({ commitment, className }) {
     if (cost > 0) {
       config = { label: 'COST FROM PO', accent: 'border-l-emerald-600', text: 'text-emerald-500/80' };
     } else {
-      config = { label: 'PO COST $0', accent: 'border-l-amber-600', text: 'text-amber-500/80' };
+      config = { label: 'COST MISSING', accent: 'border-l-red-600', text: 'text-red-400/80' };
     }
   } else {
     if (cost > 0) {

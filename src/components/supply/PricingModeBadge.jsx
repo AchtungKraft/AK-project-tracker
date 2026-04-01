@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 const CONFIGS = {
   COST_FROM_PO:        { label: 'COST FROM PO',        border: 'border-l-emerald-600', text: 'text-emerald-500/80' },
   COST_PENDING:        { label: 'COST PENDING',         border: 'border-l-gray-600',    text: 'text-gray-500' },
+  COST_MISSING:        { label: 'COST MISSING',          border: 'border-l-red-600',     text: 'text-red-400/80' },
   MANUAL_COST:         { label: 'MANUAL COST OVERRIDE',  border: 'border-l-amber-500',   text: 'text-amber-400/80' },
   MATRIX_RETAIL:       { label: 'MATRIX RETAIL',         border: 'border-l-blue-600',    text: 'text-blue-400/80' },
   MANUAL_RETAIL:       { label: 'MANUAL RETAIL',         border: 'border-l-amber-500',   text: 'text-amber-400/80' },
@@ -37,6 +38,7 @@ export function CostModeBadge({ commitment, className }) {
   const cost = commitment.unit_cost_snapshot ?? 0;
 
   if (hasPO && cost > 0) return <ModeBadge config={CONFIGS.COST_FROM_PO} className={className} />;
+  if (hasPO && cost <= 0) return <ModeBadge config={CONFIGS.COST_MISSING} className={className} />;
   return <ModeBadge config={CONFIGS.COST_PENDING} className={className} />;
 }
 

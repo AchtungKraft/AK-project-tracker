@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { Package } from "lucide-react";
+import { Package, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const LOCATION_NONE = "__none__";
@@ -89,7 +89,19 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
         </Select>
       </TableCell>
       <TableCell>
-        <span className="text-sm text-gray-400">{line.project_name}</span>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm text-gray-400">{line.project_name}</span>
+          {(line.unit_cost ?? 0) <= 0 && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-400">
+              <AlertTriangle className="w-3 h-3" /> NO COST
+            </span>
+          )}
+          {(line.unit_cost ?? 0) > 0 && (
+            <span className="text-[9px] font-mono text-emerald-500/70">
+              ${(line.unit_cost || 0).toFixed(2)}/ea
+            </span>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

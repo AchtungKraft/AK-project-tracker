@@ -244,7 +244,21 @@ async function createPO(ctx, commitment_ids, payload) {
     // FIX: Use || instead of ?? so that 0 falls through to Part.cost
     const resolvedCost = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
     const resolvedCostSource = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
-    if (resolvedCost <= 0) console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
+    if (resolvedCost <= 0) {
+      console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
+      // Audit: log zero-cost PO creation
+      try {
+        await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({
+          commitment_id: c.id,
+          action_type: 'create',
+          trigger_source: 'manual',
+          triggered_by: ctx.user.email,
+          actor_email: ctx.user.email,
+          notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${p.part_name}. Cost source: ${resolvedCostSource}`,
+          timestamp: ctx.timestamp,
+        });
+      } catch (_e) { /* audit is best-effort */ }
+    }
     vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource});
   }
   if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost}))}))},blocked};
@@ -436,12 +450,27 @@ async function cancelCommitment(ctx,commitment_ids,payload) {
 
 async function syncPOCost(ctx, commitment_ids, payload) {
   if (!commitment_ids?.length) throw new Error('commitment_ids required for SYNC_PO_COST');
-  // Delegate to the dedicated sync function
+  // Delegate to the dedicated sync function (uses service role — no auth dependency)
   const result = await ctx.base44.asServiceRole.functions.invoke('syncPOCostToCommitment', {
     commitment_ids,
     skip_retail_update: payload.skip_retail_update || false,
   });
   ctx.mutations.push(...commitment_ids.map(id => ({ entity: 'PartCommitment', id, action: 'SYNC_PO_COST' })));
+  
+  // Audit: log sync action
+  for (const cid of commitment_ids) {
+    try {
+      await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({
+        commitment_id: cid,
+        action_type: 'update',
+        trigger_source: 'sync',
+        triggered_by: ctx.user.email,
+        actor_email: ctx.user.email,
+        notes: `Manual SYNC_PO_COST triggered`,
+        timestamp: ctx.timestamp,
+      });
+    } catch (_e) { /* audit log is best-effort */ }
+  }
   return result.data || result;
 }
 

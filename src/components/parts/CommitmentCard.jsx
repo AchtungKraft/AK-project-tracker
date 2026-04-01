@@ -120,7 +120,7 @@ export default function CommitmentCard({
             {/* Cost + Retail Row */}
             <div className="flex items-center gap-4 mb-2 text-xs">
               <span className="text-gray-500">
-                C: <span className="text-gray-300 font-mono">{formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}</span>
+                C: <span className={cn("font-mono", (commitment.unit_cost_snapshot || part?.cost || 0) <= 0 ? "text-red-400" : "text-gray-300")}>{formatCurrencyUSD(commitment.unit_cost_snapshot || part?.cost || 0)}</span>
               </span>
               <span className="text-gray-500">
                 R: <span className="text-gray-300 font-mono">{formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}</span>

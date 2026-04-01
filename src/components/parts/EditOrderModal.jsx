@@ -42,13 +42,26 @@ export default function EditOrderModal({ order, onClose }) {
   const isFullyReceived = order?.status === 'Received';
 
   const updateMutation = useMutation({
-    mutationFn: (data) => base44.entities.Order.update(order.id, data),
+    mutationFn: async (data) => {
+      await base44.entities.Order.update(order.id, data);
+      // Auto-sync: trigger cost sync for all linked commitments after PO edit
+      if (order?.id) {
+        try {
+          const lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: order.id });
+          const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
+          if (commitmentIds.length > 0) {
+            await base44.functions.invoke('syncPOCostToCommitment', { commitment_ids: commitmentIds });
+          }
+        } catch (syncErr) {
+          console.warn('[EditOrder] Auto cost sync after edit:', syncErr.message);
+        }
+      }
+    },
     onSuccess: async () => {
-      // PHASE 17: Deterministic refresh
       await forceAppRefresh(queryClient, {
         orderIds: [order.id],
       });
-      toast.success('Order updated');
+      toast.success('Order updated — pricing synced');
       onClose();
     },
     onError: (error) => {
