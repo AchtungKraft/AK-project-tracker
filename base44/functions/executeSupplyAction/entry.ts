@@ -241,7 +241,11 @@ async function createPO(ctx, commitment_ids, payload) {
     const cn=readCanonical(c,ctx);
     if(cn.gap<=0){blocked.push({commitment_id:c.id,reason_code:'NO_GAP',gap:0});continue;}
     if(!vg.has(ev)) vg.set(ev,[]);
-    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:c.unit_cost_snapshot??p.cost??0});
+    // FIX: Use || instead of ?? so that 0 falls through to Part.cost
+    const resolvedCost = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
+    const resolvedCostSource = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
+    if (resolvedCost <= 0) console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
+    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource});
   }
   if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost}))}))},blocked};
 
@@ -256,7 +260,7 @@ async function createPO(ctx, commitment_ids, payload) {
 
     for(const item of items) {
       const rq=Number(item.qty); if(!rq||rq<=0||!Number.isFinite(rq)) throw new Error(`CREATE_PO_INVALID_QTY: ${item.qty}`);
-      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,status:'Ordered'});
+      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,cost_source_reference:item.cost_source||null,cost_requires_review:item.cost_source==='missing',status:'Ordered'});
       const curCov=item.commitment.covered_from_po??0, newCov=curCov+item.qty;
       const cn=readCanonical(item.commitment,ctx);
       const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov);

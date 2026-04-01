@@ -59,10 +59,19 @@ Deno.serve(async (req) => {
 
       let unit_cost, cost_src, cost_review = false;
       if (isFwd) {
-        if (part?.cost > 0) { unit_cost = part.cost; cost_src = 'part_cost'; }
+        // FIX: Check commitment snapshot first (if > 0), then fall back to part.cost
+        if (c.unit_cost_snapshot > 0) { unit_cost = c.unit_cost_snapshot; cost_src = 'commitment_snapshot'; }
+        else if (part?.cost > 0) { unit_cost = part.cost; cost_src = 'part_cost'; }
         else if (part?.default_cost > 0) { unit_cost = part.default_cost; cost_src = 'default_estimate'; cost_review = true; }
-        else { unit_cost = 0; cost_src = 'default_estimate'; cost_review = true; }
-      } else { unit_cost = part?.cost || part?.default_cost || c.unit_cost_snapshot || 0; cost_src = `commitment:${c.id}`; }
+        else { unit_cost = 0; cost_src = 'missing'; cost_review = true; }
+      } else {
+        // Legacy path: same fallback chain
+        const resolved = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (part?.cost && part.cost > 0) ? part.cost : (part?.default_cost && part.default_cost > 0) ? part.default_cost : 0;
+        unit_cost = resolved;
+        cost_src = (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (part?.cost > 0) ? 'part_cost' : (part?.default_cost > 0) ? 'default_estimate' : 'missing';
+        if (unit_cost <= 0) cost_review = true;
+      }
+      if (unit_cost <= 0) console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
       eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: gap, unit_cost, cost_src, cost_review });
     }
 
