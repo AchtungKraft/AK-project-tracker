@@ -10,6 +10,7 @@ import CommitmentActionCard from "./CommitmentActionCard";
 import { resolveNextAction } from "./CommitmentNextAction";
 import { sortByPriority, getBlockerStatus, computeCommitmentPriority } from "./commitmentPriority";
 import { formatCurrencyUSD } from "./pricingHelpers";
+import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
 
 /**
  * GlobalActionQueue - Groups all commitments by next action across projects.
@@ -83,7 +84,7 @@ export default function GlobalActionQueue({
     }
 
     for (const item of filtered) {
-      if (item.commitment_status === 'cancelled') continue;
+      if (resolveLifecycleState(item) === 'CANCELLED') continue;
       const { action } = resolveNextAction(item);
       if (groups[action]) groups[action].push(item);
       else groups['OTHER'] = groups['OTHER'] || [];

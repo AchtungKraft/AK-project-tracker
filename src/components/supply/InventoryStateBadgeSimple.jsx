@@ -2,6 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Package, AlertTriangle, CheckCircle2, Truck, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
 
 /**
  * InventoryStateBadgeSimple - Build Management Focused Inventory State
@@ -39,18 +40,19 @@ const STATE_CONFIG = {
 };
 
 /**
- * Determine inventory state from commitment data.
- * PROCUREMENT STATUS PRECEDENCE: ordered → stock → needs order.
- * ORDERED must override IN STOCK because the user needs to know the part is on a PO.
+ * Determine inventory state from commitment data — RESOLVER-FIRST.
+ * Uses resolveLifecycleState for INSTALL_READY/INSTALLED detection,
+ * then falls back to procurement status for display differentiation.
  */
 function determineInventoryState(commitment) {
+  const lifecycle = resolveLifecycleState(commitment);
+  if (lifecycle === 'INSTALLED') return 'INSTALL_READY'; // show green for installed too
+  if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';
+  
   const reserved = commitment.reserved_from_stock ?? 0;
   const ordered = commitment.covered_from_po ?? 0;
-  const required = commitment.required_total ?? 0;
 
-  // Fully covered by physical stock → ready to install
-  if (reserved >= required && required > 0 && ordered === 0) return 'INSTALL_READY';
-  if (ordered > 0)  return 'ORDERED';
+  if (ordered > 0) return 'ORDERED';
   if (reserved > 0) return 'IN_STOCK';
   return 'NEEDS_ORDER';
 }

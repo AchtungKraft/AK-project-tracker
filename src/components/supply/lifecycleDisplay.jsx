@@ -1,9 +1,11 @@
 /**
  * LIFECYCLE DISPLAY - AK Industrial Mode
  * 
- * Maps commitment_status to simplified display_status for UI.
- * NO complex grouping. NO duplicate badges.
+ * RESOLVER-FIRST: All display logic derives from resolveLifecycleState.
+ * commitment_status is DEPRECATED for display — cache-only.
  */
+
+import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor, isHiddenByDefault as _isHidden } from './resolveCommitmentStateLocal';
 
 /**
  * Map commitment_status to simplified display_status
@@ -33,25 +35,28 @@ export const LIFECYCLE_STATE_DISPLAY = {
 };
 
 /**
- * Get display status from commitment_status
- * @param {string} commitmentStatus 
+ * Get display status from commitment — uses resolver as single source of truth.
+ * @param {string|Object} commitmentOrStatus - commitment object OR legacy status string
  * @returns {string}
  */
-export function getDisplayStatus(commitmentStatus) {
-  if (!commitmentStatus) return 'PLANNED';
-  const normalized = commitmentStatus.toLowerCase().replace(/\s+/g, '_');
-  return DISPLAY_STATUS_MAP[normalized] || commitmentStatus.toUpperCase();
+export function getDisplayStatus(commitmentOrStatus) {
+  // If passed an object, use the resolver
+  if (commitmentOrStatus && typeof commitmentOrStatus === 'object') {
+    return getLifecycleLabel(commitmentOrStatus);
+  }
+  // Legacy string fallback for callers passing commitment_status directly
+  if (!commitmentOrStatus) return 'PLANNED';
+  const normalized = commitmentOrStatus.toLowerCase().replace(/\s+/g, '_');
+  return DISPLAY_STATUS_MAP[normalized] || commitmentOrStatus.toUpperCase();
 }
 
 /**
- * Check if commitment should be hidden by default
+ * Check if commitment should be hidden by default — uses resolver
  * @param {Object} commitment 
  * @returns {boolean}
  */
 export function isHiddenByDefault(commitment) {
-  if (!commitment?.commitment_status) return false;
-  const status = commitment.commitment_status.toLowerCase();
-  return status === 'cancelled' || status === 'closed';
+  return _isHidden(commitment);
 }
 
 /**
@@ -67,26 +72,40 @@ export function filterActiveCommitments(commitments, showClosedCancelled = false
 }
 
 /**
- * Get display status color (monochrome industrial palette)
- * @param {string} displayStatus 
+ * Get display status color — supports both resolver labels and legacy status strings
+ * @param {string|Object} displayStatusOrCommitment 
  * @returns {string} Tailwind class
  */
-export function getDisplayStatusColor(displayStatus) {
+export function getDisplayStatusColor(displayStatusOrCommitment) {
+  // If passed a commitment object, use resolver directly
+  if (displayStatusOrCommitment && typeof displayStatusOrCommitment === 'object') {
+    return getLifecycleColor(displayStatusOrCommitment);
+  }
+  const displayStatus = displayStatusOrCommitment;
   switch (displayStatus) {
+    case 'Planned':
     case 'PLANNED':
       return 'text-gray-300 border-l-amber-600';
+    case 'Ordered':
     case 'ORDERED':
-      return 'text-gray-300 border-l-gray-500';
+      return 'text-blue-400 border-l-blue-500';
     case 'IN PROGRESS':
       return 'text-gray-300 border-l-gray-400';
     case 'RECEIVED':
       return 'text-gray-300 border-l-gray-300';
+    case 'Ready to Install':
     case 'READY TO INSTALL':
       return 'text-emerald-400 border-l-emerald-500';
+    case 'Needs Order':
+    case 'NEEDS ORDER':
+      return 'text-amber-400 border-l-amber-600';
+    case 'Installed':
     case 'INSTALLED':
       return 'text-gray-400 border-l-gray-600';
+    case 'Cancelled':
     case 'CANCELLED':
       return 'text-gray-500 border-l-gray-700';
+    case 'Closed':
     case 'CLOSED':
       return 'text-gray-500 border-l-gray-700';
     default:

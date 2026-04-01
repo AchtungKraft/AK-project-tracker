@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Layers, Ban, AlertCircle } from "lucide-react";
+import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
 import { cn } from "@/lib/utils";
 import { getActionExplanation, getBlockerStatus } from "./commitmentPriority";
 
@@ -32,9 +33,11 @@ const NEXT_ACTIONS = {
 export function resolveNextAction(commitment) {
   if (!commitment) return { action: null, reason: null };
   
-  const status = commitment.commitment_status;
-  if (status === 'cancelled') return { action: 'CANCELLED', reason: 'Commitment cancelled' };
-  if (status === 'closed') return { action: 'COMPLETE', reason: 'Commitment closed' };
+  // Use resolver as single source of truth — NOT commitment_status
+  const lifecycle = resolveLifecycleState(commitment);
+  if (lifecycle === 'CANCELLED') return { action: 'CANCELLED', reason: 'Commitment cancelled' };
+  if (lifecycle === 'CLOSED') return { action: 'COMPLETE', reason: 'Commitment closed' };
+  if (lifecycle === 'INSTALLED') return { action: 'COMPLETE', reason: 'All parts installed' };
 
   const rt = commitment.required_total ?? 0;
   const rfs = commitment.reserved_from_stock ?? 0;
@@ -43,18 +46,16 @@ export function resolveNextAction(commitment) {
   const gap = Math.max(0, rt - rfs - cfp);
   const installable = Math.max(0, rfs - qi);
 
-  // Fully installed
-  if (qi >= rt && rt > 0) return { action: 'COMPLETE', reason: 'All parts installed' };
+  // INSTALL_READY: Has installable stock
+  if (lifecycle === 'INSTALL_READY' || installable > 0) {
+    return { action: 'INSTALL', reason: `${installable} ready to install`, qty: installable };
+  }
 
-  // Has installable stock
-  if (installable > 0) return { action: 'INSTALL', reason: `${installable} ready to install`, qty: installable };
-
-  // Has PO coverage but nothing received/reserved yet — wait for receiving
+  // COVERED: Has PO coverage but nothing received/reserved yet — wait for receiving
   if (cfp > 0 && rfs === 0) return { action: 'RECEIVE', reason: `${cfp} on order, awaiting delivery`, qty: cfp };
 
-  // Has gap — needs ordering or stock allocation
+  // NEEDS_ORDER: Has gap — needs ordering or stock allocation
   if (gap > 0) {
-    // Check if part has physical stock that could be allocated
     const inv = commitment.inventory_snapshot || {};
     const availGlobal = inv.available_global_active ?? inv.available ?? 0;
     if (availGlobal > 0) return { action: 'ALLOCATE', reason: `${Math.min(gap, availGlobal)} available in stock`, qty: Math.min(gap, availGlobal) };

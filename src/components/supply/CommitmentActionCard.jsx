@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveNextAction } from "./CommitmentNextAction";
+import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
 import CommitmentNextAction from "./CommitmentNextAction";
 import { formatCurrencyUSD } from "./pricingHelpers";
 import { computeCommitmentPriority, getActionExplanation, getBlockerStatus, PRIORITY_CONFIG } from "./commitmentPriority";
@@ -43,8 +44,9 @@ export default function CommitmentActionCard({
   const gap = Math.max(0, rt - rfs - cfp);
   const { action } = resolveNextAction(commitment);
   const part = commitment.part;
+  const lifecycle = resolveLifecycleState(commitment);
   const isComplete = action === 'COMPLETE';
-  const isCancelled = commitment.commitment_status === 'cancelled';
+  const isCancelled = lifecycle === 'CANCELLED';
   const priority = computeCommitmentPriority(commitment);
   const prioConfig = PRIORITY_CONFIG[priority.level];
   const blocker = getBlockerStatus(commitment);

@@ -1,3 +1,5 @@
+import { resolveLifecycleState } from '@/components/supply/resolveCommitmentStateLocal';
+
 /**
  * getAllowedCommitmentActions - Centralized lifecycle action gating
  * 
@@ -84,23 +86,23 @@ export function getAllowedCommitmentActions(commitment) {
   // Derived quantities from canonical fields
   const remaining = Math.max(0, effectiveRequired - qty_installed - qty_cancelled);
   const unorderedQty = effectiveGap;
-  const unreceived = effectiveOnOrder; // Items on order not yet received
+  const unreceived = effectiveOnOrder;
   const uninstalled = Math.max(0, effectiveReserved - qty_installed);
   
-  // CANONICAL: Edit locking based on invoiced_qty, NOT billing_status enum
-  // billing_status can be stale; invoiced_qty is authoritative
   const isInvoiceLocked = (invoiced_qty ?? 0) > 0;
 
-  // Default all actions to false
   const actions = getDefaultActions();
 
+  // RESOLVER-FIRST: Use lifecycle resolver for terminal state checks
+  const lifecycle = resolveLifecycleState(commitment);
+
   // Cancelled commitments - no actions allowed
-  if (commitment_status === 'cancelled') {
+  if (lifecycle === 'CANCELLED') {
     return actions;
   }
 
   // Closed commitments - view only
-  if (commitment_status === 'closed') {
+  if (lifecycle === 'CLOSED') {
     actions.canView = true;
     actions.canViewHistory = true;
     return actions;
@@ -125,13 +127,12 @@ export function getAllowedCommitmentActions(commitment) {
   const needsFromStock = Math.max(0, effectiveRequired - qty_installed - effectiveOnOrder);
   const stockCanCover = effectiveReserved >= needsFromStock;
   
-  if (unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status) && !stockCanCover) {
+  if (unorderedQty > 0 && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED' && !stockCanCover) {
     actions.canCreatePO = true;
   }
 
   // CANONICAL: DELTA ORDER - has existing orders AND still has gap
-  // Lifecycle string does NOT block (except cancelled/closed)
-  if (effectiveOnOrder > 0 && unorderedQty > 0 && !['cancelled', 'closed'].includes(commitment_status)) {
+  if (effectiveOnOrder > 0 && unorderedQty > 0 && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED') {
     actions.canCreateDeltaOrder = true;
   }
 
@@ -146,17 +147,12 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canAllocate = true;
   }
 
-  // INSTALL - only if has reserved & uninstalled (reserved_from_stock > qty_installed)
-  // ============================================================================
-  // CRITICAL (Phase 7): Install eligibility depends ONLY on inventory state
-  // - reserved_from_stock > qty_installed
-  // - Does NOT depend on: billing_status, payment status, credit allocations
-  // - In-stock committed parts can ALWAYS be installed regardless of billing state
-  // - This was a bug where billing_status incorrectly gated install
-  // ============================================================================
-  if (uninstalled > 0) {
+  // INSTALL - RESOLVER-ENFORCED: Only when lifecycle_state is INSTALL_READY
+  // reserved_from_stock must cover required_total for physical availability.
+  // This also passes if there are uninstalled reserved units (partial install scenarios).
+  if (uninstalled > 0 && (lifecycle === 'INSTALL_READY' || effectiveReserved > qty_installed)) {
     actions.canInstall = true;
-    actions.installableQty = uninstalled; // Expose for UI display
+    actions.installableQty = uninstalled;
   }
 
   // REVERSE INSTALL - only if has installed parts
@@ -219,8 +215,8 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // QUANTITY MUTATION ACTIONS
-  // Increase qty - allowed unless closed/cancelled
-  if (commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+  // Increase qty - allowed unless terminal (uses resolver)
+  if (lifecycle !== 'CLOSED' && lifecycle !== 'CANCELLED') {
     actions.canIncreaseQty = true;
   }
 
@@ -235,14 +231,14 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canCancelUnorderedQty = true;
   }
 
-  // Reallocate to project - only if has uninstalled qty
+  // Reallocate to project - only if has uninstalled qty and not terminal
   const maxMove = effectiveRequired - qty_installed;
-  if (maxMove > 0 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+  if (maxMove > 0 && lifecycle !== 'CLOSED' && lifecycle !== 'CANCELLED') {
     actions.canReallocateToProject = true;
   }
 
-  // Split commitment - need at least 2 qty
-  if (effectiveRequired > 1 && commitment_status !== 'closed' && commitment_status !== 'cancelled') {
+  // Split commitment - need at least 2 qty and not terminal
+  if (effectiveRequired > 1 && lifecycle !== 'CLOSED' && lifecycle !== 'CANCELLED') {
     actions.canSplitCommitment = true;
   }
 
@@ -301,31 +297,23 @@ function getDefaultActions() {
 }
 
 /**
- * Get lifecycle state description for UI display
+ * Get lifecycle state description for UI display — RESOLVER-FIRST
  */
 export function getCommitmentLifecycleState(commitment) {
   if (!commitment) return { state: 'unknown', label: 'Unknown', color: 'gray' };
 
-  const { commitment_status, qty_committed, qty_installed, qty_cancelled } = commitment;
-  const remaining = (qty_committed || 0) - (qty_installed || 0) - (qty_cancelled || 0);
-
+  const lifecycle = resolveLifecycleState(commitment);
   const states = {
-    planned: { state: 'planned', label: 'Planned', color: 'gray', canProgress: true },
-    ordered: { state: 'ordered', label: 'On Order', color: 'purple', canProgress: true },
-    partially_received: { state: 'partially_received', label: 'Partially Received', color: 'orange', canProgress: true },
-    received: { state: 'received', label: 'Received', color: 'blue', canProgress: true },
-    allocated: { state: 'allocated', label: 'Ready to Install', color: 'green', canProgress: true },
-    installed: { 
-      state: 'installed', 
-      label: remaining === 0 ? 'Fully Installed' : 'Partially Installed', 
-      color: 'green',
-      canProgress: remaining > 0,
-    },
-    closed: { state: 'closed', label: 'Closed', color: 'gray', canProgress: false },
-    cancelled: { state: 'cancelled', label: 'Cancelled', color: 'red', canProgress: false },
+    PLANNED: { state: 'planned', label: 'Planned', color: 'gray', canProgress: true },
+    NEEDS_ORDER: { state: 'needs_order', label: 'Needs Order', color: 'amber', canProgress: true },
+    COVERED: { state: 'covered', label: 'Ordered', color: 'blue', canProgress: true },
+    INSTALL_READY: { state: 'install_ready', label: 'Ready to Install', color: 'green', canProgress: true },
+    INSTALLED: { state: 'installed', label: 'Installed', color: 'green', canProgress: false },
+    CLOSED: { state: 'closed', label: 'Closed', color: 'gray', canProgress: false },
+    CANCELLED: { state: 'cancelled', label: 'Cancelled', color: 'red', canProgress: false },
   };
 
-  return states[commitment_status] || { state: 'unknown', label: commitment_status, color: 'gray' };
+  return states[lifecycle] || { state: 'unknown', label: lifecycle, color: 'gray' };
 }
 
 /**
@@ -338,18 +326,19 @@ export function getActionBlockReason(commitment, action) {
     return null; // Not blocked
   }
 
-  // CANONICAL: Block reasons use canonical fields only, no legacy qty_* fields
+  // RESOLVER-FIRST: Block reasons use resolver, not stored status
+  const lifecycle = resolveLifecycleState(commitment);
   const reasons = {
     canCreatePO: () => {
-      if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
-      if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
+      if (lifecycle === 'CANCELLED') return 'Commitment is cancelled';
+      if (lifecycle === 'CLOSED') return 'Commitment is closed';
       const toOrder = commitment?.to_order ?? 0;
       if (toOrder <= 0) return 'All required quantity is covered';
       return 'Cannot create PO in current state';
     },
     canCreateDeltaOrder: () => {
-      if (commitment?.commitment_status === 'cancelled') return 'Commitment is cancelled';
-      if (commitment?.commitment_status === 'closed') return 'Commitment is closed';
+      if (lifecycle === 'CANCELLED') return 'Commitment is cancelled';
+      if (lifecycle === 'CLOSED') return 'Commitment is closed';
       const coveredFromPo = commitment?.covered_from_po ?? 0;
       const toOrder = commitment?.to_order ?? 0;
       if (coveredFromPo === 0) return 'No existing orders to add to';

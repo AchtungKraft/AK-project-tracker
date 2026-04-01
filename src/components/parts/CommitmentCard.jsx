@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/getAllowedCommitmentActions";
 import DeltaOrderModal from "./DeltaOrderModal";
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
+import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "@/components/supply/resolveCommitmentStateLocal";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import CostSourceBadge from "@/components/supply/CostSourceBadge";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -53,8 +54,10 @@ export default function CommitmentCard({
   // Use centralized lifecycle gating
   const allowedActions = getAllowedCommitmentActions(commitment);
 
-  const displayStatus = getDisplayStatus(commitment.commitment_status);
-  const statusColor = getDisplayStatusColor(displayStatus);
+  // RESOLVER-FIRST: Derive display from canonical fields, not stored status
+  const lifecycleState = resolveLifecycleState(commitment);
+  const displayStatus = getLifecycleLabel(commitment);
+  const statusColor = getLifecycleColor(commitment);
 
   if (compact) {
     return (
@@ -128,19 +131,19 @@ export default function CommitmentCard({
               <CostSourceBadge commitment={commitment} />
             </div>
 
-            {/* Quantity Grid - AK Industrial: monochrome */}
+            {/* Quantity Grid - CANONICAL fields only */}
             <div className="grid grid-cols-4 gap-2 text-center mt-3">
               <div className="p-1.5 bg-gray-800/40 rounded">
-                <p className="text-[10px] text-gray-500 uppercase">Committed</p>
-                <p className="text-sm font-mono text-white">{commitment.qty_committed || 0}</p>
+                <p className="text-[10px] text-gray-500 uppercase">Required</p>
+                <p className="text-sm font-mono text-white">{commitment.required_total || 0}</p>
               </div>
               <div className="p-1.5 bg-gray-800/40 rounded">
-                <p className="text-[10px] text-gray-500 uppercase">Ordered</p>
-                <p className="text-sm font-mono text-gray-300">{commitment.qty_ordered || 0}</p>
+                <p className="text-[10px] text-gray-500 uppercase">Reserved</p>
+                <p className="text-sm font-mono text-gray-300">{commitment.reserved_from_stock || 0}</p>
               </div>
               <div className="p-1.5 bg-gray-800/40 rounded">
-                <p className="text-[10px] text-gray-500 uppercase">Received</p>
-                <p className="text-sm font-mono text-gray-300">{commitment.qty_received || 0}</p>
+                <p className="text-[10px] text-gray-500 uppercase">On PO</p>
+                <p className="text-sm font-mono text-gray-300">{commitment.covered_from_po || 0}</p>
               </div>
               <div className="p-1.5 bg-gray-800/40 rounded">
                 <p className="text-[10px] text-gray-500 uppercase">Installed</p>
@@ -188,7 +191,7 @@ export default function CommitmentCard({
                 )}
                 
                 {/* Show disabled PO option with reason if not allowed but handler exists */}
-                {onCreatePO && !allowedActions.canCreatePO && commitment.commitment_status !== 'cancelled' && !allowedActions.canCreateDeltaOrder && (
+                {onCreatePO && !allowedActions.canCreatePO && lifecycleState !== 'CANCELLED' && !allowedActions.canCreateDeltaOrder && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DropdownMenuItem disabled className="text-gray-500">

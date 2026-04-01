@@ -32,6 +32,7 @@ import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
+import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
 import ExecutionDataBlock from "./ExecutionDataBlock";
 
 /**
@@ -200,8 +201,9 @@ export function PSMItemRow({
   const [showDetails, setShowDetails] = useState(false);
   
   const { part, vendor, allowed, categoryObj } = commitment;
-  const displayStatus = getDisplayStatus(commitment.commitment_status);
-  const statusColor = getDisplayStatusColor(displayStatus);
+  // RESOLVER-FIRST: Derive display from canonical fields, not stored status
+  const displayStatus = getLifecycleLabel(commitment);
+  const statusColor = getLifecycleColor(commitment);
 
   // CANONICAL inventory values
   const inv = commitment.inventory_snapshot || {};
@@ -381,7 +383,7 @@ export function PSMItemRow({
         </div>
 
         {/* Lifecycle Status - Show only non-PLANNED statuses (PLANNED is redundant with stock badge) */}
-        {displayStatus !== 'PLANNED' && (
+        {displayStatus !== 'Planned' && (
           <div className="hidden lg:block flex-shrink-0">
             <span className={cn(
               "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",

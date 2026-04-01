@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Package } from "lucide-react";
 import { getDisplayStatus, getDisplayStatusColor } from "./lifecycleDisplay";
+import { getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
 import PricingIntegrityBadge from "./PricingIntegrityBadge";
 import { formatCurrencyUSD } from "./pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "./supplyResolvers";
@@ -76,8 +77,9 @@ export function DesktopSupplyRow({
   children, // For action buttons
   className,
 }) {
-  const displayStatus = getDisplayStatus(commitment?.commitment_status);
-  const statusColor = getDisplayStatusColor(displayStatus);
+  // RESOLVER-FIRST: Derive from canonical fields
+  const displayStatus = getLifecycleLabel(commitment);
+  const statusColor = getLifecycleColor(commitment);
   
   // ============================================================================
   // PHASE 2: CANONICAL INVENTORY VALUES
@@ -256,8 +258,9 @@ export function MobileSupplyCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   
-  const displayStatus = getDisplayStatus(commitment?.commitment_status);
-  const statusColor = getDisplayStatusColor(displayStatus);
+  // RESOLVER-FIRST: Derive from canonical fields
+  const displayStatus = getLifecycleLabel(commitment);
+  const statusColor = getLifecycleColor(commitment);
   
   // ============================================================================
   // PHASE 2: CANONICAL INVENTORY VALUES (Mobile Card)
@@ -375,11 +378,11 @@ export function MobileSupplyCard({
       {/* Expanded View */}
       {expanded && (
         <div className="px-3 pb-3 pt-0 border-t border-gray-800/50 space-y-3">
-          {/* Exact Lifecycle State */}
+          {/* Exact Lifecycle State — derived from resolver */}
           <div className="flex items-center justify-between text-xs pt-2">
-            <span className="text-gray-500">Exact Status:</span>
+            <span className="text-gray-500">Lifecycle:</span>
             <span className="text-gray-300 font-mono uppercase">
-              {commitment?.commitment_status || 'unknown'}
+              {displayStatus}
             </span>
           </div>
           
