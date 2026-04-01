@@ -1,0 +1,339 @@
+{
+  "name": "PartCommitment",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "requirement_id": {
+      "type": "string",
+      "description": "Reference to PartProjectRequirement (optional - for migration linkage)"
+    },
+    "parent_commitment_id": {
+      "type": "string",
+      "description": "Reference to parent commitment if this was split"
+    },
+    "required_total": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Total quantity required for this commitment. MUST be set on create."
+    },
+    "reserved_from_stock": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Quantity reserved from physical inventory"
+    },
+    "covered_from_po": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Quantity covered by purchase orders (ordered - received goes here until received)"
+    },
+    "qty_installed": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Quantity installed/consumed"
+    },
+    "supply_source_type": {
+      "type": "string",
+      "enum": [
+        "STOCK",
+        "VENDOR",
+        "CLIENT_SUPPLIED",
+        "AK_CUSTOM",
+        "TAKE_OFF"
+      ],
+      "default": "VENDOR",
+      "description": "CANONICAL: How this commitment will be fulfilled"
+    },
+    "qty_committed": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Use required_total. Kept for migration."
+    },
+    "qty_reserved": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Use reserved_from_stock. Kept for migration."
+    },
+    "qty_to_order": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Derived as gap = required_total - reserved_from_stock - covered_from_po. Kept for migration."
+    },
+    "qty_ordered": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Use covered_from_po. Kept for migration."
+    },
+    "qty_received": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Receiving now updates covered_from_po and Part.physical_stock. Kept for migration."
+    },
+    "qty_allocated": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Use reserved_from_stock. Kept for migration."
+    },
+    "qty_cancelled": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity cancelled or removed"
+    },
+    "commitment_status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "ordered",
+        "partially_received",
+        "received",
+        "allocated",
+        "installed",
+        "closed",
+        "cancelled"
+      ],
+      "default": "planned",
+      "description": "DEPRECATED: Lifecycle state now derived by resolver. Kept for migration."
+    },
+    "coverage_status": {
+      "type": "string",
+      "enum": [
+        "FULLY_COVERED",
+        "PARTIALLY_COVERED",
+        "NOT_COVERED"
+      ],
+      "default": "NOT_COVERED",
+      "description": "DEPRECATED: Derived by resolver. Kept for migration."
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "requirement",
+        "manual_attachment",
+        "order_attachment",
+        "split_commitment",
+        "scope_addition"
+      ],
+      "default": "requirement",
+      "description": "Origin type of this commitment"
+    },
+    "allocation_source": {
+      "type": "string",
+      "enum": [
+        "migrated_requirement",
+        "manual_commitment",
+        "po_split",
+        "stock_buffer"
+      ],
+      "default": "manual_commitment",
+      "description": "Origin of this commitment (legacy)"
+    },
+    "billing_status": {
+      "type": "string",
+      "enum": [
+        "unbilled",
+        "invoiced",
+        "paid"
+      ],
+      "default": "unbilled",
+      "description": "CANONICAL: Billing lifecycle status. Only invoice workflows may modify."
+    },
+    "order_line_item_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "References to PartPurchaseLineItem records"
+    },
+    "unit_cost_snapshot": {
+      "type": "number",
+      "description": "Cost per unit at time of commitment (from Part.cost) - SERVICE ONLY"
+    },
+    "unit_retail_snapshot": {
+      "type": "number",
+      "description": "Retail per unit at time of commitment (from Part retail_effective) - FROZEN, SERVICE ONLY"
+    },
+    "planned_cost_total": {
+      "type": "number",
+      "description": "unit_cost_snapshot * required_total - SERVICE COMPUTED"
+    },
+    "planned_retail_total": {
+      "type": "number",
+      "description": "unit_retail_snapshot * required_total - SERVICE COMPUTED"
+    },
+    "actual_unit_cost": {
+      "type": "number",
+      "description": "Actual cost from vendor invoice - updated via applyInvoiceActualsToCommitment"
+    },
+    "actual_extended_cost": {
+      "type": "number",
+      "description": "actual_unit_cost * required_total"
+    },
+    "margin_pct": {
+      "type": "number",
+      "description": "Calculated margin percentage against frozen retail"
+    },
+    "cost_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when user manually overrides cost. Prevents PO cost sync from overwriting."
+    },
+    "retail_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when user manually overrides retail. Prevents matrix recalc from overwriting."
+    },
+    "pricing_integrity_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "estimated_cost",
+        "missing_retail",
+        "overridden_retail",
+        "margin_negative",
+        "missing_cost",
+        "cost_retail_mismatch"
+      ],
+      "default": "estimated_cost",
+      "description": "Pricing data quality flag"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about this commitment"
+    },
+    "commitment_version": {
+      "type": "number",
+      "default": 1,
+      "description": "Optimistic locking version number"
+    },
+    "state_version": {
+      "type": "number",
+      "default": 0,
+      "description": "State machine version - incremented on each canonical mutation"
+    },
+    "last_recomputed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of last resolver recomputation"
+    },
+    "integrity_warning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag indicating validation failure"
+    },
+    "integrity_warning_details": {
+      "type": "string",
+      "description": "Details of integrity violations"
+    },
+    "cancelled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When commitment was cancelled"
+    },
+    "cancelled_reason": {
+      "type": "string",
+      "description": "Reason for cancellation"
+    },
+    "cancelled_by": {
+      "type": "string",
+      "description": "User who cancelled"
+    },
+    "requires_prepay": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether prepayment required"
+    },
+    "prepay_satisfied_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When prepayment was satisfied"
+    },
+    "cancellation_type": {
+      "type": "string",
+      "enum": [
+        "before_order",
+        "before_invoice",
+        "after_invoice",
+        "after_paid"
+      ],
+      "description": "At what stage cancelled"
+    },
+    "scope_reduction_credit_created": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether credit was created"
+    },
+    "invoiced_retail_total": {
+      "type": "number",
+      "description": "Total retail invoiced to client"
+    },
+    "covered_retail_total": {
+      "type": "number",
+      "description": "Total retail covered by pool allocations"
+    },
+    "exposure_gap": {
+      "type": "number",
+      "description": "Unbilled exposure (planned_retail - covered_retail)"
+    },
+    "retail_adjustment_request_id": {
+      "type": "string",
+      "description": "Reference to open RetailAdjustmentRequest if margin issue exists"
+    },
+    "invoice_blocked_reason": {
+      "type": "string",
+      "enum": [
+        "OPEN_ADJUSTMENT_REQUEST",
+        "MARGIN_NEGATIVE",
+        "MISSING_RETAIL",
+        "MISSING_COST"
+      ],
+      "description": "Why this commitment cannot be invoiced"
+    },
+    "invoice_override_approved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Manager approved invoicing despite margin issue"
+    },
+    "invoice_override_reason": {
+      "type": "string",
+      "description": "Reason for invoice override approval"
+    },
+    "invoice_override_by": {
+      "type": "string",
+      "description": "User who approved invoice override"
+    },
+    "invoice_override_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When invoice override was approved"
+    },
+    "invoiced_qty": {
+      "type": "number",
+      "default": 0,
+      "description": "PHASE 10: Quantity invoiced to client via ProjectInvoice system"
+    },
+    "invoiced_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "PHASE 10: Total amount invoiced to client via ProjectInvoice system"
+    },
+    "billed_qty_total": {
+      "type": "number",
+      "description": "Legacy: Total quantity billed (kept for compatibility)"
+    },
+    "billed_amount_total": {
+      "type": "number",
+      "description": "Legacy: Total amount billed (kept for compatibility)"
+    }
+  },
+  "required": [
+    "project_id",
+    "part_id",
+    "required_total"
+  ]
+}

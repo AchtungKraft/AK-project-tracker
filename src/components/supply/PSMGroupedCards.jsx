@@ -20,8 +20,9 @@ import {
 import {
   ChevronDown, ChevronUp, MoreVertical, ShoppingCart, Package,
   Wrench, Plus, Edit, Trash2, X, AlertTriangle, CheckCircle2,
-  ArrowUpDown, Layers, ExternalLink
+  ArrowUpDown, Layers, ExternalLink, DollarSign, RefreshCw
 } from "lucide-react";
+import CostSourceBadge from "@/components/supply/CostSourceBadge";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,8 @@ export function PSMItemRow({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onEditPricing,
+  onSyncCost,
   actionsEnabled = true,
   categoriesMap,
   vendorsMap,
@@ -364,6 +367,7 @@ export function PSMItemRow({
               <span className="text-amber-400">{formatCurrencyUSD(exposureGap)}</span>
             </div>
           )}
+          <CostSourceBadge commitment={commitment} />
         </div>
 
         {/* PHASE 1: Inventory State Badge */}
@@ -466,6 +470,19 @@ export function PSMItemRow({
               <Edit className="w-4 h-4 mr-2" />
               Manage Qty / Move
             </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-gray-700" />
+            {onEditPricing && (
+              <DropdownMenuItem onClick={() => onEditPricing?.(commitment)} className="text-emerald-400">
+                <DollarSign className="w-4 h-4 mr-2" />
+                Edit Pricing
+              </DropdownMenuItem>
+            )}
+            {onSyncCost && ((commitment.order_line_item_ids || []).length > 0 || (commitment.qty_ordered ?? 0) > 0) && (
+              <DropdownMenuItem onClick={() => onSyncCost?.(commitment)} className="text-blue-400">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Sync Cost from PO
+              </DropdownMenuItem>
+            )}
             {allowed?.canCancel && (
               <>
                 <DropdownMenuSeparator className="bg-gray-700" />
@@ -667,6 +684,8 @@ export function PSMGroupCard({
   );
 }
 
+// LEGACY PSMGroupCard no longer used - replaced by PSMGroupCardWithSubgroups
+
 // Subgroup options (same list but for secondary grouping)
 const SUBGROUP_OPTIONS = [
   { value: 'none', label: 'No Sub-group' },
@@ -739,6 +758,8 @@ function PSMSubGroupCard({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onEditPricing,
+  onSyncCost,
   actionsEnabled,
   categoriesMap,
   vendorsMap,
@@ -805,6 +826,8 @@ function PSMSubGroupCard({
               onDeltaOrder={onDeltaOrder}
               onManageQty={onManageQty}
               onCancel={onCancel}
+              onEditPricing={onEditPricing}
+              onSyncCost={onSyncCost}
               actionsEnabled={actionsEnabled}
               categoriesMap={categoriesMap}
               vendorsMap={vendorsMap}
@@ -844,6 +867,8 @@ export default function PSMGroupedView({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onEditPricing,
+  onSyncCost,
   onBatchPO,
   actionsEnabled = true,
   categoriesMap,
@@ -1156,31 +1181,33 @@ export default function PSMGroupedView({
       {/* Groups */}
       {groups.map(group => (
         <PSMGroupCardWithSubgroups
-          key={group.key}
-          group={group}
-          groupMode={groupMode}
-          subgroupMode={subgroupMode}
-          sortMode={sortMode}
-          isExpanded={isGroupExpanded(group.key)}
-          expandedSubgroups={expandedSubgroups}
-          onToggle={() => toggleGroup(group.key)}
-          onToggleSubgroup={(subKey) => toggleSubgroup(`${group.key}:${subKey}`)}
-          selectedItems={selectedItems}
-          onSelectAll={selectAllInGroup}
-          onItemSelect={selectItem}
-          onPartClick={onPartClick}
-          onCreatePO={onCreatePO}
-          onReceive={onReceive}
-          onInstall={onInstall}
-          onReverseInstall={onReverseInstall}
-          onDeltaOrder={onDeltaOrder}
-          onManageQty={onManageQty}
-          onCancel={onCancel}
-          onGroupOrder={handleGroupOrder}
-          actionsEnabled={actionsEnabled}
-          categoriesMap={categoriesMap}
-          vendorsMap={vendorsMap}
-          tab={tab}
+        key={group.key}
+        group={group}
+        groupMode={groupMode}
+        subgroupMode={subgroupMode}
+        sortMode={sortMode}
+        isExpanded={isGroupExpanded(group.key)}
+        expandedSubgroups={expandedSubgroups}
+        onToggle={() => toggleGroup(group.key)}
+        onToggleSubgroup={(subKey) => toggleSubgroup(`${group.key}:${subKey}`)}
+        selectedItems={selectedItems}
+        onSelectAll={selectAllInGroup}
+        onItemSelect={selectItem}
+        onPartClick={onPartClick}
+        onCreatePO={onCreatePO}
+        onReceive={onReceive}
+        onInstall={onInstall}
+        onReverseInstall={onReverseInstall}
+        onDeltaOrder={onDeltaOrder}
+        onManageQty={onManageQty}
+        onCancel={onCancel}
+        onEditPricing={onEditPricing}
+        onSyncCost={onSyncCost}
+        onGroupOrder={handleGroupOrder}
+        actionsEnabled={actionsEnabled}
+        categoriesMap={categoriesMap}
+        vendorsMap={vendorsMap}
+        tab={tab}
         />
       ))}
     </div>
@@ -1210,6 +1237,8 @@ function PSMGroupCardWithSubgroups({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onEditPricing,
+  onSyncCost,
   onGroupOrder,
   actionsEnabled,
   categoriesMap,
@@ -1364,6 +1393,8 @@ function PSMGroupCardWithSubgroups({
                   onDeltaOrder={onDeltaOrder}
                   onManageQty={onManageQty}
                   onCancel={onCancel}
+                  onEditPricing={onEditPricing}
+                  onSyncCost={onSyncCost}
                   actionsEnabled={actionsEnabled}
                   categoriesMap={categoriesMap}
                   vendorsMap={vendorsMap}
@@ -1387,6 +1418,8 @@ function PSMGroupCardWithSubgroups({
                 onDeltaOrder={onDeltaOrder}
                 onManageQty={onManageQty}
                 onCancel={onCancel}
+                onEditPricing={onEditPricing}
+                onSyncCost={onSyncCost}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}

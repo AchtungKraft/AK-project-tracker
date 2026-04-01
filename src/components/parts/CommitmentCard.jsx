@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Package, MoreHorizontal, FileText, ShoppingCart, RotateCcw, Plus, Trash2 } from "lucide-react";
+import { Package, MoreHorizontal, FileText, ShoppingCart, RotateCcw, Plus, Trash2, DollarSign, RefreshCw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +31,8 @@ export default function CommitmentCard({
   onViewPO,
   onCreatePO,
   onReverseInstall,
+  onEditPricing,
+  onSyncCost,
   compact = false,
   financialStatus = null,
 }) {
@@ -211,6 +213,21 @@ export default function CommitmentCard({
                 {onViewPO && (commitment.order_line_item_ids || []).length > 0 && (
                   <DropdownMenuItem onClick={() => onViewPO(commitment)}>
                     View Linked POs
+                  </DropdownMenuItem>
+                )}
+                
+                {/* Pricing Actions */}
+                <DropdownMenuSeparator className="bg-gray-700" />
+                {onEditPricing && (
+                  <DropdownMenuItem onClick={() => onEditPricing(commitment)}>
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Edit Pricing
+                  </DropdownMenuItem>
+                )}
+                {onSyncCost && (commitment.order_line_item_ids || []).length > 0 && (
+                  <DropdownMenuItem onClick={() => onSyncCost(commitment)}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Sync Cost from PO
                   </DropdownMenuItem>
                 )}
                 

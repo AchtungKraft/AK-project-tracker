@@ -56,6 +56,7 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import ProjectSupplySummaryBar, { filterByActionCategory } from "@/components/supply/ProjectSupplySummaryBar";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
+import CommitmentPricingEditor from "@/components/supply/CommitmentPricingEditor";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
@@ -149,6 +150,9 @@ export default function ProjectSupplyManager() {
   
   // Blocked items resolution state
   const [blockedItems, setBlockedItems] = useState(null);
+  
+  // Pricing editor state
+  const [pricingEditorCommitment, setPricingEditorCommitment] = useState(null);
   
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -376,6 +380,12 @@ export default function ProjectSupplyManager() {
         
         // PO line item tracking for receive action - CRITICAL for Receive modal
         order_line_item_ids: item._raw?.order_line_item_ids || item.order_line_item_ids || [],
+        
+        // Override flags for pricing
+        cost_override: item._raw?.cost_override || false,
+        retail_override: item._raw?.retail_override || false,
+        unit_cost_snapshot: item.unit_cost,
+        unit_retail_snapshot: item.unit_retail,
         
         // Raw commitment reference for modal access
         _raw: item._raw || {},
@@ -684,6 +694,42 @@ export default function ProjectSupplyManager() {
     }
   }, []);
 
+  // === PRICING ACTIONS ===
+  const handleEditPricing = useCallback((commitment) => {
+    setPricingEditorCommitment(commitment);
+  }, []);
+
+  const handleSyncCost = useCallback(async (commitment) => {
+    try {
+      await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'SYNC_PO_COST',
+        commitment_ids: [commitment.id],
+      });
+      toast.success('Costs updated from PO');
+      invalidateSupply();
+    } catch (err) {
+      toast.error('Sync failed: ' + err.message);
+    }
+  }, [invalidateSupply]);
+
+  const handleBatchSyncCost = useCallback(async () => {
+    if (selectedItems.size === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    try {
+      await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'SYNC_PO_COST',
+        commitment_ids: Array.from(selectedItems),
+      });
+      toast.success(`Costs synced for ${selectedItems.size} commitment(s)`);
+      setSelectedItems(new Set());
+      invalidateSupply();
+    } catch (err) {
+      toast.error('Batch sync failed: ' + err.message);
+    }
+  }, [selectedItems, invalidateSupply]);
+
   if (!projectId) {
     return (
       <MobileSafeAreaContainer>
@@ -873,6 +919,8 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onEditPricing={handleEditPricing}
+                onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -936,6 +984,8 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onEditPricing={handleEditPricing}
+                onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -985,6 +1035,8 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onEditPricing={handleEditPricing}
+                onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1034,6 +1086,8 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onEditPricing={handleEditPricing}
+                onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1152,9 +1206,20 @@ export default function ProjectSupplyManager() {
         selectedCount={selectedItems.size}
         onClear={() => setSelectedItems(new Set())}
         onBatchPO={handleBulkPOPreview}
+        onBatchSyncCost={handleBatchSyncCost}
         isLoading={isBulkPOLoading}
         tab={activeTab}
       />
+
+      {/* Pricing Editor Modal */}
+      {pricingEditorCommitment && (
+        <CommitmentPricingEditor
+          commitment={pricingEditorCommitment}
+          open={!!pricingEditorCommitment}
+          onClose={() => setPricingEditorCommitment(null)}
+          onSuccess={() => invalidateSupply()}
+        />
+      )}
 
       {/* Modals - FORWARD MODEL (no pool modals) */}
       {deltaOrderCommitment && (

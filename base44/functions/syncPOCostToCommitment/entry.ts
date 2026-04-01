@@ -100,6 +100,12 @@ async function syncCosts(base44, user, commitmentIds, skipRetailUpdate = false) 
       continue;
     }
 
+    // Skip if user has manually overridden cost
+    if (commitment.cost_override === true) {
+      skipped.push({ commitment_id: cid, reason: 'COST_OVERRIDE_ACTIVE' });
+      continue;
+    }
+
     const lines = linesByCommitment.get(cid) || [];
     
     // No PO lines — nothing to sync
