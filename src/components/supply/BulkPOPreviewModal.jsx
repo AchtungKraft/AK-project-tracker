@@ -196,7 +196,7 @@ export default function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoad
                 {blocked.map((item, idx) => (
                   <div key={idx} className="p-2 bg-yellow-900/20 rounded text-sm">
                     <span className="text-white">{item.part_name || 'Unknown Part'}</span>
-                    <span className="text-yellow-400 ml-2">— {item.message}</span>
+                    <span className="text-yellow-400 ml-2">— {item.message || item.reason_code || 'Blocked'}</span>
                   </div>
                 ))}
               </div>
