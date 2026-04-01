@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
       case 'REVERSE_INSTALL': result = await reverseInstall(ctx, commitment_ids, payload); break;
       case 'ALLOCATE_POOL': throw new Error('ALLOCATE_POOL removed. Use InvoiceBatch.');
       case 'CANCEL_COMMITMENT': result = await cancelCommitment(ctx, commitment_ids, payload); break;
+      case 'SYNC_PO_COST': result = await syncPOCost(ctx, commitment_ids, payload); break;
       default: return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
     }
     if (!dry_run) {
@@ -259,8 +260,29 @@ async function createPO(ctx, commitment_ids, payload) {
       const curCov=item.commitment.covered_from_po??0, newCov=curCov+item.qty;
       const cn=readCanonical(item.commitment,ctx);
       const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov);
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+item.qty,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1});
+
+      // Sync cost from PO line to commitment (inline for speed)
+      const costSync = {};
+      const oldCostSnap = item.commitment.unit_cost_snapshot ?? 0;
+      if (!['invoiced', 'paid'].includes(item.commitment.billing_status) && item.unit_cost > 0 && Math.abs(item.unit_cost - oldCostSnap) > 0.001) {
+        costSync.unit_cost_snapshot = item.unit_cost;
+        costSync.planned_cost_total = item.unit_cost * cn.required_total;
+        const curRetail = item.commitment.unit_retail_snapshot ?? 0;
+        if (curRetail > 0 && curRetail >= item.unit_cost) costSync.pricing_integrity_status = 'ok';
+        else if (curRetail > 0) costSync.pricing_integrity_status = 'margin_negative';
+        else costSync.pricing_integrity_status = 'missing_retail';
+      }
+
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+item.qty,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
       ctx.mutations.push({entity:'PartPurchaseLineItem',id:li.id,action:'CREATE'},{entity:'PartCommitment',id:item.commitment.id,action:'CREATE_PO'});
+    }
+    // Post-PO: Trigger retail sync for commitments missing retail
+    for (const item of items) {
+      if ((item.commitment.unit_retail_snapshot ?? 0) <= 0 || item.commitment.pricing_integrity_status === 'missing_retail') {
+        try {
+          await ctx.base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: item.commitment.id });
+        } catch (e) { console.warn(`[CREATE_PO_RETAIL_SYNC] ${item.commitment.id}: ${e.message}`); }
+      }
     }
     created.push({order_id:order.id,po_number:pn,vendor_id:vid,line_count:items.length,project_ids:[...new Set(items.map(i=>i.commitment.project_id).filter(Boolean))]});
   }
@@ -406,6 +428,17 @@ async function cancelCommitment(ctx,commitment_ids,payload) {
   await inlineRebalance(ctx,c.part_id,false);
   ctx.lifecycle_events.push({commitment_id:cid,event_type:'COMMITMENT_CANCELLED',trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,actor_email:ctx.user.email,part_id:c.part_id,project_id:c.project_id,metadata:JSON.stringify({reason,cancellation_type:ct}),event_date:ctx.timestamp});
   return {commitment_id:cid,cancellation_type:ct,stock_released:cn.reserved_from_stock};
+}
+
+async function syncPOCost(ctx, commitment_ids, payload) {
+  if (!commitment_ids?.length) throw new Error('commitment_ids required for SYNC_PO_COST');
+  // Delegate to the dedicated sync function
+  const result = await ctx.base44.asServiceRole.functions.invoke('syncPOCostToCommitment', {
+    commitment_ids,
+    skip_retail_update: payload.skip_retail_update || false,
+  });
+  ctx.mutations.push(...commitment_ids.map(id => ({ entity: 'PartCommitment', id, action: 'SYNC_PO_COST' })));
+  return result.data || result;
 }
 
 async function addStock(ctx,payload) {

@@ -86,12 +86,14 @@ Deno.serve(async (req) => {
       const order = await base44.asServiceRole.entities.Order.create(od);
       const liIds = [];
 
+      const commitmentIdsForCostSync = [];
       for (const item of items) {
         const { commitment: c, part, qty_to_order, unit_cost, cost_src, cost_review } = item;
         const liData = { order_id: order.id, part_id: part.id, commitment_id: c.id, vendor_id: vid, qty_ordered: qty_to_order, qty_received: 0, unit_cost, unit_price: unit_cost, extended_cost: unit_cost * qty_to_order, line_total: unit_cost * qty_to_order, cost_source_reference: cost_src, status: 'Ordered', is_legacy: false, legacy_link_status: 'linked', is_delta_order: false };
         if (isFwd && cost_review) liData.cost_requires_review = true;
         const li = await base44.asServiceRole.entities.PartPurchaseLineItem.create(liData);
         liIds.push(li.id);
+        commitmentIdsForCostSync.push(c.id);
 
         // PHASE 1: Canonical update
         const curCov = c.covered_from_po ?? 0, newCov = curCov + qty_to_order;
@@ -102,11 +104,42 @@ Deno.serve(async (req) => {
         const newQO = (c.qty_ordered || 0) + qty_to_order;
         let ns = c.commitment_status; if (newQO > 0 && (c.qty_received || 0) === 0) ns = 'ordered';
 
-        await base44.asServiceRole.entities.PartCommitment.update(c.id, { covered_from_po: newCov, qty_to_order: newTO, qty_ordered: newQO, commitment_status: ns, order_line_item_ids: [...(c.order_line_item_ids || []), li.id] });
-        updatedCommitments.push({ id: c.id, required_total: reqT, reserved_from_stock: resS, covered_from_po: newCov, gap: newTO, qty_to_order: newTO, qty_ordered: newQO, coverage_status: newTO === 0 ? 'FULLY_COVERED' : 'PARTIALLY_COVERED' });
+        // Sync cost from PO line to commitment
+        const costUpdate = {};
+        const oldCostSnap = c.unit_cost_snapshot ?? 0;
+        // Only update cost if commitment isn't billing-locked
+        if (!['invoiced', 'paid'].includes(c.billing_status)) {
+          if (unit_cost > 0 && Math.abs(unit_cost - oldCostSnap) > 0.001) {
+            costUpdate.unit_cost_snapshot = unit_cost;
+            costUpdate.planned_cost_total = unit_cost * reqT;
+            // Update pricing integrity
+            const curRetail = c.unit_retail_snapshot ?? 0;
+            if (curRetail > 0 && curRetail >= unit_cost) {
+              costUpdate.pricing_integrity_status = 'ok';
+              costUpdate.margin_pct = Math.round(((curRetail - unit_cost) / curRetail) * 10000) / 100;
+            } else if (curRetail > 0 && curRetail < unit_cost) {
+              costUpdate.pricing_integrity_status = 'margin_negative';
+            } else if (curRetail <= 0) {
+              costUpdate.pricing_integrity_status = 'missing_retail';
+            }
+          }
+        }
+
+        await base44.asServiceRole.entities.PartCommitment.update(c.id, { covered_from_po: newCov, qty_to_order: newTO, qty_ordered: newQO, commitment_status: ns, order_line_item_ids: [...(c.order_line_item_ids || []), li.id], ...costUpdate });
+        updatedCommitments.push({ id: c.id, required_total: reqT, reserved_from_stock: resS, covered_from_po: newCov, gap: newTO, qty_to_order: newTO, qty_ordered: newQO, coverage_status: newTO === 0 ? 'FULLY_COVERED' : 'PARTIALLY_COVERED', cost_synced: Object.keys(costUpdate).length > 0, new_cost: costUpdate.unit_cost_snapshot ?? oldCostSnap });
 
         await base44.asServiceRole.entities.LifecycleEvent.create({ event_type: 'PO_CREATED', commitment_id: c.id, project_id, part_id: part.id, order_id: order.id, line_item_id: li.id, vendor_id: vid, qty_delta: qty_to_order, before_state: JSON.stringify({ covered_from_po: curCov, status: c.commitment_status }), after_state: JSON.stringify({ covered_from_po: newCov, qty_to_order: newTO, status: ns }), metadata: JSON.stringify({ po_number: poNum, unit_cost, extended_cost: unit_cost * qty_to_order }), actor_email: user.email, actor_id: user.id, is_reversible: false });
       }
+
+      // Post-PO: Trigger retail update for commitments missing retail
+      for (const cid of commitmentIdsForCostSync) {
+        try {
+          await base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: cid, skip_retail_update: false });
+        } catch (e) {
+          console.warn(`[PO_COST_SYNC] Retail sync failed for ${cid}: ${e.message}`);
+        }
+      }
+
       createdOrders.push({ order_id: order.id, po_number: poNum, vendor_id: vid, vendor_name: items[0]?.vendor_name, commitment_ids: items.map(i => i.commitment.id), line_item_ids: liIds, total_qty: items.reduce((s, i) => s + i.qty_to_order, 0), total_cost: items.reduce((s, i) => s + i.qty_to_order * i.unit_cost, 0) });
     }
 

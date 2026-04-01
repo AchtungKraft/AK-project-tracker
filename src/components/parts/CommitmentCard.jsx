@@ -14,6 +14,7 @@ import { getAllowedCommitmentActions, getActionBlockReason } from "../lifecycle/
 import DeltaOrderModal from "./DeltaOrderModal";
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
 import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
+import CostSourceBadge from "@/components/supply/CostSourceBadge";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { cn } from "@/lib/utils";
 
@@ -122,6 +123,7 @@ export default function CommitmentCard({
               <span className="text-gray-500">
                 R: <span className="text-gray-300 font-mono">{formatCurrencyUSD(commitment.unit_retail_snapshot || 0)}</span>
               </span>
+              <CostSourceBadge commitment={commitment} />
             </div>
 
             {/* Quantity Grid - AK Industrial: monochrome */}
