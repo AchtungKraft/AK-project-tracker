@@ -359,9 +359,46 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
   const newLR=(li.qty_received??0)+qty_received;
   await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:newLR>=(li.qty_ordered??0)?'Received':'Partial'});
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
-  // PHASE 1: covered_from_po NOT modified on receiving
-  if(li.commitment_id){const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});if(c){if((c.covered_from_po??0)<0)ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${c.covered_from_po}`});await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id,{qty_received:(c.qty_received??0)+qty_received,commitment_version:(c.commitment_version??0)+1});}}
-  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({part_id:part.id,order_id:li.order_id,line_item_id,qty_received,location_id:eloc,received_by:ctx.user.email,received_date:ctx.timestamp});
+  // PHASE 18: Convert covered_from_po → reserved_from_stock on receiving
+  if(li.commitment_id){
+    const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
+    if(c){
+      const oldCoveredPO = c.covered_from_po ?? 0;
+      const oldReserved = c.reserved_from_stock ?? 0;
+      const oldQtyReceived = c.qty_received ?? 0;
+      if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
+      // Convert: move received qty from PO coverage to stock reservation
+      const convertQty = Math.min(qty_received, oldCoveredPO);
+      const newCoveredPO = Math.max(0, oldCoveredPO - convertQty);
+      const newReserved = oldReserved + convertQty;
+      // Enforce invariant: reserved + covered <= required_total
+      const required = c.required_total ?? 0;
+      const clampedReserved = Math.min(newReserved, Math.max(0, required - newCoveredPO));
+      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
+        covered_from_po: newCoveredPO,
+        reserved_from_stock: clampedReserved,
+        qty_reserved: clampedReserved,
+        qty_received: oldQtyReceived + qty_received,
+        commitment_status: clampedReserved >= required && required > 0 ? 'allocated' : c.commitment_status,
+        commitment_version: (c.commitment_version ?? 0) + 1,
+        last_recomputed_at: ctx.timestamp,
+      });
+      ctx.lifecycle_events.push({
+        commitment_id: c.id,
+        event_type: 'PO_RECEIVED_CONVERT',
+        trigger_source: 'UNIFIED_ENGINE',
+        triggered_by: ctx.user.email,
+        actor_email: ctx.user.email,
+        old_values: JSON.stringify({ covered_from_po: oldCoveredPO, reserved_from_stock: oldReserved }),
+        new_values: JSON.stringify({ covered_from_po: newCoveredPO, reserved_from_stock: clampedReserved, qty_received }),
+        part_id: part.id,
+        project_id: c.project_id,
+        event_date: ctx.timestamp,
+      });
+    }
+  }
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({order_id:li.order_id,received_by:ctx.user.email,received_at:ctx.timestamp,notes:`Received ${qty_received}x ${part.part_name} (line ${line_item_id}) to location ${eloc}`,receipt_status:'completed'});
   ctx.mutations.push({entity:'PartPurchaseLineItem',id:line_item_id,action:'RECEIVE'});
   return {line_item_id,part_id:part.id,part_name:part.part_name,qty_received,line_status:newLR>=(li.qty_ordered??0)?'Received':'Partial'};
 }
@@ -379,9 +416,48 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
   await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:ls});
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
   const rr=await inlineRecompute(ctx,part.id,false);
-  if(li.commitment_id){const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});if(c){if((c.covered_from_po??0)<0)ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${c.covered_from_po}`});await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id,{qty_received:(c.qty_received??0)+qty_received,commitment_version:(c.commitment_version??0)+1});ctx.mutations.push({entity:'PartCommitment',id:li.commitment_id,action:'RECEIVE'});}}
+  // PHASE 18: Convert covered_from_po → reserved_from_stock on receiving
+  if(li.commitment_id){
+    const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
+    if(c){
+      const oldCoveredPO = c.covered_from_po ?? 0;
+      const oldReserved = c.reserved_from_stock ?? 0;
+      const oldQtyReceived = c.qty_received ?? 0;
+      if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
+      // Convert: move received qty from PO coverage to stock reservation
+      const convertQty = Math.min(qty_received, oldCoveredPO);
+      const newCoveredPO = Math.max(0, oldCoveredPO - convertQty);
+      const newReserved = oldReserved + convertQty;
+      // Enforce invariant: reserved + covered <= required_total
+      const required = c.required_total ?? 0;
+      const clampedReserved = Math.min(newReserved, Math.max(0, required - newCoveredPO));
+      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
+        covered_from_po: newCoveredPO,
+        reserved_from_stock: clampedReserved,
+        qty_reserved: clampedReserved,
+        qty_received: oldQtyReceived + qty_received,
+        commitment_status: clampedReserved >= required && required > 0 ? 'allocated' : c.commitment_status,
+        commitment_version: (c.commitment_version ?? 0) + 1,
+        last_recomputed_at: ctx.timestamp,
+      });
+      ctx.mutations.push({entity:'PartCommitment',id:li.commitment_id,action:'RECEIVE_CONVERT'});
+      ctx.lifecycle_events.push({
+        commitment_id: c.id,
+        event_type: 'PO_RECEIVED_CONVERT',
+        trigger_source: 'UNIFIED_ENGINE',
+        triggered_by: ctx.user.email,
+        actor_email: ctx.user.email,
+        old_values: JSON.stringify({ covered_from_po: oldCoveredPO, reserved_from_stock: oldReserved }),
+        new_values: JSON.stringify({ covered_from_po: newCoveredPO, reserved_from_stock: clampedReserved, qty_received }),
+        part_id: part.id,
+        project_id: c.project_id,
+        event_date: ctx.timestamp,
+      });
+    }
+  }
   await inlineRebalance(ctx,part.id,false);
-  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({part_id:part.id,order_id:li.order_id,line_item_id,qty_received,location_id:eloc,received_by:ctx.user.email,received_date:ctx.timestamp});
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({order_id:li.order_id,received_by:ctx.user.email,received_at:ctx.timestamp,notes:`Received ${qty_received}x ${part.part_name} (line ${line_item_id}) to location ${eloc}`,receipt_status:'completed'});
   ctx.mutations.push({entity:'PartPurchaseLineItem',id:line_item_id,action:'RECEIVE'},{entity:'Part',id:part.id,action:'PHYSICAL_STOCK_RECOMPUTED'});
   return {line_item_id,part_id:part.id,part_name:part.part_name,qty_received,new_physical_stock:rr.computed_physical_stock,line_status:ls};
 }
