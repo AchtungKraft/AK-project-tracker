@@ -4,13 +4,15 @@ import { cn } from "@/lib/utils";
 /**
  * CostSourceBadge - Shows cost provenance on commitments
  * 
- * Rules:
- * - Manual cost/retail override → "MANUAL OVERRIDE" (amber accent)
- * - Has PO lines + cost > 0 → "COST FROM PO" (green accent)
- * - Has PO lines + cost = 0 → "PO COST $0" (amber accent) 
- * - No PO lines + cost > 0 → "EST. COST" (gray accent)
- * - No PO lines + cost = 0 → "COST PENDING" (gray accent)
- * - Billing locked → "LOCKED" badge
+ * ENHANCED LABELS:
+ * - MANUAL COST OVERRIDE  (amber) — cost_override = true
+ * - MANUAL RETAIL          (amber) — retail_override = true (no cost override)
+ * - COST FROM PO           (green) — has PO lines, cost > 0, no override
+ * - PO COST $0             (amber) — has PO lines, cost = 0
+ * - EST. COST              (gray)  — no PO lines, cost > 0
+ * - COST PENDING           (gray)  — no PO lines, cost = 0
+ * - LOCKED AFTER BILLING   (red)   — billing invoiced/paid
+ * - MATRIX RETAIL          (blue)  — retail from matrix (no override)
  */
 
 export default function CostSourceBadge({ commitment, className }) {
@@ -37,8 +39,8 @@ export default function CostSourceBadge({ commitment, className }) {
     );
   }
 
-  // Manual override has highest priority
-  if (hasCostOverride || hasRetailOverride) {
+  // Cost override badge
+  if (hasCostOverride) {
     return (
       <span
         className={cn(
@@ -47,7 +49,22 @@ export default function CostSourceBadge({ commitment, className }) {
           className
         )}
       >
-        MANUAL OVERRIDE
+        MANUAL COST OVERRIDE
+      </span>
+    );
+  }
+
+  // Retail override (without cost override)
+  if (hasRetailOverride) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider",
+          "bg-amber-900/30 border-l-2 border-l-amber-500 text-amber-400/80",
+          className
+        )}
+      >
+        MANUAL RETAIL
       </span>
     );
   }
@@ -67,17 +84,36 @@ export default function CostSourceBadge({ commitment, className }) {
     }
   }
 
+  // Add retail mode badge after cost badge
+  const retailMode = commitment.retail_override ? 'MANUAL RETAIL' : (commitment.unit_retail_snapshot > 0 ? 'MATRIX RETAIL' : null);
+  const retailConfig = commitment.retail_override
+    ? { accent: 'border-l-amber-500', text: 'text-amber-400/80' }
+    : { accent: 'border-l-blue-600', text: 'text-blue-400/80' };
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider",
-        "bg-gray-900/60 border-l-2",
-        config.accent,
-        config.text,
-        className
+    <div className={cn("flex gap-1 flex-wrap", className)}>
+      <span
+        className={cn(
+          "inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider",
+          "bg-gray-900/60 border-l-2",
+          config.accent,
+          config.text,
+        )}
+      >
+        {config.label}
+      </span>
+      {retailMode && (
+        <span
+          className={cn(
+            "inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider",
+            "bg-gray-900/60 border-l-2",
+            retailConfig.accent,
+            retailConfig.text,
+          )}
+        >
+          {retailMode}
+        </span>
       )}
-    >
-      {config.label}
-    </span>
+    </div>
   );
 }

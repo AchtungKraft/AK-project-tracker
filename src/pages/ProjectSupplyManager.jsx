@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import {
   ShoppingCart, Package, Truck, AlertTriangle,
   ArrowLeft, RefreshCw, Search,
-  Wrench, FileText, AlertCircle
+  Wrench, FileText, AlertCircle, DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -58,6 +58,7 @@ import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import CommitmentPricingEditor from "@/components/supply/CommitmentPricingEditor";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
+import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
 import { Progress } from "@/components/ui/progress";
@@ -153,6 +154,9 @@ export default function ProjectSupplyManager() {
   
   // Pricing editor state
   const [pricingEditorCommitment, setPricingEditorCommitment] = useState(null);
+  
+  // Backfill modal state
+  const [showBackfillModal, setShowBackfillModal] = useState(false);
   
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -797,9 +801,22 @@ export default function ProjectSupplyManager() {
             </div>
           </div>
 
-          {/* Phase 7: Billing Drift Diagnostics Panel */}
+          {/* Phase 7: Billing Drift Diagnostics Panel + Admin Actions */}
           {showDiagnostics && (
-            <CommitmentBillingDiagnostics projectId={projectId} />
+            <div className="space-y-3">
+              <CommitmentBillingDiagnostics projectId={projectId} />
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBackfillModal(true)}
+                  className="border-amber-700 text-amber-400 text-xs gap-1"
+                >
+                  <DollarSign className="w-3 h-3" />
+                  Backfill PO Costs
+                </Button>
+              </div>
+            </div>
           )}
 
           {/* Integrity Banner - Project-scoped gate check */}
@@ -1220,6 +1237,13 @@ export default function ProjectSupplyManager() {
           onSuccess={() => invalidateSupply()}
         />
       )}
+
+      {/* Backfill PO Costs Modal */}
+      <BackfillPOCostsModal
+        open={showBackfillModal}
+        onClose={() => setShowBackfillModal(false)}
+        projectId={projectId}
+      />
 
       {/* Modals - FORWARD MODEL (no pool modals) */}
       {deltaOrderCommitment && (
