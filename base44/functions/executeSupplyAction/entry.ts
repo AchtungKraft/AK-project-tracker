@@ -261,7 +261,7 @@ async function createPO(ctx, commitment_ids, payload) {
     }
     vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource});
   }
-  if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost}))}))},blocked};
+  if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,commitment_count:items.length,total_qty:items.reduce((s,i)=>s+i.qty,0),estimated_cost:items.reduce((s,i)=>s+i.qty*i.unit_cost,0),items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost,cost_source:i.cost_source}))}))},blocked};
 
   const created=[];
   const ds=new Date().toISOString().slice(0,10).replace(/-/g,'');

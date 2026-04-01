@@ -716,21 +716,33 @@ export default function ProjectSupplyManager() {
     }
   }, [invalidateSupply]);
 
-  const handleBatchSyncCost = useCallback(async () => {
-    if (selectedItems.size === 0) {
-      toast.error('No items selected');
+  const handleBatchSyncCost = useCallback(async (commitmentIds) => {
+    // Accept explicit array (from monitor) or use selectedItems
+    const ids = Array.isArray(commitmentIds) ? commitmentIds : Array.from(selectedItems);
+    if (ids.length === 0) {
+      toast.error('No items to sync');
       return;
     }
     try {
-      await base44.functions.invoke('executeSupplyAction', {
-        action_type: 'SYNC_PO_COST',
-        commitment_ids: Array.from(selectedItems),
+      const result = await base44.functions.invoke('syncPOCostToCommitment', {
+        commitment_ids: ids,
       });
-      toast.success(`Costs synced for ${selectedItems.size} commitment(s)`);
+      const data = result.data || result;
+      const updated = data.synced?.length || 0;
+      const skipped = data.skipped?.length || 0;
+      const missing = data.skipped?.filter(s => s.reason === 'ZERO_COST').length || 0;
+      
+      if (updated > 0) {
+        toast.success(`${updated} commitment(s) updated`, {
+          description: skipped > 0 ? `${skipped} skipped (${missing} zero-cost PO)` : undefined
+        });
+      } else {
+        toast.info(`No changes needed. ${skipped} skipped.`);
+      }
       setSelectedItems(new Set());
       invalidateSupply();
     } catch (err) {
-      toast.error('Batch sync failed: ' + err.message);
+      toast.error('Sync failed: ' + err.message);
     }
   }, [selectedItems, invalidateSupply]);
 
@@ -1223,7 +1235,7 @@ export default function ProjectSupplyManager() {
         selectedCount={selectedItems.size}
         onClear={() => setSelectedItems(new Set())}
         onBatchPO={handleBulkPOPreview}
-        onBatchSyncCost={handleBatchSyncCost}
+        onBatchSyncCost={() => handleBatchSyncCost()}
         isLoading={isBulkPOLoading}
         tab={activeTab}
       />
@@ -1427,6 +1439,12 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
   const blocked = preview.blocked || [];
   const summary = preview.summary || {};
 
+  // Detect zero-cost items in the preview
+  const zeroCostCount = vendorGroups.reduce((sum, g) => {
+    const items = g.items || [];
+    return sum + items.filter(i => (i.unit_cost ?? 0) <= 0).length;
+  }, 0);
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 max-w-lg">
@@ -1438,6 +1456,21 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Zero-cost warning */}
+          {zeroCostCount > 0 && (
+            <div className="p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-300">
+                  {zeroCostCount} item(s) have no cost
+                </p>
+                <p className="text-xs text-amber-400/70">
+                  PO lines with $0 cost will not update project pricing.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Summary */}
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="p-3 bg-green-900/30 rounded-lg">
@@ -1470,6 +1503,25 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
                     <span>Total Qty: {group.total_qty}</span>
                     <span>Est. Cost: ${group.estimated_cost?.toFixed(2)}</span>
                   </div>
+                  {/* Per-line detail with cost indicator */}
+                  {(group.items || []).length > 0 && (
+                    <div className="mt-2 space-y-1 border-t border-gray-700/50 pt-2">
+                      {(group.items || []).slice(0, 5).map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-400 truncate flex-1">{item.part_name}</span>
+                          <span className={cn(
+                            "font-mono ml-2",
+                            (item.unit_cost ?? 0) <= 0 ? "text-red-400" : "text-emerald-400"
+                          )}>
+                            {(item.unit_cost ?? 0) <= 0 ? 'NO COST' : `$${item.unit_cost.toFixed(2)}`}
+                          </span>
+                        </div>
+                      ))}
+                      {(group.items || []).length > 5 && (
+                        <span className="text-xs text-gray-500">+{(group.items || []).length - 5} more</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1501,19 +1553,19 @@ function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
           <Button
             onClick={onConfirm}
             disabled={isLoading || vendorGroups.length === 0}
-            className="bg-green-600 hover:bg-green-700"
+            className={zeroCostCount > 0 ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"}
           >
-            {isLoading ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Create {vendorGroups.length} PO(s)
-              </>
-            )}
+          {isLoading ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              {zeroCostCount > 0 ? `Create Anyway (${zeroCostCount} $0)` : `Create ${vendorGroups.length} PO(s)`}
+            </>
+          )}
           </Button>
         </DialogFooter>
       </DialogContent>

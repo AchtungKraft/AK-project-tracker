@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, X, Package, Wrench, Receipt, Wallet, RefreshCw } from "lucide-react";
+import { ShoppingCart, X, Package, Wrench, Receipt, Wallet, RefreshCw, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
@@ -94,7 +94,7 @@ export default function PSMFloatingActionBar({
           </Button>
         )}
 
-        {/* Sync All Costs action — available on all tabs */}
+        {/* Sync Costs from PO — available on all tabs */}
         {onBatchSyncCost && selectedCount > 0 && (
           <Button
             onClick={onBatchSyncCost}
@@ -102,8 +102,8 @@ export default function PSMFloatingActionBar({
             variant="outline"
             className="border-blue-700 text-blue-400 hover:bg-blue-900/30 gap-2"
           >
-            <RefreshCw className="w-4 h-4" />
-            Sync Costs ({selectedCount})
+            <DollarSign className="w-4 h-4" />
+            Sync Cost from PO ({selectedCount})
           </Button>
         )}
       </div>

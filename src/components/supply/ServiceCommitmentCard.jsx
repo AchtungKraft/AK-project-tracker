@@ -13,6 +13,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceLineItemManager from "@/components/supply/ServiceLineItemManager";
 import EditServiceModal from "@/components/supply/EditServiceModal";
 import DeleteServiceConfirmModal from "@/components/supply/DeleteServiceConfirmModal";
+import ServiceCostBadge from "@/components/supply/ServiceCostBadge";
 import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -90,6 +91,7 @@ export default function ServiceCommitmentCard({
             <span>{serviceName}</span>
             {vendorName && <span>• {vendorName}</span>}
             {commitment.quantity > 1 && <span>• Qty: {commitment.quantity}</span>}
+            <ServiceCostBadge commitment={commitment} />
           </div>
         </div>
 
