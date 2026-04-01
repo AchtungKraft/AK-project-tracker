@@ -15,9 +15,21 @@ export const DISPLAY_STATUS_MAP = {
   partially_received: 'IN PROGRESS',
   partially_installed: 'IN PROGRESS',
   received: 'RECEIVED',
+  allocated: 'READY TO INSTALL',
   installed: 'INSTALLED',
   cancelled: 'CANCELLED',
   closed: 'CLOSED'
+};
+
+/**
+ * Map resolver lifecycle_state to display label
+ */
+export const LIFECYCLE_STATE_DISPLAY = {
+  INSTALL_READY: { label: 'Ready to Install', color: 'text-emerald-400 border-l-emerald-500' },
+  COVERED: { label: 'Ordered', color: 'text-blue-400 border-l-blue-500' },
+  NEEDS_ORDER: { label: 'Needs Order', color: 'text-amber-400 border-l-amber-600' },
+  INSTALLED: { label: 'Installed', color: 'text-gray-400 border-l-gray-600' },
+  PLANNED: { label: 'Planned', color: 'text-gray-300 border-l-amber-600' },
 };
 
 /**
@@ -69,6 +81,8 @@ export function getDisplayStatusColor(displayStatus) {
       return 'text-gray-300 border-l-gray-400';
     case 'RECEIVED':
       return 'text-gray-300 border-l-gray-300';
+    case 'READY TO INSTALL':
+      return 'text-emerald-400 border-l-emerald-500';
     case 'INSTALLED':
       return 'text-gray-400 border-l-gray-600';
     case 'CANCELLED':
@@ -78,4 +92,11 @@ export function getDisplayStatusColor(displayStatus) {
     default:
       return 'text-gray-400 border-l-gray-600';
   }
+}
+
+/**
+ * Get display info for resolver lifecycle_state
+ */
+export function getLifecycleStateDisplay(lifecycleState) {
+  return LIFECYCLE_STATE_DISPLAY[lifecycleState] || { label: lifecycleState, color: 'text-gray-400 border-l-gray-600' };
 }

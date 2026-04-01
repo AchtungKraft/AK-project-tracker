@@ -314,7 +314,7 @@ export function getCommitmentLifecycleState(commitment) {
     ordered: { state: 'ordered', label: 'On Order', color: 'purple', canProgress: true },
     partially_received: { state: 'partially_received', label: 'Partially Received', color: 'orange', canProgress: true },
     received: { state: 'received', label: 'Received', color: 'blue', canProgress: true },
-    allocated: { state: 'allocated', label: 'Allocated', color: 'cyan', canProgress: true },
+    allocated: { state: 'allocated', label: 'Ready to Install', color: 'green', canProgress: true },
     installed: { 
       state: 'installed', 
       label: remaining === 0 ? 'Fully Installed' : 'Partially Installed', 

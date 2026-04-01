@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Package, AlertTriangle, CheckCircle2, Truck } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle2, Truck, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,9 +16,14 @@ import { cn } from "@/lib/utils";
  */
 
 const STATE_CONFIG = {
+  INSTALL_READY: {
+    label: "Ready to Install",
+    color: "bg-emerald-600/80 text-emerald-100 border-emerald-500",
+    Icon: Wrench,
+  },
   IN_STOCK: {
     label: "In Stock",
-    color: "bg-emerald-600/80 text-emerald-100 border-emerald-500",
+    color: "bg-cyan-600/80 text-cyan-100 border-cyan-500",
     Icon: CheckCircle2,
   },
   ORDERED: {
@@ -41,7 +46,10 @@ const STATE_CONFIG = {
 function determineInventoryState(commitment) {
   const reserved = commitment.reserved_from_stock ?? 0;
   const ordered = commitment.covered_from_po ?? 0;
+  const required = commitment.required_total ?? 0;
 
+  // Fully covered by physical stock → ready to install
+  if (reserved >= required && required > 0 && ordered === 0) return 'INSTALL_READY';
   if (ordered > 0)  return 'ORDERED';
   if (reserved > 0) return 'IN_STOCK';
   return 'NEEDS_ORDER';
@@ -78,18 +86,21 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
  * consumers (PSMSummaryStrip, PSMGroupCard) continue to compile.
  */
 export function getInventoryStateCounts(items) {
+  let installReady = 0;
   let inStock = 0;
   let ordered = 0;
   let needsOrder = 0;
   
   items.forEach(item => {
     const state = determineInventoryState(item);
-    if (state === 'IN_STOCK') inStock++;
+    if (state === 'INSTALL_READY') installReady++;
+    else if (state === 'IN_STOCK') inStock++;
     else if (state === 'ORDERED') ordered++;
     else if (state === 'NEEDS_ORDER') needsOrder++;
   });
   
   return {
+    installReady,
     inStock,
     ordered,
     needsOrder,

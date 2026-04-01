@@ -45,6 +45,12 @@ const STAGE_CONFIG = {
     color: 'bg-blue-600',
     textColor: 'text-blue-400',
   },
+  INSTALL_READY: {
+    icon: Wrench,
+    label: 'Ready to Install',
+    color: 'bg-emerald-600',
+    textColor: 'text-emerald-400',
+  },
   AWAITING_INSTALL: {
     icon: Wrench,
     label: 'Ready to Install',
