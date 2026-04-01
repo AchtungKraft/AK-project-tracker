@@ -18,6 +18,9 @@ Deno.serve(async (req) => {
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
     if (!commitment_ids?.length) return Response.json({ error: 'commitment_ids required' }, { status: 400 });
 
+    // Check strict mode setting
+    const strictMode = user?.pricing_strict_mode === true;
+
     const warnings = [];
     const [commitments, project, poSequences] = await Promise.all([
       base44.asServiceRole.entities.PartCommitment.filter({ id: { $in: commitment_ids } }),
@@ -44,14 +47,14 @@ Deno.serve(async (req) => {
     for (const c of reqC) {
       const part = partMap.get(c.part_id);
       // PHASE 1: Canonical eligibility
-      if (c.commitment_status === 'cancelled') { blocked.push({ commitment_id: c.id, reason_code: 'CANCELLED', part_name: part?.part_name }); continue; }
-      if (c.commitment_status === 'closed') { blocked.push({ commitment_id: c.id, reason_code: 'CLOSED', part_name: part?.part_name }); continue; }
+      if (c.commitment_status === 'cancelled') { blocked.push({ commitment_id: c.id, reason_code: 'CANCELLED', part_name: part?.part_name, message: 'Commitment cancelled' }); continue; }
+      if (c.commitment_status === 'closed') { blocked.push({ commitment_id: c.id, reason_code: 'CLOSED', part_name: part?.part_name, message: 'Commitment closed' }); continue; }
       const gap = Math.max(0, (c.required_total ?? 0) - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0));
-      if (gap <= 0) { blocked.push({ commitment_id: c.id, reason_code: 'NOTHING_TO_ORDER', part_name: part?.part_name }); continue; }
+      if (gap <= 0) { blocked.push({ commitment_id: c.id, reason_code: 'NOTHING_TO_ORDER', part_name: part?.part_name, message: 'Fully covered, nothing to order' }); continue; }
       const vid = override_vendor_id || part?.default_vendor_id;
-      if (!vid) { blocked.push({ commitment_id: c.id, reason_code: 'MISSING_VENDOR', part_name: part?.part_name }); continue; }
-      if (c.requires_prepay && c.billing_status !== 'paid') { blocked.push({ commitment_id: c.id, reason_code: 'PREPAY_REQUIRED', part_name: part?.part_name }); continue; }
-      if (part?.is_archived) { blocked.push({ commitment_id: c.id, reason_code: 'PART_ARCHIVED', part_name: part?.part_name }); continue; }
+      if (!vid) { blocked.push({ commitment_id: c.id, reason_code: 'MISSING_VENDOR', part_name: part?.part_name, message: 'No default vendor assigned' }); continue; }
+      if (c.requires_prepay && c.billing_status !== 'paid') { blocked.push({ commitment_id: c.id, reason_code: 'PREPAY_REQUIRED', part_name: part?.part_name, message: 'Prepayment required' }); continue; }
+      if (part?.is_archived) { blocked.push({ commitment_id: c.id, reason_code: 'PART_ARCHIVED', part_name: part?.part_name, message: 'Part is archived' }); continue; }
 
       // Drift detection
       const storedTO = c.qty_to_order ?? 0;
@@ -73,6 +76,11 @@ Deno.serve(async (req) => {
       }
       if (unit_cost <= 0) {
         console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
+        // STRICT MODE: Block zero-cost PO creation when enabled
+        if (strictMode) {
+          blocked.push({ commitment_id: c.id, reason_code: 'ZERO_COST_STRICT', part_name: part?.part_name, message: 'Strict mode: $0 cost blocked' });
+          continue;
+        }
         // Audit: log zero-cost PO creation
         try {
           await base44.asServiceRole.entities.CommitmentAuditLog.create({

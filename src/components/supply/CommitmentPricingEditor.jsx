@@ -92,15 +92,16 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
   const handleSyncFromPO = async () => {
     setSyncing(true);
     try {
-      await base44.functions.invoke("executeSupplyAction", {
-        action_type: "SYNC_PO_COST",
-        commitment_ids: [commitment.id],
-      });
-      // Clear override flags
+      // IMPORTANT: Clear override FIRST so sync won't skip due to active override
       await base44.entities.PartCommitment.update(commitment.id, {
         cost_override: false,
       });
-      toast.success("Costs updated from PO");
+      // Then trigger cost sync from PO lines
+      await base44.functions.invoke("syncPOCostToCommitment", {
+        commitment_id: commitment.id,
+        skip_retail_update: false,
+      });
+      toast.success("Cost override cleared — synced from PO");
       await forceAppRefresh(queryClient, { commitmentIds: [commitment.id] });
       onSuccess?.();
       onClose();

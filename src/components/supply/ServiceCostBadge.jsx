@@ -46,7 +46,7 @@ export default function ServiceCostBadge({ commitment, className }) {
   const totalBillable = commitment.total_billable || 0;
   const status = commitment.status || 'planned';
   const hasCostOverride = commitment.cost_override === true;
-  const hasRetailOverride = commitment.retail_override === true || totalBillable > 0;
+  const hasRetailOverride = commitment.retail_override === true;
 
   // Billing locked
   if (status === 'billed') {

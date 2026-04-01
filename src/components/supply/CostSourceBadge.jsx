@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 /**
  * CostSourceBadge - Shows cost provenance on commitments
  * 
- * ENHANCED LABELS:
+ * STANDARDIZED LABELS (Phase 15V):
  * - MANUAL COST OVERRIDE  (amber) — cost_override = true
  * - MANUAL RETAIL          (amber) — retail_override = true (no cost override)
  * - COST FROM PO           (green) — has PO lines, cost > 0, no override
- * - PO COST $0             (amber) — has PO lines, cost = 0
+ * - COST MISSING           (red)   — has PO lines, cost = 0
  * - EST. COST              (gray)  — no PO lines, cost > 0
  * - COST PENDING           (gray)  — no PO lines, cost = 0
  * - LOCKED AFTER BILLING   (red)   — billing invoiced/paid
@@ -34,7 +34,7 @@ export default function CostSourceBadge({ commitment, className }) {
           className
         )}
       >
-        LOCKED
+        LOCKED AFTER BILLING
       </span>
     );
   }

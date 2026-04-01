@@ -24,9 +24,10 @@ export default function BulkSyncResultModal({ open, onClose, result }) {
   const errors = result.errors || [];
   const total = result.total || 0;
 
-  const missing = skipped.filter(s => s.reason === 'ZERO_COST' || s.reason === 'NO_PO_LINES');
-  const overrideSkipped = skipped.filter(s => s.reason === 'COST_OVERRIDE');
+  const missing = skipped.filter(s => s.reason === 'ZERO_COST' || s.reason === 'NO_PO_LINES' || s.reason === 'ALL_LINES_CANCELLED');
+  const overrideSkipped = skipped.filter(s => s.reason === 'COST_OVERRIDE' || s.reason === 'COST_OVERRIDE_ACTIVE');
   const billingLocked = skipped.filter(s => s.reason === 'BILLING_LOCKED');
+  const statusExcluded = skipped.filter(s => s.reason === 'STATUS_EXCLUDED');
   const noChange = skipped.filter(s => s.reason === 'NO_CHANGE');
 
   return (
@@ -104,6 +105,15 @@ export default function BulkSyncResultModal({ open, onClose, result }) {
             <DetailSection title={`${billingLocked.length} Billing Locked (skipped)`} color="text-red-400/70">
               <p className="text-xs text-gray-500">
                 These commitments are invoiced or paid — cost cannot be changed.
+              </p>
+            </DetailSection>
+          )}
+
+          {/* Status Excluded (cancelled/closed) */}
+          {statusExcluded.length > 0 && (
+            <DetailSection title={`${statusExcluded.length} Cancelled/Closed (skipped)`} color="text-gray-500">
+              <p className="text-xs text-gray-500">
+                These commitments are cancelled or closed.
               </p>
             </DetailSection>
           )}

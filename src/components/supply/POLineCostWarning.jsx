@@ -45,7 +45,7 @@ export function POLineCostBadge({ lineItem, className }) {
       "bg-gray-900/60 border-l-2 border-l-emerald-600 text-emerald-500/80",
       className
     )}>
-      UPDATES PROJECT COST
+      COST FROM PO
     </span>
   );
 }
