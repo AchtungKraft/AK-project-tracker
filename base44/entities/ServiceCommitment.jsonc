@@ -53,6 +53,16 @@
       "default": "planned",
       "description": "Service commitment lifecycle status"
     },
+    "cost_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when user manually overrides cost. Prevents vendor cost sync from overwriting."
+    },
+    "retail_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when user manually overrides billing rate. Prevents recalculation."
+    },
     "notes": {
       "type": "string",
       "description": "Additional notes"

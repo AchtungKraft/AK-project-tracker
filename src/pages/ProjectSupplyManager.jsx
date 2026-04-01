@@ -62,6 +62,8 @@ import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
 import { Progress } from "@/components/ui/progress";
+import BulkPOPreviewModal from "@/components/supply/BulkPOPreviewModal";
+import BulkSyncResultModal from "@/components/supply/BulkSyncResultModal";
 import { cn } from "@/lib/utils";
 import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
 
@@ -157,6 +159,9 @@ export default function ProjectSupplyManager() {
   
   // Backfill modal state
   const [showBackfillModal, setShowBackfillModal] = useState(false);
+  
+  // Bulk sync result modal
+  const [syncResultData, setSyncResultData] = useState(null);
   
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -730,15 +735,23 @@ export default function ProjectSupplyManager() {
       const data = result.data || result;
       const updated = data.synced?.length || 0;
       const skipped = data.skipped?.length || 0;
-      const missing = data.skipped?.filter(s => s.reason === 'ZERO_COST').length || 0;
+      const errCount = data.errors?.length || 0;
+      const missing = data.skipped?.filter(s => s.reason === 'ZERO_COST' || s.reason === 'NO_PO_LINES').length || 0;
       
+      // Toast summary
       if (updated > 0) {
         toast.success(`${updated} commitment(s) updated`, {
-          description: skipped > 0 ? `${skipped} skipped (${missing} zero-cost PO)` : undefined
+          description: [skipped > 0 ? `${skipped} skipped` : null, missing > 0 ? `${missing} missing cost` : null, errCount > 0 ? `${errCount} failed` : null].filter(Boolean).join(' \u00b7 ') || undefined
         });
       } else {
         toast.info(`No changes needed. ${skipped} skipped.`);
       }
+      
+      // Show detailed modal if there were issues or large batch
+      if (ids.length > 3 || errCount > 0 || missing > 0) {
+        setSyncResultData(data);
+      }
+      
       setSelectedItems(new Set());
       invalidateSupply();
     } catch (err) {
@@ -1383,7 +1396,7 @@ export default function ProjectSupplyManager() {
         />
       )}
 
-      {/* Bulk PO Preview Modal */}
+      {/* Bulk PO Preview Modal — Enhanced with expand/collapse */}
       {showBulkPOPreview && bulkPOPreviewData && (
         <BulkPOPreviewModal
           preview={bulkPOPreviewData}
@@ -1395,6 +1408,13 @@ export default function ProjectSupplyManager() {
           isLoading={isBulkPOLoading}
         />
       )}
+
+      {/* Bulk Sync Cost Result Modal */}
+      <BulkSyncResultModal
+        open={!!syncResultData}
+        onClose={() => setSyncResultData(null)}
+        result={syncResultData}
+      />
 
       {/* Vendor Picker for single PO when part has no default vendor */}
       {vendorPickerCommitment && (
@@ -1433,145 +1453,7 @@ export default function ProjectSupplyManager() {
   );
 }
 
-// === BULK PO PREVIEW MODAL ===
-function BulkPOPreviewModal({ preview, onClose, onConfirm, isLoading }) {
-  const vendorGroups = preview.preview?.vendor_groups || [];
-  const blocked = preview.blocked || [];
-  const summary = preview.summary || {};
-
-  // Detect zero-cost items in the preview
-  const zeroCostCount = vendorGroups.reduce((sum, g) => {
-    const items = g.items || [];
-    return sum + items.filter(i => (i.unit_cost ?? 0) <= 0).length;
-  }, 0);
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-green-400" />
-            Create Purchase Orders
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          {/* Zero-cost warning */}
-          {zeroCostCount > 0 && (
-            <div className="p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-300">
-                  {zeroCostCount} item(s) have no cost
-                </p>
-                <p className="text-xs text-amber-400/70">
-                  PO lines with $0 cost will not update project pricing.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Summary */}
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-3 bg-green-900/30 rounded-lg">
-              <p className="text-2xl font-bold text-green-400">{summary.order_count || vendorGroups.length}</p>
-              <p className="text-xs text-gray-400">Orders to Create</p>
-            </div>
-            <div className="p-3 bg-blue-900/30 rounded-lg">
-              <p className="text-2xl font-bold text-blue-400">{summary.eligible_count}</p>
-              <p className="text-xs text-gray-400">Line Items</p>
-            </div>
-            <div className="p-3 bg-yellow-900/30 rounded-lg">
-              <p className="text-2xl font-bold text-yellow-400">{blocked.length}</p>
-              <p className="text-xs text-gray-400">Blocked</p>
-            </div>
-          </div>
-
-          {/* Vendor Groups */}
-          {vendorGroups.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-300">Orders by Vendor:</p>
-              {vendorGroups.map((group, idx) => (
-                <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-medium">{group.vendor_name}</span>
-                    <Badge variant="outline" className="border-green-600 text-green-400">
-                      {group.commitment_count} items
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between mt-1 text-sm text-gray-400">
-                    <span>Total Qty: {group.total_qty}</span>
-                    <span>Est. Cost: ${group.estimated_cost?.toFixed(2)}</span>
-                  </div>
-                  {/* Per-line detail with cost indicator */}
-                  {(group.items || []).length > 0 && (
-                    <div className="mt-2 space-y-1 border-t border-gray-700/50 pt-2">
-                      {(group.items || []).slice(0, 5).map((item, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-400 truncate flex-1">{item.part_name}</span>
-                          <span className={cn(
-                            "font-mono ml-2",
-                            (item.unit_cost ?? 0) <= 0 ? "text-red-400" : "text-emerald-400"
-                          )}>
-                            {(item.unit_cost ?? 0) <= 0 ? 'NO COST' : `$${item.unit_cost.toFixed(2)}`}
-                          </span>
-                        </div>
-                      ))}
-                      {(group.items || []).length > 5 && (
-                        <span className="text-xs text-gray-500">+{(group.items || []).length - 5} more</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Blocked Items */}
-          {blocked.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-yellow-400 flex items-center gap-1">
-                <AlertTriangle className="w-4 h-4" />
-                Blocked Items ({blocked.length}):
-              </p>
-              <div className="max-h-32 overflow-y-auto space-y-1">
-                {blocked.map((item, idx) => (
-                  <div key={idx} className="p-2 bg-yellow-900/20 rounded text-sm">
-                    <span className="text-white">{item.part_name || 'Unknown Part'}</span>
-                    <span className="text-yellow-400 ml-2">- {item.message}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} className="border-gray-600">
-            Cancel
-          </Button>
-          <Button
-            onClick={onConfirm}
-            disabled={isLoading || vendorGroups.length === 0}
-            className={zeroCostCount > 0 ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"}
-          >
-          {isLoading ? (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              {zeroCostCount > 0 ? `Create Anyway (${zeroCostCount} $0)` : `Create ${vendorGroups.length} PO(s)`}
-            </>
-          )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// Old BulkPOPreviewModal removed — now imported from components/supply/BulkPOPreviewModal
 
 // === VENDOR PICKER MODAL ===
 function VendorPickerModal({ commitment, onClose, onSelect }) {

@@ -1,0 +1,35 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "team_role": {
+      "type": "string",
+      "enum": [
+        "Fabricator",
+        "Engineer",
+        "Painter",
+        "Admin",
+        "Manager"
+      ],
+      "description": "Workshop role"
+    },
+    "avatar_url": {
+      "type": "string",
+      "description": "Profile picture URL"
+    },
+    "pricing_strict_mode": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, PO creation blocks on $0 unit cost lines"
+    }
+  },
+  "required": [
+    "phone",
+    "team_role",
+    "avatar_url"
+  ]
+}

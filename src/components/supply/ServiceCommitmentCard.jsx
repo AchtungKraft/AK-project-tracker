@@ -13,7 +13,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceLineItemManager from "@/components/supply/ServiceLineItemManager";
 import EditServiceModal from "@/components/supply/EditServiceModal";
 import DeleteServiceConfirmModal from "@/components/supply/DeleteServiceConfirmModal";
-import ServiceCostBadge from "@/components/supply/ServiceCostBadge";
+import ServiceCostBadge, { getServiceMarginPct } from "@/components/supply/ServiceCostBadge";
 import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -55,7 +55,7 @@ export default function ServiceCommitmentCard({
   const totalCost = commitment.total_cost > 0 ? commitment.total_cost : (commitment.actual_cost ?? commitment.estimated_cost ?? 0);
   const totalBillable = commitment.total_billable || 0;
   const hasLineItems = commitment.total_cost > 0;
-  const margin = totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : 0;
+  const margin = getServiceMarginPct(commitment);
 
   return (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg hover:border-gray-600 transition-colors">
@@ -103,9 +103,11 @@ export default function ServiceCommitmentCard({
           {totalBillable > 0 && (
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-[10px] font-mono text-green-400">{formatCurrencyUSD(totalBillable)}</span>
-              <span className={`text-[10px] ${margin >= 0 ? 'text-green-500' : 'text-red-400'}`}>
-                {margin.toFixed(0)}%
-              </span>
+              {margin != null && (
+                <span className={`text-[10px] ${margin >= 0 ? 'text-green-500' : 'text-red-400'}`}>
+                  {margin.toFixed(0)}%
+                </span>
+              )}
             </div>
           )}
         </div>
