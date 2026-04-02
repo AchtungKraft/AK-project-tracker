@@ -46,8 +46,8 @@ export function resolveNextAction(commitment) {
   const gap = Math.max(0, rt - rfs - cfp);
   const installable = Math.max(0, rfs - qi);
 
-  // INSTALL_READY: Has installable stock
-  if (lifecycle === 'INSTALL_READY' || installable > 0) {
+  // INSTALL_READY: Has installable stock — only offer when installable > 0
+  if (installable > 0) {
     return { action: 'INSTALL', reason: `${installable} ready to install`, qty: installable };
   }
 
