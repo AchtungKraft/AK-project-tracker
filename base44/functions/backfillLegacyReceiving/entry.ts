@@ -9,9 +9,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
  * 
  * HARDENED VERSION:
  * - Uses identical conversion logic for dry_run and apply
- * - Enforces all safety invariants server-side
+ * - Enforces all safety invariants server-side (req 9)
  * - Returns audit-friendly response with will_apply/skip_reason per row
  * - Supports single commitment_id, multiple commitment_ids, or project_id scope
+ * - conversion cannot exceed received_qty (safety bound)
  * - Does NOT call rebalance
  */
 
@@ -35,45 +36,57 @@ function resolveLifecycleState(c) {
 /**
  * Core conversion logic — used by BOTH dry_run and apply.
  * Returns { will_apply, skip_reason, convertible_qty, before, after } for each row.
+ * 
+ * @param c - commitment entity
+ * @param part - part entity (for physical_stock)
+ * @param qtyReceived - total qty_received from PO line items (safety bound)
  */
-function computeConversion(c, part) {
+function computeConversion(c, part, qtyReceived) {
   const physicalStock = part?.physical_stock ?? 0;
   const coveredPO = c.covered_from_po ?? 0;
   const reservedStock = c.reserved_from_stock ?? 0;
   const requiredTotal = c.required_total ?? 0;
   const qtyInstalled = c.qty_installed ?? 0;
   const remaining = Math.max(0, requiredTotal - qtyInstalled);
+  const received = qtyReceived ?? 0;
 
   const beforeState = resolveLifecycleState(c);
+  const mkBefore = () => ({ covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState });
 
-  // Safety invariant checks
+  // Safety invariant checks — return skip with explicit reason
   if (physicalStock <= 0) {
-    return { will_apply: false, skip_reason: 'NO_PHYSICAL_STOCK', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'NO_PHYSICAL_STOCK', convertible_qty: 0, before: mkBefore(), after: null };
   }
   if (remaining <= 0) {
-    return { will_apply: false, skip_reason: 'FULLY_INSTALLED', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'FULLY_INSTALLED', convertible_qty: 0, before: mkBefore(), after: null };
   }
   if (coveredPO <= 0) {
-    return { will_apply: false, skip_reason: 'NO_PO_COVERAGE', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'NO_PO_COVERAGE', convertible_qty: 0, before: mkBefore(), after: null };
   }
 
-  const convertibleQty = Math.min(coveredPO, physicalStock, remaining);
+  // Req 9: conversion cannot exceed received_qty, physical_stock, coveredPO, or remaining
+  const convertibleQty = Math.min(
+    coveredPO,
+    physicalStock,
+    remaining,
+    received > 0 ? received : 0
+  );
   if (convertibleQty <= 0) {
-    return { will_apply: false, skip_reason: 'NO_CONVERTIBLE_QTY', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'NO_CONVERTIBLE_QTY', convertible_qty: 0, before: mkBefore(), after: null };
   }
 
   const afterCoveredPO = coveredPO - convertibleQty;
   const afterReservedStock = reservedStock + convertibleQty;
 
-  // Post-conversion invariant checks
+  // Post-conversion invariant checks (req 9)
   if (afterReservedStock < 0) {
-    return { will_apply: false, skip_reason: 'WOULD_UNDERFLOW_RESERVED', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'WOULD_UNDERFLOW_RESERVED', convertible_qty: 0, before: mkBefore(), after: null };
   }
   if (afterCoveredPO < 0) {
-    return { will_apply: false, skip_reason: 'WOULD_UNDERFLOW_PO', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'WOULD_UNDERFLOW_PO', convertible_qty: 0, before: mkBefore(), after: null };
   }
   if ((afterReservedStock + afterCoveredPO) > requiredTotal) {
-    return { will_apply: false, skip_reason: 'WOULD_EXCEED_REQUIRED', convertible_qty: 0, before: { covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState }, after: null };
+    return { will_apply: false, skip_reason: 'WOULD_EXCEED_REQUIRED', convertible_qty: 0, before: mkBefore(), after: null };
   }
 
   const projectedState = resolveLifecycleState({
@@ -86,11 +99,7 @@ function computeConversion(c, part) {
     will_apply: true,
     skip_reason: null,
     convertible_qty: convertibleQty,
-    before: {
-      covered_from_po: coveredPO,
-      reserved_from_stock: reservedStock,
-      lifecycle_state: beforeState,
-    },
+    before: mkBefore(),
     after: {
       covered_from_po: afterCoveredPO,
       reserved_from_stock: afterReservedStock,
@@ -156,6 +165,37 @@ Deno.serve(async (req) => {
     }
     const projectsMap = new Map(allProjects.map(p => [p.id, p]));
 
+    // Fetch PO line items for received_qty safety bound
+    const allLineItemIds = [];
+    const commitmentLineMap = new Map();
+    for (const c of candidates) {
+      if (c.order_line_item_ids?.length > 0) {
+        for (const lid of c.order_line_item_ids) {
+          allLineItemIds.push(lid);
+          commitmentLineMap.set(lid, c.id);
+        }
+      }
+    }
+
+    let allLineItems = [];
+    if (allLineItemIds.length > 0) {
+      for (let i = 0; i < allLineItemIds.length; i += 200) {
+        const chunk = allLineItemIds.slice(i, i + 200);
+        const items = await base44.asServiceRole.entities.PartPurchaseLineItem.filter({
+          id: { $in: chunk }
+        });
+        allLineItems.push(...items);
+      }
+    }
+
+    // Build qty_received map from PO lines
+    const receivedMap = new Map();
+    for (const line of allLineItems) {
+      const cid = commitmentLineMap.get(line.id) || line.commitment_id;
+      if (!cid) continue;
+      receivedMap.set(cid, (receivedMap.get(cid) || 0) + (line.qty_received || 0));
+    }
+
     const conversions = [];
     const skipped = [];
     const errors = [];
@@ -165,7 +205,8 @@ Deno.serve(async (req) => {
     for (const c of candidates) {
       const part = partsMap.get(c.part_id);
       const project = projectsMap.get(c.project_id);
-      const result = computeConversion(c, part);
+      const qtyReceived = receivedMap.get(c.id) || 0;
+      const result = computeConversion(c, part, qtyReceived);
 
       const row = {
         commitment_id: c.id,
@@ -182,7 +223,6 @@ Deno.serve(async (req) => {
 
       if (!result.will_apply) {
         skipped.push(row);
-        // Audit skipped rows too
         auditEntries.push({
           commitment_id: c.id,
           project_id: c.project_id,
@@ -194,12 +234,15 @@ Deno.serve(async (req) => {
           action: 'skipped',
           skip_reason: result.skip_reason,
           convertible_qty: 0,
+          before_covered_from_po: result.before.covered_from_po,
+          before_reserved_from_stock: result.before.reserved_from_stock,
+          before_lifecycle_state: result.before.lifecycle_state,
+          after_lifecycle_state: null,
         });
         continue;
       }
 
       if (!dry_run) {
-        // Execute the conversion
         try {
           await base44.asServiceRole.entities.PartCommitment.update(c.id, {
             covered_from_po: result.after.covered_from_po,
@@ -209,7 +252,6 @@ Deno.serve(async (req) => {
 
           row.applied = true;
 
-          // Audit log
           const auditEntry = {
             commitment_id: c.id,
             project_id: c.project_id,
@@ -264,6 +306,10 @@ Deno.serve(async (req) => {
             reason: 'legacy_receive_backfill',
             action: 'error',
             convertible_qty: result.convertible_qty,
+            before_covered_from_po: result.before.covered_from_po,
+            before_reserved_from_stock: result.before.reserved_from_stock,
+            before_lifecycle_state: result.before.lifecycle_state,
+            after_lifecycle_state: null,
             skip_reason: null,
             error: err.message,
           });

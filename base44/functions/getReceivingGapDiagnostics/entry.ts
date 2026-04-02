@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     const partIds = [...new Set(active.map(c => c.part_id).filter(Boolean))];
     const projectIds = [...new Set(active.map(c => c.project_id).filter(Boolean))];
 
-    // Fetch parts, projects, and line items in parallel
+    // Fetch parts, projects in parallel
     const [allParts, allProjects] = await Promise.all([
       partIds.length > 0
         ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds.slice(0, 200) } })
@@ -89,7 +89,6 @@ Deno.serve(async (req) => {
 
     let allLineItems = [];
     if (allLineItemIds.length > 0) {
-      // Batch fetch in chunks of 200
       for (let i = 0; i < allLineItemIds.length; i += 200) {
         const chunk = allLineItemIds.slice(i, i + 200);
         const items = await base44.asServiceRole.entities.PartPurchaseLineItem.filter({
@@ -124,14 +123,21 @@ Deno.serve(async (req) => {
       const requiredTotal = c.required_total ?? 0;
       const qtyInstalled = c.qty_installed ?? 0;
 
+      // Only examine commitments with PO coverage — no PO means no receiving gap
+      if (coveredPO <= 0) continue;
+
       // Classify issue type — mutually exclusive, priority order
       let issueType = null;
 
-      if (coveredPO > 0 && qtyReceived === 0) {
+      if (qtyReceived === 0) {
+        // PO exists (coveredPO > 0) but nothing received yet
         issueType = 'PO_NOT_RECEIVED';
       } else if (qtyReceived > 0 && physicalStock === 0) {
+        // Received items but physical stock is zero (consumed or never entered)
         issueType = 'RECEIVED_NO_STOCK';
-      } else if (physicalStock > 0 && coveredPO > 0 && reservedStock === 0) {
+      } else if (physicalStock > 0 && coveredPO > 0 && reservedStock < requiredTotal) {
+        // Stock exists, PO coverage allocated, but stock reservation incomplete
+        // This catches both reservedStock === 0 AND partial allocation cases
         issueType = 'STOCK_NOT_ALLOCATED';
       }
 
@@ -141,7 +147,13 @@ Deno.serve(async (req) => {
 
       // Compute backfill eligibility with safety invariants
       const remaining = Math.max(0, requiredTotal - qtyInstalled);
-      const maxConvertible = Math.min(coveredPO, physicalStock, remaining, qtyReceived > 0 ? qtyReceived : coveredPO);
+      // conversion cannot exceed: coveredPO, physicalStock, remaining, or received_qty
+      const maxConvertible = Math.min(
+        coveredPO,
+        physicalStock,
+        remaining,
+        qtyReceived > 0 ? qtyReceived : 0
+      );
       const convertibleQty = Math.max(0, maxConvertible);
 
       // Safety checks for eligibility
