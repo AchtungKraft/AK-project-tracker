@@ -14,6 +14,7 @@ import UsersConfig from "../components/admin/UsersConfig";
 import EmailTemplatesConfig from "../components/admin/EmailTemplatesConfig";
 import RetailMarkupMatrixConfig from "../components/admin/RetailMarkupMatrixConfig";
 import PricingStrictModeConfig from "../components/supply/PricingStrictModeConfig";
+import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
 
 export default function AdminConfig() {
   return (
@@ -42,6 +43,7 @@ export default function AdminConfig() {
             <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
             <TabsTrigger value="pricing-matrix">Pricing Matrix</TabsTrigger>
             <TabsTrigger value="pricing-guardrails">Pricing Guardrails</TabsTrigger>
+            <TabsTrigger value="service-vendors">Service Vendors</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
@@ -98,6 +100,10 @@ export default function AdminConfig() {
 
           <TabsContent value="pricing-guardrails" className="mt-6">
             <PricingStrictModeConfig />
+          </TabsContent>
+
+          <TabsContent value="service-vendors" className="mt-6">
+            <ServiceVendorsConfig />
           </TabsContent>
         </Tabs>
       </div>
