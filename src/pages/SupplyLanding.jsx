@@ -326,6 +326,8 @@ export default function SupplyLanding() {
                   supplyAction.install(commitment.id, { qty: qty || 1 });
                 } else if (action === 'CREATE_PO') {
                   navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${commitment.project_id}&tab=buy`);
+                } else if (action === 'RECEIVE') {
+                  navigate(createPageUrl('POReceiving') + `?project_id=${commitment.project_id}`);
                 }
               }}
               onPartClick={(part) => {
