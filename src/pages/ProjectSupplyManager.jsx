@@ -66,6 +66,7 @@ import BulkPOPreviewModal from "@/components/supply/BulkPOPreviewModal";
 import BulkSyncResultModal from "@/components/supply/BulkSyncResultModal";
 import { cn } from "@/lib/utils";
 import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
+import ReceivingGapDiagnosticsPanel from "@/components/supply/ReceivingGapDiagnosticsPanel";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -830,6 +831,21 @@ export default function ProjectSupplyManager() {
           {showDiagnostics && (
             <div className="space-y-3">
               <CommitmentBillingDiagnostics projectId={projectId} />
+              <ReceivingGapDiagnosticsPanel
+                enrichedCommitments={enrichedCommitments}
+                onReceive={setReceiveModal}
+                onManageQty={setQtyManagerDrawer}
+                onRunBackfill={(item) => {
+                  base44.functions.invoke('backfillLegacyReceiving', {
+                    dry_run: false,
+                    project_id: projectId,
+                    commitment_ids: [item.commitment_id],
+                  }).then(() => {
+                    toast.success('Backfill applied for ' + (item.part?.part_name || 'part'));
+                    invalidateSupply();
+                  }).catch(err => toast.error('Backfill failed: ' + err.message));
+                }}
+              />
               <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="outline"
