@@ -484,7 +484,8 @@ async function install(ctx,commitment_ids,payload) {
     await inlineRecompute(ctx,part.id,false); await inlineRebalance(ctx,part.id,false);
     ctx.mutations.push({entity:'Part',id:part.id,action:'PHYSICAL_STOCK_RECOMPUTED'});
   }
-  await ctx.base44.asServiceRole.entities.InstalledPart.create({part_id:part.id,project_id:c.project_id,commitment_id:cid,qty_installed:qty_to_install,installed_by:ctx.user.email,installed_date:ctx.timestamp});
+  const unitCost = c.unit_cost_snapshot ?? part.cost ?? 0;
+  await ctx.base44.asServiceRole.entities.InstalledPart.create({part_id:part.id,project_id:c.project_id,commitment_id:cid,qty_consumed:qty_to_install,unit_cost_at_install:unitCost,extended_cost:unitCost*qty_to_install,installed_by:ctx.user.email,installed_date:ctx.timestamp});
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'INSTALL'});
   return {commitment_id:cid,qty_installed:qty_to_install,total_installed:newInst,new_reserved:newRes};
 }
