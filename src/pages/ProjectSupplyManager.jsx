@@ -832,19 +832,9 @@ export default function ProjectSupplyManager() {
             <div className="space-y-3">
               <CommitmentBillingDiagnostics projectId={projectId} />
               <ReceivingGapDiagnosticsPanel
-                enrichedCommitments={enrichedCommitments}
+                projectId={projectId}
                 onReceive={setReceiveModal}
                 onManageQty={setQtyManagerDrawer}
-                onRunBackfill={(item) => {
-                  base44.functions.invoke('backfillLegacyReceiving', {
-                    dry_run: false,
-                    project_id: projectId,
-                    commitment_ids: [item.commitment_id],
-                  }).then(() => {
-                    toast.success('Backfill applied for ' + (item.part?.part_name || 'part'));
-                    invalidateSupply();
-                  }).catch(err => toast.error('Backfill failed: ' + err.message));
-                }}
               />
               <div className="flex gap-2 flex-wrap">
                 <Button
