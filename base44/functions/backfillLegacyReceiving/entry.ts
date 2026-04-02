@@ -1,22 +1,19 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
- * backfillLegacyReceiving — Converts PO coverage to stock reservations
- * 
- * For commitments where physical stock exists but allocation is via
- * covered_from_po instead of reserved_from_stock, this function
- * transfers the coverage to match the current receiving model.
- * 
- * HARDENED VERSION:
- * - Uses identical conversion logic for dry_run and apply
- * - Enforces all safety invariants server-side (req 9)
- * - Returns audit-friendly response with will_apply/skip_reason per row
- * - Supports single commitment_id, multiple commitment_ids, or project_id scope
- * - conversion cannot exceed received_qty (safety bound)
- * - Does NOT call rebalance
+ * backfillLegacyReceiving — Converts PO coverage to stock reservations (HARDENED)
+ *
+ * GUARANTEES:
+ *   1. Conversion never exceeds received_qty
+ *   2. Conversion never exceeds physical_stock
+ *   3. Zero conversion when received_qty = 0
+ *   4. Every row returns will_apply + skip_reason (if false)
+ *   5. Identical logic for dry_run and apply (single computeConversion function)
+ *   6. preview === result (deterministic)
+ *
+ * Lifecycle resolver identical to getReceivingGapDiagnostics.
  */
 
-// Authoritative lifecycle resolver — identical to getReceivingGapDiagnostics
 function resolveLifecycleState(c) {
   const rawStatus = (c.commitment_status || '').toLowerCase();
   if (rawStatus === 'cancelled') return 'CANCELLED';
@@ -34,12 +31,17 @@ function resolveLifecycleState(c) {
 }
 
 /**
- * Core conversion logic — used by BOTH dry_run and apply.
- * Returns { will_apply, skip_reason, convertible_qty, before, after } for each row.
- * 
- * @param c - commitment entity
- * @param part - part entity (for physical_stock)
- * @param qtyReceived - total qty_received from PO line items (safety bound)
+ * computeConversion — Core conversion logic used by BOTH dry_run and apply.
+ * Returns { will_apply, skip_reason, convertible_qty, before, after }.
+ *
+ * Invariants enforced:
+ *   - convertible_qty <= received_qty
+ *   - convertible_qty <= physical_stock
+ *   - convertible_qty <= covered_from_po
+ *   - convertible_qty <= remaining (required - installed)
+ *   - after.reserved_from_stock >= 0
+ *   - after.covered_from_po >= 0
+ *   - after.reserved_from_stock + after.covered_from_po <= required_total
  */
 function computeConversion(c, part, qtyReceived) {
   const physicalStock = part?.physical_stock ?? 0;
@@ -51,9 +53,16 @@ function computeConversion(c, part, qtyReceived) {
   const received = qtyReceived ?? 0;
 
   const beforeState = resolveLifecycleState(c);
-  const mkBefore = () => ({ covered_from_po: coveredPO, reserved_from_stock: reservedStock, lifecycle_state: beforeState });
+  const mkBefore = () => ({
+    covered_from_po: coveredPO,
+    reserved_from_stock: reservedStock,
+    lifecycle_state: beforeState,
+  });
 
-  // Safety invariant checks — return skip with explicit reason
+  // Invariant: zero conversion when received_qty = 0
+  if (received <= 0) {
+    return { will_apply: false, skip_reason: 'ZERO_RECEIVED_QTY', convertible_qty: 0, before: mkBefore(), after: null };
+  }
   if (physicalStock <= 0) {
     return { will_apply: false, skip_reason: 'NO_PHYSICAL_STOCK', convertible_qty: 0, before: mkBefore(), after: null };
   }
@@ -64,13 +73,8 @@ function computeConversion(c, part, qtyReceived) {
     return { will_apply: false, skip_reason: 'NO_PO_COVERAGE', convertible_qty: 0, before: mkBefore(), after: null };
   }
 
-  // Req 9: conversion cannot exceed received_qty, physical_stock, coveredPO, or remaining
-  const convertibleQty = Math.min(
-    coveredPO,
-    physicalStock,
-    remaining,
-    received > 0 ? received : 0
-  );
+  // Conversion capped at minimum of all bounds
+  const convertibleQty = Math.min(coveredPO, physicalStock, remaining, received);
   if (convertibleQty <= 0) {
     return { will_apply: false, skip_reason: 'NO_CONVERTIBLE_QTY', convertible_qty: 0, before: mkBefore(), after: null };
   }
@@ -78,7 +82,7 @@ function computeConversion(c, part, qtyReceived) {
   const afterCoveredPO = coveredPO - convertibleQty;
   const afterReservedStock = reservedStock + convertibleQty;
 
-  // Post-conversion invariant checks (req 9)
+  // Post-conversion invariant checks
   if (afterReservedStock < 0) {
     return { will_apply: false, skip_reason: 'WOULD_UNDERFLOW_RESERVED', convertible_qty: 0, before: mkBefore(), after: null };
   }
@@ -119,7 +123,11 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { dry_run = true, project_id, commitment_ids } = body;
 
-    // Fetch commitments — scoped by commitment_ids first, then project_id
+    // ═══════════════════════════════════════════════════════════
+    // CONSISTENT DATA SNAPSHOT — all reads in single execution
+    // ═══════════════════════════════════════════════════════════
+
+    // Fetch commitments
     let commitments;
     if (commitment_ids?.length > 0) {
       commitments = await base44.asServiceRole.entities.PartCommitment.filter({
@@ -128,7 +136,6 @@ Deno.serve(async (req) => {
     } else if (project_id) {
       commitments = await base44.asServiceRole.entities.PartCommitment.filter({ project_id });
     } else {
-      // Global — admin bulk, fetch all
       commitments = await base44.asServiceRole.entities.PartCommitment.filter({});
     }
 
@@ -138,10 +145,10 @@ Deno.serve(async (req) => {
       return s !== 'cancelled' && s !== 'closed';
     });
 
-    // Candidates: covered_from_po > 0 (may or may not have reserved_from_stock)
+    // Candidates: covered_from_po > 0
     const candidates = active.filter(c => (c.covered_from_po ?? 0) > 0);
 
-    // Fetch parts for physical_stock check — batch
+    // Fetch parts
     const partIds = [...new Set(candidates.map(c => c.part_id).filter(Boolean))];
     let allParts = [];
     if (partIds.length > 0) {
@@ -153,7 +160,7 @@ Deno.serve(async (req) => {
     }
     const partsMap = new Map(allParts.map(p => [p.id, p]));
 
-    // Fetch projects for audit enrichment
+    // Fetch projects
     const projIds = [...new Set(candidates.map(c => c.project_id).filter(Boolean))];
     let allProjects = [];
     if (projIds.length > 0) {
@@ -165,7 +172,7 @@ Deno.serve(async (req) => {
     }
     const projectsMap = new Map(allProjects.map(p => [p.id, p]));
 
-    // Fetch PO line items for received_qty safety bound
+    // Fetch PO line items for received_qty
     const allLineItemIds = [];
     const commitmentLineMap = new Map();
     for (const c of candidates) {
@@ -188,13 +195,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build qty_received map from PO lines
     const receivedMap = new Map();
     for (const line of allLineItems) {
       const cid = commitmentLineMap.get(line.id) || line.commitment_id;
       if (!cid) continue;
       receivedMap.set(cid, (receivedMap.get(cid) || 0) + (line.qty_received || 0));
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // PROCESS — identical logic for dry_run and apply
+    // ═══════════════════════════════════════════════════════════
 
     const conversions = [];
     const skipped = [];
@@ -252,7 +262,7 @@ Deno.serve(async (req) => {
 
           row.applied = true;
 
-          const auditEntry = {
+          auditEntries.push({
             commitment_id: c.id,
             project_id: c.project_id,
             part_id: c.part_id,
@@ -269,8 +279,7 @@ Deno.serve(async (req) => {
             before_lifecycle_state: result.before.lifecycle_state,
             after_lifecycle_state: result.after.projected_lifecycle_state,
             skip_reason: null,
-          };
-          auditEntries.push(auditEntry);
+          });
 
           try {
             await base44.asServiceRole.entities.CommitmentAuditLog.create({

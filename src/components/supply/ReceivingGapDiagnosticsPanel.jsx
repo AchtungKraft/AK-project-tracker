@@ -14,12 +14,13 @@ import { toast } from "sonner";
 import BackfillConfirmModal from "./BackfillConfirmModal";
 
 /**
- * ReceivingGapDiagnosticsPanel — Fully server-driven.
+ * ReceivingGapDiagnosticsPanel — Fully server-driven (HARDENED).
  *
  * ZERO supply-state math. All values come from getReceivingGapDiagnostics.
- * Actions are driven by server-returned recommended_action field.
+ * Actions driven by server-returned recommended_action field.
+ * NO_GAP rows excluded from display (handled server-side).
  *
- * 5 issue types from backend:
+ * 5 visible issue types from backend:
  *   PO_NOT_RECEIVED, RECEIVED_NO_STOCK, RECEIVED_STOCK_CONSUMED,
  *   STOCK_NOT_ALLOCATED, STOCK_PARTIALLY_ALLOCATED
  */
@@ -46,6 +47,10 @@ const ISSUE_STYLE = {
   STOCK_PARTIALLY_ALLOCATED: {
     color: "bg-yellow-900/40 text-yellow-300 border-yellow-700/50",
     chipColor: "yellow",
+  },
+  NO_GAP: {
+    color: "bg-green-900/40 text-green-300 border-green-700/50",
+    chipColor: "green",
   },
 };
 
@@ -323,8 +328,7 @@ function SummaryChip({ label, count, color, active, onClick }) {
  * Uses server-provided issue_label for display and recommended_action for action gating.
  */
 function GapRow({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
-  const style = ISSUE_STYLE[row.issue_type];
-  if (!style) return null;
+  const style = ISSUE_STYLE[row.issue_type] || ISSUE_STYLE.NO_GAP;
 
   return (
     <tr className="border-b border-gray-800/50 hover:bg-gray-800/30">
@@ -442,6 +446,33 @@ function ReviewManuallyBadge({ reason }) {
         </TooltipTrigger>
         <TooltipContent className="bg-gray-800 text-gray-300 text-xs border-gray-700 max-w-[250px]">
           {reason || 'Requires manual review'}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/** SkipReasonBadge — shown for ineligible allocation rows */
+function SkipReasonBadge({ skipReason }) {
+  const reasonLabels = {
+    NO_CONVERTIBLE_QTY: 'No convertible quantity',
+    FULLY_INSTALLED: 'Fully installed',
+    WOULD_EXCEED_REQUIRED: 'Would exceed required total',
+    WOULD_UNDERFLOW_PO: 'Would underflow PO coverage',
+    WRONG_ISSUE_TYPE: 'Not an allocation issue',
+  };
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <Button variant="ghost" size="sm" disabled className="h-6 px-2 text-[10px] text-gray-600">
+              <SkipForward className="w-3 h-3 mr-1" />N/A
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="bg-gray-800 text-gray-300 text-xs border-gray-700 max-w-[250px]">
+          {reasonLabels[skipReason] || skipReason || 'Not eligible for backfill'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

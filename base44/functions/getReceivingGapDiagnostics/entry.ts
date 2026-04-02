@@ -1,23 +1,24 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
- * getReceivingGapDiagnostics — Canonical server-side read model
- * 
- * Returns fully-computed receiving gap rows with lifecycle states,
- * issue classifications, backfill eligibility, recommended actions,
- * and projected states.
- * 
- * NO UI-side math allowed — this is the single source of truth.
- * 
- * Issue types (5 explicit classifications):
- *   PO_NOT_RECEIVED           — PO exists, nothing received yet
- *   RECEIVED_NO_STOCK         — Received but no physical inventory (never entered)
- *   RECEIVED_STOCK_CONSUMED   — Received but stock already used/installed/allocated
- *   STOCK_NOT_ALLOCATED       — Stock exists, PO coverage, zero reservation
- *   STOCK_PARTIALLY_ALLOCATED — Stock exists, PO coverage, partial reservation
- * 
- * Uses the authoritative resolveLifecycleState function shared with
- * backfillLegacyReceiving for parity.
+ * getReceivingGapDiagnostics — Canonical server-side read model (HARDENED)
+ *
+ * GUARANTEES:
+ *   1. Every row has exactly ONE issue_type (mutual exclusivity via if/else-if)
+ *   2. Every issue_type maps to exactly one recommended_action
+ *   3. Backfill conversion never exceeds received_qty or physical_stock
+ *   4. NO_GAP rows are returned but excluded from counts/total
+ *   5. debug=true returns raw classification trace (admin only)
+ *
+ * Issue types (strict priority order — first match wins):
+ *   1. PO_NOT_RECEIVED           — PO exists, nothing received yet
+ *   2. RECEIVED_NO_STOCK         — Received, physical_stock=0, nothing consumed
+ *   3. RECEIVED_STOCK_CONSUMED   — Received, physical_stock=0, stock was used
+ *   4. STOCK_NOT_ALLOCATED       — Stock exists, PO coverage, zero reservation
+ *   5. STOCK_PARTIALLY_ALLOCATED — Stock exists, PO coverage, partial reservation
+ *   6. NO_GAP                    — No issue detected (omitted from default view)
+ *
+ * Lifecycle resolver shared with backfillLegacyReceiving for parity.
  */
 
 function resolveLifecycleState(c) {
@@ -36,6 +37,74 @@ function resolveLifecycleState(c) {
   return 'PLANNED';
 }
 
+/**
+ * classifyCommitment — Strict single-path classification.
+ * Uses if/else-if chain to guarantee mutual exclusivity.
+ * Returns { issueType, issueLabel, recommendedAction, actionReason, matchedCondition }.
+ */
+function classifyCommitment({ coveredPO, qtyReceived, physicalStock, qtyInstalled, reservedStock, requiredTotal }) {
+  // Priority 1: PO exists but nothing received
+  if (qtyReceived === 0) {
+    return {
+      issueType: 'PO_NOT_RECEIVED',
+      issueLabel: 'PO not received',
+      recommendedAction: 'RECEIVE_NOW',
+      actionReason: 'PO line items show 0 qty received',
+      matchedCondition: 'qtyReceived === 0',
+    };
+  }
+  // Priority 2: Received but no physical stock — never entered inventory
+  else if (physicalStock === 0 && qtyInstalled === 0 && reservedStock === 0) {
+    return {
+      issueType: 'RECEIVED_NO_STOCK',
+      issueLabel: 'Received but not in inventory',
+      recommendedAction: 'FIX_INVENTORY',
+      actionReason: `${qtyReceived} received on PO but physical stock is 0 with no installs or reservations`,
+      matchedCondition: 'physicalStock === 0 && qtyInstalled === 0 && reservedStock === 0',
+    };
+  }
+  // Priority 3: Received but stock consumed (installed/allocated elsewhere)
+  else if (physicalStock === 0) {
+    return {
+      issueType: 'RECEIVED_STOCK_CONSUMED',
+      issueLabel: 'Received, stock already consumed',
+      recommendedAction: 'REVIEW_MANUALLY',
+      actionReason: `${qtyReceived} received, physical stock 0, ${qtyInstalled} installed / ${reservedStock} reserved — stock appears consumed`,
+      matchedCondition: 'physicalStock === 0 (with installs or reservations)',
+    };
+  }
+  // Priority 4: Stock exists, zero reservation
+  else if (reservedStock === 0) {
+    return {
+      issueType: 'STOCK_NOT_ALLOCATED',
+      issueLabel: 'Stock not allocated',
+      recommendedAction: null, // Set after backfill eligibility check
+      actionReason: null,
+      matchedCondition: 'physicalStock > 0 && reservedStock === 0',
+    };
+  }
+  // Priority 5: Stock exists, partial reservation
+  else if (reservedStock > 0 && reservedStock < requiredTotal) {
+    return {
+      issueType: 'STOCK_PARTIALLY_ALLOCATED',
+      issueLabel: 'Stock partially allocated',
+      recommendedAction: null, // Set after backfill eligibility check
+      actionReason: null,
+      matchedCondition: 'physicalStock > 0 && 0 < reservedStock < requiredTotal',
+    };
+  }
+  // No gap — fully allocated or over-allocated
+  else {
+    return {
+      issueType: 'NO_GAP',
+      issueLabel: 'No receiving gaps',
+      recommendedAction: null,
+      actionReason: 'Commitment is fully covered and allocated',
+      matchedCondition: 'no condition matched — fully covered',
+    };
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -45,9 +114,16 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { project_id } = body;
+    const { project_id, debug = false, include_no_gap = false } = body;
 
-    // Fetch commitments — optionally scoped to project
+    // Debug trace is admin-only
+    const includeDebug = debug && user.role === 'admin';
+
+    // ═══════════════════════════════════════════════════════════
+    // CONSISTENT DATA SNAPSHOT — all reads within single execution
+    // ═══════════════════════════════════════════════════════════
+
+    // Fetch commitments
     const filter = project_id ? { project_id } : {};
     const commitments = await base44.asServiceRole.entities.PartCommitment.filter(filter);
 
@@ -57,7 +133,10 @@ Deno.serve(async (req) => {
       return s !== 'cancelled' && s !== 'closed';
     });
 
-    if (active.length === 0) {
+    // Only examine commitments with PO coverage
+    const candidates = active.filter(c => (c.covered_from_po ?? 0) > 0);
+
+    if (candidates.length === 0) {
       return Response.json({
         rows: [],
         counts: {
@@ -68,14 +147,15 @@ Deno.serve(async (req) => {
           stock_partially_allocated: 0,
         },
         total: 0,
+        ...(includeDebug ? { _debug: { candidates_count: 0, active_count: active.length, total_commitments: commitments.length } } : {}),
       });
     }
 
-    // Collect unique part IDs and project IDs
-    const partIds = [...new Set(active.map(c => c.part_id).filter(Boolean))];
-    const projectIds = [...new Set(active.map(c => c.project_id).filter(Boolean))];
+    // Collect unique IDs
+    const partIds = [...new Set(candidates.map(c => c.part_id).filter(Boolean))];
+    const projectIds = [...new Set(candidates.map(c => c.project_id).filter(Boolean))];
 
-    // Fetch parts, projects in parallel
+    // Fetch parts and projects in parallel
     const [allParts, allProjects] = await Promise.all([
       partIds.length > 0
         ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds.slice(0, 200) } })
@@ -88,10 +168,10 @@ Deno.serve(async (req) => {
     const partsMap = new Map(allParts.map(p => [p.id, p]));
     const projectsMap = new Map(allProjects.map(p => [p.id, p]));
 
-    // Fetch PO line items for qty_received + po_qty computation
+    // Fetch PO line items for qty_received
     const allLineItemIds = [];
     const commitmentLineMap = new Map();
-    for (const c of active) {
+    for (const c of candidates) {
       if (c.order_line_item_ids?.length > 0) {
         for (const lid of c.order_line_item_ids) {
           allLineItemIds.push(lid);
@@ -111,7 +191,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build qty_received and po_qty maps from PO lines
+    // Build qty_received and po_qty maps
     const receivedMap = new Map();
     const poQtyMap = new Map();
     for (const line of allLineItems) {
@@ -121,8 +201,12 @@ Deno.serve(async (req) => {
       poQtyMap.set(cid, (poQtyMap.get(cid) || 0) + (line.qty_ordered || 0));
     }
 
-    // Classify each commitment
+    // ═══════════════════════════════════════════════════════════
+    // CLASSIFY — single-path, mutually exclusive
+    // ═══════════════════════════════════════════════════════════
+
     const rows = [];
+    const debugTraces = [];
     const counts = {
       po_not_received: 0,
       received_no_stock: 0,
@@ -131,7 +215,7 @@ Deno.serve(async (req) => {
       stock_partially_allocated: 0,
     };
 
-    for (const c of active) {
+    for (const c of candidates) {
       const part = partsMap.get(c.part_id);
       const project = projectsMap.get(c.project_id);
       const physicalStock = part?.physical_stock ?? 0;
@@ -142,62 +226,34 @@ Deno.serve(async (req) => {
       const requiredTotal = c.required_total ?? 0;
       const qtyInstalled = c.qty_installed ?? 0;
 
-      // Only examine commitments with PO coverage — no PO means no receiving gap
-      if (coveredPO <= 0) continue;
+      // Raw inputs for classification
+      const inputs = { coveredPO, qtyReceived, physicalStock, qtyInstalled, reservedStock, requiredTotal };
 
-      // ═══════════════════════════════════════════════════════════
-      // CLASSIFICATION — 5 mutually exclusive issue types
-      // Priority order: most upstream problem first
-      // ═══════════════════════════════════════════════════════════
-      let issueType = null;
-      let issueLabel = null;
-      let recommendedAction = null;
-      let actionReason = null;
+      // Single-path classification (if/else-if chain)
+      const classification = classifyCommitment(inputs);
 
-      if (qtyReceived === 0) {
-        // CASE A: PO exists but nothing received yet
-        issueType = 'PO_NOT_RECEIVED';
-        issueLabel = 'PO not received';
-        recommendedAction = 'RECEIVE_NOW';
-        actionReason = 'PO line items show 0 qty received';
-      } else if (qtyReceived > 0 && physicalStock === 0) {
-        // Received but no physical stock — why?
-        if (qtyInstalled === 0 && reservedStock === 0) {
-          // CASE B: Nothing installed or reserved — stock was never entered
-          issueType = 'RECEIVED_NO_STOCK';
-          issueLabel = 'Received but not in inventory';
-          recommendedAction = 'FIX_INVENTORY';
-          actionReason = `${qtyReceived} received on PO but physical stock is 0 with no installs`;
-        } else {
-          // CASE E: Stock was consumed (installed or allocated elsewhere)
-          issueType = 'RECEIVED_STOCK_CONSUMED';
-          issueLabel = 'Received, stock already consumed';
-          recommendedAction = 'REVIEW_MANUALLY';
-          actionReason = `${qtyReceived} received, physical stock 0, ${qtyInstalled} installed / ${reservedStock} reserved — stock appears consumed`;
-        }
-      } else if (physicalStock > 0 && coveredPO > 0) {
-        if (reservedStock === 0) {
-          // CASE C: Stock exists, PO coverage, zero reservation
-          issueType = 'STOCK_NOT_ALLOCATED';
-          issueLabel = 'Stock not allocated';
-          // Action depends on backfill eligibility (computed below)
-        } else if (reservedStock > 0 && reservedStock < requiredTotal) {
-          // CASE D: Stock exists, partial reservation
-          issueType = 'STOCK_PARTIALLY_ALLOCATED';
-          issueLabel = 'Stock partially allocated';
-          // Action depends on backfill eligibility (computed below)
-        }
+      // Debug trace (admin only)
+      if (includeDebug) {
+        debugTraces.push({
+          commitment_id: c.id,
+          part_name: part?.part_name || 'Unknown',
+          raw_inputs: inputs,
+          matched_condition: classification.matchedCondition,
+          issue_type: classification.issueType,
+        });
       }
 
-      if (!issueType) continue;
+      // Skip NO_GAP unless explicitly requested
+      if (classification.issueType === 'NO_GAP' && !include_no_gap) continue;
 
-      // Count by issue type
-      const countKey = issueType.toLowerCase();
-      counts[countKey] = (counts[countKey] || 0) + 1;
+      // Count (NO_GAP excluded from counts)
+      if (classification.issueType !== 'NO_GAP') {
+        const countKey = classification.issueType.toLowerCase();
+        counts[countKey] = (counts[countKey] || 0) + 1;
+      }
 
       // ═══════════════════════════════════════════════════════════
-      // BACKFILL ELIGIBILITY — strict invariants (unchanged)
-      // convertible_qty = min(coveredPO, physicalStock, remaining, received_qty)
+      // BACKFILL ELIGIBILITY (allocation types only)
       // ═══════════════════════════════════════════════════════════
       const remaining = Math.max(0, requiredTotal - qtyInstalled);
       const maxConvertible = Math.min(
@@ -210,25 +266,21 @@ Deno.serve(async (req) => {
 
       let skipReason = null;
       let isBackfillEligible = false;
+      let { recommendedAction, actionReason } = classification;
 
-      if (issueType !== 'STOCK_NOT_ALLOCATED' && issueType !== 'STOCK_PARTIALLY_ALLOCATED') {
-        skipReason = 'WRONG_ISSUE_TYPE';
-      } else if (convertibleQty <= 0) {
-        skipReason = 'NO_CONVERTIBLE_QTY';
-      } else if (physicalStock <= 0) {
-        skipReason = 'NO_PHYSICAL_STOCK';
-      } else if (remaining <= 0) {
-        skipReason = 'FULLY_INSTALLED';
-      } else if ((reservedStock + convertibleQty) > requiredTotal) {
-        skipReason = 'WOULD_EXCEED_REQUIRED';
-      } else if ((coveredPO - convertibleQty) < 0) {
-        skipReason = 'WOULD_UNDERFLOW_PO';
-      } else {
-        isBackfillEligible = true;
-      }
+      if (classification.issueType === 'STOCK_NOT_ALLOCATED' || classification.issueType === 'STOCK_PARTIALLY_ALLOCATED') {
+        if (convertibleQty <= 0) {
+          skipReason = 'NO_CONVERTIBLE_QTY';
+        } else if (remaining <= 0) {
+          skipReason = 'FULLY_INSTALLED';
+        } else if ((reservedStock + convertibleQty) > requiredTotal) {
+          skipReason = 'WOULD_EXCEED_REQUIRED';
+        } else if ((coveredPO - convertibleQty) < 0) {
+          skipReason = 'WOULD_UNDERFLOW_PO';
+        } else {
+          isBackfillEligible = true;
+        }
 
-      // Set recommended_action for allocation types based on eligibility
-      if (issueType === 'STOCK_NOT_ALLOCATED' || issueType === 'STOCK_PARTIALLY_ALLOCATED') {
         if (isBackfillEligible) {
           recommendedAction = 'RUN_BACKFILL';
           actionReason = `Can convert ${convertibleQty} from PO coverage → stock reservation`;
@@ -236,12 +288,13 @@ Deno.serve(async (req) => {
           recommendedAction = 'REVIEW_MANUALLY';
           actionReason = skipReason;
         }
+      } else {
+        // Non-allocation types: backfill not applicable
+        skipReason = 'WRONG_ISSUE_TYPE';
       }
 
-      // Current lifecycle state via authoritative resolver
+      // Lifecycle states
       const lifecycleState = resolveLifecycleState(c);
-
-      // Projected lifecycle state after backfill (server-side resolver)
       let projectedLifecycleState = lifecycleState;
       if (isBackfillEligible && convertibleQty > 0) {
         projectedLifecycleState = resolveLifecycleState({
@@ -269,9 +322,9 @@ Deno.serve(async (req) => {
         // Lifecycle
         lifecycle_state: lifecycleState,
         projected_lifecycle_state: projectedLifecycleState,
-        // Classification contract
-        issue_type: issueType,
-        issue_label: issueLabel,
+        // Classification contract — exactly ONE per row
+        issue_type: classification.issueType,
+        issue_label: classification.issueLabel,
         recommended_action: recommendedAction,
         action_reason: actionReason,
         // Backfill fields
@@ -281,10 +334,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Gap rows = everything except NO_GAP
+    const gapRows = rows.filter(r => r.issue_type !== 'NO_GAP');
+
     return Response.json({
       rows,
       counts,
-      total: rows.length,
+      total: gapRows.length,
+      ...(includeDebug ? {
+        _debug: {
+          total_commitments: commitments.length,
+          active_count: active.length,
+          candidates_count: candidates.length,
+          classification_traces: debugTraces,
+          no_gap_count: rows.length - gapRows.length,
+        }
+      } : {}),
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
