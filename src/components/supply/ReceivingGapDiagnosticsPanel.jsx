@@ -5,10 +5,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Package, Truck, Database, Filter, Loader2, ArrowRight, RefreshCw, CheckCircle2 } from "lucide-react";
+import {
+  AlertTriangle, Package, Truck, Database, Filter, Loader2,
+  ArrowRight, RefreshCw, CheckCircle2, SkipForward
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import BackfillConfirmModal from "./BackfillConfirmModal";
+
+/**
+ * ReceivingGapDiagnosticsPanel — Fully server-driven.
+ *
+ * ZERO supply-state math in this component.
+ * All values (issue_type, counts, lifecycle, eligibility) come from
+ * getReceivingGapDiagnostics backend response.
+ *
+ * Action gating rules (from server data):
+ * - PO_NOT_RECEIVED → "Receive Now"
+ * - RECEIVED_NO_STOCK → "Create Inventory"
+ * - STOCK_NOT_ALLOCATED + is_backfill_eligible → "Run Backfill"
+ */
 
 const ISSUE_CONFIG = {
   PO_NOT_RECEIVED: {
@@ -44,11 +60,11 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
   const [activeFilter, setActiveFilter] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [backfillPreview, setBackfillPreview] = useState(null);
+  const [backfillResult, setBackfillResult] = useState(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
-  const [backfillTarget, setBackfillTarget] = useState(null); // single commitment_id or null for batch
-  const [postRunResult, setPostRunResult] = useState(null);
+  const [backfillTarget, setBackfillTarget] = useState(null);
 
-  // Canonical server-driven data
+  // Canonical server-driven data — ONLY source of truth
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['receivingGapDiagnostics', projectId],
     queryFn: async () => {
@@ -61,19 +77,22 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
     enabled: !!projectId,
   });
 
+  // All values consumed directly from server response
   const rows = data?.rows || [];
   const counts = data?.counts || { po_not_received: 0, received_no_stock: 0, stock_not_allocated: 0 };
   const total = data?.total || 0;
 
+  // Filter rows — using server-provided issue_type only
   const filtered = useMemo(() => {
     if (!activeFilter) return rows;
     return rows.filter(r => ISSUE_CONFIG[r.issue_type]?.filterKey === activeFilter);
   }, [rows, activeFilter]);
 
-  // --- Backfill flow ---
+  // --- Backfill flow: dry run → confirm → apply ---
   const handleBackfillDryRun = async (commitmentIds) => {
     setBackfillLoading(true);
     setBackfillTarget(commitmentIds);
+    setBackfillResult(null);
     try {
       const res = await base44.functions.invoke('backfillLegacyReceiving', {
         dry_run: true,
@@ -98,31 +117,48 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
         commitment_ids: backfillTarget,
       });
       const result = res.data;
-      const applied = result.summary?.applied || 0;
 
-      // Post-run: refetch diagnostics + supply view
+      // Post-apply invalidation
       queryClient.invalidateQueries({ queryKey: ['receivingGapDiagnostics', projectId] });
       queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolioSupplyState'] });
+      queryClient.invalidateQueries({ queryKey: ['lifecycleActionQueue'] });
+      queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
 
-      // Show result
-      const prevTotal = total;
+      // Re-fetch diagnostics immediately
       await refetch();
-      const newTotal = rows.length; // approximate
 
-      setPostRunResult({
-        applied,
-        before: prevTotal,
-        after: Math.max(0, prevTotal - applied),
-      });
-
-      toast.success(`Backfill applied: ${applied} commitment(s) updated`);
+      // Show result modal
       setBackfillPreview(null);
-      setBackfillTarget(null);
+      setBackfillResult(result);
+
+      const applied = result.summary?.applied || 0;
+      const skippedCount = result.summary?.skipped || 0;
+      const remaining = (data?.total || 0) - applied;
+      toast.success(`Updated ${applied} commitments. Skipped ${skippedCount}. Remaining gaps: ~${Math.max(0, remaining)}.`);
     } catch (err) {
       toast.error('Backfill failed: ' + err.message);
     } finally {
       setBackfillLoading(false);
     }
+  };
+
+  const handleCloseModal = () => {
+    setBackfillPreview(null);
+    setBackfillResult(null);
+    setBackfillTarget(null);
+  };
+
+  // Bulk backfill for currently filtered STOCK_NOT_ALLOCATED rows
+  const handleBulkBackfill = () => {
+    const eligible = filtered
+      .filter(r => r.issue_type === 'STOCK_NOT_ALLOCATED' && r.is_backfill_eligible)
+      .map(r => r.commitment_id);
+    if (eligible.length === 0) {
+      toast.info('No eligible rows for backfill in current filter.');
+      return;
+    }
+    handleBackfillDryRun(eligible);
   };
 
   // Loading state
@@ -143,11 +179,14 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
       <Card className="bg-black/40 border-gray-800">
         <CardContent className="p-3 flex items-center gap-2 text-green-400 text-sm">
           <CheckCircle2 className="w-4 h-4" />
-          No receiving gaps detected.
+          No receiving gaps found.
         </CardContent>
       </Card>
     );
   }
+
+  const bulkEligibleCount = filtered
+    .filter(r => r.issue_type === 'STOCK_NOT_ALLOCATED' && r.is_backfill_eligible).length;
 
   return (
     <>
@@ -182,9 +221,16 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
           </div>
         </CardHeader>
 
-        {/* Server-driven summary counts */}
+        {/* Server-driven summary counts as filter chips */}
         <CardContent className="px-3 pb-2 pt-0">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <SummaryChip
+              label="All"
+              count={total}
+              color="gray"
+              active={activeFilter === null}
+              onClick={() => setActiveFilter(null)}
+            />
             <SummaryChip
               label="Not Received"
               count={counts.po_not_received}
@@ -206,71 +252,80 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
               active={activeFilter === "stock_not_allocated"}
               onClick={() => setActiveFilter(activeFilter === "stock_not_allocated" ? null : "stock_not_allocated")}
             />
-            {activeFilter && (
-              <button onClick={() => setActiveFilter(null)} className="text-xs text-gray-500 hover:text-gray-300 underline">
-                Clear
-              </button>
+
+            {/* Bulk backfill button for STOCK_NOT_ALLOCATED filter */}
+            {bulkEligibleCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[10px] border-amber-700 text-amber-400 hover:bg-amber-900/30 ml-auto"
+                onClick={handleBulkBackfill}
+                disabled={backfillLoading}
+              >
+                {backfillLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Package className="w-3 h-3 mr-1" />}
+                Bulk Backfill ({bulkEligibleCount})
+              </Button>
             )}
           </div>
-
-          {/* Post-run result banner */}
-          {postRunResult && (
-            <div className="mt-2 bg-green-900/30 border border-green-700/50 rounded px-2 py-1.5 text-xs text-green-300 flex items-center justify-between">
-              <span>Receiving gaps reduced from {postRunResult.before} → {postRunResult.after} ({postRunResult.applied} fixed)</span>
-              <button onClick={() => setPostRunResult(null)} className="text-green-500 hover:text-green-300 text-[10px]">dismiss</button>
-            </div>
-          )}
         </CardContent>
 
         {/* Detail table */}
         {expanded && (
           <CardContent className="px-3 pb-3 pt-0">
             <div className="overflow-x-auto mt-2">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-gray-500 border-b border-gray-800">
-                    <th className="text-left py-1.5 pr-2">Part</th>
-                    <th className="text-right py-1.5 px-1">PO Cov</th>
-                    <th className="text-right py-1.5 px-1">Recv'd</th>
-                    <th className="text-right py-1.5 px-1">Stock</th>
-                    <th className="text-right py-1.5 px-1">Rsv'd</th>
-                    <th className="text-left py-1.5 px-1">Lifecycle</th>
-                    <th className="text-left py-1.5 px-1">Issue</th>
-                    <th className="text-right py-1.5 pl-1">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(row => (
-                    <GapRow
-                      key={row.commitment_id}
-                      row={row}
-                      onReceive={onReceive}
-                      onManageQty={onManageQty}
-                      onBackfill={() => handleBackfillDryRun([row.commitment_id])}
-                      backfillLoading={backfillLoading && backfillTarget?.[0] === row.commitment_id}
-                    />
-                  ))}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="text-center text-gray-600 py-4">
-                        No items match this filter.
-                      </td>
+              {filtered.length === 0 ? (
+                <div className="text-center text-gray-600 py-6 text-sm">
+                  No rows in this filter.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-800">
+                      <th className="text-left py-1.5 pr-2">Part</th>
+                      <th className="text-right py-1.5 px-1">Req</th>
+                      <th className="text-right py-1.5 px-1">PO Cov</th>
+                      <th className="text-right py-1.5 px-1">Recv'd</th>
+                      <th className="text-right py-1.5 px-1">Stock</th>
+                      <th className="text-right py-1.5 px-1">Rsv'd</th>
+                      <th className="text-left py-1.5 px-1">Lifecycle</th>
+                      <th className="text-left py-1.5 px-1">Issue</th>
+                      <th className="text-right py-1.5 pl-1">Action</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtered.map(row => (
+                      <GapRow
+                        key={row.commitment_id}
+                        row={row}
+                        onReceive={onReceive}
+                        onManageQty={onManageQty}
+                        onBackfill={() => handleBackfillDryRun([row.commitment_id])}
+                        backfillLoading={backfillLoading && backfillTarget?.includes(row.commitment_id)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </CardContent>
         )}
       </Card>
 
-      {/* Backfill confirmation modal */}
-      {backfillPreview && (
+      {/* Backfill preview modal (dry run) */}
+      {backfillPreview && !backfillResult && (
         <BackfillConfirmModal
           preview={backfillPreview}
           onConfirm={handleBackfillConfirm}
-          onClose={() => { setBackfillPreview(null); setBackfillTarget(null); }}
+          onClose={handleCloseModal}
           isLoading={backfillLoading}
+        />
+      )}
+
+      {/* Backfill result modal (post-apply) */}
+      {backfillResult && (
+        <BackfillConfirmModal
+          result={backfillResult}
+          onClose={handleCloseModal}
         />
       )}
     </>
@@ -278,8 +333,9 @@ export default function ReceivingGapDiagnosticsPanel({ projectId, onReceive, onM
 }
 
 function SummaryChip({ label, count, color, active, onClick }) {
-  if (count === 0) return null;
+  if (count === 0 && color !== 'gray') return null;
   const colorMap = {
+    gray: "bg-gray-800/50 text-gray-300 border-gray-700",
     purple: "bg-purple-900/30 text-purple-300 border-purple-800",
     red: "bg-red-900/30 text-red-300 border-red-800",
     amber: "bg-amber-900/30 text-amber-300 border-amber-800",
@@ -293,12 +349,19 @@ function SummaryChip({ label, count, color, active, onClick }) {
         active && "ring-1 ring-white/30"
       )}
     >
-      <Filter className="w-3 h-3" />
+      {color !== 'gray' && <Filter className="w-3 h-3" />}
       {count} {label}
     </button>
   );
 }
 
+/**
+ * GapRow — renders one diagnostic row.
+ * Action gating is STRICT and issue-type specific:
+ * - PO_NOT_RECEIVED → Receive Now (only)
+ * - RECEIVED_NO_STOCK → Create Inventory (only)
+ * - STOCK_NOT_ALLOCATED + eligible → Run Backfill (only)
+ */
 function GapRow({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
   const issue = ISSUE_CONFIG[row.issue_type];
   if (!issue) return null;
@@ -312,10 +375,8 @@ function GapRow({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
         {row.vendor_part_number && (
           <span className="text-gray-500 font-mono text-[10px]">{row.vendor_part_number}</span>
         )}
-        {row.last_backfill_at && (
-          <span className="text-[9px] text-cyan-600 ml-1">● Backfilled</span>
-        )}
       </td>
+      <td className="text-right py-1.5 px-1 text-white font-mono">{row.required_total}</td>
       <td className="text-right py-1.5 px-1 text-purple-400 font-mono">{row.covered_from_po}</td>
       <td className="text-right py-1.5 px-1 text-blue-400 font-mono">{row.qty_received}</td>
       <td className="text-right py-1.5 px-1 text-cyan-400 font-mono">{row.physical_stock}</td>
@@ -325,6 +386,7 @@ function GapRow({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
           <span className={cn("text-[10px] font-mono", LIFECYCLE_COLORS[row.lifecycle_state] || "text-gray-400")}>
             {row.lifecycle_state}
           </span>
+          {/* Only show projected state for backfill-eligible rows where state would change */}
           {row.is_backfill_eligible && row.projected_lifecycle_state !== row.lifecycle_state && (
             <>
               <ArrowRight className="w-2.5 h-2.5 text-gray-600" />
@@ -341,50 +403,100 @@ function GapRow({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
         </span>
       </td>
       <td className="text-right py-1.5 pl-1">
-        <div className="flex items-center justify-end gap-1">
-          {row.issue_type === "PO_NOT_RECEIVED" && onReceive && (
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-blue-400 hover:text-blue-300"
-              onClick={() => onReceive({ commitment_id: row.commitment_id, part_id: row.part_id, part: { id: row.part_id, part_name: row.part_name } })}
-            >
-              <Truck className="w-3 h-3 mr-1" />
-              Receive
-            </Button>
-          )}
-          {row.issue_type === "RECEIVED_NO_STOCK" && onManageQty && (
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300"
-              onClick={() => onManageQty({ id: row.commitment_id, commitment_id: row.commitment_id, part_id: row.part_id, part: { id: row.part_id, part_name: row.part_name } })}
-            >
-              <Database className="w-3 h-3 mr-1" />
-              Fix Stock
-            </Button>
-          )}
-          {row.issue_type === "STOCK_NOT_ALLOCATED" && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] text-amber-400 hover:text-amber-300"
-                      onClick={onBackfill}
-                      disabled={!row.is_backfill_eligible || backfillLoading}
-                    >
-                      {backfillLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Package className="w-3 h-3 mr-1" />}
-                      Backfill{row.convertible_qty > 0 ? ` (${row.convertible_qty})` : ''}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {!row.is_backfill_eligible && (
-                  <TooltipContent className="bg-gray-800 text-gray-300 text-xs border-gray-700">
-                    No convertible quantity
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
+        <RowAction
+          row={row}
+          onReceive={onReceive}
+          onManageQty={onManageQty}
+          onBackfill={onBackfill}
+          backfillLoading={backfillLoading}
+        />
       </td>
     </tr>
   );
+}
+
+/**
+ * RowAction — Strict issue-type gating.
+ * Only shows the action relevant to the row's issue_type.
+ * Hidden (not disabled) when not applicable.
+ */
+function RowAction({ row, onReceive, onManageQty, onBackfill, backfillLoading }) {
+  // PO_NOT_RECEIVED → Receive Now
+  if (row.issue_type === 'PO_NOT_RECEIVED' && onReceive) {
+    return (
+      <Button
+        variant="ghost" size="sm"
+        className="h-6 px-2 text-[10px] text-blue-400 hover:text-blue-300"
+        onClick={() => onReceive({
+          commitment_id: row.commitment_id,
+          part_id: row.part_id,
+          part: { id: row.part_id, part_name: row.part_name }
+        })}
+      >
+        <Truck className="w-3 h-3 mr-1" />
+        Receive Now
+      </Button>
+    );
+  }
+
+  // RECEIVED_NO_STOCK → Create Inventory
+  if (row.issue_type === 'RECEIVED_NO_STOCK' && onManageQty) {
+    return (
+      <Button
+        variant="ghost" size="sm"
+        className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300"
+        onClick={() => onManageQty({
+          id: row.commitment_id,
+          commitment_id: row.commitment_id,
+          part_id: row.part_id,
+          part: { id: row.part_id, part_name: row.part_name }
+        })}
+      >
+        <Database className="w-3 h-3 mr-1" />
+        Create Inventory
+      </Button>
+    );
+  }
+
+  // STOCK_NOT_ALLOCATED → Run Backfill (only if eligible)
+  if (row.issue_type === 'STOCK_NOT_ALLOCATED') {
+    if (!row.is_backfill_eligible) {
+      // Show disabled with skip reason tooltip
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button variant="ghost" size="sm" disabled
+                  className="h-6 px-2 text-[10px] text-gray-600"
+                >
+                  <SkipForward className="w-3 h-3 mr-1" />
+                  N/A
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="bg-gray-800 text-gray-300 text-xs border-gray-700">
+              {row.skip_reason || 'Not eligible for backfill'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return (
+      <Button
+        variant="ghost" size="sm"
+        className="h-6 px-2 text-[10px] text-amber-400 hover:text-amber-300"
+        onClick={onBackfill}
+        disabled={backfillLoading}
+      >
+        {backfillLoading
+          ? <Loader2 className="w-3 h-3 animate-spin mr-1" />
+          : <Package className="w-3 h-3 mr-1" />}
+        Backfill ({row.convertible_qty})
+      </Button>
+    );
+  }
+
+  return null;
 }

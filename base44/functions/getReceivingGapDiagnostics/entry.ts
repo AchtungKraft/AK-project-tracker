@@ -7,9 +7,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
  * issue classifications, backfill eligibility, and projected states.
  * 
  * NO UI-side math allowed — this is the single source of truth.
+ * 
+ * Uses the authoritative resolveLifecycleState function shared with
+ * backfillLegacyReceiving for parity.
  */
 
-// Mirrors resolveCommitmentStateLocal exactly
 function resolveLifecycleState(c) {
   const rawStatus = (c.commitment_status || '').toLowerCase();
   if (rawStatus === 'cancelled') return 'CANCELLED';
@@ -59,48 +61,52 @@ Deno.serve(async (req) => {
     const partIds = [...new Set(active.map(c => c.part_id).filter(Boolean))];
     const projectIds = [...new Set(active.map(c => c.project_id).filter(Boolean))];
 
-    // Fetch parts and projects in parallel
+    // Fetch parts, projects, and line items in parallel
     const [allParts, allProjects] = await Promise.all([
-      Promise.all(partIds.map(id =>
-        base44.asServiceRole.entities.Part.get(id).catch(() => null)
-      )),
-      Promise.all(projectIds.map(id =>
-        base44.asServiceRole.entities.Project.get(id).catch(() => null)
-      )),
+      partIds.length > 0
+        ? base44.asServiceRole.entities.Part.filter({ id: { $in: partIds.slice(0, 200) } })
+        : Promise.resolve([]),
+      projectIds.length > 0
+        ? base44.asServiceRole.entities.Project.filter({ id: { $in: projectIds.slice(0, 100) } })
+        : Promise.resolve([]),
     ]);
 
-    const partsMap = new Map();
-    for (const p of allParts) {
-      if (p) partsMap.set(p.id, p);
-    }
-    const projectsMap = new Map();
-    for (const p of allProjects) {
-      if (p) projectsMap.set(p.id, p);
-    }
+    const partsMap = new Map(allParts.map(p => [p.id, p]));
+    const projectsMap = new Map(allProjects.map(p => [p.id, p]));
 
-    // Fetch PO line items for qty_received computation
-    const commitmentIds = active.map(c => c.id);
-    let allLineItems = [];
-    // Batch fetch — filter by commitment_id
+    // Fetch PO line items for qty_received + po_qty computation
+    // Batch: collect all order_line_item_ids, fetch in one query
+    const allLineItemIds = [];
+    const commitmentLineMap = new Map(); // lineItemId -> commitmentId
     for (const c of active) {
       if (c.order_line_item_ids?.length > 0) {
-        try {
-          const lines = await Promise.all(
-            c.order_line_item_ids.map(lid =>
-              base44.asServiceRole.entities.PartPurchaseLineItem.get(lid).catch(() => null)
-            )
-          );
-          allLineItems.push(...lines.filter(Boolean).map(l => ({ ...l, _commitment_id: c.id })));
-        } catch (_) { /* skip */ }
+        for (const lid of c.order_line_item_ids) {
+          allLineItemIds.push(lid);
+          commitmentLineMap.set(lid, c.id);
+        }
       }
     }
 
-    // Build qty_received map from PO lines
-    const receivedMap = new Map();
+    let allLineItems = [];
+    if (allLineItemIds.length > 0) {
+      // Batch fetch in chunks of 200
+      for (let i = 0; i < allLineItemIds.length; i += 200) {
+        const chunk = allLineItemIds.slice(i, i + 200);
+        const items = await base44.asServiceRole.entities.PartPurchaseLineItem.filter({
+          id: { $in: chunk }
+        });
+        allLineItems.push(...items);
+      }
+    }
+
+    // Build qty_received and po_qty maps from PO lines
+    const receivedMap = new Map(); // commitmentId -> total qty_received
+    const poQtyMap = new Map(); // commitmentId -> total qty_ordered on PO
     for (const line of allLineItems) {
-      const cid = line._commitment_id || line.commitment_id;
+      const cid = commitmentLineMap.get(line.id) || line.commitment_id;
       if (!cid) continue;
       receivedMap.set(cid, (receivedMap.get(cid) || 0) + (line.qty_received || 0));
+      poQtyMap.set(cid, (poQtyMap.get(cid) || 0) + (line.qty_ordered || 0));
     }
 
     // Classify each commitment
@@ -112,12 +118,13 @@ Deno.serve(async (req) => {
       const project = projectsMap.get(c.project_id);
       const physicalStock = part?.physical_stock ?? 0;
       const qtyReceived = receivedMap.get(c.id) || 0;
+      const poQty = poQtyMap.get(c.id) || 0;
       const coveredPO = c.covered_from_po ?? 0;
       const reservedStock = c.reserved_from_stock ?? 0;
       const requiredTotal = c.required_total ?? 0;
       const qtyInstalled = c.qty_installed ?? 0;
 
-      // Classify issue type
+      // Classify issue type — mutually exclusive, priority order
       let issueType = null;
 
       if (coveredPO > 0 && qtyReceived === 0) {
@@ -132,26 +139,43 @@ Deno.serve(async (req) => {
 
       counts[issueType.toLowerCase()] = (counts[issueType.toLowerCase()] || 0) + 1;
 
-      // Compute backfill eligibility (same logic as backfill function)
-      const remaining = requiredTotal - qtyInstalled;
-      const convertibleQty = Math.min(coveredPO, physicalStock, Math.max(0, remaining));
-      const isBackfillEligible = convertibleQty > 0 && physicalStock > 0 && remaining > 0;
+      // Compute backfill eligibility with safety invariants
+      const remaining = Math.max(0, requiredTotal - qtyInstalled);
+      const maxConvertible = Math.min(coveredPO, physicalStock, remaining, qtyReceived > 0 ? qtyReceived : coveredPO);
+      const convertibleQty = Math.max(0, maxConvertible);
 
-      // Current lifecycle state
+      // Safety checks for eligibility
+      let skipReason = null;
+      let isBackfillEligible = false;
+
+      if (issueType !== 'STOCK_NOT_ALLOCATED') {
+        skipReason = 'WRONG_ISSUE_TYPE';
+      } else if (convertibleQty <= 0) {
+        skipReason = 'NO_CONVERTIBLE_QTY';
+      } else if (physicalStock <= 0) {
+        skipReason = 'NO_PHYSICAL_STOCK';
+      } else if (remaining <= 0) {
+        skipReason = 'FULLY_INSTALLED';
+      } else if ((reservedStock + convertibleQty) > requiredTotal) {
+        skipReason = 'WOULD_EXCEED_REQUIRED';
+      } else if ((coveredPO - convertibleQty) < 0) {
+        skipReason = 'WOULD_UNDERFLOW_PO';
+      } else {
+        isBackfillEligible = true;
+      }
+
+      // Current lifecycle state via authoritative resolver
       const lifecycleState = resolveLifecycleState(c);
 
-      // Projected lifecycle state after backfill
+      // Projected lifecycle state after backfill (server-side resolver)
       let projectedLifecycleState = lifecycleState;
-      if (isBackfillEligible) {
+      if (isBackfillEligible && convertibleQty > 0) {
         projectedLifecycleState = resolveLifecycleState({
           ...c,
           covered_from_po: coveredPO - convertibleQty,
           reserved_from_stock: reservedStock + convertibleQty,
         });
       }
-
-      // Last backfill info from audit or commitment fields
-      const lastBackfillAt = c.last_recomputed_at || null;
 
       rows.push({
         commitment_id: c.id,
@@ -166,21 +190,22 @@ Deno.serve(async (req) => {
         qty_installed: qtyInstalled,
         qty_received: qtyReceived,
         physical_stock: physicalStock,
+        po_qty: poQty,
         lifecycle_state: lifecycleState,
         projected_lifecycle_state: projectedLifecycleState,
         issue_type: issueType,
         convertible_qty: convertibleQty,
         is_backfill_eligible: isBackfillEligible,
-        last_backfill_at: lastBackfillAt,
+        skip_reason: skipReason,
       });
     }
 
     return Response.json({
       rows,
       counts: {
-        po_not_received: counts['po_not_received'] || 0,
-        received_no_stock: counts['received_no_stock'] || 0,
-        stock_not_allocated: counts['stock_not_allocated'] || 0,
+        po_not_received: counts.po_not_received || 0,
+        received_no_stock: counts.received_no_stock || 0,
+        stock_not_allocated: counts.stock_not_allocated || 0,
       },
       total: rows.length,
     });
