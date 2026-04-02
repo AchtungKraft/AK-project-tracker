@@ -323,7 +323,7 @@ export default function SupplyLanding() {
                 if (action === 'ALLOCATE') {
                   supplyAction.autoReserve(commitment.id);
                 } else if (action === 'INSTALL') {
-                  supplyAction.install(commitment.id, { qty: qty || 1 });
+                  supplyAction.install(commitment.id, { qty_to_install: qty || 1 });
                 } else if (action === 'CREATE_PO') {
                   navigate(createPageUrl('ProjectSupplyManager') + `?project_id=${commitment.project_id}&tab=buy`);
                 } else if (action === 'RECEIVE') {
@@ -350,7 +350,7 @@ export default function SupplyLanding() {
                 for (const item of items) {
                   const installable = Math.max(0, (item.reserved_from_stock ?? 0) - (item.qty_installed ?? 0));
                   if (installable > 0 && item.id) {
-                    await supplyAction.install(item.id, { qty: installable });
+                    await supplyAction.install(item.id, { qty_to_install: installable });
                   }
                 }
                 toast.success(`Installed ${items.length} items`);
