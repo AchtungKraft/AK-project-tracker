@@ -35,11 +35,26 @@
     },
     "contact_phone": {
       "type": "string",
-      "description": "Contact phone"
+      "description": "Contact phone (office/landline)"
+    },
+    "cell_phone": {
+      "type": "string",
+      "description": "Cell phone number"
     },
     "address": {
       "type": "string",
       "description": "Vendor address"
+    },
+    "website": {
+      "type": "string",
+      "description": "Vendor website URL"
+    },
+    "associated_service_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "References to Service catalog entries this vendor provides"
     },
     "notes": {
       "type": "string",

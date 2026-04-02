@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Truck } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Truck, Globe, Phone, Smartphone } from "lucide-react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const CATEGORY_OPTIONS = [
   { value: "shipping", label: "Shipping" },
@@ -47,7 +48,10 @@ const EMPTY_FORM = {
   contact_name: "",
   contact_email: "",
   contact_phone: "",
+  cell_phone: "",
   address: "",
+  website: "",
+  associated_service_ids: [],
   notes: "",
 };
 
@@ -60,6 +64,11 @@ export default function ServiceVendorsConfig() {
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ["serviceVendors-admin"],
     queryFn: () => base44.entities.ServiceVendor.list(),
+  });
+
+  const { data: services = [] } = useQuery({
+    queryKey: ["services-catalog-admin"],
+    queryFn: () => base44.entities.Service.list(),
   });
 
   const createMutation = useMutation({
@@ -106,7 +115,10 @@ export default function ServiceVendorsConfig() {
       contact_name: vendor.contact_name || "",
       contact_email: vendor.contact_email || "",
       contact_phone: vendor.contact_phone || "",
+      cell_phone: vendor.cell_phone || "",
       address: vendor.address || "",
+      website: vendor.website || "",
+      associated_service_ids: vendor.associated_service_ids || [],
       notes: vendor.notes || "",
     });
   };
@@ -189,6 +201,15 @@ export default function ServiceVendorsConfig() {
               />
             </div>
             <div>
+              <Label className="text-gray-400 text-xs">Cell Phone</Label>
+              <Input
+                value={newVendor.cell_phone}
+                onChange={(e) => setNewVendor({ ...newVendor, cell_phone: e.target.value })}
+                placeholder="(555) 987-6543"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
               <Label className="text-gray-400 text-xs">Address</Label>
               <Input
                 value={newVendor.address}
@@ -197,6 +218,34 @@ export default function ServiceVendorsConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Website</Label>
+              <Input
+                value={newVendor.website}
+                onChange={(e) => setNewVendor({ ...newVendor, website: e.target.value })}
+                placeholder="https://vendor.com"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            {services.length > 0 && (
+              <div className="md:col-span-2">
+                <Label className="text-gray-400 text-xs mb-2 block">Associated Services</Label>
+                <div className="flex flex-wrap gap-3">
+                  {services.filter(s => s.is_active !== false).map(s => (
+                    <label key={s.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                      <Checkbox
+                        checked={newVendor.associated_service_ids?.includes(s.id)}
+                        onCheckedChange={(checked) => {
+                          const ids = newVendor.associated_service_ids || [];
+                          setNewVendor({ ...newVendor, associated_service_ids: checked ? [...ids, s.id] : ids.filter(id => id !== s.id) });
+                        }}
+                      />
+                      {s.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="md:col-span-2">
               <Label className="text-gray-400 text-xs">Notes</Label>
               <Textarea
@@ -228,6 +277,7 @@ export default function ServiceVendorsConfig() {
                 <VendorRow
                   key={vendor.id}
                   vendor={vendor}
+                  services={services}
                   isEditing={editingId === vendor.id}
                   editData={editData}
                   onEditDataChange={setEditData}
@@ -254,6 +304,7 @@ export default function ServiceVendorsConfig() {
                 <VendorRow
                   key={vendor.id}
                   vendor={vendor}
+                  services={services}
                   isEditing={editingId === vendor.id}
                   editData={editData}
                   onEditDataChange={setEditData}
@@ -273,7 +324,8 @@ export default function ServiceVendorsConfig() {
   );
 }
 
-function VendorRow({ vendor, isEditing, editData, onEditDataChange, onStartEdit, onSaveEdit, onCancelEdit, onToggleActive, onDelete, isSaving }) {
+function VendorRow({ vendor, services = [], isEditing, editData, onEditDataChange, onStartEdit, onSaveEdit, onCancelEdit, onToggleActive, onDelete, isSaving }) {
+  const servicesMap = new Map(services.map(s => [s.id, s]));
   const catLabel = CATEGORY_OPTIONS.find(c => c.value === vendor.category)?.label || vendor.category || "General";
   const catColor = CATEGORY_COLORS[vendor.category] || CATEGORY_COLORS.general;
 
@@ -307,9 +359,36 @@ function VendorRow({ vendor, isEditing, editData, onEditDataChange, onStartEdit,
             <Input value={editData.contact_phone} onChange={e => onEditDataChange({ ...editData, contact_phone: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
           </div>
           <div>
+            <Label className="text-gray-400 text-xs">Cell Phone</Label>
+            <Input value={editData.cell_phone} onChange={e => onEditDataChange({ ...editData, cell_phone: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
+          </div>
+          <div>
             <Label className="text-gray-400 text-xs">Address</Label>
             <Input value={editData.address} onChange={e => onEditDataChange({ ...editData, address: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
           </div>
+          <div>
+            <Label className="text-gray-400 text-xs">Website</Label>
+            <Input value={editData.website} onChange={e => onEditDataChange({ ...editData, website: e.target.value })} placeholder="https://" className="bg-gray-800 border-gray-700 text-white" />
+          </div>
+          {services.length > 0 && (
+            <div className="md:col-span-2">
+              <Label className="text-gray-400 text-xs mb-2 block">Associated Services</Label>
+              <div className="flex flex-wrap gap-3">
+                {services.filter(s => s.is_active !== false).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                    <Checkbox
+                      checked={editData.associated_service_ids?.includes(s.id)}
+                      onCheckedChange={(checked) => {
+                        const ids = editData.associated_service_ids || [];
+                        onEditDataChange({ ...editData, associated_service_ids: checked ? [...ids, s.id] : ids.filter(id => id !== s.id) });
+                      }}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="md:col-span-2">
             <Label className="text-gray-400 text-xs">Notes</Label>
             <Textarea value={editData.notes} onChange={e => onEditDataChange({ ...editData, notes: e.target.value })} className="bg-gray-800 border-gray-700 text-white" rows={2} />
@@ -340,9 +419,23 @@ function VendorRow({ vendor, isEditing, editData, onEditDataChange, onStartEdit,
         <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-sm text-gray-400">
           {vendor.contact_name && <span>{vendor.contact_name}</span>}
           {vendor.contact_email && <span>{vendor.contact_email}</span>}
-          {vendor.contact_phone && <span>{vendor.contact_phone}</span>}
+          {vendor.contact_phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{vendor.contact_phone}</span>}
+          {vendor.cell_phone && <span className="flex items-center gap-1"><Smartphone className="w-3 h-3" />{vendor.cell_phone}</span>}
         </div>
         {vendor.address && <p className="text-xs text-gray-500 mt-0.5">{vendor.address}</p>}
+        {vendor.website && (
+          <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline mt-0.5 flex items-center gap-1">
+            <Globe className="w-3 h-3" />{vendor.website}
+          </a>
+        )}
+        {vendor.associated_service_ids?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {vendor.associated_service_ids.map(sid => {
+              const svc = servicesMap.get(sid);
+              return svc ? <Badge key={sid} variant="outline" className="text-[10px] bg-amber-900/30 text-amber-400 border-amber-700/40">{svc.name}</Badge> : null;
+            })}
+          </div>
+        )}
         {vendor.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{vendor.notes}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
