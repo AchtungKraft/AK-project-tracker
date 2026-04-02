@@ -55,6 +55,8 @@ import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnostic
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import SettlePartsWithCreditModal from "@/components/financial/SettlePartsWithCreditModal";
+import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
+import InstallPartModal from "@/components/project/InstallPartModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { lifecycleKeys, billingKeys, creditKeys } from "@/components/financial/queryKeyFactories";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -572,6 +574,9 @@ export default function PartsActionWorkbench() {
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
   // PHASE 3: Settle parts with credit modal
   const [showSettleCreditModal, setShowSettleCreditModal] = useState(false);
+  // Action modals for Receive / Install / etc.
+  const [receiveTarget, setReceiveTarget] = useState(null);
+  const [installTarget, setInstallTarget] = useState(null);
 
   // Lifecycle action hook
   const { executeActionAsync, isExecuting } = useLifecycleAction();
@@ -737,12 +742,23 @@ export default function PartsActionWorkbench() {
   const handleExecuteAction = async (item, actionType) => {
     const commitmentId = item.commitment_id;
     
-    // Check if action requires a modal
-    if (actionRequiresModal(actionType)) {
-      // Open timeline drawer for now - modals can be wired later
+    // Route modal-requiring actions to their respective modals
+    if (actionType === ACTION_TYPES.RECEIVE_PART) {
+      setReceiveTarget(item);
+      return;
+    }
+    if (actionType === ACTION_TYPES.INSTALL_PART) {
+      setInstallTarget(item);
+      return;
+    }
+    if (actionType === ACTION_TYPES.CREATE_ORDER) {
+      // Navigate to project supply manager for PO creation
+      window.location.href = `${createPageUrl('ProjectDetail')}?id=${item.project_id}&tab=supply`;
+      return;
+    }
+    if (actionType === ACTION_TYPES.FIX_DATA) {
       setSelectedItem(item);
       setTimelineOpen(true);
-      toast.info(`${item.next_step_label || 'Action'} - Use the appropriate modal to complete`);
       return;
     }
 
@@ -986,6 +1002,45 @@ export default function PartsActionWorkbench() {
           setSelectedIds(new Set());
         }}
       />
+
+      {/* Receive Inventory Modal */}
+      {receiveTarget && (
+        <ReceiveInventoryModal
+          open={true}
+          onOpenChange={() => setReceiveTarget(null)}
+          part={{ id: receiveTarget.part_id, part_name: receiveTarget.part_name }}
+          commitment={{ 
+            id: receiveTarget.commitment_id, 
+            order_line_item_ids: receiveTarget.order_line_item_ids || [] 
+          }}
+          defaultQuantity={receiveTarget.required_total || 1}
+          onSuccess={async () => {
+            setReceiveTarget(null);
+            await forceAppRefresh(queryClient, { projectIds: [receiveTarget.project_id] });
+            refetch();
+          }}
+          onClose={() => setReceiveTarget(null)}
+        />
+      )}
+
+      {/* Install Part Modal */}
+      {installTarget && (
+        <InstallPartModal
+          commitment={{
+            id: installTarget.commitment_id,
+            part_id: installTarget.part_id,
+            project_id: installTarget.project_id,
+            required_total: installTarget.required_total,
+            reserved_from_stock: installTarget.reserved_from_stock,
+            qty_installed: installTarget.qty_installed,
+          }}
+          onClose={async () => {
+            setInstallTarget(null);
+            await forceAppRefresh(queryClient, { projectIds: [installTarget.project_id] });
+            refetch();
+          }}
+        />
+      )}
     </div>
   );
 }
