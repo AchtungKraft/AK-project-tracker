@@ -38,8 +38,13 @@ import ExecutionDataBlock from "./ExecutionDataBlock";
 /**
  * PSMGroupedCards - Build Management Optimized UI
  * 
+ * ORDERING CONTEXT RULE:
+ * In tab='buy', ALL UI elements (badges, buttons, labels) are driven ONLY by:
+ * - to_order + coverage_status
+ * Stock/reserved fields are informational ONLY — install actions MUST NOT appear if to_order > 0
+ *
  * REFACTORED FOR:
- * - Removed "Covered" semantics
+ * - Context-aware rendering (ordering vs install vs plan)
  * - Compact horizontal metrics
  * - Collapsible ExecutionDataBlock
  * - Sorting within groups
@@ -112,6 +117,64 @@ export function PSMSummaryStrip({ items, tab }) {
       ...inventoryCounts 
     };
   }, [items, tab]);
+
+  // ORDERING CONTEXT: Show procurement-relevant cards instead of inventory cards
+  if (isOrderingContext) {
+    return (
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
+        <Card className="bg-black/40 border-gray-800">
+          <CardContent className="p-3 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Items</p>
+            <p className="text-lg font-bold text-white">{stats.totalItems}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-black/40 border-red-900/50">
+          <CardContent className="p-3 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Needs Order</p>
+            <p className={cn(
+              "text-lg font-bold",
+              stats.needsOrder > 0 ? "text-red-400" : "text-gray-500"
+            )}>
+              {stats.needsOrder}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-black/40 border-purple-900/50">
+          <CardContent className="p-3 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Ordered</p>
+            <p className={cn(
+              "text-lg font-bold",
+              stats.ordered > 0 ? "text-purple-400" : "text-gray-500"
+            )}>
+              {stats.ordered}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-black/40 border-emerald-900/50">
+          <CardContent className="p-3 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Covered</p>
+            <p className={cn(
+              "text-lg font-bold",
+              stats.inStock > 0 ? "text-emerald-400" : "text-gray-500"
+            )}>
+              {stats.inStock}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-black/40 border-amber-900/50">
+          <CardContent className="p-3 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Exposure</p>
+            <p className={cn(
+              "text-lg font-bold font-mono",
+              stats.totalExposure > 0 ? "text-amber-400" : "text-gray-500"
+            )}>
+              {formatCurrencyUSD(stats.totalExposure)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
@@ -202,6 +265,10 @@ export function PSMItemRow({
   const [showDetails, setShowDetails] = useState(false);
   
   const { part, vendor, allowed, categoryObj } = commitment;
+
+  // ORDERING CONTEXT: Determines which UI elements are shown
+  const isOrderingContext = tab === 'buy';
+
   // RESOLVER-FIRST: Derive display from canonical fields, not stored status
   const displayStatus = getLifecycleLabel(commitment);
   const statusColor = getLifecycleColor(commitment);
@@ -225,14 +292,21 @@ export function PSMItemRow({
     categoriesMap
   );
 
-  // Phase 5: Dev diagnostics for PO field passthrough
-  if (import.meta.env.DEV) {
-    console.log('[PSMItemRow] PO fields', {
-      commitment_id: commitment.commitment_id || commitment.id,
-      order_id: commitment.order_id,
-      order_number: commitment.order_number,
-    });
+  // Dev: detect conflicting UI state in ordering context
+  if (import.meta.env.DEV && isOrderingContext) {
+    const stock = commitment.reserved_from_stock ?? 0;
+    if (stock > 0 && toOrder > 0) {
+      console.error('[UI CONFLICT BLOCKED] stock-driven UI leaking into ordering context', {
+        part: part?.part_name,
+        stock,
+        to_order: toOrder,
+        coverage: commitment.coverage_status,
+      });
+    }
   }
+
+  // ORDERING CONTEXT: Suppress install actions when to_order > 0
+  const hideInstallActions = isOrderingContext && toOrder > 0;
 
   // PHASE 6: Disable ordering when gap_qty === 0
   const canOrder = allowed?.canCreatePO && toOrder > 0;
@@ -324,26 +398,51 @@ export function PSMItemRow({
           </div>
         </button>
 
-        {/* PHASE 3: Inline Inventory Metrics */}
+        {/* PHASE 3: Inline Metrics — context-aware */}
         <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono flex-shrink-0">
           <div className="text-center">
             <span className="text-gray-500 block">REQ</span>
             <span className="text-white">{commitment.required_total ?? 0}</span>
           </div>
-          {(commitment.covered_from_po ?? 0) > 0 && (
-            <div className="text-center">
-              <span className="text-gray-500 block">ORD</span>
-              <span className="text-purple-400">{commitment.covered_from_po}</span>
-            </div>
+          {isOrderingContext ? (
+            /* ORDERING: Show TO ORDER prominently, stock demoted */
+            <>
+              <div className="text-center">
+                <span className="text-gray-500 block">TO ORDER</span>
+                <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
+              </div>
+              {(commitment.covered_from_po ?? 0) > 0 && (
+                <div className="text-center">
+                  <span className="text-gray-500 block">ORD</span>
+                  <span className="text-purple-400">{commitment.covered_from_po}</span>
+                </div>
+              )}
+              {(reservedProject + available) > 0 && (
+                <div className="text-center">
+                  <span className="text-gray-500 block">STOCK</span>
+                  <span className="text-gray-500">{reservedProject + available}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            /* NON-ORDERING: Show full inventory metrics */
+            <>
+              {(commitment.covered_from_po ?? 0) > 0 && (
+                <div className="text-center">
+                  <span className="text-gray-500 block">ORD</span>
+                  <span className="text-purple-400">{commitment.covered_from_po}</span>
+                </div>
+              )}
+              <div className="text-center">
+                <span className="text-gray-500 block">INST</span>
+                <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span>
+              </div>
+              <div className="text-center">
+                <span className="text-gray-500 block">STOCK</span>
+                <span className="text-cyan-400">{reservedProject + available}</span>
+              </div>
+            </>
           )}
-          <div className="text-center">
-            <span className="text-gray-500 block">INST</span>
-            <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span>
-          </div>
-          <div className="text-center">
-            <span className="text-gray-500 block">STOCK</span>
-            <span className="text-cyan-400">{reservedProject + available}</span>
-          </div>
         </div>
 
         {/* PHASE 3: Inline Financial — Unit + Total Cost/Retail */}
@@ -378,13 +477,15 @@ export function PSMItemRow({
           <InventoryStateBadgeSimple commitment={commitment} tab={tab} />
         </div>
 
-        {/* PHASE 4: Next Action Badge */}
-        <div className="flex-shrink-0 hidden lg:block">
-          <NextActionBadgeInline commitment={commitment} />
-        </div>
+        {/* PHASE 4: Next Action Badge — HIDDEN in ordering context (prevents install badge leaking) */}
+        {!isOrderingContext && (
+          <div className="flex-shrink-0 hidden lg:block">
+            <NextActionBadgeInline commitment={commitment} />
+          </div>
+        )}
 
-        {/* Lifecycle Status - Show only non-PLANNED statuses (PLANNED is redundant with stock badge) */}
-        {displayStatus !== 'Planned' && (
+        {/* Lifecycle Status - HIDDEN in ordering context (prevents stock-derived status labels) */}
+        {!isOrderingContext && displayStatus !== 'Planned' && (
           <div className="hidden lg:block flex-shrink-0">
             <span className={cn(
               "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
@@ -456,14 +557,14 @@ export function PSMItemRow({
                 View PO{commitment.order_number ? ` #${commitment.order_number}` : ''}
               </DropdownMenuItem>
             )}
-            {/* CANONICAL: Install depends ONLY on inventory (reserved > installed), NOT billing status */}
-            {allowed?.canInstall && (
+            {/* CANONICAL: Install/Reverse Install — BLOCKED in ordering context when to_order > 0 */}
+            {!hideInstallActions && allowed?.canInstall && (
               <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
                 <Wrench className="w-4 h-4 mr-2" />
                 Install ({Math.max(0, reservedProject - (commitment.qty_installed ?? 0))} available)
               </DropdownMenuItem>
             )}
-            {allowed?.canReverseInstall && (
+            {!hideInstallActions && allowed?.canReverseInstall && (
               <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)} className="text-orange-400">
                 <X className="w-4 h-4 mr-2" />
                 Reverse Install
