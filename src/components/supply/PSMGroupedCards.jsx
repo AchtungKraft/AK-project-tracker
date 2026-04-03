@@ -34,6 +34,7 @@ import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/suppl
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
 import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
 import ExecutionDataBlock from "./ExecutionDataBlock";
+import CoverageDebugPanel from "./CoverageDebugPanel";
 
 /**
  * PSMGroupedCards - Build Management Optimized UI
@@ -616,6 +617,12 @@ export function PSMItemRow({
           <div className="max-w-sm">
             <ExecutionDataBlock item={commitment} />
           </div>
+          {/* Coverage Debug Panel — dev mode or localStorage toggle */}
+          {(import.meta.env.DEV || localStorage.getItem('ak_debug_coverage') === 'true') && (
+            <div className="max-w-sm mt-2">
+              <CoverageDebugPanel item={commitment} />
+            </div>
+          )}
         </div>
       )}
     </div>

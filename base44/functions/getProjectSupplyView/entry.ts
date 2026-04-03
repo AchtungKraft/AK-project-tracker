@@ -461,6 +461,16 @@ Deno.serve(async (req) => {
           available_to_install,
 
           // Coverage debug fields (helps diagnose allocation drift)
+          coverage_total: reserved_from_stock + covered_from_po,
+          coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po),
+          coverage_actual: reserved_from_stock + covered_from_po + to_order,
+          coverage_expected: required_total,
+          coverage_drift: Math.abs((reserved_from_stock + covered_from_po + to_order) - required_total) > 0.01,
+          debug_flags: {
+            has_unallocated_stock: (partInv.physical_stock > 0) && (reserved_from_stock === 0),
+            has_po_but_not_covered: (commitmentLineItems.length > 0) && (covered_from_po === 0),
+            is_dead_zone: (partInv.physical_stock > 0) && (to_order > 0),
+          },
           _coverage_debug: {
             required_total,
             reserved_from_stock,
