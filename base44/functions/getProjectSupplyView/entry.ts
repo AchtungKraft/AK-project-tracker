@@ -278,7 +278,7 @@ Deno.serve(async (req) => {
         // This fixes the "stock > 0 but to_order > 0" drift condition.
         // ============================================================================
         const partInvForAlloc = partInventoryMap.get(c.part_id);
-        const gap = Math.max(0, required_total - reserved_from_stock - covered_from_po);
+        const gap = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
         if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
           const autoReserve = Math.min(gap, partInvForAlloc.available);
           reserved_from_stock += autoReserve;
@@ -292,20 +292,25 @@ Deno.serve(async (req) => {
             `physical=${partInvForAlloc.physical_stock} reserved_global=${partInvForAlloc.reserved_global}`);
         }
 
-        // Derived quantities (resolver computes these, UI does NOT)
-        const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
+        // COVERAGE MODEL:
+        // required_total is satisfied by:
+        // - reserved_from_stock (allocated inventory)
+        // - covered_from_po (incoming supply)
+        // - qty_installed (consumed supply)
+        // - remaining gap becomes to_order
+        const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
         const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
 
         // ============================================================================
         // PHASE 9C: HARD INVARIANT ENFORCEMENT
-        // Coverage Invariant: required_total MUST equal reserved + covered + to_order
+        // Coverage Invariant: required_total MUST equal reserved + covered + installed + to_order
         // This is a HARD FAIL - UI must NEVER render mathematically invalid rows
         // ============================================================================
-        const coverage_sum = reserved_from_stock + covered_from_po + to_order;
+        const coverage_sum = reserved_from_stock + covered_from_po + qty_installed + to_order;
         if (Math.abs(coverage_sum - required_total) > 0.01) {
           throw new Error(
             `COVERAGE_INVARIANT_VIOLATION: part=${c.part_id} commitment=${c.id} ` +
-            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} to_order=${to_order} sum=${coverage_sum}`
+            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} installed=${qty_installed} to_order=${to_order} sum=${coverage_sum}`
           );
         }
         
@@ -461,13 +466,13 @@ Deno.serve(async (req) => {
           available_to_install,
 
           // Coverage debug fields (helps diagnose allocation drift)
-          coverage_total: reserved_from_stock + covered_from_po,
-          coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po),
-          coverage_actual: reserved_from_stock + covered_from_po + to_order,
+          coverage_total: reserved_from_stock + covered_from_po + qty_installed,
+          coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed),
+          coverage_actual: reserved_from_stock + covered_from_po + qty_installed + to_order,
           coverage_expected: required_total,
-          coverage_drift: Math.abs((reserved_from_stock + covered_from_po + to_order) - required_total) > 0.01,
+          coverage_drift: Math.abs((reserved_from_stock + covered_from_po + qty_installed + to_order) - required_total) > 0.01,
           debug_flags: {
-            has_unallocated_stock: (partInv.physical_stock > 0) && (reserved_from_stock === 0),
+            has_unallocated_stock: (partInv.physical_stock > 0) && (reserved_from_stock === 0) && (qty_installed === 0),
             has_po_but_not_covered: (commitmentLineItems.length > 0) && (covered_from_po === 0),
             is_dead_zone: (partInv.physical_stock > 0) && (to_order > 0),
           },
@@ -475,11 +480,11 @@ Deno.serve(async (req) => {
             required_total,
             reserved_from_stock,
             covered_from_po,
+            qty_installed,
             to_order,
             physical_stock: partInv.physical_stock,
-            available_before_alloc: partInv.physical_stock - partInv.reserved_global + reserved_from_stock,
-            coverage_sum: reserved_from_stock + covered_from_po + to_order,
-            drift: Math.abs((reserved_from_stock + covered_from_po + to_order) - required_total) > 0.01,
+            coverage_sum: reserved_from_stock + covered_from_po + qty_installed + to_order,
+            drift: Math.abs((reserved_from_stock + covered_from_po + qty_installed + to_order) - required_total) > 0.01,
           },
 
           // Coverage state
