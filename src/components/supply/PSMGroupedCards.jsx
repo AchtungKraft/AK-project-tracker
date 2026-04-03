@@ -92,10 +92,11 @@ function applySorting(items, sortMode) {
  * PSMSummaryStrip - PHASE 6: Inventory clarity focused
  */
 export function PSMSummaryStrip({ items, tab }) {
+  const isOrderingContext = tab === 'buy';
   const stats = useMemo(() => {
     const totalItems = items.length;
     const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
-    const inventoryCounts = getInventoryStateCounts(items);
+    const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
     const installReadyCount = items.filter(i => 
       (i.available_to_install ?? 0) > 0 && i.allowed?.canInstall
@@ -372,9 +373,9 @@ export function PSMItemRow({
           <CostSourceBadge commitment={commitment} />
         </div>
 
-        {/* PHASE 1: Inventory State Badge */}
+        {/* PHASE 1: Inventory State Badge — context-aware */}
         <div className="flex-shrink-0 hidden md:block">
-          <InventoryStateBadgeSimple commitment={commitment} />
+          <InventoryStateBadgeSimple commitment={commitment} tab={tab} />
         </div>
 
         {/* PHASE 4: Next Action Badge */}
@@ -553,7 +554,8 @@ export function PSMGroupCard({
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
       return true;
     }).length;
-    const inventoryCounts = getInventoryStateCounts(items);
+    const isOrderingContext = tab === 'buy';
+    const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     return { totalQty, totalExposure, totalCost, readyCount, ...inventoryCounts };
   }, [sortedItems, tab]);
 
@@ -697,6 +699,8 @@ const SUBGROUP_OPTIONS = [
 ];
 
 // Helper to get grouping info for an item — HARDENED against missing fields
+// CANONICAL: In inventory mode, uses coverage-based grouping (to_order/coverage_status)
+// to prevent "In Stock" + "Needs Order" conflicts
 function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
   if (!item) return { key: '_unknown', name: 'Unknown', inventoryState: null };
 
@@ -711,10 +715,15 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
         inventoryState: null,
       };
     } else if (mode === 'inventory') {
-      const reserved = item.reserved_from_stock ?? 0;
+      // CANONICAL: Use coverage-driven grouping to avoid stock vs ordering conflicts
+      const toOrder = item.to_order ?? 0;
       const ordered = item.covered_from_po ?? 0;
+      const reserved = item.reserved_from_stock ?? 0;
       
-      if (ordered > 0) {
+      // Primary: coverage/ordering state (prevents "In Stock" + "Needs Order" conflict)
+      if (toOrder > 0) {
+        return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
+      } else if (ordered > 0) {
         return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
       } else if (reserved > 0) {
         return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
@@ -1268,7 +1277,8 @@ function PSMGroupCardWithSubgroups({
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
       return true;
     }).length;
-    const inventoryCounts = getInventoryStateCounts(items);
+    const isOrderingContext = tab === 'buy';
+    const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     return { totalQty, totalExposure, totalCost, readyCount, ...inventoryCounts };
   }, [items, tab]);
 

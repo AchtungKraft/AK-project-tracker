@@ -37,7 +37,32 @@ const STATE_CONFIG = {
     color: "bg-red-600/80 text-red-100 border-red-500",
     Icon: AlertTriangle,
   },
+  // Ordering-context states (coverage-driven)
+  COVERED: {
+    label: "Covered",
+    color: "bg-emerald-600/80 text-emerald-100 border-emerald-500",
+    Icon: CheckCircle2,
+  },
+  PARTIAL: {
+    label: "Partial",
+    color: "bg-amber-600/80 text-amber-100 border-amber-500",
+    Icon: AlertTriangle,
+  },
 };
+
+/**
+ * Determine ordering state from canonical coverage fields ONLY.
+ * Used in ordering context (tab === 'buy' or GlobalNeedToOrder).
+ * MUST NOT reference stock/available/reserved for primary status.
+ */
+function determineOrderingState(commitment) {
+  const toOrder = commitment.to_order ?? 0;
+  if (toOrder > 0) return 'NEEDS_ORDER';
+  const coverage = commitment.coverage_status;
+  if (coverage === 'FULL') return 'COVERED';
+  if (coverage === 'PARTIAL') return 'PARTIAL';
+  return 'NEEDS_ORDER';
+}
 
 /**
  * Determine inventory state from commitment data — RESOLVER-FIRST.
@@ -46,7 +71,7 @@ const STATE_CONFIG = {
  */
 function determineInventoryState(commitment) {
   const lifecycle = resolveLifecycleState(commitment);
-  if (lifecycle === 'INSTALLED') return 'INSTALL_READY'; // show green for installed too
+  if (lifecycle === 'INSTALLED') return 'INSTALL_READY';
   if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';
   
   const reserved = commitment.reserved_from_stock ?? 0;
@@ -57,7 +82,32 @@ function determineInventoryState(commitment) {
   return 'NEEDS_ORDER';
 }
 
-export function InventoryStateBadgeSimple({ commitment, compact = false, className }) {
+/**
+ * Context-aware state resolver.
+ * In ordering context: uses coverage/to_order fields only.
+ * Otherwise: uses inventory/lifecycle state.
+ */
+export function determineContextAwareState(commitment, isOrderingContext = false) {
+  if (isOrderingContext) {
+    // Dev conflict warning
+    if (import.meta.env.DEV) {
+      const stock = commitment.reserved_from_stock ?? 0;
+      const toOrder = commitment.to_order ?? 0;
+      if (stock > 0 && toOrder > 0) {
+        console.warn('[Ordering Conflict]', {
+          part: commitment.part?.part_name || commitment.part_name,
+          stock,
+          to_order: toOrder,
+          coverage: commitment.coverage_status,
+        });
+      }
+    }
+    return determineOrderingState(commitment);
+  }
+  return determineInventoryState(commitment);
+}
+
+export function InventoryStateBadgeSimple({ commitment, compact = false, className, tab }) {
   // Phase 7: Dev diagnostics guard for missing canonical fields
   if (import.meta.env.DEV) {
     if (commitment.covered_from_po === undefined) console.error('Missing covered_from_po in read model', commitment.id);
@@ -65,19 +115,30 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
     if (commitment.required_total === undefined) console.error('Missing required_total in read model', commitment.id);
   }
 
-  const state = determineInventoryState(commitment);
-  const config = STATE_CONFIG[state];
+  const isOrderingContext = tab === 'buy';
+  const state = determineContextAwareState(commitment, isOrderingContext);
+  const config = STATE_CONFIG[state] || STATE_CONFIG.NEEDS_ORDER;
   const Icon = config.Icon;
 
+  // In ordering context, demote stock to secondary info instead of primary badge
+  const showStockSubtext = isOrderingContext && (commitment.reserved_from_stock ?? 0) > 0 && state === 'NEEDS_ORDER';
+
   return (
-    <Badge className={cn(
-      config.color,
-      "gap-1 text-[10px] font-medium whitespace-nowrap",
-      className
-    )}>
-      <Icon className="w-3 h-3" />
-      {!compact && config.label}
-    </Badge>
+    <div className="flex flex-col items-end gap-0.5">
+      <Badge className={cn(
+        config.color,
+        "gap-1 text-[10px] font-medium whitespace-nowrap",
+        className
+      )}>
+        <Icon className="w-3 h-3" />
+        {!compact && config.label}
+      </Badge>
+      {showStockSubtext && (
+        <span className="text-[9px] text-gray-500 font-mono">
+          Stock: {commitment.reserved_from_stock}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -87,27 +148,33 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
  * Also returns legacy aliases { partialStock, outOfStock } so existing
  * consumers (PSMSummaryStrip, PSMGroupCard) continue to compile.
  */
-export function getInventoryStateCounts(items) {
+export function getInventoryStateCounts(items, isOrderingContext = false) {
   let installReady = 0;
   let inStock = 0;
   let ordered = 0;
   let needsOrder = 0;
+  let covered = 0;
+  let partial = 0;
   
   items.forEach(item => {
-    const state = determineInventoryState(item);
+    const state = determineContextAwareState(item, isOrderingContext);
     if (state === 'INSTALL_READY') installReady++;
     else if (state === 'IN_STOCK') inStock++;
     else if (state === 'ORDERED') ordered++;
     else if (state === 'NEEDS_ORDER') needsOrder++;
+    else if (state === 'COVERED') covered++;
+    else if (state === 'PARTIAL') partial++;
   });
   
   return {
     installReady,
-    inStock,
-    ordered,
+    inStock: inStock + covered, // Merge covered into inStock for summary counts
+    ordered: ordered + partial, // Merge partial into ordered for summary counts
     needsOrder,
+    covered,
+    partial,
     // Legacy aliases for PSMGroupedCards consumers
-    partialStock: ordered,
+    partialStock: ordered + partial,
     outOfStock: needsOrder,
   };
 }
