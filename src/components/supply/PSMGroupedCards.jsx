@@ -292,16 +292,26 @@ export function PSMItemRow({
     categoriesMap
   );
 
-  // Dev: detect conflicting UI state in ordering context
-  if (import.meta.env.DEV && isOrderingContext) {
-    const stock = commitment.reserved_from_stock ?? 0;
-    if (stock > 0 && toOrder > 0) {
-      console.error('[UI CONFLICT BLOCKED] stock-driven UI leaking into ordering context', {
+  // Dev: detect conflicting UI state and coverage drift
+  if (import.meta.env.DEV) {
+    // Coverage drift detection
+    if (commitment._coverage_debug?.drift) {
+      console.error('[COVERAGE DRIFT]', {
         part: part?.part_name,
-        stock,
-        to_order: toOrder,
-        coverage: commitment.coverage_status,
+        ...commitment._coverage_debug,
       });
+    }
+    // Ordering context conflict detection
+    if (isOrderingContext) {
+      const stock = commitment.reserved_from_stock ?? 0;
+      if (stock > 0 && toOrder > 0) {
+        console.error('[UI CONFLICT BLOCKED] stock-driven UI leaking into ordering context', {
+          part: part?.part_name,
+          stock,
+          to_order: toOrder,
+          coverage: commitment.coverage_status,
+        });
+      }
     }
   }
 

@@ -226,9 +226,29 @@ Deno.serve(async (req) => {
 
       // Canonical quantities
       const required_total = c.required_total ?? c.qty_committed ?? 0;
-      const reserved_from_stock = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+      let reserved_from_stock = c.reserved_from_stock ?? c.qty_reserved ?? 0;
       const covered_from_po = c.covered_from_po ?? c.qty_ordered ?? 0;
       const qty_installed = c.qty_installed ?? 0;
+
+      // ============================================================================
+      // AUTO-ALLOCATION: If physical stock exists but reserved_from_stock is 0,
+      // auto-allocate available stock to reduce to_order.
+      // This fixes the "stock > 0 but to_order > 0" drift condition.
+      // ============================================================================
+      const partInvForAlloc = partInventoryMap.get(c.part_id);
+      const gap = Math.max(0, required_total - reserved_from_stock - covered_from_po);
+      if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
+        const autoReserve = Math.min(gap, partInvForAlloc.available);
+        reserved_from_stock += autoReserve;
+        // Deduct from available pool so other commitments don't double-count
+        partInvForAlloc.available -= autoReserve;
+        partInvForAlloc.reserved_global += autoReserve;
+        
+        // DRIFT DETECTION: Log auto-allocation
+        console.warn(`[AUTO_ALLOCATE] commitment=${c.id} part=${c.part_id} ` +
+          `auto_reserved=${autoReserve} gap_before=${gap} gap_after=${gap - autoReserve} ` +
+          `physical=${partInvForAlloc.physical_stock} reserved_global=${partInvForAlloc.reserved_global}`);
+      }
 
       // Derived quantities
       const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
@@ -380,6 +400,17 @@ Deno.serve(async (req) => {
         on_order_qty,
         received_qty,
         available_to_install,
+
+        // Coverage debug fields
+        _coverage_debug: {
+          required_total,
+          reserved_from_stock,
+          covered_from_po,
+          to_order,
+          physical_stock: partInv.physical_stock,
+          coverage_sum: reserved_from_stock + covered_from_po + to_order,
+          drift: Math.abs((reserved_from_stock + covered_from_po + to_order) - required_total) > 0.01,
+        },
 
         // Coverage state
         coverage_status,
