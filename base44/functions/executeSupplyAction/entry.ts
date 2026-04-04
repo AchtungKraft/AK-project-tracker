@@ -323,6 +323,27 @@ async function createPO(ctx, commitment_ids, payload) {
     }
     vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource,source_id:resolvedSourceId,price_ordered:resolvedCost});
   }
+
+  // ── DEFENSIVE ASSERTIONS: Prevent silent empty-group regression ──
+  const totalGrouped = Array.from(vg.values()).reduce((s, items) => s + items.length, 0);
+  const validInputCount = commitments.length - blocked.length;
+  console.log(`[CREATE_PO_AUDIT] input=${commitment_ids.length} fetched=${commitments.length} blocked=${blocked.length} valid=${validInputCount} grouped=${totalGrouped} vendor_groups=${vg.size}`);
+  if (validInputCount > 0 && totalGrouped === 0) {
+    const msg = `CREATE_PO_GROUPING_FAILED: ${validInputCount} valid commitments but 0 grouped into vendor groups. This indicates a code regression in vendor resolution.`;
+    console.error(`[CREATE_PO_HARD_FAIL] ${msg}`);
+    throw new Error(msg);
+  }
+  if (totalGrouped !== validInputCount) {
+    console.warn(`[CREATE_PO_GROUPING_MISMATCH] valid=${validInputCount} grouped=${totalGrouped} — some commitments may have been silently dropped`);
+    ctx.warnings.push({ type: 'GROUPING_MISMATCH', msg: `valid=${validInputCount} grouped=${totalGrouped}` });
+  }
+  // Log vendor override audit
+  const overrideCount = Object.keys(vendor_override_map).length;
+  const sourceOverrideCount = Object.keys(source_override_map).length;
+  if (overrideCount > 0 || sourceOverrideCount > 0) {
+    console.log(`[CREATE_PO_OVERRIDES] vendor_overrides=${overrideCount} source_overrides=${sourceOverrideCount}`);
+  }
+
   // SINGLE-VENDOR ENFORCEMENT: if allow_multi_vendor=false and overrides result in multiple vendors, block
   if (!allow_multi_vendor && vg.size > 1) {
     const vendorNames = Array.from(vg.keys()).map(vid => {
@@ -362,6 +383,8 @@ async function createPO(ctx, commitment_ids, payload) {
       }
 
       await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+item.qty,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
+      // COVERAGE VERIFICATION LOG
+      console.log(`[CREATE_PO_COVERAGE] commitment=${item.commitment.id} part=${item.part.part_name} qty_ordered=${rq} old_covered=${curCov} new_covered=${newCov} new_to_order=${newTO} vendor=${vid} cost=${item.unit_cost} source=${item.cost_source}`);
       ctx.mutations.push({entity:'PartPurchaseLineItem',id:li.id,action:'CREATE'},{entity:'PartCommitment',id:item.commitment.id,action:'CREATE_PO'});
     }
     // Post-PO: Trigger retail sync for commitments missing retail
@@ -372,9 +395,16 @@ async function createPO(ctx, commitment_ids, payload) {
         } catch (e) { console.warn(`[CREATE_PO_RETAIL_SYNC] ${item.commitment.id}: ${e.message}`); }
       }
     }
+    console.log(`[CREATE_PO_COMPLETE] PO=${pn} vendor=${vid} lines=${items.length} total_qty=${items.reduce((s,i)=>s+i.qty,0)} total_cost=${items.reduce((s,i)=>s+i.qty*i.unit_cost,0).toFixed(2)}`);
     created.push({order_id:order.id,po_number:pn,vendor_id:vid,line_count:items.length,project_ids:[...new Set(items.map(i=>i.commitment.project_id).filter(Boolean))]});
   }
-  return {created_orders:created,blocked};
+  // FINAL SUMMARY AUDIT
+  const totalLinesCreated = created.reduce((s, o) => s + o.line_count, 0);
+  console.log(`[CREATE_PO_SUMMARY] orders=${created.length} total_lines=${totalLinesCreated} blocked=${blocked.length}`);
+  if (totalLinesCreated === 0 && validInputCount > 0) {
+    console.error(`[CREATE_PO_ZERO_LINES] CRITICAL: ${validInputCount} valid commitments but 0 PO lines created`);
+  }
+  return {created_orders:created,blocked,_audit:{input_count:commitment_ids.length,fetched:commitments.length,blocked_count:blocked.length,grouped:totalGrouped,vendor_groups:vg.size,lines_created:totalLinesCreated}};
 }
 
 async function receive(ctx, commitment_ids, payload) {
