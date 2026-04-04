@@ -34,11 +34,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import POReceivingLineRow from "./POReceivingLineRow";
 import POReceivingCompletedLines from "./POReceivingCompletedLines";
+import DeletePOConfirmModal from "./DeletePOConfirmModal";
 
 const LOCATION_NONE = "__none__";
 
@@ -61,6 +63,8 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   const [defaultLocation, setDefaultLocation] = useState(LOCATION_NONE);
   const [isReceiving, setIsReceiving] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   // Optimistic PO overlay — applied on top of server PO data for instant UI
   const [optimisticDeltas, setOptimisticDeltas] = useState(null);
   const initializedForRef = useRef(null);
@@ -391,6 +395,15 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
               {effectivePO.pdf_attachments.length} Doc{effectivePO.pdf_attachments.length > 1 ? 's' : ''}
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteModal(true)}
+            className="border-red-700/50 text-red-400 hover:bg-red-900/30 hover:text-red-300"
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Delete PO
+          </Button>
         </div>
       </div>
 
@@ -562,6 +575,44 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Delete PO Modal */}
+      {showDeleteModal && (
+        <DeletePOConfirmModal
+          po={effectivePO}
+          isDeleting={isDeleting}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={async (reason) => {
+            setIsDeleting(true);
+            try {
+              const response = await base44.functions.invoke('executeSupplyAction', {
+                action_type: 'DELETE_PO',
+                commitment_ids: [],
+                payload: { order_id: effectivePO.order_id, reason },
+                dry_run: false,
+              });
+              const result = response.data;
+              if (result?.error) throw new Error(result.error);
+              toast.success(`PO ${effectivePO.po_number} deleted`, {
+                description: `${result.commitments_restored || 0} commitment(s) restored to ordering queue`,
+              });
+              // Invalidate all related caches
+              queryClient.invalidateQueries({ queryKey: ['poReceivingView'], exact: false });
+              queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
+              queryClient.invalidateQueries({ queryKey: ['orders'] });
+              queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+              queryClient.invalidateQueries({ queryKey: ['projectSupplyView'], exact: false });
+              queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'], exact: false });
+              navigate(createPageUrl('POReceiving'));
+            } catch (error) {
+              toast.error('Failed to delete PO: ' + error.message);
+            } finally {
+              setIsDeleting(false);
+              setShowDeleteModal(false);
+            }
+          }}
+        />
       )}
     </div>
   );

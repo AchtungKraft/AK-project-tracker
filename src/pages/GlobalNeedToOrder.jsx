@@ -364,9 +364,14 @@ export default function GlobalNeedToOrder() {
               <VendorQueueView
                 items={filteredItems}
                 onSelectVendor={(vendor) => {
+                  // Select items where this vendor is default OR has a PartVendorSource
                   const vendorItemIds = new Set(
                     filteredItems
-                      .filter(i => (i.vendor?.id || i.vendor_id) === vendor.id && i.to_order > 0 && i.allowed?.canCreatePO)
+                      .filter(i => {
+                        if ((i.vendor?.id || i.vendor_id) === vendor.id) return true;
+                        return false; // Source-based selection happens in the vendor view itself
+                      })
+                      .filter(i => i.to_order > 0)
                       .map(i => i.id)
                   );
                   setSelectedItems(vendorItemIds);

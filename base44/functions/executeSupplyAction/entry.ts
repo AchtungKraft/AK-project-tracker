@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
       case 'ALLOCATE_POOL': throw new Error('ALLOCATE_POOL removed. Use InvoiceBatch.');
       case 'CANCEL_COMMITMENT': result = await cancelCommitment(ctx, commitment_ids, payload); break;
       case 'SYNC_PO_COST': result = await syncPOCost(ctx, commitment_ids, payload); break;
+      case 'DELETE_PO': result = await deletePO(ctx, payload); break;
       default: return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
     }
     if (!dry_run) {
@@ -614,6 +615,120 @@ async function syncPOCost(ctx, commitment_ids, payload) {
     } catch (_e) { /* audit log is best-effort */ }
   }
   return result.data || result;
+}
+
+async function deletePO(ctx, payload) {
+  const { order_id, reason } = payload;
+  if (!order_id) throw new Error('order_id required');
+  const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
+  if (!order) throw new Error('Order not found');
+
+  // Fetch all line items for this PO
+  const lineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
+  if (ctx.dry_run) {
+    return {
+      preview: {
+        order_id,
+        po_number: order.po_number,
+        line_count: lineItems.length,
+        total_qty_ordered: lineItems.reduce((s, l) => s + (l.qty_ordered ?? 0), 0),
+        total_qty_received: lineItems.reduce((s, l) => s + (l.qty_received ?? 0), 0),
+      },
+    };
+  }
+
+  const restoredCommitments = [];
+  const affectedParts = new Set();
+
+  for (const li of lineItems) {
+    // Restore commitment: reduce covered_from_po by (qty_ordered - qty_received)
+    // qty_received portion has already been converted to reserved_from_stock
+    if (li.commitment_id) {
+      const [c] = await ctx.base44.entities.PartCommitment.filter({ id: li.commitment_id });
+      if (c) {
+        const unreceived = Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0));
+        const oldCovered = c.covered_from_po ?? 0;
+        const newCovered = Math.max(0, oldCovered - unreceived);
+        const cn = readCanonical(c, ctx);
+        const newTO = Math.max(0, cn.required_total - cn.reserved_from_stock - newCovered - cn.qty_installed);
+
+        // Remove this line item from order_line_item_ids
+        const existingIds = (c.order_line_item_ids || []).filter(id => id !== li.id);
+        
+        // Determine new status
+        let newStatus = c.commitment_status;
+        if (newCovered <= 0 && cn.reserved_from_stock <= 0 && cn.qty_installed <= 0) {
+          newStatus = 'planned';
+        }
+
+        await ctx.base44.asServiceRole.entities.PartCommitment.update(c.id, {
+          covered_from_po: newCovered,
+          qty_to_order: newTO,
+          qty_ordered: Math.max(0, (c.qty_ordered ?? 0) - (li.qty_ordered ?? 0)),
+          order_line_item_ids: existingIds,
+          commitment_status: newStatus,
+          commitment_version: (c.commitment_version ?? 0) + 1,
+          last_recomputed_at: ctx.timestamp,
+        });
+
+        restoredCommitments.push({
+          commitment_id: c.id,
+          part_id: c.part_id,
+          project_id: c.project_id,
+          old_covered: oldCovered,
+          new_covered: newCovered,
+          qty_restored: unreceived,
+          new_to_order: newTO,
+        });
+
+        ctx.lifecycle_events.push({
+          commitment_id: c.id,
+          event_type: 'PO_DELETED',
+          trigger_source: 'UNIFIED_ENGINE',
+          triggered_by: ctx.user.email,
+          actor_email: ctx.user.email,
+          order_id,
+          part_id: c.part_id,
+          project_id: c.project_id,
+          old_values: JSON.stringify({ covered_from_po: oldCovered }),
+          new_values: JSON.stringify({ covered_from_po: newCovered, qty_to_order: newTO }),
+          metadata: JSON.stringify({ po_number: order.po_number, reason, qty_restored: unreceived }),
+          event_date: ctx.timestamp,
+        });
+
+        ctx.mutations.push({ entity: 'PartCommitment', id: c.id, action: 'DELETE_PO_RESTORE' });
+      }
+    }
+
+    if (li.part_id) affectedParts.add(li.part_id);
+
+    // Delete the line item
+    await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.delete(li.id);
+    ctx.mutations.push({ entity: 'PartPurchaseLineItem', id: li.id, action: 'DELETE' });
+  }
+
+  // Delete the order
+  await ctx.base44.asServiceRole.entities.Order.update(order_id, { status: 'Cancelled', notes: `DELETED: ${reason || 'No reason'}. Original: ${order.notes || ''}` });
+  ctx.mutations.push({ entity: 'Order', id: order_id, action: 'DELETE_PO' });
+
+  // Rebalance affected parts
+  for (const pid of affectedParts) {
+    try {
+      await inlineRebalance(ctx, pid, false);
+    } catch (e) {
+      console.warn(`[DELETE_PO_REBALANCE] ${pid}: ${e.message}`);
+    }
+  }
+
+  return {
+    success: true,
+    order_id,
+    po_number: order.po_number,
+    lines_deleted: lineItems.length,
+    commitments_restored: restoredCommitments.length,
+    restored: restoredCommitments,
+    affected_part_ids: [...affectedParts],
+  };
 }
 
 async function addStock(ctx,payload) {
