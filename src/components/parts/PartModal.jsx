@@ -50,7 +50,7 @@ const cancelPartQueries = (queryClient, partId) => {
   });
 };
 
-export default function PartModal({ part, partId, onClose }) {
+export default function PartModal({ part, partId, onClose, open }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -78,44 +78,15 @@ export default function PartModal({ part, partId, onClose }) {
   // Track which partId we've initialized formData for - prevents overwrites during edits
   const initializedPartIdRef = useRef(null);
   
-  // Dev diagnostic for tracking part switches
-  if (import.meta.env.DEV) {
-    console.debug('[PartModal] effectivePartId:', effectivePartId);
-  }
+  // Dev diagnostic — only on mount/change, not every render
+  // (moved to useEffect below to prevent render-time side effects)
   
-  // PHASE 3: Section health monitor - detect stuck queries
-  const sectionHealthRef = useRef({});
+  // Dev: log partId changes (not on every render)
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const checkStuckQueries = () => {
-      const queryCache = queryClient.getQueryCache();
-      const stuckThreshold = 4000; // 4 seconds
-      const now = Date.now();
-      
-      queryCache.getAll().forEach(query => {
-        const key = query.queryKey;
-        const state = query.state;
-        
-        // Only check part-scoped queries
-        if (!Array.isArray(key) || !key.some(k => k === effectivePartId)) return;
-        
-        if (state.fetchStatus === 'fetching') {
-          const elapsed = now - (state.fetchMeta?.fetchMore?.timestamp || state.dataUpdatedAt || now);
-          if (elapsed > stuckThreshold) {
-            console.warn('[SECTION_HEALTH] Stuck query detected:', {
-              queryKey: key,
-              elapsed: `${elapsed}ms`,
-              status: state.status,
-              fetchStatus: state.fetchStatus,
-            });
-          }
-        }
-      });
-    };
-    
-    const interval = setInterval(checkStuckQueries, 2000);
-    return () => clearInterval(interval);
-  }, [effectivePartId, queryClient]);
+    if (import.meta.env.DEV && effectivePartId) {
+      console.debug('[PartModal] effectivePartId:', effectivePartId);
+    }
+  }, [effectivePartId]);
   
   // Track previous partId to cancel in-flight queries on switch
   const prevPartIdRef = useRef(null);
@@ -765,6 +736,9 @@ export default function PartModal({ part, partId, onClose }) {
     );
   }
 
+  // Stabilize mounting: if `open` prop is false, render nothing but keep hooks alive
+  if (open === false) return null;
+
   if (!activePart) return null;
 
   // Derived data
@@ -1191,19 +1165,17 @@ export default function PartModal({ part, partId, onClose }) {
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
               {activeCategories.filter(c => !c.parent_id).map(parent => {
-                const children = activeCategories.filter(c => c.parent_id === parent.id);
-                return (
-                  <React.Fragment key={parent.id}>
-                    <SelectItem value={parent.id}>
-                      <span style={{ color: parent.color }}>{parent.name}</span>
-                    </SelectItem>
-                    {children.map(child => (
-                      <SelectItem key={child.id} value={child.id}>
-                        <span className="pl-4" style={{ color: child.color }}>↳ {child.name}</span>
-                      </SelectItem>
-                    ))}
-                  </React.Fragment>
-                );
+              const children = activeCategories.filter(c => c.parent_id === parent.id);
+              return [
+                <SelectItem key={parent.id} value={parent.id}>
+                  <span style={{ color: parent.color }}>{parent.name}</span>
+                </SelectItem>,
+                ...children.map(child => (
+                  <SelectItem key={child.id} value={child.id}>
+                    <span className="pl-4" style={{ color: child.color }}>↳ {child.name}</span>
+                  </SelectItem>
+                ))
+              ];
               })}
             </SelectContent>
           </Select>
@@ -1238,18 +1210,16 @@ export default function PartModal({ part, partId, onClose }) {
                       const children = activeLocations
                         .filter(l => l.parent_id === parent.id)
                         .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color || '#8B5CF6' }}>{parent.bin_description || parent.location_area}</span>
+                      return [
+                        <SelectItem key={parent.id} value={parent.id}>
+                          <span style={{ color: parent.color || '#8B5CF6' }}>{parent.bin_description || parent.location_area}</span>
+                        </SelectItem>,
+                        ...children.map(child => (
+                          <SelectItem key={child.id} value={child.id}>
+                            <span className="pl-4" style={{ color: child.color || '#8B5CF6' }}>↳ {child.bin_description || child.location_area}</span>
                           </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="pl-4" style={{ color: child.color || '#8B5CF6' }}>↳ {child.bin_description || child.location_area}</span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
+                        ))
+                      ];
                     })}
                     {orphanLocations.map(l => (
                       <SelectItem key={l.id} value={l.id}>
