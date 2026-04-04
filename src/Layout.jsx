@@ -164,7 +164,6 @@ const getNavigationSections = () => {
         { title: "PO Receiving", url: createPageUrl("POReceiving"), icon: Package },
         { title: "Services", url: createPageUrl("ServicesDashboard"), icon: Truck },
         { title: "Action Workbench", url: createPageUrl("PartsActionWorkbench"), icon: Flame },
-        { title: "Vendor PO Builder", url: "/VendorPOBuilder", icon: ShoppingCart },
       ],
     },
     {
