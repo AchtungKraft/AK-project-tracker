@@ -1263,7 +1263,7 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
-      {/* Vendor Sources Section (Edit Mode) */}
+      {/* Vendor Sources Section (Edit Mode) — UNIFIED component */}
       <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-gray-300 text-sm">Vendor Sources</Label>
@@ -1272,12 +1272,13 @@ export default function PartModal({ part, partId, onClose }) {
           </button>
         </div>
         <PartVendorSourcesSection
+          mode="edit"
           partId={activePart.id}
           vendors={vendors}
           isEditing={true}
           onPreferredChange={handlePreferredSourceChange}
         />
-        <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost above.</p>
+        <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost.</p>
       </div>
 
 

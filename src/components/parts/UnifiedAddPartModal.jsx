@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartTypeSelector from "./PartTypeSelector";
 import PartPricingFields from "./PartPricingFields";
+import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
@@ -152,20 +153,32 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       const projectIds = [];
       const commitmentIds = [];
 
-      // Create vendor sources for the new part
+      // GUARD: Enforce single preferred on create
+      const preferredSources = vendorSources.filter(s => s.is_preferred);
+      if (preferredSources.length > 1) {
+        console.warn('[AddPart] Multiple preferred sources — auto-resolving to first');
+      }
+
+      // Create vendor sources for the new part (skip duplicates)
+      const seenKeys = new Set();
       for (const source of vendorSources) {
-        if (source.vendor_id) {
-          await base44.entities.PartVendorSource.create({
-            part_id: newPart.id,
-            vendor_id: source.vendor_id,
-            vendor_part_number: source.vendor_part_number || '',
-            unit_cost: source.unit_cost || 0,
-            order_url: source.order_url || '',
-            is_preferred: source.is_preferred || false,
-            is_active: true,
-            sort_order: source.sort_order || 0,
-          });
+        if (!source.vendor_id) continue;
+        const dedupKey = `${source.vendor_id}::${source.order_url || ''}`;
+        if (seenKeys.has(dedupKey)) {
+          console.warn('[AddPart] Skipping duplicate vendor source:', dedupKey);
+          continue;
         }
+        seenKeys.add(dedupKey);
+        await base44.entities.PartVendorSource.create({
+          part_id: newPart.id,
+          vendor_id: source.vendor_id,
+          vendor_part_number: source.vendor_part_number || '',
+          unit_cost: source.unit_cost || 0,
+          order_url: source.order_url || '',
+          is_preferred: source.is_preferred || false,
+          is_active: true,
+          sort_order: source.sort_order || 0,
+        });
       }
       
       // CANONICAL SUPPLY FLOW ENFORCED
@@ -631,7 +644,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
             </div>
 
-            {/* Vendor Sources Section — same component as Edit Part */}
+            {/* Vendor Sources Section — UNIFIED component, mode=create */}
             <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-gray-300 text-sm">Vendor Sources</Label>
@@ -639,9 +652,11 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   + New Vendor
                 </button>
               </div>
-              <AddPartVendorSourcesInline
-                sources={vendorSources}
+              <PartVendorSourcesSection
+                mode="create"
                 vendors={activeVendors}
+                isEditing={true}
+                sources={vendorSources}
                 onAdd={handleAddVendorSource}
                 onRemove={handleRemoveVendorSource}
                 onFieldChange={handleVendorSourceFieldChange}
@@ -833,64 +848,4 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   );
 }
 
-/* ─── Inline Vendor Sources for Add Part (no partId yet) ─── */
-
-function AddPartVendorSourcesInline({ sources, vendors, onAdd, onRemove, onFieldChange, onSetPreferred }) {
-  return (
-    <div className="space-y-2">
-      {sources.map((s, idx) => {
-        const cheapestCost = sources.length > 1
-          ? Math.min(...sources.filter(x => (x.unit_cost || 0) > 0).map(x => x.unit_cost))
-          : 0;
-        const isCheapest = s.unit_cost > 0 && s.unit_cost <= cheapestCost && sources.length > 1;
-
-        return (
-          <div key={s._tempId || idx} className={cn(
-            "p-3 rounded-lg border space-y-2",
-            s.is_preferred ? "bg-yellow-900/10 border-yellow-700/30" : "bg-gray-800/30 border-gray-700/50"
-          )}>
-            <div className="flex items-center gap-2">
-              <Select
-                value={s.vendor_id || "none"}
-                onValueChange={(val) => onFieldChange(idx, "vendor_id", val === "none" ? "" : val)}
-              >
-                <SelectTrigger className="flex-1 bg-gray-800 border-gray-700 text-white h-8 text-sm">
-                  <SelectValue placeholder="Select vendor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select vendor...</SelectItem>
-                  {vendors.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button" size="icon"
-                variant={s.is_preferred ? "default" : "ghost"}
-                className={cn("h-8 w-8 shrink-0", s.is_preferred ? "bg-yellow-600 hover:bg-yellow-700 text-white" : "text-gray-400 hover:text-yellow-400")}
-                onClick={() => onSetPreferred(idx)}
-                title={s.is_preferred ? "Preferred source" : "Set as preferred"}
-              >
-                <Star className="w-3.5 h-3.5" fill={s.is_preferred ? "currentColor" : "none"} />
-              </Button>
-              {isCheapest && (
-                <span className="text-[9px] text-green-400 font-bold shrink-0">BEST</span>
-              )}
-              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-400 hover:text-red-300" onClick={() => onRemove(idx)}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Input placeholder="Vendor Part #" value={s.vendor_part_number || ""} onChange={(e) => onFieldChange(idx, "vendor_part_number", e.target.value)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
-              <Input type="number" step="0.01" min="0" placeholder="Unit cost" value={s.unit_cost || ""} onChange={(e) => onFieldChange(idx, "unit_cost", parseFloat(e.target.value) || 0)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
-              <Input placeholder="Order URL" value={s.order_url || ""} onChange={(e) => onFieldChange(idx, "order_url", e.target.value)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
-            </div>
-          </div>
-        );
-      })}
-      <Button type="button" variant="outline" size="sm" onClick={onAdd} className="border-gray-600 text-gray-300 gap-1 w-full">
-        <Plus className="w-3 h-3" /> Add Vendor Source
-      </Button>
-    </div>
-  );
-}
+/* AddPartVendorSourcesInline removed — unified into PartVendorSourcesSection mode="create" */

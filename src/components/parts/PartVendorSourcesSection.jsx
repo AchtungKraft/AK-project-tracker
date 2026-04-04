@@ -12,56 +12,96 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Star, ExternalLink, Check, Loader2, TrendingDown,
+  Plus, Trash2, Star, ExternalLink, Loader2, TrendingDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 /**
- * PartVendorSourcesSection — Displays and manages PartVendorSource records for a part.
- * On preferred change: syncs Part.default_vendor_id + Part.cost.
- * On save: upserts sources, deletes removed ones.
+ * PartVendorSourcesSection — UNIFIED component for Add Part + Edit Part.
+ *
+ * mode="create" → local-only state, parent owns sources array via props
+ * mode="edit"   → fetches from DB, exposes save via window.__partVendorSourcesSave
+ *
+ * Guarantees:
+ * 1. Single preferred source (auto-enforced)
+ * 2. No duplicate vendor_id + order_url combos
+ * 3. Only PART vendors in selector
  */
+
+/* ─── Duplicate check helper ─── */
+function hasDuplicate(sources, index, vendorId, orderUrl) {
+  if (!vendorId) return false;
+  return sources.some((s, i) => {
+    if (i === index) return false;
+    const sameVendor = s.vendor_id === vendorId;
+    const sameUrl = (s.order_url || '') === (orderUrl || '');
+    return sameVendor && sameUrl;
+  });
+}
+
 export default function PartVendorSourcesSection({
-  partId,
+  // Shared props
   vendors = [],
   isEditing,
   onPreferredChange, // (vendor_id, unit_cost) => void — syncs to Part form
+
+  // mode="edit" props
+  partId,
+
+  // mode="create" props
+  mode = "edit", // "create" | "edit"
+  sources: externalSources,
+  onAdd: externalAdd,
+  onRemove: externalRemove,
+  onFieldChange: externalFieldChange,
+  onSetPreferred: externalSetPreferred,
 }) {
   const queryClient = useQueryClient();
-  const [localSources, setLocalSources] = useState(null); // null = not initialized
+
+  // ─── MODE: EDIT (existing part) ───
+  const [localSources, setLocalSources] = useState(null);
   const [deletedIds, setDeletedIds] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // Fetch existing sources — shares cache with PartModal view/edit toggling
   const { data: serverSources = [], isLoading } = useQuery({
     queryKey: ["partVendorSources", partId],
     queryFn: async () => {
       if (!partId) return [];
       return base44.entities.PartVendorSource.filter({ part_id: partId });
     },
-    enabled: Boolean(partId),
+    enabled: mode === "edit" && Boolean(partId),
     staleTime: 120000,
     gcTime: 300000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  // Initialize local state from server data
   useEffect(() => {
+    if (mode !== "edit") return;
     if (serverSources.length > 0 || (localSources === null && !isLoading)) {
       setLocalSources(serverSources.map(s => ({ ...s, _isNew: false })));
       setDeletedIds([]);
     }
-  }, [serverSources, isLoading]);
+  }, [serverSources, isLoading, mode]);
 
-  const sources = localSources || [];
+  // Determine active source list
+  const sources = mode === "create"
+    ? (externalSources || [])
+    : (localSources || []);
+
   const cheapestCost = sources.length > 0
     ? Math.min(...sources.filter(s => (s.unit_cost || 0) > 0).map(s => s.unit_cost))
     : 0;
 
+  // ─── HANDLERS (edit mode only — create mode delegates to parent) ───
+
   const handleAdd = () => {
+    if (mode === "create") {
+      externalAdd?.();
+      return;
+    }
     setLocalSources(prev => [
       ...(prev || []),
       {
@@ -72,21 +112,23 @@ export default function PartVendorSourcesSection({
         vendor_part_number: "",
         unit_cost: 0,
         order_url: "",
-        is_preferred: (prev || []).length === 0, // first source is auto-preferred
+        is_preferred: (prev || []).length === 0,
         is_active: true,
       },
     ]);
   };
 
   const handleRemove = (index) => {
+    if (mode === "create") {
+      externalRemove?.(index);
+      return;
+    }
     setLocalSources(prev => {
       const updated = [...prev];
       const removed = updated.splice(index, 1)[0];
       if (removed.id) setDeletedIds(d => [...d, removed.id]);
-      // If removed was preferred and there are others, make first one preferred
       if (removed.is_preferred && updated.length > 0) {
         updated[0].is_preferred = true;
-        const v = vendors.find(v => v.id === updated[0].vendor_id);
         onPreferredChange?.(updated[0].vendor_id, updated[0].unit_cost);
       }
       return updated;
@@ -94,6 +136,10 @@ export default function PartVendorSourcesSection({
   };
 
   const handleFieldChange = (index, field, value) => {
+    if (mode === "create") {
+      externalFieldChange?.(index, field, value);
+      return;
+    }
     setLocalSources(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
@@ -102,28 +148,44 @@ export default function PartVendorSourcesSection({
   };
 
   const handleSetPreferred = (index) => {
+    if (mode === "create") {
+      externalSetPreferred?.(index);
+      return;
+    }
     setLocalSources(prev => {
-      const updated = prev.map((s, i) => ({
-        ...s,
-        is_preferred: i === index,
-      }));
+      const updated = prev.map((s, i) => ({ ...s, is_preferred: i === index }));
       const preferred = updated[index];
       onPreferredChange?.(preferred.vendor_id, preferred.unit_cost);
       return updated;
     });
   };
 
-  // Save all sources (called from parent via ref or explicit button)
+  // ─── SAVE (edit mode only) ───
   const saveAll = async () => {
-    if (!partId) return;
+    if (!partId || mode !== "edit") return;
+
+    // GUARD: Enforce single preferred
+    const preferredCount = (localSources || []).filter(s => s.is_preferred).length;
+    if (preferredCount > 1) {
+      toast.error("Multiple preferred sources detected — auto-resolving to first.");
+      setLocalSources(prev => prev.map((s, i) => ({ ...s, is_preferred: i === 0 })));
+    }
+
+    // GUARD: Duplicate check
+    for (let i = 0; i < (localSources || []).length; i++) {
+      const s = localSources[i];
+      if (hasDuplicate(localSources, i, s.vendor_id, s.order_url)) {
+        toast.error(`Duplicate vendor+URL found: row ${i + 1}. Remove duplicates before saving.`);
+        return;
+      }
+    }
+
     setSaving(true);
 
-    // Delete removed sources
     for (const id of deletedIds) {
       await base44.entities.PartVendorSource.delete(id);
     }
 
-    // Upsert remaining
     for (const s of (localSources || [])) {
       const data = {
         part_id: partId,
@@ -147,14 +209,15 @@ export default function PartVendorSourcesSection({
     setSaving(false);
   };
 
-  // Expose save method so parent can call it on Part save
+  // Expose save for parent (edit mode)
   useEffect(() => {
-    if (window.__partVendorSourcesSave) delete window.__partVendorSourcesSave;
+    if (mode !== "edit") return;
     window.__partVendorSourcesSave = saveAll;
     return () => { delete window.__partVendorSourcesSave; };
-  }, [localSources, deletedIds, partId]);
+  }, [localSources, deletedIds, partId, mode]);
 
-  if (isLoading) {
+  // ─── LOADING STATE (edit mode only) ───
+  if (mode === "edit" && isLoading) {
     return (
       <div className="flex items-center gap-2 text-gray-500 text-sm py-3">
         <Loader2 className="w-4 h-4 animate-spin" />
@@ -163,7 +226,7 @@ export default function PartVendorSourcesSection({
     );
   }
 
-  // View mode
+  // ─── VIEW MODE ───
   if (!isEditing) {
     if (sources.length === 0) {
       return (
@@ -172,15 +235,14 @@ export default function PartVendorSourcesSection({
         </div>
       );
     }
-
     return (
       <div className="space-y-1.5">
-        {sources.map((s) => {
+        {sources.map((s, idx) => {
           const v = vendors.find(v => v.id === s.vendor_id);
           const isCheapest = s.unit_cost > 0 && s.unit_cost <= cheapestCost && sources.length > 1;
           return (
             <SourceViewRow
-              key={s.id || s._tempId}
+              key={s.id || s._tempId || idx}
               source={s}
               vendorName={v?.vendor_name || "Unknown"}
               isCheapest={isCheapest}
@@ -191,25 +253,28 @@ export default function PartVendorSourcesSection({
     );
   }
 
-  // Edit mode
+  // ─── EDIT MODE ───
   return (
     <div className="space-y-2">
       {sources.length > 0 && (
         <div className="space-y-2">
-          {sources.map((s, idx) => (
-            <SourceEditRow
-              key={s.id || s._tempId}
-              source={s}
-              vendors={vendors}
-              isCheapest={s.unit_cost > 0 && s.unit_cost <= cheapestCost && sources.length > 1}
-              onFieldChange={(field, val) => handleFieldChange(idx, field, val)}
-              onSetPreferred={() => handleSetPreferred(idx)}
-              onRemove={() => handleRemove(idx)}
-            />
-          ))}
+          {sources.map((s, idx) => {
+            const isDuplicate = hasDuplicate(sources, idx, s.vendor_id, s.order_url);
+            return (
+              <SourceEditRow
+                key={s.id || s._tempId || idx}
+                source={s}
+                vendors={vendors}
+                isCheapest={s.unit_cost > 0 && s.unit_cost <= cheapestCost && sources.length > 1}
+                isDuplicate={isDuplicate}
+                onFieldChange={(field, val) => handleFieldChange(idx, field, val)}
+                onSetPreferred={() => handleSetPreferred(idx)}
+                onRemove={() => handleRemove(idx)}
+              />
+            );
+          })}
         </div>
       )}
-
       <Button
         type="button"
         variant="outline"
@@ -271,15 +336,20 @@ function SourceViewRow({ source, vendorName, isCheapest }) {
 }
 
 /* ─── Edit Row ─── */
-function SourceEditRow({ source, vendors, isCheapest, onFieldChange, onSetPreferred, onRemove }) {
-  // CANONICAL: Only show PART vendors in vendor source selector
+function SourceEditRow({ source, vendors, isCheapest, isDuplicate, onFieldChange, onSetPreferred, onRemove }) {
   const activeVendors = vendors.filter(v => v.active !== false && v.vendor_type === 'PART');
 
   return (
     <div className={cn(
       "p-3 rounded-lg border space-y-2",
+      isDuplicate ? "bg-red-900/20 border-red-700/50" : 
       source.is_preferred ? "bg-yellow-900/10 border-yellow-700/30" : "bg-gray-800/30 border-gray-700/50"
     )}>
+      {isDuplicate && (
+        <div className="text-[10px] text-red-400 font-semibold">
+          ⚠ Duplicate vendor + URL — remove before saving
+        </div>
+      )}
       {/* Row 1: Vendor + preferred + delete */}
       <div className="flex items-center gap-2">
         <Select
