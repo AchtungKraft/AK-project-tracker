@@ -82,21 +82,29 @@ export default function CoverageDebugPanel({ item }) {
         )}
       </div>
 
-      {/* Section 4: Flags */}
-      {hasAnyFlag && (
-        <div className="border-t border-gray-800 pt-1.5 space-y-1">
-          <div className="text-gray-600 text-[9px]">FLAGS</div>
-          {flags.has_unallocated_stock && (
-            <FlagRow color="amber" text="Stock exists but not allocated" />
-          )}
-          {flags.has_po_but_not_covered && (
-            <FlagRow color="amber" text="PO exists but not contributing to coverage" />
-          )}
-          {flags.is_dead_zone && (
-            <FlagRow color="red" text="Dead zone: stock present but still needs order" />
-          )}
-        </div>
-      )}
+      {/* Section 4: Coverage Explanation */}
+      {(() => {
+        const explanation = getCoverageExplanation({ ...item, coverage_total: coverageTotal, debug_flags: flags });
+        if (!explanation) return null;
+        return (
+          <div className="border-t border-gray-800 pt-1.5 space-y-1">
+            <div className="text-gray-600 text-[9px]">STATUS</div>
+            <div className={cn(
+              "px-2 py-1 rounded border text-[10px] leading-snug",
+              explanation.severity === 'red' ? "bg-red-950/40 border-red-800/40 text-red-400" :
+              explanation.severity === 'green' ? "bg-emerald-950/40 border-emerald-800/40 text-emerald-400" :
+              "bg-amber-950/40 border-amber-800/40 text-amber-400"
+            )}>
+              {explanation.text}
+            </div>
+            {import.meta.env.DEV && hasAnyFlag && (
+              <div className="text-[9px] text-gray-600 mt-0.5">
+                {JSON.stringify(flags)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -110,14 +118,30 @@ function Row({ label, value, color = "text-gray-300" }) {
   );
 }
 
-function FlagRow({ color, text }) {
-  const colorMap = {
-    red: "bg-red-950/40 border-red-800/40 text-red-400",
-    amber: "bg-amber-950/40 border-amber-800/40 text-amber-400",
-  };
-  return (
-    <div className={cn("px-1.5 py-0.5 rounded border text-[9px]", colorMap[color] || colorMap.amber)}>
-      ⚑ {text}
-    </div>
-  );
+/**
+ * Resolves debug flags + coverage state into a human-readable explanation with severity.
+ * Returns { text, severity } or null if no special state.
+ */
+function getCoverageExplanation(item) {
+  const flags = item.debug_flags || {};
+  const coverageTotal = item.coverage_total ?? 0;
+  const required = item.required_total ?? 0;
+
+  if (flags.is_dead_zone) {
+    return { text: "No available stock — all inventory is reserved to other builds", severity: "red" };
+  }
+  if (flags.has_po_but_not_covered) {
+    return { text: "Item was received but not applied to this build", severity: "amber" };
+  }
+  if (flags.has_unallocated_stock) {
+    return { text: "Stock available but not yet assigned to this build", severity: "amber" };
+  }
+  if (required > 0 && coverageTotal >= required) {
+    return { text: "All required parts are accounted for", severity: "green" };
+  }
+  if (required > 0 && coverageTotal < required) {
+    const remaining = required - coverageTotal;
+    return { text: `${coverageTotal} of ${required} covered — ${remaining} still needs to be ordered`, severity: "red" };
+  }
+  return null;
 }
