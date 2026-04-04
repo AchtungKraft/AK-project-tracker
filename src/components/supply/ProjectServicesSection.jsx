@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,56 +8,24 @@ import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceCommitmentCard from "@/components/supply/ServiceCommitmentCard";
 import AddServiceModal from "@/components/supply/AddServiceModal";
+import { useServicesView, useInvalidateServicesView } from "@/components/supply/useServicesView";
 
 export default function ProjectServicesSection({ projectId, projectName }) {
-  const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: commitments = [], isLoading, refetch } = useQuery({
-    queryKey: ["serviceCommitments", projectId],
-    queryFn: () => base44.entities.ServiceCommitment.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
-
-  const { data: services = [] } = useQuery({
-    queryKey: ["services-catalog"],
-    queryFn: () => base44.entities.Service.list(),
-  });
-
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
-    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
-  });
-
-  const servicesMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services]);
-  const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
+  // Canonical read model — scoped to this project
+  const { commitments, summary, isLoading, refetch } = useServicesView({ project_id: projectId });
+  const invalidateAll = useInvalidateServicesView();
 
   const filtered = useMemo(() => {
     if (!searchTerm) return commitments;
     const term = searchTerm.toLowerCase();
     return commitments.filter(c =>
       c.description?.toLowerCase().includes(term) ||
-      servicesMap.get(c.service_id)?.name?.toLowerCase().includes(term)
+      c.service_name?.toLowerCase().includes(term)
     );
-  }, [commitments, searchTerm, servicesMap]);
-
-  const summary = useMemo(() => {
-    let totalCost = 0, totalBillable = 0;
-    const byStatus = { planned: 0, ordered: 0, completed: 0, billed: 0 };
-    for (const c of commitments) {
-      byStatus[c.status || 'planned']++;
-      // Prefer line-item totals, fall back to legacy
-      totalCost += c.total_cost > 0 ? c.total_cost : ((c.actual_cost ?? c.estimated_cost ?? 0) * (c.quantity || 1));
-      totalBillable += c.total_billable || 0;
-    }
-    const margin = totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : 0;
-    return { totalCost, totalBillable, margin, count: commitments.length, byStatus };
-  }, [commitments]);
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["serviceCommitments", projectId] });
-  };
+  }, [commitments, searchTerm]);
 
   const handleStatusChange = async (commitmentId, newStatus) => {
     try {
@@ -68,26 +35,24 @@ export default function ProjectServicesSection({ projectId, projectName }) {
         new_status: newStatus,
       });
       toast.success(`Service marked as ${newStatus}`);
-      invalidate();
+      invalidateAll();
     } catch (err) {
       toast.error(err.message);
     }
   };
 
-  // Called after delete confirmation modal succeeds — skipConfirm flag from card
   const handleDelete = async (commitmentId, alreadyDeleted) => {
     if (alreadyDeleted) {
-      invalidate();
+      invalidateAll();
       return;
     }
-    // Fallback direct delete (shouldn't normally be reached)
     try {
       await base44.functions.invoke("executeServiceAction", {
         action_type: "DELETE",
         commitment_id: commitmentId,
       });
       toast.success("Service deleted");
-      invalidate();
+      invalidateAll();
     } catch (err) {
       toast.error(err.message);
     }
@@ -121,20 +86,20 @@ export default function ProjectServicesSection({ projectId, projectName }) {
         </div>
       </div>
 
-      {/* Summary Strip */}
-      {summary.count > 0 && (
+      {/* Summary Strip — uses canonical summary from backend */}
+      {summary.total > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-          <SummaryCell label="Services" value={summary.count} color="text-white" />
-          <SummaryCell label="Total Cost" value={formatCurrencyUSD(summary.totalCost)} color="text-white" mono />
-          <SummaryCell label="Total Billable" value={formatCurrencyUSD(summary.totalBillable)} color="text-green-400" mono />
-          <SummaryCell label="Margin" value={`${summary.margin.toFixed(1)}%`} color={summary.margin >= 0 ? "text-green-400" : "text-red-400"} />
-          <SummaryCell label="Completed" value={summary.byStatus.completed + summary.byStatus.billed} color="text-blue-400" />
-          <SummaryCell label="Pending" value={summary.byStatus.planned + summary.byStatus.ordered} color="text-amber-400" />
+          <SummaryCell label="Services" value={summary.total} color="text-white" />
+          <SummaryCell label="Total Cost" value={formatCurrencyUSD(summary.total_cost)} color="text-white" mono />
+          <SummaryCell label="Total Billable" value={formatCurrencyUSD(summary.total_billable)} color="text-green-400" mono />
+          <SummaryCell label="Margin" value={`${summary.margin_pct.toFixed(1)}%`} color={summary.margin_pct >= 0 ? "text-green-400" : "text-red-400"} />
+          <SummaryCell label="Completed" value={(summary.by_status.completed || 0) + (summary.by_status.billed || 0)} color="text-blue-400" />
+          <SummaryCell label="Pending" value={(summary.by_status.planned || 0) + (summary.by_status.ordered || 0)} color="text-amber-400" />
         </div>
       )}
 
       {/* Search */}
-      {summary.count > 3 && (
+      {summary.total > 3 && (
         <div className="relative max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <Input
@@ -163,11 +128,9 @@ export default function ProjectServicesSection({ projectId, projectName }) {
             <ServiceCommitmentCard
               key={c.id}
               commitment={c}
-              serviceName={servicesMap.get(c.service_id)?.name || "Unknown Service"}
-              vendorName={vendorsMap.get(c.vendor_id)?.name}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
-              onTotalsChanged={invalidate}
+              onTotalsChanged={invalidateAll}
             />
           ))}
         </div>
@@ -179,7 +142,7 @@ export default function ProjectServicesSection({ projectId, projectName }) {
           projectName={projectName}
           open={showAddModal}
           onClose={() => setShowAddModal(false)}
-          onSuccess={invalidate}
+          onSuccess={invalidateAll}
         />
       )}
     </div>

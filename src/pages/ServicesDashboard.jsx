@@ -1,7 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,14 +12,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Truck, Search, RefreshCw, Plus, DollarSign,
-  Filter, Package, ArrowRight
+  Truck, Search, RefreshCw, Plus, Package,
 } from "lucide-react";
 import { toast } from "sonner";
+import { base44 } from "@/api/base44Client";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceCommitmentCard from "@/components/supply/ServiceCommitmentCard";
 import AddServiceModal from "@/components/supply/AddServiceModal";
 import ServiceCatalogManager from "@/components/supply/ServiceCatalogManager";
+import { useServicesView, useInvalidateServicesView } from "@/components/supply/useServicesView";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
@@ -32,41 +31,16 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ServicesDashboard() {
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("commitments");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addModalProjectId, setAddModalProjectId] = useState(null);
-  const [editCostModal, setEditCostModal] = useState(null);
 
-  // Data queries
-  const { data: commitments = [], isLoading, refetch } = useQuery({
-    queryKey: ["allServiceCommitments"],
-    queryFn: () => base44.entities.ServiceCommitment.list("-created_date", 500),
-  });
-
-  const { data: services = [] } = useQuery({
-    queryKey: ["services-catalog"],
-    queryFn: () => base44.entities.Service.list(),
-  });
-
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
-    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
-  });
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects-for-services"],
-    queryFn: () => base44.entities.Project.list("-created_date", 200),
-  });
-
-  // Lookup maps
-  const servicesMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services]);
-  const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
-  const projectsMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
+  // Canonical read model — no client-side joins needed
+  const { commitments, summary, isLoading, refetch } = useServicesView();
+  const invalidateAll = useInvalidateServicesView();
 
   // Filtered commitments
   const filtered = useMemo(() => {
@@ -78,44 +52,33 @@ export default function ServicesDashboard() {
       const term = searchTerm.toLowerCase();
       list = list.filter(c =>
         c.description?.toLowerCase().includes(term) ||
-        servicesMap.get(c.service_id)?.name?.toLowerCase().includes(term) ||
-        projectsMap.get(c.project_id)?.name?.toLowerCase().includes(term)
+        c.service_name?.toLowerCase().includes(term) ||
+        c.project_name?.toLowerCase().includes(term)
       );
     }
     return list;
-  }, [commitments, statusFilter, projectFilter, vendorFilter, searchTerm, servicesMap, projectsMap]);
+  }, [commitments, statusFilter, projectFilter, vendorFilter, searchTerm]);
 
-  // Summary
-  const summary = useMemo(() => {
-    const byStatus = { planned: 0, ordered: 0, completed: 0, billed: 0 };
-    let totalCost = 0, totalBillable = 0;
+  // Unique projects & vendors in commitments for filter dropdowns
+  const projectsInUse = useMemo(() => {
+    const seen = new Map();
     for (const c of commitments) {
-      byStatus[c.status || "planned"]++;
-      totalCost += c.total_cost > 0 ? c.total_cost : ((c.actual_cost ?? c.estimated_cost ?? 0) * (c.quantity || 1));
-      totalBillable += c.total_billable || 0;
+      if (c.project_id && c.project_name && !seen.has(c.project_id)) {
+        seen.set(c.project_id, { id: c.project_id, name: c.project_name });
+      }
     }
-    const margin = totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : 0;
-    return { byStatus, totalCost, totalBillable, margin, total: commitments.length };
+    return [...seen.values()];
   }, [commitments]);
 
-  // Unique projects & vendors in commitments for filters
-  const projectsInUse = useMemo(() => {
-    const ids = [...new Set(commitments.map(c => c.project_id))];
-    return ids.map(id => projectsMap.get(id)).filter(Boolean);
-  }, [commitments, projectsMap]);
-
   const vendorsInUse = useMemo(() => {
-    const ids = [...new Set(commitments.map(c => c.vendor_id).filter(Boolean))];
-    return ids.map(id => vendorsMap.get(id)).filter(Boolean);
-  }, [commitments, vendorsMap]);
-
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ["allServiceCommitments"] });
-  };
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["allServiceCommitments"] });
-  };
+    const seen = new Map();
+    for (const c of commitments) {
+      if (c.vendor_id && c.vendor_name && !seen.has(c.vendor_id)) {
+        seen.set(c.vendor_id, { id: c.vendor_id, name: c.vendor_name });
+      }
+    }
+    return [...seen.values()];
+  }, [commitments]);
 
   const handleStatusChange = async (commitmentId, newStatus) => {
     try {
@@ -125,16 +88,15 @@ export default function ServicesDashboard() {
         new_status: newStatus,
       });
       toast.success(`Service marked as ${newStatus}`);
-      invalidate();
+      invalidateAll();
     } catch (err) {
       toast.error(err.message);
     }
   };
 
-  // Called after delete confirmation modal succeeds — alreadyDeleted flag from card
   const handleDelete = async (commitmentId, alreadyDeleted) => {
     if (alreadyDeleted) {
-      invalidate();
+      invalidateAll();
       return;
     }
     try {
@@ -143,15 +105,10 @@ export default function ServicesDashboard() {
         commitment_id: commitmentId,
       });
       toast.success("Service deleted");
-      invalidate();
+      invalidateAll();
     } catch (err) {
       toast.error(err.message);
     }
-  };
-
-  const handleAddService = () => {
-    setAddModalProjectId(null);
-    setShowAddModal(true);
   };
 
   return (
@@ -172,31 +129,31 @@ export default function ServicesDashboard() {
             <Button onClick={() => refetch()} variant="outline" size="sm" className="border-gray-700 text-white">
               <RefreshCw className="w-4 h-4" />
             </Button>
-            <Button onClick={() => handleAddService()} size="sm" className="gap-1">
+            <Button onClick={() => setShowAddModal(true)} size="sm" className="gap-1">
               <Plus className="w-4 h-4" />
               Add Service
             </Button>
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards — uses canonical summary from backend */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2">
           <SummaryCard label="Total" value={summary.total} color="text-white" />
-          <SummaryCard label="Planned" value={summary.byStatus.planned} color="text-gray-400" />
-          <SummaryCard label="Ordered" value={summary.byStatus.ordered} color="text-purple-400" />
-          <SummaryCard label="Completed" value={summary.byStatus.completed} color="text-blue-400" />
-          <SummaryCard label="Billed" value={summary.byStatus.billed} color="text-green-400" />
+          <SummaryCard label="Planned" value={summary.by_status.planned} color="text-gray-400" />
+          <SummaryCard label="Ordered" value={summary.by_status.ordered} color="text-purple-400" />
+          <SummaryCard label="Completed" value={summary.by_status.completed} color="text-blue-400" />
+          <SummaryCard label="Billed" value={summary.by_status.billed} color="text-green-400" />
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Total Cost</p>
-            <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(summary.totalCost)}</p>
+            <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(summary.total_cost)}</p>
           </div>
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Billable</p>
-            <p className="text-lg font-bold text-green-400 font-mono">{formatCurrencyUSD(summary.totalBillable)}</p>
+            <p className="text-lg font-bold text-green-400 font-mono">{formatCurrencyUSD(summary.total_billable)}</p>
           </div>
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Margin</p>
-            <p className={`text-lg font-bold ${summary.margin >= 0 ? 'text-green-400' : 'text-red-400'}`}>{summary.margin.toFixed(1)}%</p>
+            <p className={`text-lg font-bold ${summary.margin_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>{summary.margin_pct.toFixed(1)}%</p>
           </div>
         </div>
 
@@ -270,7 +227,7 @@ export default function ServicesDashboard() {
                 <CardContent className="p-8 text-center">
                   <Truck className="w-12 h-12 mx-auto mb-3 text-gray-600" />
                   <p className="text-gray-400">No service commitments found</p>
-                  <Button variant="outline" size="sm" className="mt-3 border-gray-700 text-white" onClick={() => handleAddService()}>
+                  <Button variant="outline" size="sm" className="mt-3 border-gray-700 text-white" onClick={() => setShowAddModal(true)}>
                     <Plus className="w-4 h-4 mr-1" /> Add Service
                   </Button>
                 </CardContent>
@@ -278,19 +235,13 @@ export default function ServicesDashboard() {
             ) : (
               <div className="space-y-2">
                 {filtered.map(c => (
-                  <div key={c.id} className="relative">
-                    <div className="pt-0">
-                      <ServiceCommitmentCard
-                        commitment={c}
-                        serviceName={servicesMap.get(c.service_id)?.name || "Unknown"}
-                        vendorName={vendorsMap.get(c.vendor_id)?.name}
-                        projectName={projectsMap.get(c.project_id)?.name}
-                        onStatusChange={handleStatusChange}
-                        onDelete={handleDelete}
-                        onTotalsChanged={invalidateAll}
-                      />
-                    </div>
-                  </div>
+                  <ServiceCommitmentCard
+                    key={c.id}
+                    commitment={c}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDelete}
+                    onTotalsChanged={invalidateAll}
+                  />
                 ))}
               </div>
             )}
@@ -303,14 +254,14 @@ export default function ServicesDashboard() {
         </Tabs>
       </div>
 
-      {/* Add Modal — unified: handles both project-scoped and global */}
+      {/* Add Modal */}
       {showAddModal && (
         <AddServiceModal
           projectId={null}
           projectName={null}
           open={showAddModal}
-          onClose={() => { setShowAddModal(false); setAddModalProjectId(null); }}
-          onSuccess={invalidate}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={invalidateAll}
         />
       )}
     </div>
@@ -322,55 +273,6 @@ function SummaryCard({ label, value, color }) {
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
       <p className="text-xs text-gray-500">{label}</p>
       <p className={`text-lg font-bold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-// ProjectPickerForService removed — project selection is now built into AddServiceModal
-
-function EditCostModalGlobal({ commitment, onClose, onSuccess }) {
-  const [estimated, setEstimated] = useState(String(commitment.estimated_cost || ""));
-  const [actual, setActual] = useState(String(commitment.actual_cost ?? ""));
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await base44.functions.invoke("executeServiceAction", {
-        action_type: "UPDATE_COST",
-        commitment_id: commitment.id,
-        estimated_cost: parseFloat(estimated) || 0,
-        actual_cost: actual !== "" ? parseFloat(actual) : undefined,
-      });
-      toast.success("Cost updated");
-      onSuccess();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-sm w-full p-4 space-y-3" onClick={e => e.stopPropagation()}>
-        <h3 className="text-white font-semibold flex items-center gap-2">
-          <DollarSign className="w-4 h-4" /> Edit Cost
-        </h3>
-        <p className="text-sm text-gray-400">{commitment.description}</p>
-        <div>
-          <label className="text-xs text-gray-400">Estimated Cost</label>
-          <Input type="number" step="0.01" value={estimated} onChange={e => setEstimated(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400">Actual Cost</label>
-          <Input type="number" step="0.01" value={actual} onChange={e => setActual(e.target.value)} placeholder="Enter when known" className="bg-gray-800 border-gray-600 text-white mt-1" />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onClose} className="flex-1 border-gray-600">Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="flex-1">{saving ? "Saving..." : "Save"}</Button>
-        </div>
-      </div>
     </div>
   );
 }

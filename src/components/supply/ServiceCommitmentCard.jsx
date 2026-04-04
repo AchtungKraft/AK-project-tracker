@@ -13,7 +13,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceLineItemManager from "@/components/supply/ServiceLineItemManager";
 import EditServiceModal from "@/components/supply/EditServiceModal";
 import DeleteServiceConfirmModal from "@/components/supply/DeleteServiceConfirmModal";
-import ServiceCostBadge, { getServiceMarginPct } from "@/components/supply/ServiceCostBadge";
+import ServiceCostBadge from "@/components/supply/ServiceCostBadge";
 import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -35,11 +35,24 @@ const NEXT_LABEL = {
   completed: "Mark Billed",
 };
 
+/**
+ * ServiceCommitmentCard — Renders a single enriched service commitment.
+ *
+ * Accepts pre-enriched data from getServicesView read model.
+ * Falls back to legacy prop-based names for backward compatibility.
+ *
+ * Props:
+ *  - commitment: enriched commitment from getServicesView (has service_name, vendor_name, project_name, total_cost, margin_pct)
+ *  - serviceName?: string (legacy — used if commitment.service_name missing)
+ *  - vendorName?: string (legacy)
+ *  - projectName?: string (legacy)
+ *  - onStatusChange, onDelete, onTotalsChanged
+ */
 export default function ServiceCommitmentCard({
   commitment,
-  serviceName,
-  vendorName,
-  projectName,
+  serviceName: legacyServiceName,
+  vendorName: legacyVendorName,
+  projectName: legacyProjectName,
   onStatusChange,
   onDelete,
   onTotalsChanged,
@@ -51,11 +64,15 @@ export default function ServiceCommitmentCard({
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.planned;
   const nextStatus = NEXT_STATUS[status];
 
-  // Prefer line-item-derived totals, fall back to legacy fields
-  const totalCost = commitment.total_cost > 0 ? commitment.total_cost : (commitment.actual_cost ?? commitment.estimated_cost ?? 0);
+  // Use canonical pre-joined names; fall back to legacy props
+  const serviceName = commitment.service_name || legacyServiceName || "Unknown";
+  const vendorName = commitment.vendor_name || legacyVendorName;
+  const projectName = commitment.project_name || legacyProjectName;
+
+  // Use canonical cost/margin from read model
+  const totalCost = commitment.total_cost || 0;
   const totalBillable = commitment.total_billable || 0;
-  const hasLineItems = commitment.total_cost > 0;
-  const margin = getServiceMarginPct(commitment);
+  const margin = commitment.margin_pct ?? (totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : null);
 
   return (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg hover:border-gray-600 transition-colors">
@@ -105,7 +122,7 @@ export default function ServiceCommitmentCard({
               <span className="text-[10px] font-mono text-green-400">{formatCurrencyUSD(totalBillable)}</span>
               {margin != null && (
                 <span className={`text-[10px] ${margin >= 0 ? 'text-green-500' : 'text-red-400'}`}>
-                  {margin.toFixed(0)}%
+                  {typeof margin === 'number' ? margin.toFixed(0) : '0'}%
                 </span>
               )}
             </div>

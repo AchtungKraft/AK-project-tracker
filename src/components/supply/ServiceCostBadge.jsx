@@ -40,9 +40,8 @@ function BadgeChip({ config, className }) {
 export default function ServiceCostBadge({ commitment, className }) {
   if (!commitment) return null;
 
-  const totalCost = commitment.total_cost > 0
-    ? commitment.total_cost
-    : (commitment.actual_cost ?? commitment.estimated_cost ?? 0);
+  // Use canonical total_cost from read model (already resolved by backend)
+  const totalCost = commitment.total_cost || 0;
   const totalBillable = commitment.total_billable || 0;
   const status = commitment.status || 'planned';
   const hasCostOverride = commitment.cost_override === true;
@@ -79,11 +78,11 @@ export default function ServiceCostBadge({ commitment, className }) {
 /**
  * getServiceMarginPct - Compute margin for a service commitment
  * Matches Parts margin logic: (retail - cost) / retail * 100
+ * Uses canonical total_cost from read model.
  */
 export function getServiceMarginPct(commitment) {
-  const totalCost = commitment?.total_cost > 0
-    ? commitment.total_cost
-    : (commitment?.actual_cost ?? commitment?.estimated_cost ?? 0);
+  // Use canonical total_cost from read model (already resolved by backend)
+  const totalCost = commitment?.total_cost || 0;
   const totalBillable = commitment?.total_billable || 0;
   if (totalBillable <= 0) return null;
   return ((totalBillable - totalCost) / totalBillable) * 100;
