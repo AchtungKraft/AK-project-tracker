@@ -12,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Star, ExternalLink, Loader2, TrendingDown,
+  Plus, Trash2, Star, ExternalLink, Loader2, TrendingDown, UserPlus,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -46,6 +47,7 @@ export default function PartVendorSourcesSection({
   vendors = [],
   isEditing,
   onPreferredChange, // (vendor_id, unit_cost) => void — syncs to Part form
+  onNewVendor, // () => void — opens canonical vendor creation modal
 
   // mode="edit" props
   partId,
@@ -112,6 +114,7 @@ export default function PartVendorSourcesSection({
         vendor_part_number: "",
         unit_cost: 0,
         order_url: "",
+        notes: "",
         is_preferred: (prev || []).length === 0,
         is_active: true,
       },
@@ -195,6 +198,7 @@ export default function PartVendorSourcesSection({
         order_url: s.order_url || "",
         is_preferred: s.is_preferred || false,
         is_active: true,
+        notes: s.notes || "",
       };
 
       if (s.id && !s._isNew) {
@@ -275,16 +279,30 @@ export default function PartVendorSourcesSection({
           })}
         </div>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleAdd}
-        className="border-gray-600 text-gray-300 gap-1 w-full"
-      >
-        <Plus className="w-3 h-3" />
-        Add Vendor Source
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleAdd}
+          className="border-gray-600 text-gray-300 gap-1 flex-1"
+        >
+          <Plus className="w-3 h-3" />
+          Add Source
+        </Button>
+        {onNewVendor && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onNewVendor}
+            className="border-blue-700 text-blue-400 gap-1"
+          >
+            <UserPlus className="w-3 h-3" />
+            New Vendor
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -424,6 +442,15 @@ function SourceEditRow({ source, vendors, isCheapest, isDuplicate, onFieldChange
           className="bg-gray-800 border-gray-700 text-white h-7 text-xs"
         />
       </div>
+
+      {/* Row 3: Notes */}
+      <Textarea
+        placeholder="Source notes..."
+        value={source.notes || ""}
+        onChange={(e) => onFieldChange("notes", e.target.value)}
+        className="bg-gray-800 border-gray-700 text-white text-xs min-h-[28px] h-7 py-1"
+        rows={1}
+      />
     </div>
   );
 }

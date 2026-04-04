@@ -178,6 +178,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           is_preferred: source.is_preferred || false,
           is_active: true,
           sort_order: source.sort_order || 0,
+          notes: source.notes || '',
         });
       }
       
@@ -316,6 +317,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
         vendor_part_number: '',
         unit_cost: 0,
         order_url: '',
+        notes: '',
         is_preferred: prev.length === 0,
         sort_order: prev.length,
       },
@@ -443,11 +445,41 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       const newItem = await mutation(data);
       await queryClient.invalidateQueries({ queryKey: [queryKey] });
       
-      if (entityType === 'PartCategory') setFormData({ ...formData, part_category_id: newItem.id });
-      else if (entityType === 'Vendor') setFormData({ ...formData, default_vendor_id: newItem.id });
-      else if (entityType === 'CarMake') setFormData({ ...formData, car_make_id: newItem.id });
-      else if (entityType === 'CarModel') setFormData({ ...formData, car_model_id: newItem.id });
-      else if (entityType === 'CarYear') setFormData({ ...formData, car_year_id: newItem.id });
+      if (entityType === 'PartCategory') {
+        setFormData(f => ({ ...f, part_category_id: newItem.id }));
+      } else if (entityType === 'Vendor') {
+        // Auto-insert created vendor into first empty source row, or add a new one
+        await queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
+        setVendorSources(prev => {
+          const emptyIdx = prev.findIndex(s => !s.vendor_id);
+          if (emptyIdx >= 0) {
+            const updated = [...prev];
+            updated[emptyIdx] = { ...updated[emptyIdx], vendor_id: newItem.id };
+            return updated;
+          }
+          return [
+            ...prev,
+            {
+              _tempId: `new_${Date.now()}`,
+              vendor_id: newItem.id,
+              vendor_part_number: '',
+              unit_cost: 0,
+              order_url: '',
+              notes: '',
+              is_preferred: prev.length === 0,
+              sort_order: prev.length,
+            },
+          ];
+        });
+        // Sync preferred to form
+        setFormData(f => ({ ...f, default_vendor_id: newItem.id }));
+      } else if (entityType === 'CarMake') {
+        setFormData(f => ({ ...f, car_make_id: newItem.id }));
+      } else if (entityType === 'CarModel') {
+        setFormData(f => ({ ...f, car_model_id: newItem.id }));
+      } else if (entityType === 'CarYear') {
+        setFormData(f => ({ ...f, car_year_id: newItem.id }));
+      }
       
       toast.success(`${entityType} created`);
       setShowCreateModal(null);
@@ -646,12 +678,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
 
             {/* Vendor Sources Section — UNIFIED component, mode=create */}
             <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-gray-300 text-sm">Vendor Sources</Label>
-                <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
-                  + New Vendor
-                </button>
-              </div>
+              <Label className="text-gray-300 text-sm">Vendor Sources</Label>
               <PartVendorSourcesSection
                 mode="create"
                 vendors={activeVendors}
@@ -661,6 +688,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                 onRemove={handleRemoveVendorSource}
                 onFieldChange={handleVendorSourceFieldChange}
                 onSetPreferred={handleSetVendorSourcePreferred}
+                onNewVendor={() => setShowCreateModal('Vendor')}
               />
               <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost.</p>
             </div>

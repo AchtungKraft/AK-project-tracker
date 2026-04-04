@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import VendorFormFields from "@/components/admin/VendorFormFields";
 
 export default function CreateInlineModal({ entityType, onClose, onCreate, parentData = {} }) {
   const [formData, setFormData] = useState(() => {
@@ -23,6 +25,9 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       color: "#3B82F6"
     };
     
+    if (entityType === 'Vendor') {
+      return { ...base, vendor_type: 'PART', vendor_group_id: '', vendor_name: '' };
+    }
     if (entityType === 'CarModel' && parentData.car_make_id) {
       return { ...base, car_make_id: parentData.car_make_id };
     }
@@ -52,11 +57,11 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     enabled: entityType === 'Location',
   });
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+  const { data: vendorGroups = [] } = useQuery({
+    queryKey: ['vendorGroups'],
     queryFn: async () => {
-      const list = await base44.entities.Vendor.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      const list = await base44.entities.VendorGroup.list();
+      return list.filter(g => g.is_active !== false);
     },
     enabled: entityType === 'Vendor',
   });
@@ -156,66 +161,13 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
         );
 
       case 'Vendor':
-        const parentVendors = vendors.filter(v => !v.parent_id && v.active);
         return (
-          <>
-            <div>
-              <Label className="text-gray-400 text-xs">Vendor Name *</Label>
-              <Input
-                value={formData.vendor_name || ''}
-                onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                placeholder="e.g., OEM Parts Supplier"
-                className="bg-gray-800 border-gray-700 text-white"
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Parent Vendor</Label>
-              <Select
-                value={formData.parent_id || 'none'}
-                onValueChange={(value) => setFormData({ ...formData, parent_id: value === 'none' ? '' : value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="None (Top Level)" />
-                </SelectTrigger>
-                <SelectContent style={{ zIndex: 999999 }}>
-                  <SelectItem value="none">None (Top Level)</SelectItem>
-                  {parentVendors.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Website</Label>
-              <Input
-                type="url"
-                value={formData.website || ''}
-                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                placeholder="https://vendor.com"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Contact Info</Label>
-              <Input
-                value={formData.contact_info || ''}
-                onChange={(e) => setFormData({ ...formData, contact_info: e.target.value })}
-                placeholder="Phone, email, etc."
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Notes</Label>
-              <Textarea
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Additional notes..."
-                className="bg-gray-800 border-gray-700 text-white"
-                rows={2}
-              />
-            </div>
-          </>
+          <VendorFormFields
+            data={formData}
+            onChange={setFormData}
+            groups={vendorGroups}
+            showType={false}
+          />
         );
 
       case 'Location':
@@ -434,7 +386,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
       case 'PartCategory':
         return formData.name?.trim();
       case 'Vendor':
-        return formData.vendor_name?.trim();
+        return formData.vendor_name?.trim() && formData.vendor_group_id;
       case 'Location':
         return formData.location_area?.trim();
       case 'CarMake':
@@ -451,7 +403,10 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent 
-        className="bg-gray-900 border border-red-900/30 text-white max-w-md"
+        className={cn(
+          "bg-gray-900 border border-red-900/30 text-white",
+          entityType === 'Vendor' ? 'max-w-2xl' : 'max-w-md'
+        )}
         style={{ zIndex: 99999 }}
       >
         <DialogHeader>

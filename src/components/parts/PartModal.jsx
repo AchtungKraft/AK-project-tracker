@@ -624,14 +624,15 @@ export default function PartModal({ part, partId, onClose }) {
       if (entityType === 'Vendor') {
         await queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
         await queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
+        await queryClient.invalidateQueries({ queryKey: ['partVendorSources'] });
       }
       
-      if (entityType === 'PartCategory') setFormData({ ...formData, part_category_id: newItem.id });
-      else if (entityType === 'Vendor') setFormData({ ...formData, default_vendor_id: newItem.id });
-      else if (entityType === 'Location') setFormData({ ...formData, location_id: newItem.id });
-      else if (entityType === 'CarMake') setFormData({ ...formData, car_make_id: newItem.id });
-      else if (entityType === 'CarModel') setFormData({ ...formData, car_model_id: newItem.id });
-      else if (entityType === 'CarYear') setFormData({ ...formData, car_year_id: newItem.id });
+      if (entityType === 'PartCategory') setFormData(f => ({ ...f, part_category_id: newItem.id }));
+      else if (entityType === 'Vendor') setFormData(f => ({ ...f, default_vendor_id: newItem.id }));
+      else if (entityType === 'Location') setFormData(f => ({ ...f, location_id: newItem.id }));
+      else if (entityType === 'CarMake') setFormData(f => ({ ...f, car_make_id: newItem.id }));
+      else if (entityType === 'CarModel') setFormData(f => ({ ...f, car_model_id: newItem.id }));
+      else if (entityType === 'CarYear') setFormData(f => ({ ...f, car_year_id: newItem.id }));
       
       toast.success(`${entityType} created`);
       setShowCreateModal(null);
@@ -1265,18 +1266,14 @@ export default function PartModal({ part, partId, onClose }) {
 
       {/* Vendor Sources Section (Edit Mode) — UNIFIED component */}
       <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-gray-300 text-sm">Vendor Sources</Label>
-          <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
-            + New Vendor
-          </button>
-        </div>
+        <Label className="text-gray-300 text-sm">Vendor Sources</Label>
         <PartVendorSourcesSection
           mode="edit"
           partId={activePart.id}
           vendors={vendors}
           isEditing={true}
           onPreferredChange={handlePreferredSourceChange}
+          onNewVendor={() => setShowCreateModal('Vendor')}
         />
         <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost.</p>
       </div>
