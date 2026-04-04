@@ -245,6 +245,7 @@ export default function GlobalNeedToOrder() {
                 Go to Receiving
               </Button>
             </div>
+          </div>
 
           {/* Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
