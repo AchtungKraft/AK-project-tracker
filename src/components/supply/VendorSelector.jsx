@@ -99,9 +99,14 @@ export default function VendorSelector({ onSelectVendor, vendorType = "PART" }) 
                           </div>
                           <div className="min-w-0">
                             <p className="text-white font-medium truncate">{v.vendor_name}</p>
-                            {v.website && (
-                              <p className="text-xs text-gray-500 truncate">{v.website}</p>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Badge variant="outline" className="text-[9px] text-gray-400 border-gray-600 bg-gray-800/50">
+                                {group.group_name}
+                              </Badge>
+                              {v.website && (
+                                <span className="text-[10px] text-gray-500 truncate">{v.website}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />

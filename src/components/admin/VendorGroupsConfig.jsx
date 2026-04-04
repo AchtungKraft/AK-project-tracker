@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Package, Truck } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Package, Truck, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import UnclassifiedVendorsPanel from "./UnclassifiedVendorsPanel";
 
 const TYPE_CONFIG = {
   PART: { label: "Part Vendors", icon: Package, color: "text-blue-400", bg: "bg-blue-900/30 border-blue-700/40" },
@@ -144,34 +145,41 @@ export default function VendorGroupsConfig() {
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <GroupColumn
-              title="Part Vendor Groups"
-              type="PART"
-              groups={partGroups}
-              editingId={editingId}
-              editData={editData}
-              onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0 }); }}
-              onSaveEdit={() => updateMutation.mutate({ id: editingId, data: { ...editData } })}
-              onCancelEdit={() => { setEditingId(null); setEditData(null); }}
-              onEditDataChange={setEditData}
-              onDelete={(id) => { if (confirm("Delete this group?")) deleteMutation.mutate(id); }}
-              isSaving={updateMutation.isPending}
-            />
-            <GroupColumn
-              title="Service Vendor Groups"
-              type="SERVICE"
-              groups={serviceGroups}
-              editingId={editingId}
-              editData={editData}
-              onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0 }); }}
-              onSaveEdit={() => updateMutation.mutate({ id: editingId, data: { ...editData } })}
-              onCancelEdit={() => { setEditingId(null); setEditData(null); }}
-              onEditDataChange={setEditData}
-              onDelete={(id) => { if (confirm("Delete this group?")) deleteMutation.mutate(id); }}
-              isSaving={updateMutation.isPending}
-            />
-          </div>
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <GroupColumn
+                title="Part Vendor Groups"
+                type="PART"
+                groups={partGroups}
+                editingId={editingId}
+                editData={editData}
+                onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0 }); }}
+                onSaveEdit={() => updateMutation.mutate({ id: editingId, data: { ...editData } })}
+                onCancelEdit={() => { setEditingId(null); setEditData(null); }}
+                onEditDataChange={setEditData}
+                onDelete={(id) => { if (confirm("Delete this group?")) deleteMutation.mutate(id); }}
+                isSaving={updateMutation.isPending}
+              />
+              <GroupColumn
+                title="Service Vendor Groups"
+                type="SERVICE"
+                groups={serviceGroups}
+                editingId={editingId}
+                editData={editData}
+                onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0 }); }}
+                onSaveEdit={() => updateMutation.mutate({ id: editingId, data: { ...editData } })}
+                onCancelEdit={() => { setEditingId(null); setEditData(null); }}
+                onEditDataChange={setEditData}
+                onDelete={(id) => { if (confirm("Delete this group?")) deleteMutation.mutate(id); }}
+                isSaving={updateMutation.isPending}
+              />
+            </div>
+
+            {/* Unclassified Vendors Section */}
+            <div className="border-t border-gray-700/50 pt-6">
+              <UnclassifiedVendorsPanel />
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

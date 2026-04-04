@@ -255,11 +255,23 @@ export default function VendorsConfig() {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <div className="w-4 h-4 rounded border border-gray-600" style={{ backgroundColor: vendor.color }} />
                         <span className="font-medium text-white" style={{ color: vendor.color }}>
                           {vendor.vendor_name}
                         </span>
+                        {vendor.vendor_group_id && (() => {
+                          const grp = vendorGroups.find(g => g.id === vendor.vendor_group_id);
+                          return grp ? (
+                            <Badge variant="outline" className="text-[9px] bg-gray-800/50 text-gray-400 border-gray-600">{grp.name}</Badge>
+                          ) : null;
+                        })()}
+                        {!vendor.vendor_type && (
+                          <Badge variant="outline" className="text-[9px] bg-red-900/30 text-red-400 border-red-700">No Type</Badge>
+                        )}
+                        {!vendor.vendor_group_id && (
+                          <Badge variant="outline" className="text-[9px] bg-amber-900/30 text-amber-400 border-amber-700">No Group</Badge>
+                        )}
                         {!vendor.active && (
                           <Badge variant="outline" className="text-xs bg-gray-800 text-gray-500">Inactive</Badge>
                         )}

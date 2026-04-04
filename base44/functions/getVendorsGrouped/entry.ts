@@ -15,20 +15,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'vendor_type must be PART or SERVICE' }, { status: 400 });
     }
 
-    // Fetch groups and vendors in parallel
-    // For PART type, also include legacy vendors without vendor_type set
-    const [allGroups, typedVendors, allVendorsRaw] = await Promise.all([
+    // Fetch groups and vendors — strict type filter, no legacy fallback
+    const [allGroups, allVendors] = await Promise.all([
       base44.entities.VendorGroup.filter({ vendor_type }),
       base44.entities.Vendor.filter({ vendor_type }),
-      vendor_type === 'PART' ? base44.entities.Vendor.filter({}) : Promise.resolve([]),
     ]);
-
-    // Merge: typed vendors + untyped legacy vendors (for PART only)
-    const typedIds = new Set(typedVendors.map(v => v.id));
-    const legacyUntyped = vendor_type === 'PART'
-      ? allVendorsRaw.filter(v => !v.vendor_type && !typedIds.has(v.id))
-      : [];
-    const allVendors = [...typedVendors, ...legacyUntyped];
 
     // Sort groups by sort_priority
     const activeGroups = allGroups
@@ -48,22 +39,16 @@ Deno.serve(async (req) => {
       vendors: activeVendors.filter(v => v.vendor_group_id === group.id),
     }));
 
-    // Ungrouped vendors (no group_id or group not found)
-    const groupedVendorIds = new Set(grouped.flatMap(g => g.vendors.map(v => v.id)));
-    const ungrouped = activeVendors.filter(v => !groupedVendorIds.has(v.id));
-
-    if (ungrouped.length > 0) {
-      grouped.push({
-        group_id: null,
-        group_name: 'Ungrouped',
-        sort_priority: 999,
-        vendors: ungrouped,
-      });
-    }
+    // Filter out UNCATEGORIZED from operational UI (hide_uncategorized param)
+    const body2 = body;
+    const hideUncategorized = body2.hide_uncategorized !== false; // default true
+    const finalGroups = hideUncategorized
+      ? grouped.filter(g => g.group_name !== 'UNCATEGORIZED' || g.vendors.length > 0)
+      : grouped;
 
     return Response.json({
       vendor_type,
-      groups: grouped,
+      groups: finalGroups,
       total_vendors: activeVendors.length,
     });
   } catch (error) {
