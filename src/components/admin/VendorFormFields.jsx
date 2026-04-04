@@ -18,10 +18,19 @@ import { Package, Truck } from "lucide-react";
 export default function VendorFormFields({ data, onChange, groups = [], showType = false, isLoading = false }) {
   const vendorType = (data.vendor_type || "PART").toUpperCase();
 
-  const safeGroups = Array.isArray(groups) ? groups : [];
+  // Normalize group shape — handles both entity records {id, name, vendor_type}
+  // and any alternate shapes {group_id, group_name} that might arrive from different sources
+  const safeGroups = (Array.isArray(groups) ? groups : []).map(g => ({
+    id: g.id || g.group_id,
+    name: g.name || g.group_name,
+    vendor_type: (g.vendor_type || "").toUpperCase(),
+    is_active: g.is_active,
+    sort_priority: g.sort_priority || 0,
+  }));
+
   const groupsForType = safeGroups
-    .filter(g => (g.vendor_type || "").toUpperCase() === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
-    .sort((a, b) => (a.sort_priority || 0) - (b.sort_priority || 0));
+    .filter(g => g.id && g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
+    .sort((a, b) => a.sort_priority - b.sort_priority);
 
   const handleTypeChange = (newType) => {
     // Clear group when type changes since groups are type-scoped
