@@ -67,7 +67,7 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
             <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent style={{ zIndex: 999999 }}>
               <SelectItem value="PART">
                 <span className="flex items-center gap-1.5"><Package className="w-3.5 h-3.5" />Part Vendor</span>
               </SelectItem>
@@ -108,7 +108,7 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
             <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
               <SelectValue placeholder="Select group..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent style={{ zIndex: 999999 }}>
               <SelectItem value="none">Select group...</SelectItem>
               {groupsForType.map(g => (
                 <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
