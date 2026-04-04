@@ -28,6 +28,7 @@ import CreateInlineModal from "../common/CreateInlineModal";
 import PartPricingFields from "./PartPricingFields";
 import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
+import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
@@ -634,7 +635,18 @@ export default function PartModal({ part, partId, onClose }) {
     }
   };
 
-  const handleSave = (e) => {
+  // Handler for preferred source change — syncs vendor + cost to Part form
+  const handlePreferredSourceChange = (vendorId, unitCost) => {
+    if (vendorId) {
+      setFormData(prev => ({
+        ...prev,
+        default_vendor_id: vendorId,
+        cost: unitCost || prev.cost,
+      }));
+    }
+  };
+
+  const handleSave = async (e) => {
     e?.preventDefault();
     if (!formData.part_name?.trim()) {
       toast.error('Part name is required');
@@ -678,6 +690,11 @@ export default function PartModal({ part, partId, onClose }) {
         featured_photo: updatePayload.featured_photo,
         photos: updatePayload.photos,
       });
+    }
+
+    // Save vendor sources alongside part update
+    if (window.__partVendorSourcesSave) {
+      await window.__partVendorSourcesSave();
     }
 
     // PHASE 16: Simplified - drift detection handled by canonical refetch
@@ -958,21 +975,31 @@ export default function PartModal({ part, partId, onClose }) {
         )}
       </div>
 
-      {/* Vendor & Location */}
-      <div className="grid grid-cols-2 gap-4">
-        {vendor && (
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Vendor</p>
-            <p className="text-white">{vendor.vendor_name}</p>
-          </div>
-        )}
-        {location && (
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Location</p>
-            <p className="text-white">{location.bin_description || location.location_area}</p>
-          </div>
-        )}
+      {/* Vendor Sources Section (View Mode) */}
+      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">Vendor Sources</span>
+          {vendor && (
+            <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-500/50">
+              <Star className="w-3 h-3 mr-1" fill="currentColor" />
+              {vendor.vendor_name}
+            </Badge>
+          )}
+        </div>
+        <PartVendorSourcesSection
+          partId={activePart.id}
+          vendors={vendors}
+          isEditing={false}
+        />
       </div>
+
+      {/* Location */}
+      {location && (
+        <div>
+          <p className="text-xs text-gray-400 mb-1">Location</p>
+          <p className="text-white">{location.bin_description || location.location_area}</p>
+        </div>
+      )}
 
       {/* Order URL */}
       {formData.order_url && (
@@ -1139,8 +1166,8 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       </div>
 
-      {/* Category, Vendor, Location */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Category & Location */}
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-gray-400 text-xs flex items-center justify-between">
             Category
@@ -1178,68 +1205,6 @@ export default function PartModal({ part, partId, onClose }) {
 
         <div>
           <Label className="text-gray-400 text-xs flex items-center justify-between">
-            Vendor
-            <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
-              + New
-            </button>
-          </Label>
-          <Select
-            value={formData.default_vendor_id || 'none'}
-            onValueChange={(value) => setFormData({ ...formData, default_vendor_id: value === 'none' ? '' : value })}
-          >
-            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {/* Group vendors by parent_id, alpha sort groups and items */}
-              {(() => {
-                // Get parent vendors (no parent_id), sorted alphabetically
-                const parentVendors = activeVendors
-                  .filter(v => !v.parent_id)
-                  .sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
-                
-                // Get orphan vendors (have parent_id but parent not found or inactive)
-                const parentIds = new Set(parentVendors.map(v => v.id));
-                const childVendors = activeVendors.filter(v => v.parent_id);
-                const orphanVendors = childVendors
-                  .filter(v => !parentIds.has(v.parent_id))
-                  .sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
-                
-                return (
-                  <>
-                    {parentVendors.map(parent => {
-                      const children = activeVendors
-                        .filter(v => v.parent_id === parent.id)
-                        .sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
-                      return (
-                        <React.Fragment key={parent.id}>
-                          <SelectItem value={parent.id}>
-                            <span style={{ color: parent.color || '#3B82F6' }}>{parent.vendor_name}</span>
-                          </SelectItem>
-                          {children.map(child => (
-                            <SelectItem key={child.id} value={child.id}>
-                              <span className="pl-4" style={{ color: child.color || '#3B82F6' }}>↳ {child.vendor_name}</span>
-                            </SelectItem>
-                          ))}
-                        </React.Fragment>
-                      );
-                    })}
-                    {/* Render orphan vendors at the end */}
-                    {orphanVendors.map(v => (
-                      <SelectItem key={v.id} value={v.id}>
-                        <span style={{ color: v.color || '#3B82F6' }}>{v.vendor_name}</span>
-                      </SelectItem>
-                    ))}
-                  </>
-                );
-              })()}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-gray-400 text-xs flex items-center justify-between">
             Location
             <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">
               + New
@@ -1254,20 +1219,13 @@ export default function PartModal({ part, partId, onClose }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
-              {/* Group locations by parent_id, alpha sort groups and items */}
               {(() => {
-                // Get parent locations (no parent_id), sorted alphabetically
                 const parentLocations = activeLocations
                   .filter(l => !l.parent_id)
                   .sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''));
-                
-                // Get orphan locations (have parent_id but parent not found or inactive)
                 const parentIds = new Set(parentLocations.map(l => l.id));
-                const childLocations = activeLocations.filter(l => l.parent_id);
-                const orphanLocations = childLocations
-                  .filter(l => !parentIds.has(l.parent_id))
+                const orphanLocations = activeLocations.filter(l => l.parent_id && !parentIds.has(l.parent_id))
                   .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
-                
                 return (
                   <>
                     {parentLocations.map(parent => {
@@ -1287,7 +1245,6 @@ export default function PartModal({ part, partId, onClose }) {
                         </React.Fragment>
                       );
                     })}
-                    {/* Render orphan locations at the end */}
                     {orphanLocations.map(l => (
                       <SelectItem key={l.id} value={l.id}>
                         <span style={{ color: l.color || '#8B5CF6' }}>{l.bin_description || l.location_area}</span>
@@ -1300,6 +1257,24 @@ export default function PartModal({ part, partId, onClose }) {
           </Select>
         </div>
       </div>
+
+      {/* Vendor Sources Section (Edit Mode) */}
+      <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-gray-300 text-sm">Vendor Sources</Label>
+          <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
+            + New Vendor
+          </button>
+        </div>
+        <PartVendorSourcesSection
+          partId={activePart.id}
+          vendors={vendors}
+          isEditing={true}
+          onPreferredChange={handlePreferredSourceChange}
+        />
+        <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost above.</p>
+      </div>
+
 
       {/* Part Type & Reorder Settings */}
       <div className="grid grid-cols-3 gap-4">
