@@ -50,7 +50,7 @@ const cancelPartQueries = (queryClient, partId) => {
   });
 };
 
-export default function PartModal({ part, partId, onClose, open }) {
+export default function PartModal({ part, partId, onClose }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -735,9 +735,6 @@ export default function PartModal({ part, partId, onClose, open }) {
       </Dialog>
     );
   }
-
-  // Stabilize mounting: if `open` prop is false, render nothing but keep hooks alive
-  if (open === false) return null;
 
   if (!activePart) return null;
 

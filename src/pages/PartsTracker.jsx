@@ -88,11 +88,12 @@ export default function PartsTracker() {
         </div>
       </MobileSafeAreaContainer>
 
-      <PartModal
-        partId={selectedPartId}
-        open={Boolean(selectedPartId)}
-        onClose={() => setSelectedPartId(null)}
-      />
+      {selectedPartId && (
+        <PartModal
+          partId={selectedPartId}
+          onClose={() => setSelectedPartId(null)}
+        />
+      )}
     </>
   );
 }
