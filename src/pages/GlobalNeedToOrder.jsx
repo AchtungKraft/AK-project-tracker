@@ -32,6 +32,7 @@ import VendorQueueView from "@/components/supply/VendorQueueView";
 // VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import { cn } from "@/lib/utils";
 
+
 /**
  * GlobalNeedToOrder - Cross-Project Procurement Queue
  * 
