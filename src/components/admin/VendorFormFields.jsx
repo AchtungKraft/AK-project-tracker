@@ -53,6 +53,7 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
   });
 
   const handleTypeChange = (newType) => {
+    console.log('[VendorFormFields] TYPE CHANGE', { from: vendorType, to: newType });
     // Clear group when type changes since groups are type-scoped
     onChange({ ...data, vendor_type: newType, vendor_group_id: "" });
   };
@@ -99,7 +100,10 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
         ) : (
           <Select
             value={data.vendor_group_id ? String(data.vendor_group_id) : "none"}
-            onValueChange={(value) => onChange({ ...data, vendor_group_id: value === "none" ? "" : value })}
+            onValueChange={(value) => {
+              console.log('[VendorFormFields] GROUP CHANGE', { value, resolved: value === "none" ? "" : value });
+              onChange({ ...data, vendor_group_id: value === "none" ? "" : value });
+            }}
           >
             <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
               <SelectValue placeholder="Select group..." />
