@@ -15,7 +15,7 @@ import { Package, Truck } from "lucide-react";
  *   groups     — all VendorGroup records
  *   showType   — whether to show the vendor_type selector (true for edit, false for create when type comes from tab)
  */
-export default function VendorFormFields({ data, onChange, groups, showType = false }) {
+export default function VendorFormFields({ data, onChange, groups, showType = false, isLoading = false }) {
   const vendorType = data.vendor_type || "PART";
 
   const groupsForType = groups
@@ -60,7 +60,9 @@ export default function VendorFormFields({ data, onChange, groups, showType = fa
 
       <div>
         <Label className="text-gray-400 text-xs">Vendor Group *</Label>
-        {groupsForType.length === 0 ? (
+        {isLoading ? (
+          <div className="h-9 bg-gray-800 border border-gray-700 rounded-md animate-pulse" />
+        ) : groupsForType.length === 0 ? (
           <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded px-3 py-2">
             No vendor groups available for {vendorType} type. Create one in Admin Config first.
           </div>

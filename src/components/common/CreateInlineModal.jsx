@@ -47,6 +47,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
     makes: refMakes,
     models: refModels,
     locations: refLocations,
+    isLoading: refDataLoading,
   } = useReferenceData();
 
   const categories = refCategories;
@@ -138,6 +139,7 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
             onChange={setFormData}
             groups={vendorGroups}
             showType={false}
+            isLoading={refDataLoading}
           />
         );
 

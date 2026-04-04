@@ -42,7 +42,7 @@ export default function VendorsConfig() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: vendorGroups = [] } = useQuery({
+  const { data: vendorGroups = [], isLoading: groupsLoading } = useQuery({
     queryKey: ['referenceData', 'vendorGroups'],
     queryFn: () => base44.entities.VendorGroup.list(),
     staleTime: 300000,
@@ -160,6 +160,7 @@ export default function VendorsConfig() {
                         onChange={setEditData}
                         groups={vendorGroups}
                         showType={true}
+                        isLoading={groupsLoading}
                       />
                     </div>
                   ) : (
@@ -283,6 +284,7 @@ export default function VendorsConfig() {
             onChange={setNewVendor}
             groups={vendorGroups}
             showType={false}
+            isLoading={groupsLoading}
           />
           <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
             {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add {activeTab === 'PART' ? 'Part' : 'Service'} Vendor</>}
