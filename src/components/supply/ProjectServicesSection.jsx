@@ -46,6 +46,11 @@ export default function ProjectServicesSection({ projectId, projectName }) {
       invalidateAll();
       return;
     }
+    const target = commitments.find(c => c.id === commitmentId);
+    if (target?.status === "billed") {
+      toast.error("Billed services cannot be deleted");
+      return;
+    }
     try {
       await base44.functions.invoke("executeServiceAction", {
         action_type: "DELETE",
