@@ -359,27 +359,43 @@ async function createPO(ctx, commitment_ids, payload) {
     const order=await ctx.base44.asServiceRole.entities.Order.create({po_number:pn,po_prefix:vd.po_prefix||po_prefix,vendor_id:vid,order_number:vd.order_number||null,order_url:vd.order_url||null,order_date:vd.order_date||new Date().toISOString().slice(0,10),eta_date:vd.eta_date||null,notes:vd.notes||null,freight_cost:vd.freight_cost||0,tariff_cost:vd.tariff_cost||0,status:'Draft'});
 
     for(const item of items) {
-      const rq=Number(item.qty); if(!rq||rq<=0||!Number.isFinite(rq)) throw new Error(`CREATE_PO_INVALID_QTY: ${item.qty}`);
-      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,cost_source_reference:item.cost_source||null,cost_requires_review:item.cost_source==='missing',status:'Ordered',source_id:item.source_id||null,price_ordered:item.price_ordered||item.unit_cost});
-      const curCov=item.commitment.covered_from_po??0, newCov=curCov+item.qty;
+      const rq=Number(item.qty); if(!rq||rq<=0||!Number.isFinite(rq)) throw new Error(`CREATE_PO_INVALID_QTY: commitment=${item.commitment.id} item.qty=${item.qty}`);
+      const uc=Number(item.unit_cost); if(!Number.isFinite(uc)||uc<0) throw new Error(`CREATE_PO_INVALID_COST: commitment=${item.commitment.id} item.unit_cost=${item.unit_cost}`);
+      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:uc,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:uc*rq,cost_source_reference:item.cost_source||null,cost_requires_review:item.cost_source==='missing',status:'Ordered',source_id:item.source_id||null,price_ordered:item.price_ordered||uc});
+
+      // ── POST-WRITE PERSISTENCE ASSERTION ──
+      // Verify the persisted line matches what we intended
+      if (li.qty_ordered !== rq || Math.abs((li.unit_cost ?? 0) - uc) > 0.001) {
+        const msg = `QTY_OR_COST_PERSISTENCE_MISMATCH: commitment=${item.commitment.id} intended_qty=${rq} persisted_qty=${li.qty_ordered} intended_cost=${uc} persisted_cost=${li.unit_cost}`;
+        console.error(`[CREATE_PO_HARD_FAIL] ${msg}`);
+        ctx.warnings.push({ type: 'PERSISTENCE_MISMATCH', id: item.commitment.id, msg });
+        // Best-effort audit log
+        try { await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({ commitment_id: item.commitment.id, action_type: 'create', trigger_source: 'manual', triggered_by: ctx.user.email, actor_email: ctx.user.email, notes: msg, timestamp: ctx.timestamp }); } catch (_e) {}
+        throw new Error(msg);
+      }
+
+      // ── PER-LINE AUDIT LOG ──
+      console.log(`[CREATE_PO_LINE_PERSISTED] commitment=${item.commitment.id} part=${item.part.part_name} vendor=${vid} intended_qty=${rq} persisted_qty_ordered=${li.qty_ordered} intended_cost=${uc} persisted_unit_cost=${li.unit_cost} extended=${li.extended_cost} cost_source=${item.cost_source} line_id=${li.id}`);
+
+      const curCov=item.commitment.covered_from_po??0, newCov=curCov+rq;
       const cn=readCanonical(item.commitment,ctx);
       const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov-cn.qty_installed);
 
       // Sync cost from PO line to commitment (inline for speed)
       const costSync = {};
       const oldCostSnap = item.commitment.unit_cost_snapshot ?? 0;
-      if (!['invoiced', 'paid'].includes(item.commitment.billing_status) && item.unit_cost > 0 && Math.abs(item.unit_cost - oldCostSnap) > 0.001) {
-        costSync.unit_cost_snapshot = item.unit_cost;
-        costSync.planned_cost_total = item.unit_cost * cn.required_total;
+      if (!['invoiced', 'paid'].includes(item.commitment.billing_status) && uc > 0 && Math.abs(uc - oldCostSnap) > 0.001) {
+        costSync.unit_cost_snapshot = uc;
+        costSync.planned_cost_total = uc * cn.required_total;
         const curRetail = item.commitment.unit_retail_snapshot ?? 0;
-        if (curRetail > 0 && curRetail >= item.unit_cost) costSync.pricing_integrity_status = 'ok';
+        if (curRetail > 0 && curRetail >= uc) costSync.pricing_integrity_status = 'ok';
         else if (curRetail > 0) costSync.pricing_integrity_status = 'margin_negative';
         else costSync.pricing_integrity_status = 'missing_retail';
       }
 
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+item.qty,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+rq,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
       // COVERAGE VERIFICATION LOG
-      console.log(`[CREATE_PO_COVERAGE] commitment=${item.commitment.id} part=${item.part.part_name} qty_ordered=${rq} old_covered=${curCov} new_covered=${newCov} new_to_order=${newTO} vendor=${vid} cost=${item.unit_cost} source=${item.cost_source}`);
+      console.log(`[CREATE_PO_COVERAGE] commitment=${item.commitment.id} part=${item.part.part_name} qty_ordered=${rq} old_covered=${curCov} new_covered=${newCov} new_to_order=${newTO} vendor=${vid} cost=${uc} source=${item.cost_source}`);
       ctx.mutations.push({entity:'PartPurchaseLineItem',id:li.id,action:'CREATE'},{entity:'PartCommitment',id:item.commitment.id,action:'CREATE_PO'});
     }
     // Post-PO: Trigger retail sync for commitments missing retail
