@@ -83,8 +83,16 @@ export default function VendorPOConfirmModal({
                     line.unit_cost <= 0 ? "bg-red-900/20" : "bg-gray-800/30"
                   )}
                 >
-                  <span className="flex-1 truncate text-gray-300">{line.part_name}</span>
-                  <span className="w-16 text-right font-mono text-gray-400">{line.qty}x</span>
+                  <span className="flex-1 truncate text-gray-300">
+                    {line.part_name}
+                    {line.is_manual && <span className="text-blue-400 ml-1 text-[9px]">(manual)</span>}
+                  </span>
+                  <span className="w-20 text-right font-mono text-gray-400">
+                    {line.qty}x
+                    {line.qty_requested > 0 && line.qty > line.qty_requested && (
+                      <span className="text-amber-400 text-[9px] ml-0.5">(+{line.qty - line.qty_requested})</span>
+                    )}
+                  </span>
                   <span className={cn(
                     "w-20 text-right font-mono",
                     line.unit_cost > 0 ? "text-emerald-400" : "text-red-400"

@@ -103,15 +103,27 @@ export function VendorPOSelectedRow({ line, vendorSources, onChange, onRemove })
       </div>
 
       {/* Qty input */}
-      <div className="w-20 shrink-0">
-        <Input
-          type="number"
-          min={1}
-          max={line.max_qty}
-          value={line.qty}
-          onChange={e => onChange({ qty: Math.min(Math.max(1, Number(e.target.value) || 1), line.max_qty) })}
-          className="bg-gray-800 border-gray-700 text-white text-center h-8 text-sm"
-        />
+      <div className="shrink-0">
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="number"
+            min={0}
+            value={line.qty}
+            onChange={e => onChange({ qty: Math.max(0, Number(e.target.value) || 0) })}
+            className="bg-gray-800 border-gray-700 text-white text-center h-8 text-sm w-20"
+          />
+        </div>
+        {line.qty_requested > 0 && (
+          <div className="text-[9px] text-center mt-0.5">
+            <span className="text-gray-500">{line.qty_requested} needed</span>
+            {line.qty > line.qty_requested && (
+              <span className="text-amber-400 ml-1">(+{line.qty - line.qty_requested} extra)</span>
+            )}
+          </div>
+        )}
+        {line.is_manual && (
+          <div className="text-[9px] text-center mt-0.5 text-blue-400">manual</div>
+        )}
       </div>
 
       {/* Source selector (if multiple sources for this vendor) */}

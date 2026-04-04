@@ -14,6 +14,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
 import { VendorPOAvailableRow, VendorPOSelectedRow } from "./VendorPOLineRow";
 import VendorPOConfirmModal from "./VendorPOConfirmModal";
+import AddManualPOLineModal from "./AddManualPOLineModal";
 
 /**
  * VendorPOBuilder — Step 2: Browse available parts for a vendor, build a PO cart, and submit.
@@ -30,6 +31,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [etaDate, setEtaDate] = useState("");
   const [poNotes, setPONotes] = useState("");
+  const [showAddManual, setShowAddManual] = useState(false);
 
   const supplyAction = useSupplyAction({
     showSuccessToast: true,
@@ -85,7 +87,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       part_name: item.part_name,
       project_name: item.project_name,
       qty: item.qty_to_order,
-      max_qty: item.qty_to_order,
+      qty_requested: item.qty_to_order,
       unit_cost: item.unit_cost || 0,
       source_id: item.source_id || null,
       vendor_sources: item.has_dedicated_source
@@ -97,11 +99,11 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       price_delta: item.price_delta,
       price_delta_overall: item.price_delta_overall,
       all_sources: item.all_sources || [],
+      is_manual: false,
     }]);
   };
 
   const handleAddAll = () => {
-    // Only add items that are compatible with this vendor
     const compatible = available.filter(item => item.has_dedicated_source || item.is_default_vendor);
     if (compatible.length < available.length) {
       toast.info(`${available.length - compatible.length} item(s) skipped (no source for ${vendor.vendor_name})`);
@@ -112,7 +114,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       part_name: item.part_name,
       project_name: item.project_name,
       qty: item.qty_to_order,
-      max_qty: item.qty_to_order,
+      qty_requested: item.qty_to_order,
       unit_cost: item.unit_cost || 0,
       source_id: item.source_id || null,
       vendor_sources: item.has_dedicated_source
@@ -124,6 +126,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       price_delta: item.price_delta,
       price_delta_overall: item.price_delta_overall,
       all_sources: item.all_sources || [],
+      is_manual: false,
     }));
     setCart(prev => [...prev, ...newLines]);
   };
@@ -140,15 +143,22 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
     if (cart.length === 0) return;
     setSubmitting(true);
 
-    // Build selected_sources map
+    // Build selected_sources map and qty_overrides
     const selected_sources = {};
+    const qty_overrides = {};
     for (const line of cart) {
-      if (line.source_id) {
+      if (line.commitment_id && line.source_id) {
         selected_sources[line.commitment_id] = line.source_id;
+      }
+      if (line.commitment_id) {
+        qty_overrides[line.commitment_id] = line.qty;
       }
     }
 
-    const commitment_ids = cart.map(l => l.commitment_id);
+    // Separate commitment-linked and manual lines
+    const commitmentLines = cart.filter(l => l.commitment_id);
+    const manualLines = cart.filter(l => !l.commitment_id);
+    const commitment_ids = commitmentLines.map(l => l.commitment_id);
 
     try {
       const res = await base44.functions.invoke('createPurchaseOrdersFromCommitments', {
@@ -156,6 +166,13 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
         commitment_ids,
         override_vendor_id: vendor.id,
         selected_sources,
+        qty_overrides,
+        manual_lines: manualLines.map(l => ({
+          part_id: l.part_id,
+          qty: l.qty,
+          unit_cost: l.unit_cost,
+          source_id: l.source_id,
+        })),
         eta_date: etaDate || null,
         notes: poNotes || `Vendor PO Builder: ${vendor.vendor_name}`,
         vendor_order_data: {
@@ -256,10 +273,21 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
         <Card className="bg-black/40 border-gray-800">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-green-400" />
-                PO Lines
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-green-400" />
+                  PO Lines
+                </h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAddManual(true)}
+                  className="border-gray-700 text-white gap-1 text-xs h-7"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Part
+                </Button>
+              </div>
               {/* Column headers */}
               <div className="flex items-center gap-3 text-[9px] uppercase tracking-wider text-gray-500">
                 <span className="w-20 text-center">Qty</span>
@@ -270,7 +298,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
             </div>
             {cart.map((line, idx) => (
               <VendorPOSelectedRow
-                key={line.commitment_id}
+                key={line.commitment_id || `manual-${idx}`}
                 line={line}
                 vendorSources={line.vendor_sources || []}
                 onChange={updates => handleLineChange(idx, updates)}
@@ -390,6 +418,16 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Add Manual Part Modal */}
+      {showAddManual && (
+        <AddManualPOLineModal
+          vendor={vendor}
+          existingPartIds={cart.map(l => l.part_id)}
+          onAdd={(line) => setCart(prev => [...prev, line])}
+          onClose={() => setShowAddManual(false)}
+        />
+      )}
 
       {/* Confirm Modal */}
       {showConfirm && (

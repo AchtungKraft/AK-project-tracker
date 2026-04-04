@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await req.json();
-    const { project_id, commitment_ids=[], mode='BULK', override_vendor_id=null, eta_date=null, notes=null, dry_run=false, vendor_order_data={} } = payload;
+    const { project_id, commitment_ids=[], mode='BULK', override_vendor_id=null, eta_date=null, notes=null, dry_run=false, vendor_order_data={}, qty_overrides={}, manual_lines=[] } = payload;
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
     if (!commitment_ids?.length) return Response.json({ error: 'commitment_ids required' }, { status: 400 });
 
@@ -123,7 +123,10 @@ Deno.serve(async (req) => {
           });
         } catch (_e) { /* audit is best-effort */ }
       }
-      eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: gap, unit_cost, cost_src, cost_review, source_id: resolvedSourceId, price_ordered: unit_cost });
+      // Use qty_override if provided (allows user to order more than gap)
+      const qtyOverride = qty_overrides[c.id];
+      const finalQty = (qtyOverride != null && qtyOverride > 0) ? qtyOverride : gap;
+      eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: finalQty, canonical_gap: gap, unit_cost, cost_src, cost_review, source_id: resolvedSourceId, price_ordered: unit_cost });
     }
 
     if (dry_run) {
@@ -131,7 +134,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, dry_run: true, preview: { vendor_groups: Object.entries(vg).map(([v, items]) => ({ vendor_id: v, vendor_name: items[0]?.vendor_name, commitment_count: items.length, total_qty: items.reduce((s, i) => s + i.qty_to_order, 0), estimated_cost: items.reduce((s, i) => s + i.qty_to_order * i.unit_cost, 0), items: items.map(i => ({ commitment_id: i.commitment.id, part_name: i.part?.part_name, qty: i.qty_to_order, unit_cost: i.unit_cost, cost_src: i.cost_src, project_name: null })) })), total_orders_to_create: Object.keys(vg).length, total_line_items: eligible.length }, blocked, phase1_warnings: warnings.length ? warnings : undefined, summary: { eligible_count: eligible.length, blocked_count: blocked.length, order_count: Object.keys(vg).length } });
     }
 
-    if (!eligible.length) return Response.json({ ok: false, error: 'No eligible commitments', created_orders: [], blocked, updated_commitments: [], summary: { eligible_count: 0, blocked_count: blocked.length, order_count: 0 } });
+    if (!eligible.length && !manual_lines.length) return Response.json({ ok: false, error: 'No eligible commitments', created_orders: [], blocked, updated_commitments: [], summary: { eligible_count: 0, blocked_count: blocked.length, order_count: 0 } });
 
     const vg = {}; for (const e of eligible) { if (!vg[e.vendor_id]) vg[e.vendor_id] = []; vg[e.vendor_id].push(e); }
     if (mode === 'SINGLE' && Object.keys(vg).length > 1 && !override_vendor_id) return Response.json({ ok: false, error: 'Single mode requires vendor override', created_orders: [], blocked, updated_commitments: [], summary: { eligible_count: eligible.length, blocked_count: blocked.length, order_count: 0 } });
@@ -199,6 +202,35 @@ Deno.serve(async (req) => {
           await base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: cid, skip_retail_update: false });
         } catch (e) {
           console.warn(`[PO_COST_SYNC] Sync failed for ${cid}: ${e.message}`);
+        }
+      }
+
+      // Handle manual lines (no commitment) for this vendor group
+      if (vid === (override_vendor_id || vid)) {
+        for (const ml of manual_lines) {
+          if (!ml.part_id || !ml.qty || ml.qty <= 0) continue;
+          const mlPart = partMap.get(ml.part_id);
+          const mlCost = ml.unit_cost || mlPart?.cost || 0;
+          const mlLiData = {
+            order_id: order.id,
+            part_id: ml.part_id,
+            vendor_id: vid,
+            qty_ordered: ml.qty,
+            qty_received: 0,
+            unit_cost: mlCost,
+            unit_price: mlCost,
+            extended_cost: mlCost * ml.qty,
+            line_total: mlCost * ml.qty,
+            cost_source_reference: 'manual_entry',
+            status: 'Ordered',
+            is_legacy: false,
+            legacy_link_status: 'unlinked',
+            is_delta_order: false,
+            source_id: ml.source_id || null,
+            price_ordered: mlCost,
+          };
+          const mlLi = await base44.asServiceRole.entities.PartPurchaseLineItem.create(mlLiData);
+          liIds.push(mlLi.id);
         }
       }
 
