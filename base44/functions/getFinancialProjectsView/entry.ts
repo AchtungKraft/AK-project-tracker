@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * PHASE 1 — Canonical Financial Read Model
@@ -30,15 +30,24 @@ Deno.serve(async (req) => {
     // Fetch all required data in parallel
     // NOTE: These are intentional cross-project global scans for financial overview dashboard.
     // Acceptable at current scale (<100 projects, <2000 commitments).
-    const [projects, projectTypes, commitments, invoices, creditLedger] = await Promise.all([
+    const [projects, projectTypes, commitments, serviceCommitments, invoices, creditLedger] = await Promise.all([
       base44.entities.Project.filter({ is_system_project: { $ne: true } }),
       base44.entities.ProjectType.list(),
       base44.entities.PartCommitment.list('-created_date', 5000),
+      base44.entities.ServiceCommitment.list('-created_date', 2000),
       base44.entities.ProjectInvoice.list('-created_date', 2000),
       base44.entities.ProjectCreditLedger.list('-created_date', 1000),
     ]);
 
     const projectTypeMap = Object.fromEntries(projectTypes.map(pt => [pt.id, pt]));
+
+    // Group service commitments by project (kept SEPARATE from parts)
+    const servicesByProject = {};
+    for (const sc of serviceCommitments) {
+      if (!sc.project_id) continue;
+      if (!servicesByProject[sc.project_id]) servicesByProject[sc.project_id] = [];
+      servicesByProject[sc.project_id].push(sc);
+    }
 
     // Group commitments by project
     const commitmentsByProject = {};
@@ -78,29 +87,46 @@ Deno.serve(async (req) => {
       const projectInvoices = invoicesByProject[project.id] || [];
       const projectCredits = creditsByProject[project.id] || [];
 
-      // Skip projects with no parts assigned
-      if (projectCommitments.length === 0) {
+      const projectServices = servicesByProject[project.id] || [];
+
+      // Skip projects with no parts or services assigned
+      if (projectCommitments.length === 0 && projectServices.length === 0) {
         continue;
       }
 
-      // Calculate total parts exposure (planned retail from commitments)
+      // ── PARTS exposure (SEPARATE from services) ──
       let totalPartsExposure = 0;
       let totalInvoicedFromCommitments = 0;
       let hasUnpaidParts = false;
 
       for (const c of projectCommitments) {
-        // Use planned_retail_total or calculate from snapshot
         const retailTotal = c.planned_retail_total || 
           ((c.unit_retail_snapshot || 0) * (c.required_total || 0));
         totalPartsExposure += retailTotal;
-
-        // Track invoiced amount from commitment
         const invoicedAmount = c.invoiced_amount || 0;
         totalInvoicedFromCommitments += invoicedAmount;
-
-        // Check if has unpaid parts
         if (c.billing_status !== 'paid' && retailTotal > invoicedAmount) {
           hasUnpaidParts = true;
+        }
+      }
+
+      // ── SERVICES exposure (SEPARATE from parts) ──
+      let totalServicesBillable = 0;
+      let totalServicesCost = 0;
+      let totalServicesBilled = 0;
+      let hasUnbilledServices = false;
+
+      for (const sc of projectServices) {
+        const billable = sc.total_billable || 0;
+        const cost = (sc.total_cost > 0) ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
+        totalServicesBillable += billable;
+        totalServicesCost += cost;
+        // CANONICAL: Use explicit is_billed flag, fallback to status
+        const isBilled = sc.is_billed === true || sc.status === 'billed';
+        if (isBilled) {
+          totalServicesBilled += billable;
+        } else if (billable > 0) {
+          hasUnbilledServices = true;
         }
       }
 
@@ -118,8 +144,10 @@ Deno.serve(async (req) => {
         availableCredit += credit.remaining_amount || 0;
       }
 
-      // Remaining to bill = exposure - invoiced (from commitments)
-      const remainingToBill = Math.max(0, totalPartsExposure - totalInvoicedFromCommitments);
+      // Combined remaining to bill (parts + services, kept separable)
+      const partsRemainingToBill = Math.max(0, totalPartsExposure - totalInvoicedFromCommitments);
+      const servicesRemainingToBill = Math.max(0, totalServicesBillable - totalServicesBilled);
+      const remainingToBill = partsRemainingToBill + servicesRemainingToBill;
 
       const projectType = project.project_type_id ? projectTypeMap[project.project_type_id] : null;
 
@@ -129,15 +157,25 @@ Deno.serve(async (req) => {
         project_type_id: project.project_type_id,
         project_type_name: projectType?.name || 'Uncategorized',
         project_type_color: projectType?.color || '#6B7280',
+        // PARTS totals (isolated — no service contamination)
         total_parts_exposure: totalPartsExposure,
         total_invoiced: totalInvoicedFromCommitments,
+        // SERVICES totals (isolated — no parts contamination)
+        total_services_billable: totalServicesBillable,
+        total_services_cost: totalServicesCost,
+        total_services_billed: totalServicesBilled,
+        // COMBINED totals
+        total_exposure: totalPartsExposure + totalServicesBillable,
         total_paid: totalPaid,
         remaining_to_bill: remainingToBill,
         available_credit: availableCredit,
-        has_parts_assigned: true, // Always true since we filter above
+        has_parts_assigned: projectCommitments.length > 0,
+        has_services_assigned: projectServices.length > 0,
         has_unpaid_parts: hasUnpaidParts,
+        has_unbilled_services: hasUnbilledServices,
         commitment_count: projectCommitments.length,
-        invoice_count: projectInvoices.length
+        service_count: projectServices.length,
+        invoice_count: projectInvoices.length,
       });
     }
 
@@ -161,11 +199,18 @@ Deno.serve(async (req) => {
       projects: financialProjects,
       summary: {
         total_projects: financialProjects.length,
-        total_exposure: financialProjects.reduce((sum, p) => sum + p.total_parts_exposure, 0),
+        // PARTS-ONLY totals (no service contamination)
+        total_parts_exposure: financialProjects.reduce((sum, p) => sum + p.total_parts_exposure, 0),
         total_invoiced: financialProjects.reduce((sum, p) => sum + p.total_invoiced, 0),
+        // SERVICES-ONLY totals (no parts contamination)
+        total_services_billable: financialProjects.reduce((sum, p) => sum + (p.total_services_billable || 0), 0),
+        total_services_cost: financialProjects.reduce((sum, p) => sum + (p.total_services_cost || 0), 0),
+        total_services_billed: financialProjects.reduce((sum, p) => sum + (p.total_services_billed || 0), 0),
+        // COMBINED totals
+        total_exposure: financialProjects.reduce((sum, p) => sum + p.total_exposure, 0),
         total_paid: financialProjects.reduce((sum, p) => sum + p.total_paid, 0),
         total_remaining: financialProjects.reduce((sum, p) => sum + p.remaining_to_bill, 0),
-        total_credit_available: financialProjects.reduce((sum, p) => sum + p.available_credit, 0)
+        total_credit_available: financialProjects.reduce((sum, p) => sum + p.available_credit, 0),
       }
     });
 

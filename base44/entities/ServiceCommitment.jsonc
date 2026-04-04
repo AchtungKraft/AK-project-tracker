@@ -53,6 +53,15 @@
       "default": "planned",
       "description": "Service commitment lifecycle status"
     },
+    "is_billed": {
+      "type": "boolean",
+      "default": false,
+      "description": "CANONICAL: Explicit billing flag. True when invoice has been sent. Only markInvoiceSent may set this."
+    },
+    "invoice_id": {
+      "type": "string",
+      "description": "Reference to ProjectInvoice that billed this service. Null until invoiced."
+    },
     "cost_override": {
       "type": "boolean",
       "default": false,
@@ -84,7 +93,7 @@
     },
     "invoice_reference": {
       "type": "string",
-      "description": "Client invoice reference"
+      "description": "LEGACY: Client invoice reference string. Use invoice_id for canonical linkage."
     }
   },
   "required": [

@@ -16,6 +16,8 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  */
 export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary }) {
   const financial = useMemo(() => {
+    // ASSERTION: enrichedCommitments MUST only contain type="part" items.
+    // Services are passed separately via servicesSummary to prevent double counting.
     const partsCostExposure = enrichedCommitments.reduce(
       (sum, c) => sum + (c.planned_cost_total ?? 0), 0
     );

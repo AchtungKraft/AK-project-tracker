@@ -722,14 +722,23 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     // Effective cost: total_cost > 0 ? total_cost : (actual_cost ?? estimated_cost) * quantity
     const effectiveCost = (sc.total_cost > 0) ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
     const totalBillable = sc.total_billable || 0;
-    const isBilled = sc.status === 'billed';
+    // CANONICAL: Use explicit is_billed flag (fallback to status for pre-migration data)
+    const isBilled = sc.is_billed === true || sc.status === 'billed';
     const isCompleted = sc.status === 'completed';
     const isReadyToBill = isCompleted && totalBillable > 0 && !isBilled;
+
+    const serviceDisplayName = sc.description || svc?.name || 'Unknown Service';
 
     const serviceRow = {
       id: sc.id,
       type: 'service',
+      // Canonical shape alignment: services expose part_id/part_name aliases
+      // so downstream code (BillablePartsSelector, InvoiceWorkbench) can treat
+      // them uniformly without branching on type.
+      part_id: null,
+      part_name: serviceDisplayName,
       service_id: sc.service_id,
+      service_commitment_id: sc.id,
       service_name: svc?.name || 'Unknown Service',
       service_category: svc?.category || 'other',
       description: sc.description || '',
@@ -738,10 +747,12 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       vendor_id: sc.vendor_id || null,
       vendor_name: vendor?.name || null,
       status: sc.status || 'planned',
+      is_billed: isBilled,
+      invoice_id: sc.invoice_id || null,
       quantity: sc.quantity || 1,
       total_cost: effectiveCost,
       total_billable: totalBillable,
-      // Invoice compatibility fields
+      // Invoice compatibility fields (canonical shape alignment)
       unit_retail: totalBillable,
       unit_retail_snapshot: totalBillable,
       unit_cost: effectiveCost,

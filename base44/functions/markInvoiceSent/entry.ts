@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * markInvoiceSent - PHASE 10 Forward Invoice System
@@ -80,10 +80,12 @@ Deno.serve(async (req) => {
       due_date,
     });
 
-    // Apply commitment mutations for part lines
+    // Apply commitment mutations for part AND service lines
     const commitmentUpdates = [];
+    const serviceUpdates = [];
 
     for (const line of lines) {
+      // ── PART commitment billing ──
       if (line.type === 'part' && line.part_commitment_id) {
         const commitments = await base44.entities.PartCommitment.filter({ 
           id: line.part_commitment_id 
@@ -109,6 +111,27 @@ Deno.serve(async (req) => {
             new_invoiced_qty: newInvoicedQty,
             new_invoiced_amount: newInvoicedAmount,
           });
+        }
+      }
+
+      // ── SERVICE commitment billing ──
+      if (line.type === 'service' && line.part_commitment_id) {
+        // part_commitment_id holds the ServiceCommitment.id for service lines
+        const serviceCommitmentId = line.part_commitment_id;
+        try {
+          await base44.asServiceRole.entities.ServiceCommitment.update(serviceCommitmentId, {
+            status: 'billed',
+            is_billed: true,
+            billed_date: new Date().toISOString(),
+            invoice_id: invoice_id,
+          });
+
+          serviceUpdates.push({
+            service_commitment_id: serviceCommitmentId,
+            amount_billed: line.line_total ?? 0,
+          });
+        } catch (svcErr) {
+          console.error(`[markInvoiceSent] Failed to mark service ${serviceCommitmentId} as billed:`, svcErr.message);
         }
       }
     }
@@ -148,6 +171,7 @@ Deno.serve(async (req) => {
       issue_date,
       due_date,
       commitment_updates: commitmentUpdates,
+      service_updates: serviceUpdates,
     });
 
   } catch (error) {
