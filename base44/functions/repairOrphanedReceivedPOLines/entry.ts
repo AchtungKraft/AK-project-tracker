@@ -201,14 +201,14 @@ Deno.serve(async (req) => {
             triggered_by: user.email,
             actor_email: user.email,
             notes: `RECEIVED_PO_REPAIR: ${r.repair_source}. Applied allocation=${r.applied_allocation} to reserved_from_stock. Reason: ${r.reason}`,
-            previous_values: JSON.stringify({
-              reserved_from_stock: r.current_reserved,
-              covered_from_po: r.current_covered,
-            }),
-            new_values: JSON.stringify({
-              reserved_from_stock: r.new_reserved,
-              to_order: r.new_to_order,
-            }),
+            previous_values: {
+              reserved_from_stock: r.current_reserved ?? 0,
+              covered_from_po: r.current_covered ?? 0,
+            },
+            new_values: {
+              reserved_from_stock: r.new_reserved ?? 0,
+              to_order: r.new_to_order ?? 0,
+            },
             timestamp,
           });
 
@@ -219,8 +219,8 @@ Deno.serve(async (req) => {
             trigger_source: 'migration',
             triggered_by: user.email,
             actor_email: user.email,
-            old_values: JSON.stringify({ reserved_from_stock: r.current_reserved }),
-            new_values: JSON.stringify({ reserved_from_stock: r.new_reserved, applied_allocation: r.applied_allocation }),
+            old_values: { reserved_from_stock: r.current_reserved ?? 0 },
+            new_values: { reserved_from_stock: r.new_reserved ?? 0, applied_allocation: r.applied_allocation ?? 0 },
             part_id: r.part_id,
             project_id: r.project_id,
             event_date: timestamp,
