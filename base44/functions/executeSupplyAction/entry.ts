@@ -239,7 +239,8 @@ async function autoReserve(ctx, commitment_ids, payload) {
 }
 
 async function createPO(ctx, commitment_ids, payload) {
-  const {vendor_id,po_prefix='AK',vendor_order_data={},selected_sources={},vendor_override_map={},source_override_map={},allow_multi_vendor=true}=payload;
+  const {vendor_id,po_prefix='AK',vendor_order_data={},selected_sources={},vendor_override_map={},source_override_map={},allow_multi_vendor=true,qty_override_map={},cost_override_map={}}=payload;
+  console.log(`[CREATE_PO_QTY_AUDIT] qty_override_map keys=${Object.keys(qty_override_map).length}`, qty_override_map);
   if(!commitment_ids?.length) throw new Error('PO_COMMITMENT_REQUIRED');
   const commitments=await ctx.base44.entities.PartCommitment.filter({id:{$in:commitment_ids}});
   
@@ -307,21 +308,15 @@ async function createPO(ctx, commitment_ids, payload) {
     const resolvedCost = finalCost;
     const resolvedCostSource = finalCostSource;
     const resolvedSourceId = finalSourceId;
-    if (resolvedCost <= 0) {
-      console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
-      try {
-        await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({
-          commitment_id: c.id,
-          action_type: 'create',
-          trigger_source: 'manual',
-          triggered_by: ctx.user.email,
-          actor_email: ctx.user.email,
-          notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${p.part_name}. Cost source: ${resolvedCostSource}`,
-          timestamp: ctx.timestamp,
-        });
-      } catch (_e) { /* audit is best-effort */ }
-    }
-    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource,source_id:resolvedSourceId,price_ordered:resolvedCost});
+    // QTY OVERRIDE: Use modal-provided qty if available, otherwise fall back to gap
+    const qtyOverride = qty_override_map[c.id];
+    const finalQty = (qtyOverride != null && Number(qtyOverride) > 0) ? Number(qtyOverride) : cn.gap;
+    // COST OVERRIDE: Use modal-provided cost if available
+    const costOverride = cost_override_map[c.id];
+    const finalUnitCost = (costOverride != null && Number(costOverride) >= 0) ? Number(costOverride) : resolvedCost;
+    const finalCostSrc = (costOverride != null) ? 'modal_override' : resolvedCostSource;
+    console.log(`[CREATE_PO_LINE_QTY] commitment=${c.id} part=${p.part_name} gap=${cn.gap} qty_override=${qtyOverride ?? 'none'} final_qty=${finalQty} cost_override=${costOverride ?? 'none'} final_cost=${finalUnitCost}`);
+    vg.get(ev).push({commitment:c,part:p,qty:finalQty,unit_cost:finalUnitCost,cost_source:finalCostSrc,source_id:resolvedSourceId,price_ordered:finalUnitCost});
   }
 
   // ── DEFENSIVE ASSERTIONS: Prevent silent empty-group regression ──

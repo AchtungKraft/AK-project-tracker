@@ -395,6 +395,27 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
       }
     }
 
+    // Build qty_override_map from modal's user-edited quantities
+    // This is the ONLY authoritative source for ordered qty — backend MUST use it
+    const qtyOverrideMap = {};
+    const costOverrideMap = {};
+    for (const [groupVendorId, group] of Object.entries(vendorGroups)) {
+      for (const item of group.items) {
+        if (!item.commitment_id) continue;
+        qtyOverrideMap[item.commitment_id] = item.qty_to_order || 1;
+        if (item.unit_cost != null) {
+          costOverrideMap[item.commitment_id] = item.unit_cost;
+        }
+      }
+    }
+
+    console.log('[CreateBatchOrderModal] SUBMIT payload audit:', {
+      commitment_count: commitmentIds.length,
+      qty_overrides: qtyOverrideMap,
+      cost_overrides: Object.keys(costOverrideMap).length,
+      vendor_overrides: Object.keys(vendorOverrideMap).length,
+    });
+
     // Route through canonical dispatcher - NO direct entity writes
     supplyAction.mutate({
       action_type: 'CREATE_PO',
@@ -406,6 +427,8 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
         vendor_override_map: vendorOverrideMap,
         source_override_map: sourceOverrideMap,
         vendor_order_data: vendorOrderData,
+        qty_override_map: qtyOverrideMap,
+        cost_override_map: costOverrideMap,
       },
       dry_run: false
     });
