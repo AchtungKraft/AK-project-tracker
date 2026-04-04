@@ -6,6 +6,7 @@ import { ArrowLeft, ShoppingCart } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import VendorSelector from "@/components/supply/VendorSelector";
 import VendorPOBuilderPanel from "@/components/supply/VendorPOBuilder";
+import VendorOrderQueue from "@/components/supply/VendorOrderQueue";
 
 /**
  * VendorPOBuilder Page — Vendor-first PO creation workflow.
@@ -88,7 +89,10 @@ export default function VendorPOBuilder() {
           )}
 
           {step === 'select' && (
-            <VendorSelector onSelectVendor={handleSelectVendor} />
+            <>
+              <VendorOrderQueue onSelectVendor={handleSelectVendor} />
+              <VendorSelector onSelectVendor={handleSelectVendor} />
+            </>
           )}
 
           {step === 'build' && selectedVendor && (
