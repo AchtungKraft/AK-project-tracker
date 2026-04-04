@@ -188,8 +188,8 @@ export default function VendorsConfig() {
                       {vendor.website && (
                         <p className="text-sm text-blue-400 mt-1 truncate">{vendor.website}</p>
                       )}
-                      {vendor.contact_info && (
-                        <p className="text-sm text-gray-400 mt-1">{vendor.contact_info}</p>
+                      {vendor.contact_name && (
+                        <p className="text-sm text-gray-400 mt-1">{vendor.contact_name}{vendor.contact_email ? ` · ${vendor.contact_email}` : ''}</p>
                       )}
                       {vendor.notes && (
                         <p className="text-sm text-gray-500 mt-1 italic">{vendor.notes}</p>

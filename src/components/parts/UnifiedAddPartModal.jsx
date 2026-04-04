@@ -77,51 +77,69 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   };
 
   const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
+    queryKey: ['referenceData', 'partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['referenceData', 'vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
+    queryKey: ['referenceData', 'locations'],
     queryFn: async () => {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
+    queryKey: ['referenceData', 'carMakes'],
     queryFn: async () => {
       const list = await base44.entities.CarMake.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
+    queryKey: ['referenceData', 'carModels'],
     queryFn: async () => {
       const list = await base44.entities.CarModel.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
+    queryKey: ['referenceData', 'carYears'],
     queryFn: async () => {
       const list = await base44.entities.CarYear.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Matrix pricing derivation — identical to Edit Part
@@ -415,27 +433,27 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     switch(entityType) {
       case 'PartCategory':
         mutation = base44.entities.PartCategory.create;
-        queryKey = 'partCategories';
+        queryKey = ['referenceData', 'partCategories'];
         break;
       case 'Vendor':
         mutation = base44.entities.Vendor.create;
-        queryKey = 'vendors';
+        queryKey = ['referenceData', 'vendors'];
         break;
       case 'Location':
         mutation = base44.entities.Location.create;
-        queryKey = 'locations';
+        queryKey = ['referenceData', 'locations'];
         break;
       case 'CarMake':
         mutation = base44.entities.CarMake.create;
-        queryKey = 'carMakes';
+        queryKey = ['referenceData', 'carMakes'];
         break;
       case 'CarModel':
         mutation = base44.entities.CarModel.create;
-        queryKey = 'carModels';
+        queryKey = ['referenceData', 'carModels'];
         break;
       case 'CarYear':
         mutation = base44.entities.CarYear.create;
-        queryKey = 'carYears';
+        queryKey = ['referenceData', 'carYears'];
         break;
       default:
         return;
@@ -443,7 +461,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     
     try {
       const newItem = await mutation(data);
-      await queryClient.invalidateQueries({ queryKey: [queryKey] });
+      await queryClient.invalidateQueries({ queryKey });
       
       if (entityType === 'PartCategory') {
         setFormData(f => ({ ...f, part_category_id: newItem.id }));

@@ -199,6 +199,7 @@ export default function PartVendorSourcesSection({
         is_preferred: s.is_preferred || false,
         is_active: true,
         notes: s.notes || "",
+        sort_order: s.sort_order || 0,
       };
 
       if (s.id && !s._isNew) {
