@@ -214,6 +214,23 @@ function ProjectCommitmentRow({ commitment }) {
     coverage_status === 'PARTIALLY_COVERED' ? 'bg-yellow-500' :
     'bg-red-500';
 
+  // DEV: Coverage drift assertion
+  if (import.meta.env.DEV) {
+    const expected = reserved_from_stock + covered_from_po + qty_installed + to_order;
+    if (expected !== required_total) {
+      console.warn('MODAL COVERAGE DRIFT', {
+        commitment_id,
+        required_total,
+        reserved_from_stock,
+        covered_from_po,
+        qty_installed,
+        to_order,
+        expected,
+        delta: required_total - expected,
+      });
+    }
+  }
+
   return (
     <Link
       to={createPageUrl('ProjectSupplyManager') + `?project_id=${project_id}`}

@@ -118,8 +118,8 @@ Deno.serve(async (req) => {
           return sum + Math.max(0, (li.qty_ordered ?? 0) - (li.qty_received ?? 0));
         }, 0);
 
-        const to_order = Math.max(0, required - reserved - covered_po);
-        const coverage_total = reserved + covered_po;
+        const to_order = Math.max(0, required - reserved - covered_po - installed);
+        const coverage_total = reserved + covered_po + installed;
         const coverage_pct = required > 0 ? Math.round((coverage_total / required) * 100) : 100;
 
         total_required += required;
@@ -141,10 +141,10 @@ Deno.serve(async (req) => {
         } else if (on_order > 0) {
           // Fully covered by PO but awaiting delivery
           next_action = 'RECEIVE';
-        } else if (reserved > installed) {
-          // Stock in hand, ready to install
+        } else if (reserved + covered_po > installed && installed < required) {
+          // Stock/PO in hand, ready to install
           next_action = 'INSTALL';
-        } else if (reserved === 0 && required > 0 && installed < required) {
+        } else if (reserved === 0 && covered_po === 0 && required > 0 && installed < required) {
           // Need stock allocation first
           const physicalStock = part.physical_stock ?? 0;
           const totalAllocated = partCommitments.reduce((s, pc) => s + (pc.reserved_from_stock ?? 0), 0);
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
       const physical_stock = part.physical_stock ?? 0;
       const allocated_total = total_reserved;
       const available = Math.max(0, physical_stock - allocated_total);
-      const total_to_order = Math.max(0, total_required - total_reserved - total_covered_po);
+      const total_to_order = Math.max(0, total_required - total_reserved - total_covered_po - total_installed);
 
       results.push({
         part_id: partId,
