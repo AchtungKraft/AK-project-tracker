@@ -27,6 +27,9 @@ Deno.serve(async (req) => {
       case 'CREATE':
         result = await createServiceCommitment(base44, user, payload);
         break;
+      case 'CREATE_WITH_LINE_ITEMS':
+        result = await createWithLineItems(base44, user, payload);
+        break;
       case 'UPDATE_STATUS':
         result = await updateStatus(base44, user, payload);
         break;
@@ -96,9 +99,9 @@ async function recomputeTotals(base44, commitmentId) {
   return { commitment_id: commitmentId, total_cost: totalCost, total_billable: totalBillable, line_count: lineItems.length, action: 'TOTALS_RECOMPUTED' };
 }
 
-// ── CREATE ──
+// ── CREATE (bare commitment — no legacy cost fields) ──
 async function createServiceCommitment(base44, user, payload) {
-  const { project_id, service_id, description, vendor_id, estimated_cost, quantity, notes } = payload;
+  const { project_id, service_id, description, vendor_id, quantity, notes } = payload;
   if (!project_id || !service_id || !description) throw new Error('project_id, service_id, and description required');
 
   const commitment = await base44.asServiceRole.entities.ServiceCommitment.create({
@@ -106,7 +109,6 @@ async function createServiceCommitment(base44, user, payload) {
     service_id,
     description,
     vendor_id: vendor_id || null,
-    estimated_cost: estimated_cost || 0,
     quantity: quantity || 1,
     status: 'planned',
     notes: notes || null,
@@ -115,6 +117,67 @@ async function createServiceCommitment(base44, user, payload) {
   });
 
   return { commitment, action: 'CREATED' };
+}
+
+// ── CREATE WITH LINE ITEMS (atomic: commitment + N line items + recompute) ──
+async function createWithLineItems(base44, user, payload) {
+  const { project_id, service_id, description, vendor_id, quantity, notes, line_items } = payload;
+  if (!project_id || !service_id || !description) throw new Error('project_id, service_id, and description required');
+  if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
+    throw new Error('At least one line item is required');
+  }
+
+  // Validate each line item has cost or billing_rate
+  for (let i = 0; i < line_items.length; i++) {
+    const li = line_items[i];
+    if (!li.type || !li.description) throw new Error(`Line item ${i + 1}: type and description required`);
+    if (!(li.cost > 0) && !(li.billing_rate > 0)) {
+      throw new Error(`Line item ${i + 1}: cost or billing_rate must be > 0`);
+    }
+  }
+
+  // 1. Create commitment (no legacy cost fields)
+  const commitment = await base44.asServiceRole.entities.ServiceCommitment.create({
+    project_id,
+    service_id,
+    description,
+    vendor_id: vendor_id || null,
+    quantity: quantity || 1,
+    status: 'planned',
+    notes: notes || null,
+    total_cost: 0,
+    total_billable: 0,
+  });
+
+  // 2. Create line items
+  const createdLines = [];
+  for (let i = 0; i < line_items.length; i++) {
+    const li = line_items[i];
+    const created = await base44.asServiceRole.entities.ServiceLineItem.create({
+      service_commitment_id: commitment.id,
+      type: li.type,
+      description: li.description,
+      vendor_id: li.vendor_id || null,
+      cost: li.cost || 0,
+      billing_rate: li.billing_rate || 0,
+      quantity: li.quantity || 1,
+      sort_order: i + 1,
+      notes: li.notes || null,
+    });
+    createdLines.push(created);
+  }
+
+  // 3. Recompute totals
+  const totals = await recomputeTotals(base44, commitment.id);
+
+  console.log(`[CREATE_WITH_LINE_ITEMS] commitment=${commitment.id} lines=${createdLines.length} cost=${totals.total_cost} billable=${totals.total_billable} by=${user.email}`);
+
+  return {
+    commitment,
+    line_items: createdLines,
+    totals,
+    action: 'CREATED_WITH_LINE_ITEMS',
+  };
 }
 
 // ── UPDATE STATUS ──
