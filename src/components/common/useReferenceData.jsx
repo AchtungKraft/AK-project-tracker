@@ -267,6 +267,11 @@ export function useReferenceData() {
     isError,
     error,
     
+    // Per-query loading states (for targeted loading guards)
+    vendorGroupsLoading: vendorGroupsQuery.isLoading,
+    vendorsLoading: vendorsQuery.isLoading,
+    categoriesLoading: categoriesQuery.isLoading,
+    
     // Raw arrays
     categories,
     vendors,
