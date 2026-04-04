@@ -21,21 +21,21 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
   // Normalize group shape — handles both entity records {id, name, vendor_type}
   // and any alternate shapes {group_id, group_name} that might arrive from different sources
   const safeGroups = (Array.isArray(groups) ? groups : []).map(g => ({
-    id: g.id || g.group_id,
-    name: g.name || g.group_name,
+    id: String(g.id || g.group_id || ""),
+    name: g.name || g.group_name || "",
     vendor_type: (g.vendor_type || "").toUpperCase(),
     is_active: g.is_active,
     sort_priority: g.sort_priority || 0,
   }));
 
   const filteredGroups = safeGroups
-    .filter(g => g.id && g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
+    .filter(g => g.id && g.id !== "" && g.name && g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
     .sort((a, b) => a.sort_priority - b.sort_priority);
 
   // Fallback: if type-filtering yields nothing but groups exist, show all active groups
   // This prevents an empty dropdown due to casing/missing vendor_type issues
   const allActiveGroups = safeGroups
-    .filter(g => g.id && g.is_active !== false && g.name !== "UNCATEGORIZED")
+    .filter(g => g.id && g.id !== "" && g.name && g.is_active !== false && g.name !== "UNCATEGORIZED")
     .sort((a, b) => a.sort_priority - b.sort_priority);
 
   const groupsForType = filteredGroups.length > 0 ? filteredGroups : allActiveGroups;
@@ -86,7 +86,7 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
           </div>
         ) : (
           <Select
-            value={data.vendor_group_id || "none"}
+            value={data.vendor_group_id ? String(data.vendor_group_id) : "none"}
             onValueChange={(value) => onChange({ ...data, vendor_group_id: value === "none" ? "" : value })}
           >
             <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
