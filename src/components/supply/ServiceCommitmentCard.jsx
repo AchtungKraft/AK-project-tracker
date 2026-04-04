@@ -154,21 +154,15 @@ export default function ServiceCommitmentCard({
                 <List className="w-3.5 h-3.5 mr-2" />
                 {expanded ? "Hide" : "Show"} Line Items
               </DropdownMenuItem>
-              {status !== "billed" && (
-                <DropdownMenuItem onClick={() => setShowEditModal(true)} className="text-gray-200">
-                  <Pencil className="w-3.5 h-3.5 mr-2" />
-                  Edit Service
-                </DropdownMenuItem>
-              )}
-              {status !== "billed" && (
-                <>
-                  <DropdownMenuSeparator className="bg-gray-700" />
-                  <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">
-                    <Trash2 className="w-3.5 h-3.5 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuItem onClick={() => setShowEditModal(true)} className="text-gray-200">
+                <Pencil className="w-3.5 h-3.5 mr-2" />
+                Edit Service
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-gray-700" />
+              <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">
+                <Trash2 className="w-3.5 h-3.5 mr-2" />
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
