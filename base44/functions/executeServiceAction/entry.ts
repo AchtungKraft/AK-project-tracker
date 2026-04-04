@@ -98,8 +98,14 @@ async function recomputeTotals(base44, commitmentId) {
 
 // ── CREATE (atomic: commitment + line items + recompute, with rollback) ──
 async function createServiceCommitment(base44, user, payload) {
-  const { project_id, service_id, description, vendor_id, quantity, notes, line_items } = payload;
+  const { project_id, service_id, description, vendor_id, quantity, notes, line_items, estimated_cost, actual_cost } = payload;
   if (!project_id || !service_id || !description) throw new Error('project_id, service_id, and description required');
+
+  // Hard-block legacy fields
+  if (estimated_cost !== undefined || actual_cost !== undefined) {
+    console.warn(`[CREATE] Legacy cost field detected! estimated_cost=${estimated_cost} actual_cost=${actual_cost} by=${user.email} — IGNORED`);
+  }
+
   if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
     throw new Error('At least one line item is required');
   }
