@@ -70,6 +70,7 @@ export default function GlobalNeedToOrder() {
   const [viewMode, setViewMode] = useState('parts'); // 'parts' | 'vendors'
 
   // Use canonical ops supply view
+  // CRITICAL: vendor filter is NEVER set by vendor view selection — only by explicit dropdown
   const { 
     items: needToOrderItems, 
     summary, 
@@ -363,20 +364,12 @@ export default function GlobalNeedToOrder() {
             ) : (
               <VendorQueueView
                 items={filteredItems}
-                onSelectVendor={(vendor) => {
-                  // Select items where this vendor is default OR has a PartVendorSource
-                  const vendorItemIds = new Set(
-                    filteredItems
-                      .filter(i => {
-                        if ((i.vendor?.id || i.vendor_id) === vendor.id) return true;
-                        return false; // Source-based selection happens in the vendor view itself
-                      })
-                      .filter(i => i.to_order > 0)
-                      .map(i => i.id)
-                  );
-                  setSelectedItems(vendorItemIds);
-                  setSelectedVendorFilter(vendor.id);
+                onSelectVendor={(vendor, itemIds) => {
+                  // PART 1 FIX: Selection ONLY — no filter mutation
+                  // itemIds come from VendorQueueView which knows about sources
+                  setSelectedItems(new Set(itemIds));
                   setViewMode('parts');
+                  // DO NOT call setSelectedVendorFilter — that mutates the dataset
                 }}
               />
             )
