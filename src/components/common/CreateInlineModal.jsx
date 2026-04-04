@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { useReferenceData } from "@/components/common/useReferenceData";
 import {
   Dialog,
   DialogContent,
@@ -39,50 +40,20 @@ export default function CreateInlineModal({ entityType, onClose, onCreate, paren
   });
   const [creating, setCreating] = useState(false);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
-    queryFn: async () => {
-      const list = await base44.entities.PartCategory.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: entityType === 'PartCategory',
-  });
+  // Centralized reference data — single source of truth, no duplicate fetches
+  const {
+    categories: refCategories,
+    vendorGroups: refVendorGroups,
+    makes: refMakes,
+    models: refModels,
+    locations: refLocations,
+  } = useReferenceData();
 
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const list = await base44.entities.Location.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: entityType === 'Location',
-  });
-
-  const { data: vendorGroups = [] } = useQuery({
-    queryKey: ['vendorGroups'],
-    queryFn: async () => {
-      const list = await base44.entities.VendorGroup.list();
-      return list.filter(g => g.is_active !== false);
-    },
-    enabled: entityType === 'Vendor',
-  });
-
-  const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
-    queryFn: async () => {
-      const list = await base44.entities.CarMake.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: entityType === 'CarModel' || entityType === 'CarYear',
-  });
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
-    queryFn: async () => {
-      const list = await base44.entities.CarModel.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: entityType === 'CarYear',
-  });
+  const categories = refCategories;
+  const locations = refLocations;
+  const vendorGroups = refVendorGroups;
+  const makes = refMakes;
+  const models = refModels;
 
   const handleSubmit = async (e) => {
     e?.preventDefault();

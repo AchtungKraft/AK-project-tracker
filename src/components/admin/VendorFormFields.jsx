@@ -60,20 +60,26 @@ export default function VendorFormFields({ data, onChange, groups, showType = fa
 
       <div>
         <Label className="text-gray-400 text-xs">Vendor Group *</Label>
-        <Select
-          value={data.vendor_group_id || "none"}
-          onValueChange={(value) => onChange({ ...data, vendor_group_id: value === "none" ? "" : value })}
-        >
-          <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-            <SelectValue placeholder="Select group..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Select group...</SelectItem>
-            {groupsForType.map(g => (
-              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {groupsForType.length === 0 ? (
+          <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded px-3 py-2">
+            No vendor groups available for {vendorType} type. Create one in Admin Config first.
+          </div>
+        ) : (
+          <Select
+            value={data.vendor_group_id || "none"}
+            onValueChange={(value) => onChange({ ...data, vendor_group_id: value === "none" ? "" : value })}
+          >
+            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+              <SelectValue placeholder="Select group..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Select group...</SelectItem>
+              {groupsForType.map(g => (
+                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div>
