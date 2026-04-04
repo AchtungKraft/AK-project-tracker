@@ -20,21 +20,25 @@ Deno.serve(async (req) => {
     const { dry_run = true } = await req.json().catch(() => ({}));
 
     // Fetch all parts and existing sources
+    // Fetch ALL vendors (not just PART) to handle parts referencing SERVICE or untyped vendors
     const [allParts, allSources, allVendors] = await Promise.all([
-      base44.entities.Part.filter({}),
-      base44.entities.PartVendorSource.filter({}),
-      base44.entities.Vendor.filter({ vendor_type: 'PART' }),
+      base44.asServiceRole.entities.Part.filter({}),
+      base44.asServiceRole.entities.PartVendorSource.filter({}),
+      base44.asServiceRole.entities.Vendor.filter({}),
     ]);
+    const partVendors = allVendors.filter(v => v.vendor_type === 'PART');
 
     // Build lookup: which parts already have sources
     const partsWithSources = new Set(allSources.map(s => s.part_id));
 
-    // Build vendor name lookup for matching
+    // Build vendor name lookup for matching (PART vendors only for name-based creation)
     const vendorByName = new Map();
-    for (const v of allVendors) {
+    for (const v of partVendors) {
       const normalized = (v.vendor_name || '').toLowerCase().trim();
       if (normalized) vendorByName.set(normalized, v);
     }
+    // Full vendor ID lookup (all types) for resolving default_vendor_id references
+    const vendorById = new Map(allVendors.map(v => [v.id, v]));
 
     // Find UNCATEGORIZED group for new vendors
     const uncategorizedGroups = await base44.entities.VendorGroup.filter({ vendor_type: 'PART' });
@@ -70,12 +74,21 @@ Deno.serve(async (req) => {
 
       // Find the vendor
       let vendorId = part.default_vendor_id;
-      const existingVendor = allVendors.find(v => v.id === vendorId);
+      const existingVendor = vendorById.get(vendorId);
 
       if (!existingVendor) {
-        // Vendor reference is broken — skip
+        // Vendor reference is broken — clear the reference and skip
+        if (!dry_run) {
+          await base44.asServiceRole.entities.Part.update(part.id, { default_vendor_id: '' });
+        }
         stats.parts_no_vendor++;
         continue;
+      }
+
+      // If vendor is SERVICE type, flag but still create source (vendor exists, just wrong type)
+      // The vendor should ideally be reclassified, but we create the link regardless
+      if (existingVendor.vendor_type === 'SERVICE') {
+        console.warn(`[migrate] Part "${part.part_name}" references SERVICE vendor "${existingVendor.vendor_name}" — creating source anyway`);
       }
 
       stats.vendors_matched++;

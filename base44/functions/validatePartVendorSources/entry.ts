@@ -1,5 +1,5 @@
 /**
- * validatePartVendorSources — Integrity checks for PartVendorSource data.
+ * validatePartVendorSources — Comprehensive integrity checks for PartVendorSource data.
  * 
  * Checks:
  * - Sources with missing vendor_id
@@ -7,6 +7,8 @@
  * - Duplicate source rows per part (same vendor_id + order_url)
  * - Parts still relying only on legacy vendor fields (no sources)
  * - Parts with no preferred source
+ * - Broken vendor references (default_vendor_id points to non-existent vendor)
+ * - Drift: default_vendor_id != preferred PartVendorSource.vendor_id
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
@@ -19,9 +21,9 @@ Deno.serve(async (req) => {
     }
 
     const [allParts, allSources, allVendors] = await Promise.all([
-      base44.entities.Part.filter({}),
-      base44.entities.PartVendorSource.filter({}),
-      base44.entities.Vendor.filter({}),
+      base44.asServiceRole.entities.Part.filter({}),
+      base44.asServiceRole.entities.PartVendorSource.filter({}),
+      base44.asServiceRole.entities.Vendor.filter({}),
     ]);
 
     const vendorMap = new Map(allVendors.map(v => [v.id, v]));
@@ -32,6 +34,8 @@ Deno.serve(async (req) => {
       duplicate_sources: [],
       parts_without_sources: [],
       parts_without_preferred: [],
+      broken_vendor_refs: [],
+      vendor_drift: [],
       total_sources: allSources.length,
       total_parts: allParts.length,
     };
@@ -60,7 +64,6 @@ Deno.serve(async (req) => {
 
     // Check for duplicates and missing preferred
     for (const [partId, sources] of partSourceMap) {
-      // Duplicate check: same vendor_id + order_url
       const seen = new Set();
       for (const s of sources) {
         const key = `${s.vendor_id}|${s.order_url || ''}`;
@@ -70,20 +73,42 @@ Deno.serve(async (req) => {
         seen.add(key);
       }
 
-      // Preferred check
       const hasPreferred = sources.some(s => s.is_preferred);
       if (!hasPreferred) {
         issues.parts_without_preferred.push(partId);
       }
     }
 
-    // Parts without any sources but have legacy vendor
+    // Check parts
     for (const part of allParts) {
-      if (!partSourceMap.has(part.id) && part.default_vendor_id) {
+      const sources = partSourceMap.get(part.id) || [];
+
+      // Parts without any sources but have legacy vendor
+      if (sources.length === 0 && part.default_vendor_id) {
         issues.parts_without_sources.push({
           part_id: part.id,
           part_name: part.part_name,
           default_vendor_id: part.default_vendor_id,
+        });
+      }
+
+      // Broken vendor reference
+      if (part.default_vendor_id && !vendorMap.has(part.default_vendor_id)) {
+        issues.broken_vendor_refs.push({
+          part_id: part.id,
+          part_name: part.part_name,
+          broken_vendor_id: part.default_vendor_id,
+        });
+      }
+
+      // Drift: default_vendor_id != preferred source
+      const preferred = sources.find(s => s.is_preferred);
+      if (preferred && part.default_vendor_id && part.default_vendor_id !== preferred.vendor_id) {
+        issues.vendor_drift.push({
+          part_id: part.id,
+          part_name: part.part_name,
+          default_vendor_id: part.default_vendor_id,
+          preferred_vendor_id: preferred.vendor_id,
         });
       }
     }
@@ -93,7 +118,9 @@ Deno.serve(async (req) => {
       issues.service_vendor_reference.length +
       issues.duplicate_sources.length +
       issues.parts_without_sources.length +
-      issues.parts_without_preferred.length;
+      issues.parts_without_preferred.length +
+      issues.broken_vendor_refs.length +
+      issues.vendor_drift.length;
 
     return Response.json({
       success: true,
