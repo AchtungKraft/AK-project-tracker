@@ -159,10 +159,17 @@ export default function ServiceCommitmentCard({
                 Edit Service
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-gray-700" />
-              <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">
-                <Trash2 className="w-3.5 h-3.5 mr-2" />
-                Delete
-              </DropdownMenuItem>
+              {status === "billed" ? (
+                <DropdownMenuItem disabled className="text-gray-500">
+                  <Trash2 className="w-3.5 h-3.5 mr-2" />
+                  Delete (Billed)
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">
+                  <Trash2 className="w-3.5 h-3.5 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
