@@ -106,14 +106,14 @@ export default function VendorQueueView({ items, onSelectVendor }) {
         totalToOrderQty += toOrder;
         totalExposure += item.exposure_gap ?? 0;
 
-        // Find this vendor's cost for this part
+        // Find this vendor's cost for this part (prefer PartVendorSource)
         const sources = sourcesByPart.get(item.part_id) || [];
         const thisVendorSource = sources.find(s => s.vendor_id === vendorId);
-        const vendorCost = thisVendorSource?.unit_cost ?? item.unit_cost ?? 0;
+        const vendorCost = thisVendorSource?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost ?? 0;
 
         // Find cheapest source across all vendors for comparison
         const allCosts = sources.filter(s => (s.unit_cost ?? 0) > 0).map(s => s.unit_cost);
-        const defaultCost = item.unit_cost ?? 0;
+        const defaultCost = item.resolved_unit_cost ?? item.unit_cost ?? 0;
         if (defaultCost > 0 && !allCosts.includes(defaultCost)) allCosts.push(defaultCost);
         const cheapest = allCosts.length > 0 ? Math.min(...allCosts) : 0;
 

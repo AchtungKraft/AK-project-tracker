@@ -107,10 +107,10 @@ export default function GlobalNeedToOrder() {
     });
   }, [needToOrderItems, coverageFilter, prepayFilter]);
 
-  // Stats from canonical fields
+  // Stats from canonical resolved fields (PartVendorSource-first)
   const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
   const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
-  const totalCost = filteredItems.reduce((sum, i) => sum + (i.planned_cost_total ?? i.estimated_cost ?? 0), 0);
+  const totalCost = filteredItems.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.estimated_cost ?? 0), 0);
   const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
   const blockedCount = filteredItems.filter(i => !i.is_orderable).length;
 
@@ -469,11 +469,13 @@ export default function GlobalNeedToOrder() {
             project_id: item.project_id,
             project_name: item.project_name,
             qty_to_order: item.to_order,
-            estimated_cost: item.estimated_cost,
-            default_cost: item.unit_cost,
+            estimated_cost: item.resolved_cost_total ?? item.estimated_cost,
+            default_cost: item.resolved_unit_cost ?? item.unit_cost,
             default_retail: item.unit_retail,
             order_url: item.order_url,
-            sources: vendorSourcesByPart[item.part_id] || [],
+            cost_source_tag: item.cost_source_tag,
+            invalid_cost: item.invalid_cost,
+            sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
           }))}
           selectedVendorContext={selectedVendorContext}
           onClose={() => setShowBatchOrderModal(false)}

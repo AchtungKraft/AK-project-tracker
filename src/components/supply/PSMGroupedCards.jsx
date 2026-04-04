@@ -456,11 +456,13 @@ export function PSMItemRow({
           )}
         </div>
 
-        {/* PHASE 3: Inline Financial — Unit + Total Cost/Retail */}
+        {/* PHASE 3: Inline Financial — CANONICAL: uses resolved_unit_cost from PartVendorSource */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
           <div className="text-center">
             <span className="text-gray-500 block">U/COST</span>
-            <span className="text-gray-400">{formatCurrencyUSD(commitment.unit_cost ?? 0)}</span>
+            <span className={commitment.invalid_cost ? "text-red-500" : "text-gray-400"}>
+              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.resolved_unit_cost ?? commitment.unit_cost ?? 0)}
+            </span>
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">U/RETAIL</span>
@@ -468,7 +470,9 @@ export function PSMItemRow({
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">COST</span>
-            <span className="text-red-400">{formatCurrencyUSD(commitment.planned_cost_total ?? 0)}</span>
+            <span className={commitment.invalid_cost ? "text-red-500" : "text-red-400"}>
+              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.resolved_cost_total ?? commitment.planned_cost_total ?? 0)}
+            </span>
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">RETAIL</span>
@@ -1389,7 +1393,7 @@ function PSMGroupCardWithSubgroups({
   const groupStats = useMemo(() => {
     const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
     const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
-    const totalCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
+    const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
