@@ -119,9 +119,25 @@ function AllocationBreakdown({ inventory, demand, health }) {
   const allocatedPct = Math.min(100, Math.round((allocated_total / totalBar) * 100));
   const availablePct = 100 - allocatedPct;
 
+  // DEV: Summary-level canonical invariant assertion
+  if (import.meta.env.DEV && demand) {
+    const expectedTotal = (demand.total_reserved ?? 0) + (demand.total_covered_po ?? 0) + (demand.total_installed ?? 0) + (demand.total_to_order ?? 0);
+    if (expectedTotal !== (demand.total_required ?? 0)) {
+      console.warn('[SUMMARY COVERAGE DRIFT]', {
+        total_required: demand.total_required,
+        total_reserved: demand.total_reserved,
+        total_covered_po: demand.total_covered_po,
+        total_installed: demand.total_installed,
+        total_to_order: demand.total_to_order,
+        expected: expectedTotal,
+        delta: (demand.total_required ?? 0) - expectedTotal,
+      });
+    }
+  }
+
   return (
     <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-3">
-      {/* Metric row */}
+      {/* Metric row — canonical backend values only */}
       <div className="grid grid-cols-4 gap-2 text-center">
         <MetricCell label="In Stock" value={physical_stock} color="text-white" />
         <MetricCell label="Allocated" value={allocated_total} color="text-cyan-400" />
@@ -208,25 +224,26 @@ function ProjectCommitmentRow({ commitment }) {
     next_action,
   } = commitment;
 
-  const gap = to_order;
   const coverageColor =
     coverage_status === 'FULLY_COVERED'  ? 'bg-green-500' :
     coverage_status === 'PARTIALLY_COVERED' ? 'bg-yellow-500' :
     'bg-red-500';
 
-  // DEV: Coverage drift assertion
+  // DEV: Row-level coverage invariant assertion
+  // required_total === reserved_from_stock + covered_from_po + qty_installed + to_order
   if (import.meta.env.DEV) {
-    const expected = reserved_from_stock + covered_from_po + qty_installed + to_order;
-    if (expected !== required_total) {
-      console.warn('MODAL COVERAGE DRIFT', {
+    const coverageSum = reserved_from_stock + covered_from_po + qty_installed + to_order;
+    if (coverageSum !== required_total) {
+      console.error('[ROW COVERAGE DRIFT]', {
         commitment_id,
+        part_id: commitment.part_id,
         required_total,
         reserved_from_stock,
         covered_from_po,
         qty_installed,
         to_order,
-        expected,
-        delta: required_total - expected,
+        coverageSum,
+        delta: required_total - coverageSum,
       });
     }
   }
@@ -253,15 +270,15 @@ function ProjectCommitmentRow({ commitment }) {
         />
       </div>
 
-      {/* Quantity breakdown - all canonical fields */}
+      {/* Quantity breakdown — canonical backend fields only, no local math */}
       <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
-        <QtyChip label="Req" value={required_total} />
-        <QtyChip label="Res" value={reserved_from_stock} color="text-cyan-400" />
+        <QtyChip label="req" value={required_total} />
+        <QtyChip label="res" value={reserved_from_stock} color="text-cyan-400" />
         <QtyChip label="PO" value={covered_from_po} color="text-purple-400" show={covered_from_po > 0} />
-        <QtyChip label="Inst" value={qty_installed} color="text-green-400" show={qty_installed > 0} />
-        {gap > 0 && (
+        <QtyChip label="inst" value={qty_installed} color="text-green-400" show={qty_installed > 0} />
+        {to_order > 0 && (
           <span className="text-red-400 font-semibold">
-            Gap <span className="font-bold">{gap}</span>
+            Gap <span className="font-bold">{to_order}</span>
           </span>
         )}
       </div>
