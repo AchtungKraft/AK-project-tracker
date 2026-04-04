@@ -9,9 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Package } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { cn } from "@/lib/utils";
+import { CheapestBadge, SourceComparisonPopover } from "./SourceComparisonBadges";
 
 /**
  * VendorPOAvailableRow — A single available item in the "Add to PO" list.
@@ -23,12 +24,16 @@ export function VendorPOAvailableRow({ item, onAdd }) {
   return (
     <div className="flex items-center gap-3 p-3 bg-gray-800/40 rounded-lg border border-gray-700/50 hover:border-gray-600 transition-colors">
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium truncate">{item.part_name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm text-white font-medium truncate">{item.part_name}</p>
+          <CheapestBadge isCheapest={item.is_cheapest_source} priceDelta={item.price_delta} />
+        </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-gray-500">{item.project_name}</span>
           {item.vendor_part_number && (
             <span className="text-xs text-gray-600">SKU: {item.vendor_part_number}</span>
           )}
+          <SourceComparisonPopover allSources={item.all_sources} currentVendorId={null} />
         </div>
       </div>
 
@@ -49,12 +54,6 @@ export function VendorPOAvailableRow({ item, onAdd }) {
         <p className="text-sm font-mono text-gray-300">{formatCurrencyUSD(extCost)}</p>
       </div>
 
-      {item.has_dedicated_source && (
-        <Badge className="bg-blue-900/40 text-blue-400 border-blue-700 text-[9px] shrink-0">
-          SOURCE
-        </Badge>
-      )}
-
       <Button
         size="sm"
         onClick={() => onAdd(item)}
@@ -74,10 +73,21 @@ export function VendorPOSelectedRow({ line, vendorSources, onChange, onRemove })
   const extCost = (line.unit_cost || 0) * (line.qty || 0);
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-gray-900/60 rounded-lg border border-green-800/30">
+    <div className={cn(
+      "flex items-center gap-3 p-3 rounded-lg border",
+      line.is_cheapest_source === false && line.price_delta > 0
+        ? "bg-amber-900/10 border-amber-800/30"
+        : "bg-gray-900/60 border-green-800/30"
+    )}>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium truncate">{line.part_name}</p>
-        <p className="text-xs text-gray-500">{line.project_name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm text-white font-medium truncate">{line.part_name}</p>
+          <CheapestBadge isCheapest={line.is_cheapest_source} priceDelta={line.price_delta} />
+        </div>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-gray-500">{line.project_name}</p>
+          <SourceComparisonPopover allSources={line.all_sources} currentVendorId={null} />
+        </div>
       </div>
 
       {/* Qty input */}

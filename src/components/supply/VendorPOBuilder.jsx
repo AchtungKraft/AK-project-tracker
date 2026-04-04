@@ -70,6 +70,7 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
   const cartTotalQty = cart.reduce((s, l) => s + l.qty, 0);
   const cartTotalCost = cart.reduce((s, l) => s + l.qty * l.unit_cost, 0);
   const zeroCostLines = cart.filter(l => l.unit_cost <= 0);
+  const totalSavingsAvailable = cart.reduce((s, l) => s + (l.price_delta || 0) * l.qty, 0);
 
   const handleAdd = (item) => {
     setCart(prev => [...prev, {
@@ -84,6 +85,9 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       vendor_sources: item.has_dedicated_source
         ? [{ source_id: item.source_id, unit_cost: item.unit_cost, vendor_part_number: item.vendor_part_number }]
         : [],
+      is_cheapest_source: item.is_cheapest_source,
+      price_delta: item.price_delta,
+      all_sources: item.all_sources || [],
     }]);
   };
 
@@ -100,6 +104,9 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
       vendor_sources: item.has_dedicated_source
         ? [{ source_id: item.source_id, unit_cost: item.unit_cost, vendor_part_number: item.vendor_part_number }]
         : [],
+      is_cheapest_source: item.is_cheapest_source,
+      price_delta: item.price_delta,
+      all_sources: item.all_sources || [],
     }));
     setCart(prev => [...prev, ...newLines]);
   };
@@ -204,6 +211,16 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
                   {zeroCostLines.length} $0 COST
                 </Badge>
               )}
+              {cart.filter(l => !l.is_cheapest_source && l.price_delta > 0).length > 0 && (
+                <Badge className="bg-blue-900/40 text-blue-400 border-blue-700 text-[9px]">
+                  {cart.filter(l => !l.is_cheapest_source && l.price_delta > 0).length} NOT CHEAPEST
+                </Badge>
+              )}
+              {totalSavingsAvailable > 0 && (
+                <span className="text-[10px] text-amber-400/70">
+                  {formatCurrencyUSD(totalSavingsAvailable)} cheaper elsewhere
+                </span>
+              )}
             </div>
             <Button
               onClick={() => setShowConfirm(true)}
@@ -306,6 +323,21 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
               </Button>
             </div>
           </div>
+
+          {/* Source comparison summary */}
+          {!loading && available.length > 0 && (() => {
+            const cheapestCount = available.filter(i => i.is_cheapest_source).length;
+            const notCheapestCount = available.filter(i => !i.is_cheapest_source && i.price_delta > 0).length;
+            const multiSourceCount = available.filter(i => (i.source_count || 0) > 1).length;
+            if (multiSourceCount === 0) return null;
+            return (
+              <div className="flex items-center gap-3 text-[10px] text-gray-500 px-1">
+                <span>{multiSourceCount} with multiple sources</span>
+                {cheapestCount > 0 && <span className="text-green-400">{cheapestCount} best price</span>}
+                {notCheapestCount > 0 && <span className="text-amber-400">{notCheapestCount} cheaper elsewhere</span>}
+              </div>
+            );
+          })()}
 
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />

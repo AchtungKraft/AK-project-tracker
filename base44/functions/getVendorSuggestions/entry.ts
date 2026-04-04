@@ -64,13 +64,29 @@ Deno.serve(async (req) => {
     const gapPartIds = [...new Set(withGap.map(c => c.part_id))];
     const gapProjectIds = [...new Set(withGap.map(c => c.project_id).filter(Boolean))];
 
-    const [parts, projects] = await Promise.all([
+    const [parts, projects, allSourcesForParts] = await Promise.all([
       base44.entities.Part.filter({ id: { $in: gapPartIds } }),
       gapProjectIds.length > 0 ? base44.entities.Project.filter({ id: { $in: gapProjectIds } }) : [],
+      // Fetch ALL active sources across ALL vendors for these parts (for cross-vendor comparison)
+      base44.entities.PartVendorSource.filter({ part_id: { $in: gapPartIds }, is_active: true }),
     ]);
     const partMap = new Map(parts.map(p => [p.id, p]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
     const sourceMap = new Map(vendorSources.map(s => [s.part_id, s]));
+
+    // Build cross-vendor source map: part_id -> all sources from any vendor
+    const allSourcesByPart = new Map();
+    for (const s of allSourcesForParts) {
+      if (!allSourcesByPart.has(s.part_id)) allSourcesByPart.set(s.part_id, []);
+      allSourcesByPart.get(s.part_id).push(s);
+    }
+
+    // Resolve vendor names for all sources
+    const allVendorIds = [...new Set(allSourcesForParts.map(s => s.vendor_id).filter(Boolean))];
+    const allVendors = allVendorIds.length > 0
+      ? await base44.entities.Vendor.filter({ id: { $in: allVendorIds } })
+      : [];
+    const vendorNameMap = new Map(allVendors.map(v => [v.id, v.vendor_name]));
 
     const suggestions = withGap.map(c => {
       const part = partMap.get(c.part_id);
@@ -83,6 +99,50 @@ Deno.serve(async (req) => {
         (c.qty_installed ?? 0)
       );
 
+      const thisVendorCost = source?.unit_cost || part?.cost || 0;
+
+      // Cross-vendor comparison: find all sources for this part
+      const partSources = allSourcesByPart.get(c.part_id) || [];
+      // Include a synthetic source for the part's default vendor cost if not already represented
+      const allCosts = partSources.map(s => ({
+        source_id: s.id,
+        vendor_id: s.vendor_id,
+        vendor_name: vendorNameMap.get(s.vendor_id) || 'Unknown',
+        vendor_part_number: s.vendor_part_number || null,
+        unit_cost: s.unit_cost || 0,
+        is_preferred: s.is_preferred || false,
+        is_this_vendor: s.vendor_id === vendor_id,
+      }));
+
+      // If part has a default vendor cost not covered by any source, add synthetic entry
+      if (part?.default_vendor_id && part.cost > 0) {
+        const hasDefaultSource = allCosts.some(s => s.vendor_id === part.default_vendor_id);
+        if (!hasDefaultSource) {
+          allCosts.push({
+            source_id: null,
+            vendor_id: part.default_vendor_id,
+            vendor_name: vendorNameMap.get(part.default_vendor_id) || 'Default',
+            vendor_part_number: part.vendor_part_number || null,
+            unit_cost: part.cost,
+            is_preferred: false,
+            is_this_vendor: part.default_vendor_id === vendor_id,
+          });
+        }
+      }
+
+      // Find cheapest across all vendors
+      const validCosts = allCosts.filter(s => s.unit_cost > 0);
+      const cheapestCost = validCosts.length > 0 ? Math.min(...validCosts.map(s => s.unit_cost)) : 0;
+      const is_cheapest_source = thisVendorCost > 0 && thisVendorCost <= cheapestCost;
+      const price_delta = cheapestCost > 0 && thisVendorCost > 0 ? thisVendorCost - cheapestCost : 0;
+
+      // Sort: cheapest first, then this vendor's source first among equal costs
+      allCosts.sort((a, b) => {
+        if (a.unit_cost !== b.unit_cost) return a.unit_cost - b.unit_cost;
+        if (a.is_this_vendor !== b.is_this_vendor) return a.is_this_vendor ? -1 : 1;
+        return 0;
+      });
+
       return {
         commitment_id: c.id,
         part_id: c.part_id,
@@ -91,10 +151,16 @@ Deno.serve(async (req) => {
         project_id: c.project_id,
         project_name: project?.name || 'Unknown',
         qty_to_order: gap,
-        unit_cost: source?.unit_cost || part?.cost || 0,
+        unit_cost: thisVendorCost,
         source_id: source?.id || null,
         has_dedicated_source: !!source,
         is_default_vendor: part?.default_vendor_id === vendor_id,
+        // Cross-vendor comparison fields
+        is_cheapest_source,
+        cheapest_cost: cheapestCost,
+        price_delta,
+        all_sources: allCosts,
+        source_count: allCosts.length,
       };
     });
 
