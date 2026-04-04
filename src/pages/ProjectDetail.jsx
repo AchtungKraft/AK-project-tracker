@@ -342,7 +342,7 @@ export default function ProjectDetail() {
           </TabsContent>
 
           <TabsContent value="services" className={isMobile ? 'mt-3' : 'mt-6'}>
-            <ProjectServicesSection projectId={projectId} />
+            <ProjectServicesSection projectId={projectId} projectName={project?.name} />
           </TabsContent>
         </Tabs>
       </div>

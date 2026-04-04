@@ -322,9 +322,12 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
           <div className="border-t border-gray-700/50" />
 
           {/* ── Line Items Section ── */}
-          <div>
-            <Label className="text-gray-300 font-medium">Cost Breakdown *</Label>
-            <p className="text-[10px] text-gray-500 mb-2">Add at least one line item. Each needs a cost or billing rate.</p>
+          <div className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-green-400" />
+              <Label className="text-gray-200 font-medium">Cost Breakdown *</Label>
+            </div>
+            <p className="text-[10px] text-gray-500 mb-3">Each service needs at least one cost line. Select a service above to auto-add, or add manually.</p>
 
             {/* Quick-add buttons */}
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -364,7 +367,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
             {/* Totals preview */}
             {lineItems.length > 0 && (
-              <div className="mt-2 bg-gray-800/50 border border-gray-700 rounded p-2 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-2 bg-green-900/20 border border-green-800/40 rounded p-2 grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <span className="text-gray-500">Total Cost</span>
                   <p className="text-white font-mono">{formatCurrencyUSD(totals.cost)}</p>
