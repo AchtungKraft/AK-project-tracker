@@ -29,7 +29,7 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import VendorQueueView from "@/components/supply/VendorQueueView";
-import VendorPOBuilderPanel from "@/components/supply/VendorPOBuilder";
+// VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import { cn } from "@/lib/utils";
 
 /**
@@ -67,7 +67,6 @@ export default function GlobalNeedToOrder() {
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [editingPartId, setEditingPartId] = useState(null);
   const [viewMode, setViewMode] = useState('parts'); // 'parts' | 'vendors'
-  const [vendorPOVendor, setVendorPOVendor] = useState(null); // when set, shows VendorPOBuilderPanel
 
   // Use canonical ops supply view
   const { 
@@ -205,7 +204,7 @@ export default function GlobalNeedToOrder() {
                 <Button
                   variant={viewMode === 'parts' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => { setViewMode('parts'); setVendorPOVendor(null); }}
+                  onClick={() => setViewMode('parts')}
                   className={cn(
                     "gap-1.5 h-7 text-xs",
                     viewMode === 'parts' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
@@ -217,7 +216,7 @@ export default function GlobalNeedToOrder() {
                 <Button
                   variant={viewMode === 'vendors' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => { setViewMode('vendors'); setVendorPOVendor(null); }}
+                  onClick={() => setViewMode('vendors')}
                   className={cn(
                     "gap-1.5 h-7 text-xs",
                     viewMode === 'vendors' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
@@ -354,64 +353,54 @@ export default function GlobalNeedToOrder() {
           {/* PSM Summary Strip */}
           <PSMSummaryStrip items={filteredItems} tab="buy" />
 
-          {/* Vendor PO Builder Panel (inline) */}
-          {vendorPOVendor && (
-            <VendorPOBuilderPanel
-              vendor={vendorPOVendor}
-              onBack={() => setVendorPOVendor(null)}
-              onSuccess={() => {
-                setVendorPOVendor(null);
-                refetch();
-              }}
-            />
-          )}
-
           {/* Main Content — Parts or Vendors view */}
-          {!vendorPOVendor && (
-            <>
-              {viewMode === 'vendors' ? (
-                isLoading ? (
-                  <Card className="bg-black/40 border-gray-800">
-                    <CardContent className="p-8 text-center text-gray-500">Loading vendor queue...</CardContent>
-                  </Card>
-                ) : (
-                  <VendorQueueView
-                    items={filteredItems}
-                    onSelectVendor={(vendor) => setVendorPOVendor(vendor)}
-                  />
-                )
-              ) : (
-                /* Parts view — original grouped items */
-                isLoading ? (
-                  <Card className="bg-black/40 border-gray-800">
-                    <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
-                  </Card>
-                ) : filteredItems.length === 0 ? (
-                  <Card className="bg-black/40 border-gray-800">
-                    <CardContent className="p-8 text-center">
-                      <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
-                      <p className="text-gray-400">No items need ordering</p>
-                      <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <PSMGroupedView
-                    items={filteredItems}
-                    groupMode={groupMode}
-                    onGroupModeChange={setGroupMode}
-                    selectedItems={selectedItems}
-                    setSelectedItems={setSelectedItems}
-                    onPartClick={handlePartClick}
-                    onCreatePO={handleCreatePO}
-                    onReceive={handleReceive}
-                    onDeltaOrder={handleDeltaOrder}
-                    onBatchPO={handleBatchCreatePO}
-                    actionsEnabled={true}
-                    tab="buy"
-                  />
-                )
-              )}
-            </>
+          {viewMode === 'vendors' ? (
+            isLoading ? (
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-8 text-center text-gray-500">Loading vendor queue...</CardContent>
+              </Card>
+            ) : (
+              <VendorQueueView
+                items={filteredItems}
+                onSelectVendor={(vendor) => {
+                  const vendorItemIds = new Set(
+                    filteredItems
+                      .filter(i => (i.vendor?.id || i.vendor_id) === vendor.id && i.to_order > 0 && i.allowed?.canCreatePO)
+                      .map(i => i.id)
+                  );
+                  setSelectedItems(vendorItemIds);
+                  setSelectedVendorFilter(vendor.id);
+                  setViewMode('parts');
+                }}
+              />
+            )
+          ) : isLoading ? (
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
+            </Card>
+          ) : filteredItems.length === 0 ? (
+            <Card className="bg-black/40 border-gray-800">
+              <CardContent className="p-8 text-center">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
+                <p className="text-gray-400">No items need ordering</p>
+                <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <PSMGroupedView
+              items={filteredItems}
+              groupMode={groupMode}
+              onGroupModeChange={setGroupMode}
+              selectedItems={selectedItems}
+              setSelectedItems={setSelectedItems}
+              onPartClick={handlePartClick}
+              onCreatePO={handleCreatePO}
+              onReceive={handleReceive}
+              onDeltaOrder={handleDeltaOrder}
+              onBatchPO={handleBatchCreatePO}
+              actionsEnabled={true}
+              tab="buy"
+            />
           )}
         </div>
       </div>

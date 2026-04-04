@@ -143,7 +143,9 @@ export default function VendorQueueView({ items, onSelectVendor }) {
             </div>
 
             {/* Action hint */}
-            <ShoppingCart className="w-4 h-4 text-green-500/50 shrink-0" />
+            <Badge className="bg-green-900/30 text-green-400 border-green-700/40 text-[9px] px-2 py-0.5 shrink-0">
+              Select All
+            </Badge>
           </button>
         ))}
       </div>
