@@ -595,7 +595,7 @@ export default function PartModal({ part, partId, onClose }) {
         break;
       case 'Vendor':
         mutation = base44.entities.Vendor.create;
-        queryKey = 'vendors';
+        queryKey = 'referenceData';
         break;
       case 'Location':
         mutation = base44.entities.Location.create;
@@ -620,6 +620,11 @@ export default function PartModal({ part, partId, onClose }) {
     try {
       const newItem = await mutation(data);
       await queryClient.invalidateQueries({ queryKey: [queryKey] });
+      // Also invalidate grouped vendors cache for vendor source selectors
+      if (entityType === 'Vendor') {
+        await queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
+        await queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
+      }
       
       if (entityType === 'PartCategory') setFormData({ ...formData, part_category_id: newItem.id });
       else if (entityType === 'Vendor') setFormData({ ...formData, default_vendor_id: newItem.id });
@@ -772,7 +777,7 @@ export default function PartModal({ part, partId, onClose }) {
   const availableYears = years.filter(y => y.car_model_id === formData.car_model_id);
 
   const activeCategories = categories.filter(c => c.active);
-  const activeVendors = vendors.filter(v => v.active);
+  const activeVendors = vendors.filter(v => v.active && v.vendor_type === 'PART');
   const activeLocations = locations.filter(l => l.active);
 
   // --- VIEW MODE ---

@@ -8,10 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Upload, X, Wand2 } from "lucide-react";
+import { Loader2, Upload, X, Wand2, Plus, Trash2, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartTypeSelector from "./PartTypeSelector";
+import PartPricingFields from "./PartPricingFields";
 import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
@@ -31,6 +33,8 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const [scraping, setScraping] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(null);
   
+  // Vendor sources state managed locally for new parts (no partId yet)
+  const [vendorSources, setVendorSources] = useState([]);
   const [formData, setFormData] = useState({
     part_name: "",
     vendor_part_number: "",
@@ -40,8 +44,12 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     car_year_id: "",
     part_category_id: "",
     default_vendor_id: "",
-    default_cost: "",
-    default_retail: "",
+    // Pricing — canonical fields matching Edit Part
+    pricing_mode: "matrix",
+    cost: 0,
+    retail_override: null,
+    retail_matrix_price: null,
+    applied_markup_pct: null,
     reorder_point: 0,
     reorder_quantity: 1,
     is_active: true,
@@ -115,15 +123,52 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     },
   });
 
+  // Matrix pricing derivation — identical to Edit Part
+  useEffect(() => {
+    if (formData.pricing_mode === 'matrix' && formData.cost > 0) {
+      const fetchMatrixPrice = async () => {
+        try {
+          const res = await base44.functions.invoke('computeRetailFromMatrix', { cost: formData.cost });
+          if (res.data?.success) {
+            setFormData(prev => ({
+              ...prev,
+              retail_matrix_price: res.data.retail_matrix_price,
+              applied_markup_pct: res.data.applied_markup_pct
+            }));
+          }
+        } catch (err) {
+          console.error('[AddPart MatrixPrice] Fetch failed:', err?.message);
+        }
+      };
+      const timer = setTimeout(fetchMatrixPrice, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [formData.cost, formData.pricing_mode]);
+
   const createPartMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
     onSuccess: async (newPart) => {
       const partIds = newPart?.id ? [newPart.id] : [];
       const projectIds = [];
       const commitmentIds = [];
+
+      // Create vendor sources for the new part
+      for (const source of vendorSources) {
+        if (source.vendor_id) {
+          await base44.entities.PartVendorSource.create({
+            part_id: newPart.id,
+            vendor_id: source.vendor_id,
+            vendor_part_number: source.vendor_part_number || '',
+            unit_cost: source.unit_cost || 0,
+            order_url: source.order_url || '',
+            is_preferred: source.is_preferred || false,
+            is_active: true,
+            sort_order: source.sort_order || 0,
+          });
+        }
+      }
       
       // CANONICAL SUPPLY FLOW ENFORCED
-      // If projectId is provided, create commitment via CommitmentService
       if (projectId) {
         projectIds.push(projectId);
         try {
@@ -145,7 +190,6 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
         }
       }
       
-      // PHASE 17: Deterministic refresh
       await forceAppRefresh(queryClient, { partIds, projectIds, commitmentIds });
       
       toast.success('Part created successfully');
@@ -215,7 +259,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           part_name: data.part_name || prev.part_name,
           vendor_part_number: data.part_number || prev.vendor_part_number,
           notes: data.notes || prev.notes,
-          default_cost: data.price ? String(data.price) : prev.default_cost,
+          cost: data.price ? parseFloat(data.price) : prev.cost,
           order_url: url,
           photos: validImages.length > 0 ? [...prev.photos, ...validImages] : prev.photos,
           featured_photo: prev.featured_photo || (validImages.length > 0 ? validImages[0] : prev.featured_photo)
@@ -249,25 +293,85 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     }
   };
 
+  // Handler: vendor source adds/changes for new part (before save)
+  const handleAddVendorSource = () => {
+    setVendorSources(prev => [
+      ...prev,
+      {
+        _tempId: `new_${Date.now()}`,
+        vendor_id: '',
+        vendor_part_number: '',
+        unit_cost: 0,
+        order_url: '',
+        is_preferred: prev.length === 0,
+        sort_order: prev.length,
+      },
+    ]);
+  };
+
+  const handleRemoveVendorSource = (index) => {
+    setVendorSources(prev => {
+      const updated = [...prev];
+      const removed = updated.splice(index, 1)[0];
+      if (removed.is_preferred && updated.length > 0) {
+        updated[0].is_preferred = true;
+        setFormData(f => ({ ...f, default_vendor_id: updated[0].vendor_id, cost: updated[0].unit_cost || f.cost }));
+      }
+      return updated;
+    });
+  };
+
+  const handleVendorSourceFieldChange = (index, field, value) => {
+    setVendorSources(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleSetVendorSourcePreferred = (index) => {
+    setVendorSources(prev => {
+      const updated = prev.map((s, i) => ({ ...s, is_preferred: i === index }));
+      const preferred = updated[index];
+      setFormData(f => ({ ...f, default_vendor_id: preferred.vendor_id, cost: preferred.unit_cost || f.cost }));
+      return updated;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Apply part type behavior defaults
     const behaviorDefaults = getPartTypeBehavior(formData.part_type);
     
     const partData = {
-      ...formData,
+      part_name: formData.part_name,
+      vendor_part_number: formData.vendor_part_number,
+      order_url: formData.order_url,
+      car_make_id: formData.car_make_id,
+      car_model_id: formData.car_model_id,
+      car_year_id: formData.car_year_id,
+      part_category_id: formData.part_category_id,
+      default_vendor_id: formData.default_vendor_id,
+      // Canonical pricing fields
+      pricing_mode: formData.pricing_mode,
+      cost: formData.cost || 0,
+      retail_override: formData.pricing_mode === 'manual' ? formData.retail_override : null,
+      retail_matrix_price: formData.pricing_mode === 'matrix' ? formData.retail_matrix_price : null,
+      applied_markup_pct: formData.applied_markup_pct,
+      // Part type + behavior
+      part_type: formData.part_type,
       ...behaviorDefaults,
-      default_cost: formData.default_cost ? parseFloat(formData.default_cost) : undefined,
-      default_retail: formData.default_retail ? parseFloat(formData.default_retail) : undefined,
+      is_active: formData.is_active,
+      notes: formData.notes,
+      photos: formData.photos,
+      featured_photo: formData.featured_photo,
+      reorder_point: parseInt(formData.reorder_point) || 0,
+      reorder_quantity: parseInt(formData.reorder_quantity) || 1,
       production_cost: formData.production_cost ? parseFloat(formData.production_cost) : undefined,
       handling_fee: formData.handling_fee ? parseFloat(formData.handling_fee) : undefined,
       resale_value: formData.resale_value ? parseFloat(formData.resale_value) : undefined,
-      reorder_point: parseInt(formData.reorder_point) || 0,
-      reorder_quantity: parseInt(formData.reorder_quantity) || 1,
     };
 
-    // Remove empty IDs
     if (!partData.car_make_id) delete partData.car_make_id;
     if (!partData.car_model_id) delete partData.car_model_id;
     if (!partData.car_year_id) delete partData.car_year_id;
@@ -280,8 +384,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const activeCategories = categories.filter(c => c.active);
   const parentCategories = activeCategories.filter(c => !c.parent_id);
   
-  const activeVendors = vendors.filter(v => v.active);
-  const parentVendors = activeVendors.filter(v => !v.parent_id);
+  const activeVendors = vendors.filter(v => v.active && v.vendor_type === 'PART');
   
   const activeLocations = locations.filter(l => l.active);
   const parentLocations = activeLocations.filter(l => !l.parent_id);
@@ -508,10 +611,7 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-400 flex items-center justify-between">
-                  Default Vendor
-                  <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">+ New</button>
-                </Label>
+                <Label className="text-gray-400">Default Vendor</Label>
                 <Select
                   value={formData.default_vendor_id || 'none'}
                   onValueChange={(value) => setFormData({ ...formData, default_vendor_id: value === 'none' ? '' : value })}
@@ -521,54 +621,48 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {parentVendors.map(parent => {
-                      const children = activeVendors.filter(v => v.parent_id === parent.id);
-                      return [
-                        <SelectItem key={parent.id} value={parent.id}>
-                          <span style={{ color: parent.color }}>{parent.vendor_name}</span>
-                        </SelectItem>,
-                        ...children.map(child => (
-                          <SelectItem key={child.id} value={child.id}>
-                            <span className="ml-4" style={{ color: child.color }}>→ {child.vendor_name}</span>
-                          </SelectItem>
-                        ))
-                      ];
-                    })}
+                    {activeVendors.map(v => (
+                      <SelectItem key={v.id} value={v.id}>
+                        <span style={{ color: v.color }}>{v.vendor_name}</span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Dynamic Pricing Fields based on Part Type */}
-            <div className="grid grid-cols-2 gap-4">
-              {fieldVisibility.showDefaultCost && (
-                <div className="space-y-2">
-                  <Label className="text-gray-400">Default Cost</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.default_cost}
-                    onChange={(e) => setFormData({ ...formData, default_cost: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                    placeholder="0.00"
-                  />
-                </div>
-              )}
-              
-              {fieldVisibility.showDefaultRetail && (
-                <div className="space-y-2">
-                  <Label className="text-gray-400">Default Retail</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.default_retail}
-                    onChange={(e) => setFormData({ ...formData, default_retail: e.target.value })}
-                    className="bg-gray-800 border-gray-700 text-white"
-                    placeholder="0.00"
-                  />
-                </div>
-              )}
+            {/* Vendor Sources Section — same component as Edit Part */}
+            <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-gray-300 text-sm">Vendor Sources</Label>
+                <button type="button" onClick={() => setShowCreateModal('Vendor')} className="text-xs text-blue-400 hover:text-blue-300">
+                  + New Vendor
+                </button>
+              </div>
+              <AddPartVendorSourcesInline
+                sources={vendorSources}
+                vendors={activeVendors}
+                onAdd={handleAddVendorSource}
+                onRemove={handleRemoveVendorSource}
+                onFieldChange={handleVendorSourceFieldChange}
+                onSetPreferred={handleSetVendorSourcePreferred}
+              />
+              <p className="text-[10px] text-gray-500">Preferred source syncs to default vendor &amp; cost.</p>
+            </div>
 
+            {/* Canonical Pricing Section — same component as Edit Part */}
+            <PartPricingFields
+              defaultCost={formData.cost}
+              defaultRetail={formData.retail_override || formData.retail_matrix_price}
+              pricingMode={formData.pricing_mode || 'matrix'}
+              appliedMarkupPct={formData.applied_markup_pct}
+              onCostChange={(cost) => setFormData({ ...formData, cost })}
+              onRetailChange={(retail) => setFormData({ ...formData, retail_override: retail })}
+              onModeChange={(mode) => setFormData({ ...formData, pricing_mode: mode })}
+            />
+
+            {/* Dynamic Part-Type-Specific Fields */}
+            <div className="grid grid-cols-2 gap-4">
               {fieldVisibility.showProductionCost && (
                 <div className="space-y-2">
                   <Label className="text-gray-400">Production Cost</Label>
@@ -735,6 +829,68 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/* ─── Inline Vendor Sources for Add Part (no partId yet) ─── */
+
+function AddPartVendorSourcesInline({ sources, vendors, onAdd, onRemove, onFieldChange, onSetPreferred }) {
+  return (
+    <div className="space-y-2">
+      {sources.map((s, idx) => {
+        const cheapestCost = sources.length > 1
+          ? Math.min(...sources.filter(x => (x.unit_cost || 0) > 0).map(x => x.unit_cost))
+          : 0;
+        const isCheapest = s.unit_cost > 0 && s.unit_cost <= cheapestCost && sources.length > 1;
+
+        return (
+          <div key={s._tempId || idx} className={cn(
+            "p-3 rounded-lg border space-y-2",
+            s.is_preferred ? "bg-yellow-900/10 border-yellow-700/30" : "bg-gray-800/30 border-gray-700/50"
+          )}>
+            <div className="flex items-center gap-2">
+              <Select
+                value={s.vendor_id || "none"}
+                onValueChange={(val) => onFieldChange(idx, "vendor_id", val === "none" ? "" : val)}
+              >
+                <SelectTrigger className="flex-1 bg-gray-800 border-gray-700 text-white h-8 text-sm">
+                  <SelectValue placeholder="Select vendor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select vendor...</SelectItem>
+                  {vendors.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button" size="icon"
+                variant={s.is_preferred ? "default" : "ghost"}
+                className={cn("h-8 w-8 shrink-0", s.is_preferred ? "bg-yellow-600 hover:bg-yellow-700 text-white" : "text-gray-400 hover:text-yellow-400")}
+                onClick={() => onSetPreferred(idx)}
+                title={s.is_preferred ? "Preferred source" : "Set as preferred"}
+              >
+                <Star className="w-3.5 h-3.5" fill={s.is_preferred ? "currentColor" : "none"} />
+              </Button>
+              {isCheapest && (
+                <span className="text-[9px] text-green-400 font-bold shrink-0">BEST</span>
+              )}
+              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-red-400 hover:text-red-300" onClick={() => onRemove(idx)}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Input placeholder="Vendor Part #" value={s.vendor_part_number || ""} onChange={(e) => onFieldChange(idx, "vendor_part_number", e.target.value)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
+              <Input type="number" step="0.01" min="0" placeholder="Unit cost" value={s.unit_cost || ""} onChange={(e) => onFieldChange(idx, "unit_cost", parseFloat(e.target.value) || 0)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
+              <Input placeholder="Order URL" value={s.order_url || ""} onChange={(e) => onFieldChange(idx, "order_url", e.target.value)} className="bg-gray-800 border-gray-700 text-white h-7 text-xs" />
+            </div>
+          </div>
+        );
+      })}
+      <Button type="button" variant="outline" size="sm" onClick={onAdd} className="border-gray-600 text-gray-300 gap-1 w-full">
+        <Plus className="w-3 h-3" /> Add Vendor Source
+      </Button>
     </div>
   );
 }

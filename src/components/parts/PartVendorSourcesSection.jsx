@@ -272,7 +272,8 @@ function SourceViewRow({ source, vendorName, isCheapest }) {
 
 /* ─── Edit Row ─── */
 function SourceEditRow({ source, vendors, isCheapest, onFieldChange, onSetPreferred, onRemove }) {
-  const activeVendors = vendors.filter(v => v.active !== false);
+  // CANONICAL: Only show PART vendors in vendor source selector
+  const activeVendors = vendors.filter(v => v.active !== false && v.vendor_type === 'PART');
 
   return (
     <div className={cn(
