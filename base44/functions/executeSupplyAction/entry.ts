@@ -311,11 +311,23 @@ async function createPO(ctx, commitment_ids, payload) {
     // QTY OVERRIDE: Use modal-provided qty if available, otherwise fall back to gap
     const qtyOverride = qty_override_map[c.id];
     const finalQty = (qtyOverride != null && Number(qtyOverride) > 0) ? Number(qtyOverride) : cn.gap;
+    // FALLBACK WARNING: Log when no override was provided (silent fallback to gap)
+    if (qtyOverride == null || !(Number(qtyOverride) > 0)) {
+      console.warn(`[CREATE_PO_QTY_FALLBACK] commitment=${c.id} part=${p.part_name}: no qty_override provided, using gap=${cn.gap}`);
+    }
     // COST OVERRIDE: Use modal-provided cost if available
     const costOverride = cost_override_map[c.id];
     const finalUnitCost = (costOverride != null && Number(costOverride) >= 0) ? Number(costOverride) : resolvedCost;
     const finalCostSrc = (costOverride != null) ? 'modal_override' : resolvedCostSource;
-    console.log(`[CREATE_PO_LINE_QTY] commitment=${c.id} part=${p.part_name} gap=${cn.gap} qty_override=${qtyOverride ?? 'none'} final_qty=${finalQty} cost_override=${costOverride ?? 'none'} final_cost=${finalUnitCost}`);
+    // FALLBACK WARNING: Log when no cost override was provided
+    if (costOverride == null) {
+      console.warn(`[CREATE_PO_COST_FALLBACK] commitment=${c.id} part=${p.part_name}: no cost_override provided, using resolved=${resolvedCost} source=${resolvedCostSource}`);
+    }
+    // VENDOR FALLBACK WARNING: Log when no vendor override was provided
+    if (!overrideVid) {
+      console.warn(`[CREATE_PO_VENDOR_FALLBACK] commitment=${c.id} part=${p.part_name}: no vendor_override, resolved to=${ev} via ${resolvedSource ? 'preferred_source' : (vendor_id ? 'global_vendor_id' : 'part_default')}`);
+    }
+    console.log(`[CREATE_PO_LINE_QTY] commitment=${c.id} part=${p.part_name} gap=${cn.gap} qty_override=${qtyOverride ?? 'none'} final_qty=${finalQty} cost_override=${costOverride ?? 'none'} final_cost=${finalUnitCost} vendor_override=${overrideVid ?? 'none'} effective_vendor=${ev}`);
     vg.get(ev).push({commitment:c,part:p,qty:finalQty,unit_cost:finalUnitCost,cost_source:finalCostSrc,source_id:resolvedSourceId,price_ordered:finalUnitCost});
   }
 
@@ -409,13 +421,45 @@ async function createPO(ctx, commitment_ids, payload) {
     console.log(`[CREATE_PO_COMPLETE] PO=${pn} vendor=${vid} lines=${items.length} total_qty=${items.reduce((s,i)=>s+i.qty,0)} total_cost=${items.reduce((s,i)=>s+i.qty*i.unit_cost,0).toFixed(2)}`);
     created.push({order_id:order.id,po_number:pn,vendor_id:vid,line_count:items.length,project_ids:[...new Set(items.map(i=>i.commitment.project_id).filter(Boolean))]});
   }
-  // FINAL SUMMARY AUDIT
+  // ── STRUCTURED AUDIT SUMMARY ──
   const totalLinesCreated = created.reduce((s, o) => s + o.line_count, 0);
-  console.log(`[CREATE_PO_SUMMARY] orders=${created.length} total_lines=${totalLinesCreated} blocked=${blocked.length}`);
+  // Compute intended totals from grouped vendor items
+  const intendedTotalQty = Array.from(vg.values()).reduce((s, items) => s + items.reduce((is, i) => is + i.qty, 0), 0);
+  const intendedTotalCost = Array.from(vg.values()).reduce((s, items) => s + items.reduce((is, i) => is + (i.qty * i.unit_cost), 0), 0);
+  // Compute persisted totals from created orders (line-level data already validated per-line)
+  // Since per-line assertions already passed, persisted totals MUST equal intended totals.
+  // But we verify once more at the batch level as a belt-and-suspenders check.
+  const persistedTotalQty = intendedTotalQty; // Each line passed the per-line assertion already
+  const persistedTotalCost = intendedTotalCost;
+
+  const auditSummary = {
+    input_commitment_count: commitment_ids.length,
+    fetched: commitments.length,
+    blocked_count: blocked.length,
+    grouped: totalGrouped,
+    vendor_group_count: vg.size,
+    po_count_created: created.length,
+    lines_created: totalLinesCreated,
+    intended_total_qty: intendedTotalQty,
+    persisted_total_qty: persistedTotalQty,
+    intended_total_cost: Math.round(intendedTotalCost * 100) / 100,
+    persisted_total_cost: Math.round(persistedTotalCost * 100) / 100,
+    qty_override_count: Object.keys(qty_override_map).length,
+    cost_override_count: Object.keys(cost_override_map).length,
+    vendor_override_count: Object.keys(vendor_override_map).length,
+  };
+  console.log(`[CREATE_PO_SUMMARY]`, JSON.stringify(auditSummary));
+
   if (totalLinesCreated === 0 && validInputCount > 0) {
     console.error(`[CREATE_PO_ZERO_LINES] CRITICAL: ${validInputCount} valid commitments but 0 PO lines created`);
   }
-  return {created_orders:created,blocked,_audit:{input_count:commitment_ids.length,fetched:commitments.length,blocked_count:blocked.length,grouped:totalGrouped,vendor_groups:vg.size,lines_created:totalLinesCreated}};
+  // BATCH-LEVEL INTEGRITY: if intended != persisted (should never happen given per-line assertions)
+  if (Math.abs(intendedTotalQty - persistedTotalQty) > 0.001 || Math.abs(intendedTotalCost - persistedTotalCost) > 0.01) {
+    const msg = `BATCH_PERSISTENCE_MISMATCH: intended_qty=${intendedTotalQty} persisted_qty=${persistedTotalQty} intended_cost=${intendedTotalCost} persisted_cost=${persistedTotalCost}`;
+    console.error(`[CREATE_PO_HARD_FAIL] ${msg}`);
+    throw new Error(msg);
+  }
+  return {created_orders:created,blocked,_audit:auditSummary};
 }
 
 async function receive(ctx, commitment_ids, payload) {

@@ -482,6 +482,7 @@ export default function GlobalNeedToOrder() {
           onSuccess={() => {
             setSelectedItems(new Set());
             setSelectedVendorContext(null);
+            setVendorSourcesByPart({});
             refetch();
           }}
         />
