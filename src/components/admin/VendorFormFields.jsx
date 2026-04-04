@@ -28,9 +28,17 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
     sort_priority: g.sort_priority || 0,
   }));
 
-  const groupsForType = safeGroups
+  const filteredGroups = safeGroups
     .filter(g => g.id && g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
     .sort((a, b) => a.sort_priority - b.sort_priority);
+
+  // Fallback: if type-filtering yields nothing but groups exist, show all active groups
+  // This prevents an empty dropdown due to casing/missing vendor_type issues
+  const allActiveGroups = safeGroups
+    .filter(g => g.id && g.is_active !== false && g.name !== "UNCATEGORIZED")
+    .sort((a, b) => a.sort_priority - b.sort_priority);
+
+  const groupsForType = filteredGroups.length > 0 ? filteredGroups : allActiveGroups;
 
   const handleTypeChange = (newType) => {
     // Clear group when type changes since groups are type-scoped
@@ -74,7 +82,7 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
           <div className="h-9 bg-gray-800 border border-gray-700 rounded-md animate-pulse" />
         ) : groupsForType.length === 0 ? (
           <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded px-3 py-2">
-            No vendor groups available for {vendorType} type. Create one in Admin Config first.
+            No vendor groups available. Create one in Admin Config first.
           </div>
         ) : (
           <Select
