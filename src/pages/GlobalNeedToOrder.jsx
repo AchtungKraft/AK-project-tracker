@@ -16,6 +16,7 @@ import {
   DollarSign, CheckCircle2, RefreshCw, Truck, Package
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import OrderPartModal from "@/components/parts/OrderPartModal";
 import CreateBatchOrderModal from "@/components/parts/CreateBatchOrderModal";
 import DeltaOrderModal from "@/components/parts/DeltaOrderModal";
@@ -204,6 +205,15 @@ export default function GlobalNeedToOrder() {
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Button>
+              <Link to="/VendorPOBuilder">
+                <Button
+                  variant="outline"
+                  className="border-green-700/50 text-green-400 hover:bg-green-900/30 gap-2"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  Vendor PO Builder
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 onClick={() => navigate(createPageUrl('POReceiving'))}

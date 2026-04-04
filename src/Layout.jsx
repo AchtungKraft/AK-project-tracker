@@ -17,6 +17,7 @@ import {
   Truck,
   Layers,
   Receipt,
+  ShoppingCart,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -163,6 +164,7 @@ const getNavigationSections = () => {
         { title: "PO Receiving", url: createPageUrl("POReceiving"), icon: Package },
         { title: "Services", url: createPageUrl("ServicesDashboard"), icon: Truck },
         { title: "Action Workbench", url: createPageUrl("PartsActionWorkbench"), icon: Flame },
+        { title: "Vendor PO Builder", url: "/VendorPOBuilder", icon: ShoppingCart },
       ],
     },
     {
