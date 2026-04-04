@@ -28,17 +28,29 @@ export default function VendorFormFields({ data, onChange, groups = [], showType
     sort_priority: g.sort_priority || 0,
   }));
 
-  const filteredGroups = safeGroups
-    .filter(g => g.id && g.id !== "" && g.name && g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
+  // Stage A: Valid groups (broad — any group with id + name, exclude UNCATEGORIZED)
+  const validGroups = safeGroups
+    .filter(g => g.id && g.name && g.name !== "UNCATEGORIZED")
     .sort((a, b) => a.sort_priority - b.sort_priority);
 
-  // Fallback: if type-filtering yields nothing but groups exist, show all active groups
-  // This prevents an empty dropdown due to casing/missing vendor_type issues
-  const allActiveGroups = safeGroups
-    .filter(g => g.id && g.id !== "" && g.name && g.is_active !== false && g.name !== "UNCATEGORIZED")
-    .sort((a, b) => a.sort_priority - b.sort_priority);
+  // Stage B: Strict groups (type-specific filter)
+  const strictGroups = validGroups.filter(
+    g => g.vendor_type === vendorType
+  );
 
-  const groupsForType = filteredGroups.length > 0 ? filteredGroups : allActiveGroups;
+  // Use strict if available, fall back to all valid groups
+  const groupsForType = strictGroups.length > 0 ? strictGroups : validGroups;
+
+  // Temporary debug — remove after confirming dropdown works
+  console.log('[VendorFormFields] group debug', {
+    rawGroupsCount: (Array.isArray(groups) ? groups : []).length,
+    total: safeGroups.length,
+    valid: validGroups.length,
+    strict: strictGroups.length,
+    final: groupsForType.length,
+    vendorType,
+    sampleTypes: [...new Set(safeGroups.map(g => g.vendor_type))],
+  });
 
   const handleTypeChange = (newType) => {
     // Clear group when type changes since groups are type-scoped
