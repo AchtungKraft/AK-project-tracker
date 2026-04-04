@@ -7,17 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, ChevronRight, ChevronDown, GripVertical, Package, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { cn } from "@/lib/utils";
 
 export default function VendorsConfig() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("PART");
   const [newVendor, setNewVendor] = useState({
     vendor_name: "",
+    vendor_type: "PART",
+    vendor_group_id: "",
     parent_id: "",
     website: "",
+    contact_name: "",
+    contact_email: "",
+    contact_phone: "",
+    cell_phone: "",
+    address: "",
     contact_info: "",
     notes: "",
     color: "#3B82F6",
@@ -27,18 +37,32 @@ export default function VendorsConfig() {
   const [collapsed, setCollapsed] = useState({});
 
   const { data: vendors = [], isLoading } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['referenceData', 'vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    }
+    },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
   });
+
+  const { data: vendorGroups = [] } = useQuery({
+    queryKey: ['referenceData', 'vendorGroups'],
+    queryFn: () => base44.entities.VendorGroup.list(),
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+  });
+
+  const groupsForType = vendorGroups
+    .filter(g => g.vendor_type === activeTab && g.is_active !== false)
+    .sort((a, b) => (a.sort_priority || 0) - (b.sort_priority || 0));
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Vendor.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendors'] });
-      setNewVendor({ vendor_name: "", parent_id: "", website: "", contact_info: "", notes: "", color: "#3B82F6", sort_order: 0 });
+      queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
+      setNewVendor(prev => ({ ...prev, vendor_name: "", vendor_group_id: "", parent_id: "", website: "", contact_name: "", contact_email: "", contact_phone: "", cell_phone: "", address: "", contact_info: "", notes: "", color: "#3B82F6", sort_order: 0 }));
       toast.success('Vendor created');
     },
   });
@@ -46,7 +70,8 @@ export default function VendorsConfig() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Vendor.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
       setEditing(null);
       toast.success('Vendor updated');
     },
@@ -55,7 +80,8 @@ export default function VendorsConfig() {
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Vendor.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
       toast.success('Vendor deleted');
     },
   });
@@ -63,6 +89,16 @@ export default function VendorsConfig() {
   const handleCreate = (e) => {
     e.preventDefault();
     if (!newVendor.vendor_name.trim()) return;
+    if (!newVendor.vendor_group_id) {
+      toast.error('Please select a vendor group');
+      return;
+    }
+    // Validate group matches type
+    const group = vendorGroups.find(g => g.id === newVendor.vendor_group_id);
+    if (group && group.vendor_type !== newVendor.vendor_type) {
+      toast.error('Vendor group type does not match vendor type');
+      return;
+    }
     createMutation.mutate({ ...newVendor, active: true });
   };
 
@@ -90,20 +126,22 @@ export default function VendorsConfig() {
       const update = updates.find(u => u.id === v.id);
       return update ? { ...v, ...update.data } : v;
     });
-    queryClient.setQueryData(['vendors'], allVendors.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+    queryClient.setQueryData(['referenceData', 'vendors'], allVendors.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
     try {
       await Promise.all(updates.map(u => base44.entities.Vendor.update(u.id, u.data)));
       toast.success('Order updated');
     } catch (error) {
-      queryClient.invalidateQueries({ queryKey: ['vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
       toast.error('Failed to update order');
     }
   };
 
-  const parentVendors = vendors.filter(v => !v.parent_id);
+  // Filter vendors by current active tab type
+  const typeVendors = vendors.filter(v => v.vendor_type === activeTab || (!v.vendor_type && activeTab === 'PART'));
+  const parentVendors = typeVendors.filter(v => !v.parent_id);
   const childrenMap = {};
-  vendors.forEach(vendor => {
+  typeVendors.forEach(vendor => {
     if (vendor.parent_id) {
       if (!childrenMap[vendor.parent_id]) childrenMap[vendor.parent_id] = [];
       childrenMap[vendor.parent_id].push(vendor);
@@ -248,7 +286,7 @@ export default function VendorsConfig() {
                         <Check className="w-4 h-4" />
                       </Button>
                       <Button size="icon" variant="ghost" 
-                              onClick={() => { setEditing(null); queryClient.invalidateQueries({ queryKey: ['vendors'] }); }}
+                              onClick={() => { setEditing(null); queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] }); }}
                               className="h-8 w-8 text-gray-400">
                         <XIcon className="w-4 h-4" />
                       </Button>
@@ -302,9 +340,18 @@ export default function VendorsConfig() {
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
         <CardTitle className="text-white text-base">Vendors & Suppliers</CardTitle>
-        <p className="text-sm text-gray-400 mt-1">Manage vendor hierarchy and details</p>
+        <p className="text-sm text-gray-400 mt-1">Manage part and service vendors</p>
       </CardHeader>
       <CardContent className="p-4 space-y-6">
+        {/* Type Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setNewVendor(prev => ({ ...prev, vendor_type: v, vendor_group_id: "" })); }}>
+          <TabsList className="bg-gray-900/50 border border-gray-700">
+            <TabsTrigger value="PART" className="gap-1.5"><Package className="w-3.5 h-3.5" />Part Vendors</TabsTrigger>
+            <TabsTrigger value="SERVICE" className="gap-1.5"><Truck className="w-3.5 h-3.5" />Service Vendors</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* Create Form */}
         <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -312,26 +359,62 @@ export default function VendorsConfig() {
               <Input
                 value={newVendor.vendor_name}
                 onChange={(e) => setNewVendor({ ...newVendor, vendor_name: e.target.value })}
-                placeholder="e.g., OEM Parts Supplier"
+                placeholder={activeTab === 'PART' ? "e.g., OEM Parts Supplier" : "e.g., Chrome Plating Co."}
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Parent Vendor/Group</Label>
+              <Label className="text-gray-400 text-xs">Vendor Group *</Label>
               <Select
-                value={newVendor.parent_id || "none"}
-                onValueChange={(value) => setNewVendor({ ...newVendor, parent_id: value === "none" ? "" : value })}
+                value={newVendor.vendor_group_id || "none"}
+                onValueChange={(value) => setNewVendor({ ...newVendor, vendor_group_id: value === "none" ? "" : value })}
               >
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="None (Top Level)" />
+                  <SelectValue placeholder="Select group..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None (Top Level)</SelectItem>
-                  {parentVendors.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.vendor_name}</SelectItem>
+                  <SelectItem value="none">Select group...</SelectItem>
+                  {groupsForType.map(g => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Contact Name</Label>
+              <Input
+                value={newVendor.contact_name}
+                onChange={(e) => setNewVendor({ ...newVendor, contact_name: e.target.value })}
+                placeholder="Primary contact"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Contact Email</Label>
+              <Input
+                value={newVendor.contact_email}
+                onChange={(e) => setNewVendor({ ...newVendor, contact_email: e.target.value })}
+                placeholder="email@vendor.com"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Contact Phone</Label>
+              <Input
+                value={newVendor.contact_phone}
+                onChange={(e) => setNewVendor({ ...newVendor, contact_phone: e.target.value })}
+                placeholder="(555) 123-4567"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Cell Phone</Label>
+              <Input
+                value={newVendor.cell_phone}
+                onChange={(e) => setNewVendor({ ...newVendor, cell_phone: e.target.value })}
+                placeholder="(555) 987-6543"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
             </div>
             <div>
               <Label className="text-gray-400 text-xs">Website</Label>
@@ -344,11 +427,11 @@ export default function VendorsConfig() {
               />
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Contact Info</Label>
+              <Label className="text-gray-400 text-xs">Address</Label>
               <Input
-                value={newVendor.contact_info}
-                onChange={(e) => setNewVendor({ ...newVendor, contact_info: e.target.value })}
-                placeholder="Phone, email, etc."
+                value={newVendor.address}
+                onChange={(e) => setNewVendor({ ...newVendor, address: e.target.value })}
+                placeholder="Vendor address"
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
@@ -382,16 +465,16 @@ export default function VendorsConfig() {
             </div>
           </div>
           <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
-            {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add Vendor</>}
+            {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add {activeTab === 'PART' ? 'Part' : 'Service'} Vendor</>}
           </Button>
         </form>
 
         <div>
-          <Label className="text-gray-400 text-xs mb-3 block">Existing Vendors</Label>
+          <Label className="text-gray-400 text-xs mb-3 block">{activeTab === 'PART' ? 'Part' : 'Service'} Vendors</Label>
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : vendors.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No vendors yet</div>
+          ) : parentVendors.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No {activeTab.toLowerCase()} vendors yet</div>
           ) : (
             <DragDropContext onDragEnd={(result) => handleDragEnd(result, null)}>
               <Droppable droppableId="parents">

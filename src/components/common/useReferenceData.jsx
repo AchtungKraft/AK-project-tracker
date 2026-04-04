@@ -127,6 +127,13 @@ export function useReferenceData() {
     ...REFERENCE_QUERY_CONFIG,
   });
 
+  // Vendor Groups
+  const vendorGroupsQuery = useQuery({
+    queryKey: ['referenceData', 'vendorGroups'],
+    queryFn: () => base44.entities.VendorGroup.list(),
+    ...REFERENCE_QUERY_CONFIG,
+  });
+
   // Determine ready state
   const isLoading = 
     categoriesQuery.isLoading ||
@@ -134,7 +141,8 @@ export function useReferenceData() {
     makesQuery.isLoading ||
     modelsQuery.isLoading ||
     yearsQuery.isLoading ||
-    locationsQuery.isLoading;
+    locationsQuery.isLoading ||
+    vendorGroupsQuery.isLoading;
 
   const isError = 
     categoriesQuery.isError ||
@@ -142,7 +150,8 @@ export function useReferenceData() {
     makesQuery.isError ||
     modelsQuery.isError ||
     yearsQuery.isError ||
-    locationsQuery.isError;
+    locationsQuery.isError ||
+    vendorGroupsQuery.isError;
 
   const error = 
     categoriesQuery.error ||
@@ -150,7 +159,8 @@ export function useReferenceData() {
     makesQuery.error ||
     modelsQuery.error ||
     yearsQuery.error ||
-    locationsQuery.error;
+    locationsQuery.error ||
+    vendorGroupsQuery.error;
 
   // Ready = all queries succeeded and have data
   const ready = 
@@ -159,7 +169,8 @@ export function useReferenceData() {
     makesQuery.isSuccess &&
     modelsQuery.isSuccess &&
     yearsQuery.isSuccess &&
-    locationsQuery.isSuccess;
+    locationsQuery.isSuccess &&
+    vendorGroupsQuery.isSuccess;
 
   // Raw data arrays (with fallback to empty arrays)
   const categories = categoriesQuery.data ?? [];
@@ -168,6 +179,7 @@ export function useReferenceData() {
   const models = modelsQuery.data ?? [];
   const years = yearsQuery.data ?? [];
   const locations = locationsQuery.data ?? [];
+  const vendorGroups = vendorGroupsQuery.data ?? [];
 
   // Build lookup maps (memoized to prevent re-renders)
   const categoriesMap = useMemo(() => buildMap(categories), [categories]);
@@ -176,6 +188,15 @@ export function useReferenceData() {
   const modelMap = useMemo(() => buildMap(models), [models]);
   const yearMap = useMemo(() => buildMap(years), [years]);
   const locationMap = useMemo(() => buildMap(locations), [locations]);
+  const vendorGroupMap = useMemo(() => buildMap(vendorGroups), [vendorGroups]);
+
+  // Utility: Get vendor group name
+  const getVendorGroupName = useMemo(() => {
+    return (groupId) => {
+      if (!groupId) return null;
+      return vendorGroupMap[groupId]?.name ?? null;
+    };
+  }, [vendorGroupMap]);
 
   // Utility: Get category path string
   const getCategoryPath = useMemo(() => {
@@ -235,6 +256,7 @@ export function useReferenceData() {
       modelsQuery.refetch(),
       yearsQuery.refetch(),
       locationsQuery.refetch(),
+      vendorGroupsQuery.refetch(),
     ]);
   };
 
@@ -252,6 +274,7 @@ export function useReferenceData() {
     models,
     years,
     locations,
+    vendorGroups,
     
     // Lookup maps
     categoriesMap,
@@ -260,9 +283,11 @@ export function useReferenceData() {
     modelMap,
     yearMap,
     locationMap,
+    vendorGroupMap,
     
     // Utility functions
     getCategoryPath,
+    getVendorGroupName,
     getVendorName,
     getCarDescription,
     getLocationLabel,

@@ -1,0 +1,36 @@
+{
+  "name": "VendorGroup",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Group display name"
+    },
+    "vendor_type": {
+      "type": "string",
+      "enum": [
+        "PART",
+        "SERVICE"
+      ],
+      "description": "Which vendor domain this group belongs to"
+    },
+    "sort_priority": {
+      "type": "number",
+      "default": 0,
+      "description": "Sort order within its vendor_type"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description of the group"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this group is active"
+    }
+  },
+  "required": [
+    "name",
+    "vendor_type"
+  ]
+}
