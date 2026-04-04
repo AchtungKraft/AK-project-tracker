@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       // PHASE 1: Canonical eligibility
       if (c.commitment_status === 'cancelled') { blocked.push({ commitment_id: c.id, reason_code: 'CANCELLED', part_name: part?.part_name, message: 'Commitment cancelled' }); continue; }
       if (c.commitment_status === 'closed') { blocked.push({ commitment_id: c.id, reason_code: 'CLOSED', part_name: part?.part_name, message: 'Commitment closed' }); continue; }
-      const gap = Math.max(0, (c.required_total ?? 0) - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0));
+      const gap = Math.max(0, (c.required_total ?? 0) - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0) - (c.qty_installed ?? 0));
       if (gap <= 0) { blocked.push({ commitment_id: c.id, reason_code: 'NOTHING_TO_ORDER', part_name: part?.part_name, message: 'Fully covered, nothing to order' }); continue; }
 
       // Drift detection
@@ -158,8 +158,9 @@ Deno.serve(async (req) => {
         // PHASE 1: Canonical update
         const curCov = c.covered_from_po ?? 0, newCov = curCov + qty_to_order;
         const reqT = c.required_total ?? 0, resS = c.reserved_from_stock ?? 0;
-        const newTO = Math.max(0, reqT - resS - newCov);
-        const invSum = resS + newCov + newTO;
+        const instQ = c.qty_installed ?? 0;
+        const newTO = Math.max(0, reqT - resS - newCov - instQ);
+        const invSum = resS + newCov + instQ + newTO;
         if (Math.abs(invSum - reqT) > 0.01) throw new Error(`COVERAGE_INVARIANT: c=${c.id} sum=${invSum} exp=${reqT}`);
         const newQO = (c.qty_ordered || 0) + qty_to_order;
         let ns = c.commitment_status; if (newQO > 0 && (c.qty_received || 0) === 0) ns = 'ordered';

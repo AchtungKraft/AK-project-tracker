@@ -12,8 +12,13 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 /**
  * CheapestBadge — Shows if this vendor is the cheapest source
  */
-export function CheapestBadge({ isCheapest, priceDelta }) {
-  if (isCheapest) {
+export function CheapestBadge({ isCheapest, isCheapestForVendor, priceDelta, priceDeltaOverall, context = 'global' }) {
+  // In vendor PO context, prioritize vendor-specific comparison
+  const showOverallBest = isCheapest;
+  const showVendorBest = isCheapestForVendor && !isCheapest;
+  const effectiveDelta = context === 'vendor' ? (priceDeltaOverall ?? priceDelta ?? 0) : (priceDelta ?? 0);
+
+  if (showOverallBest) {
     return (
       <Badge className="bg-green-900/40 text-green-400 border-green-700 text-[9px] gap-0.5 shrink-0">
         <Check className="w-2.5 h-2.5" />
@@ -21,11 +26,19 @@ export function CheapestBadge({ isCheapest, priceDelta }) {
       </Badge>
     );
   }
-  if (priceDelta > 0) {
+  if (showVendorBest) {
+    return (
+      <Badge className="bg-cyan-900/40 text-cyan-400 border-cyan-700 text-[9px] gap-0.5 shrink-0">
+        <Check className="w-2.5 h-2.5" />
+        BEST (Vendor)
+      </Badge>
+    );
+  }
+  if (effectiveDelta > 0) {
     return (
       <Badge className="bg-amber-900/30 text-amber-400 border-amber-700/50 text-[9px] gap-0.5 shrink-0">
         <TrendingUp className="w-2.5 h-2.5" />
-        +{formatCurrencyUSD(priceDelta)}
+        +{formatCurrencyUSD(effectiveDelta)}
       </Badge>
     );
   }

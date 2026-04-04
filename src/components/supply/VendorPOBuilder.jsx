@@ -70,9 +70,15 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
   const cartTotalQty = cart.reduce((s, l) => s + l.qty, 0);
   const cartTotalCost = cart.reduce((s, l) => s + l.qty * l.unit_cost, 0);
   const zeroCostLines = cart.filter(l => l.unit_cost <= 0);
-  const totalSavingsAvailable = cart.reduce((s, l) => s + (l.price_delta || 0) * l.qty, 0);
+  const totalSavingsAvailable = cart.reduce((s, l) => s + (l.price_delta_overall ?? l.price_delta ?? 0) * l.qty, 0);
 
   const handleAdd = (item) => {
+    // Vendor compatibility guard: only allow parts that have a source for this vendor
+    const hasVendorSource = item.has_dedicated_source || item.is_default_vendor;
+    if (!hasVendorSource) {
+      toast.error(`${item.part_name} has no source for ${vendor.vendor_name}`);
+      return;
+    }
     setCart(prev => [...prev, {
       commitment_id: item.commitment_id,
       part_id: item.part_id,
@@ -86,13 +92,21 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
         ? [{ source_id: item.source_id, unit_cost: item.unit_cost, vendor_part_number: item.vendor_part_number }]
         : [],
       is_cheapest_source: item.is_cheapest_source,
+      is_cheapest_overall: item.is_cheapest_overall,
+      is_cheapest_for_vendor: item.is_cheapest_for_vendor,
       price_delta: item.price_delta,
+      price_delta_overall: item.price_delta_overall,
       all_sources: item.all_sources || [],
     }]);
   };
 
   const handleAddAll = () => {
-    const newLines = available.map(item => ({
+    // Only add items that are compatible with this vendor
+    const compatible = available.filter(item => item.has_dedicated_source || item.is_default_vendor);
+    if (compatible.length < available.length) {
+      toast.info(`${available.length - compatible.length} item(s) skipped (no source for ${vendor.vendor_name})`);
+    }
+    const newLines = compatible.map(item => ({
       commitment_id: item.commitment_id,
       part_id: item.part_id,
       part_name: item.part_name,
@@ -105,7 +119,10 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
         ? [{ source_id: item.source_id, unit_cost: item.unit_cost, vendor_part_number: item.vendor_part_number }]
         : [],
       is_cheapest_source: item.is_cheapest_source,
+      is_cheapest_overall: item.is_cheapest_overall,
+      is_cheapest_for_vendor: item.is_cheapest_for_vendor,
       price_delta: item.price_delta,
+      price_delta_overall: item.price_delta_overall,
       all_sources: item.all_sources || [],
     }));
     setCart(prev => [...prev, ...newLines]);
@@ -211,9 +228,9 @@ export default function VendorPOBuilder({ vendor, onBack, onSuccess }) {
                   {zeroCostLines.length} $0 COST
                 </Badge>
               )}
-              {cart.filter(l => !l.is_cheapest_source && l.price_delta > 0).length > 0 && (
+              {cart.filter(l => !(l.is_cheapest_overall ?? l.is_cheapest_source) && (l.price_delta_overall ?? l.price_delta) > 0).length > 0 && (
                 <Badge className="bg-blue-900/40 text-blue-400 border-blue-700 text-[9px]">
-                  {cart.filter(l => !l.is_cheapest_source && l.price_delta > 0).length} NOT CHEAPEST
+                  {cart.filter(l => !(l.is_cheapest_overall ?? l.is_cheapest_source) && (l.price_delta_overall ?? l.price_delta) > 0).length} NOT CHEAPEST
                 </Badge>
               )}
               {totalSavingsAvailable > 0 && (

@@ -26,7 +26,13 @@ export function VendorPOAvailableRow({ item, onAdd }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm text-white font-medium truncate">{item.part_name}</p>
-          <CheapestBadge isCheapest={item.is_cheapest_source} priceDelta={item.price_delta} />
+          <CheapestBadge
+            isCheapest={item.is_cheapest_overall ?? item.is_cheapest_source}
+            isCheapestForVendor={item.is_cheapest_for_vendor}
+            priceDelta={item.price_delta}
+            priceDeltaOverall={item.price_delta_overall}
+            context="vendor"
+          />
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-gray-500">{item.project_name}</span>
@@ -82,7 +88,13 @@ export function VendorPOSelectedRow({ line, vendorSources, onChange, onRemove })
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm text-white font-medium truncate">{line.part_name}</p>
-          <CheapestBadge isCheapest={line.is_cheapest_source} priceDelta={line.price_delta} />
+          <CheapestBadge
+            isCheapest={line.is_cheapest_overall ?? line.is_cheapest_source}
+            isCheapestForVendor={line.is_cheapest_for_vendor}
+            priceDelta={line.price_delta}
+            priceDeltaOverall={line.price_delta_overall}
+            context="vendor"
+          />
         </div>
         <div className="flex items-center gap-2">
           <p className="text-xs text-gray-500">{line.project_name}</p>

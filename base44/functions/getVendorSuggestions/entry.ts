@@ -130,11 +130,22 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Find cheapest across all vendors
+      // Find cheapest across ALL vendors (overall)
       const validCosts = allCosts.filter(s => s.unit_cost > 0);
-      const cheapestCost = validCosts.length > 0 ? Math.min(...validCosts.map(s => s.unit_cost)) : 0;
-      const is_cheapest_source = thisVendorCost > 0 && thisVendorCost <= cheapestCost;
-      const price_delta = cheapestCost > 0 && thisVendorCost > 0 ? thisVendorCost - cheapestCost : 0;
+      const cheapestCostOverall = validCosts.length > 0 ? Math.min(...validCosts.map(s => s.unit_cost)) : 0;
+      const is_cheapest_overall = thisVendorCost > 0 && thisVendorCost <= cheapestCostOverall;
+      const price_delta_overall = cheapestCostOverall > 0 && thisVendorCost > 0 ? thisVendorCost - cheapestCostOverall : 0;
+
+      // Find cheapest within THIS vendor's sources only
+      const thisVendorSources = allCosts.filter(s => s.vendor_id === vendor_id && s.unit_cost > 0);
+      const cheapestCostForVendor = thisVendorSources.length > 0 ? Math.min(...thisVendorSources.map(s => s.unit_cost)) : thisVendorCost;
+      const is_cheapest_for_vendor = thisVendorCost > 0 && thisVendorCost <= cheapestCostForVendor;
+      const price_delta_for_vendor = cheapestCostForVendor > 0 && thisVendorCost > 0 ? thisVendorCost - cheapestCostForVendor : 0;
+
+      // Backward-compatible aliases
+      const cheapestCost = cheapestCostOverall;
+      const is_cheapest_source = is_cheapest_overall;
+      const price_delta = price_delta_overall;
 
       // Sort: cheapest first, then this vendor's source first among equal costs
       allCosts.sort((a, b) => {
@@ -155,10 +166,17 @@ Deno.serve(async (req) => {
         source_id: source?.id || null,
         has_dedicated_source: !!source,
         is_default_vendor: part?.default_vendor_id === vendor_id,
-        // Cross-vendor comparison fields
+        // Cross-vendor comparison fields (backward-compatible)
         is_cheapest_source,
         cheapest_cost: cheapestCost,
         price_delta,
+        // Dual comparison fields (new)
+        is_cheapest_overall,
+        cheapest_cost_overall: cheapestCostOverall,
+        price_delta_overall,
+        is_cheapest_for_vendor,
+        cheapest_cost_for_vendor: cheapestCostForVendor,
+        price_delta_for_vendor,
         all_sources: allCosts,
         source_count: allCosts.length,
       };

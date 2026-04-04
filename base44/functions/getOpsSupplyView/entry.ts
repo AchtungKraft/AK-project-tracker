@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
-      inv.to_order_global += Math.max(0, required - reserved - covered);
+      inv.to_order_global += Math.max(0, required - reserved - covered - (c.qty_installed ?? 0));
     }
     
     // Calculate available after aggregation
@@ -655,8 +655,8 @@ function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
     requires_prepay = false,
   } = commitment;
 
-  const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po);
-  const available_to_install = reserved_from_stock + covered_from_po - qty_installed;
+  const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
+  const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
 
   // Build prepay diagnostics
   let prepay_diagnostics = null;
