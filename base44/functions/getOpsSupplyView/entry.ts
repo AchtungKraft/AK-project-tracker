@@ -68,10 +68,23 @@ Deno.serve(async (req) => {
         : [],
     ]);
     
-    // Derive vendor IDs and category IDs from parts (not global scans)
-    const derivedVendorIds = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
-    const derivedCategoryIds = [...new Set(parts.map(p => p.part_category_id).filter(Boolean))];
+    // Phase 2: Fetch vendor sources for multi-source display
+    const vendorSources = commitmentPartIds.length > 0
+      ? await base44.entities.PartVendorSource.filter({ part_id: { $in: commitmentPartIds }, is_active: true })
+      : [];
+    const sourcesByPart = new Map();
+    for (const s of vendorSources) {
+      if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
+      sourcesByPart.get(s.part_id).push(s);
+    }
     
+    // Derive vendor IDs and category IDs from parts (not global scans)
+    const derivedVendorIds = [...new Set([
+      ...parts.map(p => p.default_vendor_id).filter(Boolean),
+      ...vendorSources.map(s => s.vendor_id).filter(Boolean),
+    ])];
+    const derivedCategoryIds = [...new Set(parts.map(p => p.part_category_id).filter(Boolean))];
+
     const [vendors, categories] = await Promise.all([
       derivedVendorIds.length > 0
         ? base44.entities.Vendor.filter({ id: { $in: derivedVendorIds } })
@@ -461,6 +474,16 @@ Deno.serve(async (req) => {
 
         // Commitment status (canonical)
         commitment_status: c.commitment_status || 'planned',
+
+        // Multi-source info
+        vendor_sources: (sourcesByPart.get(c.part_id) || []).map(s => ({
+          source_id: s.id,
+          vendor_id: s.vendor_id,
+          vendor_name: vendorMap.get(s.vendor_id)?.vendor_name || 'Unknown',
+          unit_cost: s.unit_cost || 0,
+          is_preferred: s.is_preferred || false,
+        })),
+        has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
 
         // PSM-compatible nested shape aliases (allows PSMGroupedView to consume this data)
         part: {

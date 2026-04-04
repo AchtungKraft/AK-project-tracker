@@ -52,11 +52,26 @@ Deno.serve(async (req) => {
 
     // PHASE 2: Scope parts and vendors to only those referenced by commitments
     const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
-    const parts = partIdsFromCommitments.length > 0
-      ? await base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
-      : [];
+    const [parts, vendorSources] = await Promise.all([
+      partIdsFromCommitments.length > 0
+        ? base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
+        : [],
+      partIdsFromCommitments.length > 0
+        ? base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true })
+        : [],
+    ]);
     
-    const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    // Build source lookup by part
+    const sourcesByPart = new Map();
+    for (const s of vendorSources) {
+      if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
+      sourcesByPart.get(s.part_id).push(s);
+    }
+    
+    const vendorIdsFromParts = [...new Set([
+      ...parts.map(p => p.default_vendor_id).filter(Boolean),
+      ...vendorSources.map(s => s.vendor_id).filter(Boolean),
+    ])];
     const vendors = vendorIdsFromParts.length > 0
       ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
       : [];
@@ -499,11 +514,18 @@ Deno.serve(async (req) => {
           // Source type
           source_type,
 
+          // Multi-source info
+          vendor_sources: (sourcesByPart.get(c.part_id) || []).map(s => ({
+            source_id: s.id,
+            vendor_id: s.vendor_id,
+            vendor_name: vendorMap.get(s.vendor_id)?.vendor_name || 'Unknown',
+            unit_cost: s.unit_cost || 0,
+            is_preferred: s.is_preferred || false,
+          })),
+          has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
+
           // Financial
           unit_cost,
-          unit_retail,
-          planned_cost_total,
-          planned_retail_total,
           covered_retail_total,
           exposure_gap,
           billing_status: c.billing_status || 'billable',

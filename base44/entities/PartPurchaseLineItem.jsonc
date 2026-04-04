@@ -1,0 +1,158 @@
+{
+  "name": "PartPurchaseLineItem",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "Reference to Order"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "requirement_id": {
+      "type": "string",
+      "description": "Reference to PartProjectRequirement (optional)"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Reference to PartVendorSource used for this line. Null for legacy lines."
+    },
+    "qty_ordered": {
+      "type": "number",
+      "default": 1,
+      "description": "Quantity ordered"
+    },
+    "qty_received": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity received"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Unit cost - FORWARD MODEL: Editable at PO creation, authoritative source"
+    },
+    "price_ordered": {
+      "type": "number",
+      "description": "Price at time of order from the selected vendor source. Frozen on PO creation."
+    },
+    "unit_price": {
+      "type": "number",
+      "description": "DEPRECATED: Use unit_cost. Kept for compatibility."
+    },
+    "extended_cost": {
+      "type": "number",
+      "description": "unit_cost * qty_ordered - SERVICE COMPUTED"
+    },
+    "line_total": {
+      "type": "number",
+      "description": "DEPRECATED: Use extended_cost. Kept for compatibility."
+    },
+    "cost_source_reference": {
+      "type": "string",
+      "description": "Source of cost: 'part_cost', 'default_estimate', 'user_input', 'commitment:{id}', 'vendor_source:{id}'"
+    },
+    "cost_requires_review": {
+      "type": "boolean",
+      "default": false,
+      "description": "FORWARD MODEL: True if cost was $0 or missing at creation time - requires manual review"
+    },
+    "unit_retail": {
+      "type": "number",
+      "description": "Display-only retail snapshot (from commitment.unit_retail_snapshot)"
+    },
+    "retail_source_reference": {
+      "type": "string",
+      "description": "Source of retail snapshot"
+    },
+    "is_legacy": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a legacy line item (pre-commitment system)"
+    },
+    "legacy_link_status": {
+      "type": "string",
+      "enum": [
+        "linked",
+        "quarantined",
+        "unlinked"
+      ],
+      "default": "unlinked",
+      "description": "Status of legacy line item linkage to commitment"
+    },
+    "legacy_reason": {
+      "type": "string",
+      "description": "Reason for legacy status or quarantine"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Ordered",
+        "Partial",
+        "Received",
+        "Cancelled"
+      ],
+      "default": "Ordered",
+      "description": "Line item status"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Line item notes"
+    },
+    "billing_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, has custom billing settings"
+    },
+    "billing_status_override": {
+      "type": "string",
+      "enum": [
+        "Not Invoiced",
+        "Client Invoiced",
+        "Client Paid"
+      ],
+      "description": "Override billing status"
+    },
+    "invoice_number_override": {
+      "type": "string",
+      "description": "Override invoice number"
+    },
+    "invoice_date_override": {
+      "type": "string",
+      "format": "date",
+      "description": "Override invoice date"
+    },
+    "is_delta_order": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a delta order"
+    },
+    "cost_locked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When cost was locked"
+    },
+    "freight_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED for forward model: Use Order.freight_cost. Line-level allocation for legacy."
+    },
+    "tariff_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED for forward model: Use Order.tariff_cost. Line-level allocation for legacy."
+    }
+  },
+  "required": [
+    "order_id",
+    "part_id"
+  ]
+}

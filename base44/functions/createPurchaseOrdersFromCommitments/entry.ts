@@ -31,7 +31,25 @@ Deno.serve(async (req) => {
 
     const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const parts = partIds.length > 0 ? await base44.asServiceRole.entities.Part.filter({ id: { $in: partIds } }) : [];
-    const vendorIds = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
+    
+    // Phase 2: Fetch vendor sources for all parts (for source-based cost/vendor resolution)
+    const vendorSources = partIds.length > 0 
+      ? await base44.asServiceRole.entities.PartVendorSource.filter({ part_id: { $in: partIds }, is_active: true })
+      : [];
+    const sourceMap = new Map(vendorSources.map(s => [s.id, s]));
+    const sourcesByPart = new Map();
+    for (const s of vendorSources) {
+      if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
+      sourcesByPart.get(s.part_id).push(s);
+    }
+    
+    // Parse per-commitment source selections: { commitment_id: source_id }
+    const { selected_sources = {} } = payload;
+    
+    const vendorIds = [...new Set([
+      ...parts.map(p => p.default_vendor_id).filter(Boolean),
+      ...vendorSources.map(s => s.vendor_id).filter(Boolean),
+    ])];
     if (override_vendor_id && !vendorIds.includes(override_vendor_id)) vendorIds.push(override_vendor_id);
     const vendors = vendorIds.length > 0 ? await base44.asServiceRole.entities.Vendor.filter({ id: { $in: vendorIds } }) : [];
     const partMap = new Map(parts.map(p => [p.id, p]));
@@ -51,37 +69,48 @@ Deno.serve(async (req) => {
       if (c.commitment_status === 'closed') { blocked.push({ commitment_id: c.id, reason_code: 'CLOSED', part_name: part?.part_name, message: 'Commitment closed' }); continue; }
       const gap = Math.max(0, (c.required_total ?? 0) - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0));
       if (gap <= 0) { blocked.push({ commitment_id: c.id, reason_code: 'NOTHING_TO_ORDER', part_name: part?.part_name, message: 'Fully covered, nothing to order' }); continue; }
-      const vid = override_vendor_id || part?.default_vendor_id;
-      if (!vid) { blocked.push({ commitment_id: c.id, reason_code: 'MISSING_VENDOR', part_name: part?.part_name, message: 'No default vendor assigned' }); continue; }
-      if (c.requires_prepay && c.billing_status !== 'paid') { blocked.push({ commitment_id: c.id, reason_code: 'PREPAY_REQUIRED', part_name: part?.part_name, message: 'Prepayment required' }); continue; }
-      if (part?.is_archived) { blocked.push({ commitment_id: c.id, reason_code: 'PART_ARCHIVED', part_name: part?.part_name, message: 'Part is archived' }); continue; }
 
       // Drift detection
       const storedTO = c.qty_to_order ?? 0;
       if (Math.abs(gap - storedTO) > 0.01 && storedTO > 0) warnings.push({ type: 'QTY_TO_ORDER_DRIFT', id: c.id, msg: `stored(${storedTO})!=gap(${gap})` });
 
+      // Phase 2: Resolve vendor via selected_source → PartVendorSource → Part.default_vendor_id
+      let resolvedSourceId = selected_sources[c.id] || null;
+      let resolvedSource = resolvedSourceId ? sourceMap.get(resolvedSourceId) : null;
+      
+      // If no explicit source selected, find preferred source for this part
+      if (!resolvedSource) {
+        const partSources = sourcesByPart.get(c.part_id) || [];
+        resolvedSource = partSources.find(s => s.is_preferred) || null;
+        resolvedSourceId = resolvedSource?.id || null;
+      }
+      
+      // Resolve vendor: override > source > Part.default
+      const vid = override_vendor_id || resolvedSource?.vendor_id || part?.default_vendor_id;
+      if (!vid) { blocked.push({ commitment_id: c.id, reason_code: 'MISSING_VENDOR', part_name: part?.part_name, message: 'No default vendor assigned' }); continue; }
+      if (c.requires_prepay && c.billing_status !== 'paid') { blocked.push({ commitment_id: c.id, reason_code: 'PREPAY_REQUIRED', part_name: part?.part_name, message: 'Prepayment required' }); continue; }
+      if (part?.is_archived) { blocked.push({ commitment_id: c.id, reason_code: 'PART_ARCHIVED', part_name: part?.part_name, message: 'Part is archived' }); continue; }
+
       let unit_cost, cost_src, cost_review = false;
       if (isFwd) {
-        // FIX: Check commitment snapshot first (if > 0), then fall back to part.cost
-        if (c.unit_cost_snapshot > 0) { unit_cost = c.unit_cost_snapshot; cost_src = 'commitment_snapshot'; }
+        // Phase 2: Source cost → commitment snapshot → Part.cost → default_cost → 0
+        if (resolvedSource?.unit_cost > 0) { unit_cost = resolvedSource.unit_cost; cost_src = `vendor_source:${resolvedSourceId}`; }
+        else if (c.unit_cost_snapshot > 0) { unit_cost = c.unit_cost_snapshot; cost_src = 'commitment_snapshot'; }
         else if (part?.cost > 0) { unit_cost = part.cost; cost_src = 'part_cost'; }
         else if (part?.default_cost > 0) { unit_cost = part.default_cost; cost_src = 'default_estimate'; cost_review = true; }
         else { unit_cost = 0; cost_src = 'missing'; cost_review = true; }
       } else {
-        // Legacy path: same fallback chain
-        const resolved = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (part?.cost && part.cost > 0) ? part.cost : (part?.default_cost && part.default_cost > 0) ? part.default_cost : 0;
+        const resolved = (resolvedSource?.unit_cost > 0) ? resolvedSource.unit_cost : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (part?.cost && part.cost > 0) ? part.cost : (part?.default_cost && part.default_cost > 0) ? part.default_cost : 0;
         unit_cost = resolved;
-        cost_src = (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (part?.cost > 0) ? 'part_cost' : (part?.default_cost > 0) ? 'default_estimate' : 'missing';
+        cost_src = (resolvedSource?.unit_cost > 0) ? `vendor_source:${resolvedSourceId}` : (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (part?.cost > 0) ? 'part_cost' : (part?.default_cost > 0) ? 'default_estimate' : 'missing';
         if (unit_cost <= 0) cost_review = true;
       }
       if (unit_cost <= 0) {
         console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
-        // STRICT MODE: Block zero-cost PO creation when enabled
         if (strictMode) {
           blocked.push({ commitment_id: c.id, reason_code: 'ZERO_COST_STRICT', part_name: part?.part_name, message: 'Strict mode: $0 cost blocked' });
           continue;
         }
-        // Audit: log zero-cost PO creation
         try {
           await base44.asServiceRole.entities.CommitmentAuditLog.create({
             commitment_id: c.id,
@@ -94,7 +123,7 @@ Deno.serve(async (req) => {
           });
         } catch (_e) { /* audit is best-effort */ }
       }
-      eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: gap, unit_cost, cost_src, cost_review });
+      eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: gap, unit_cost, cost_src, cost_review, source_id: resolvedSourceId, price_ordered: unit_cost });
     }
 
     if (dry_run) {
@@ -120,7 +149,7 @@ Deno.serve(async (req) => {
       const commitmentIdsForCostSync = [];
       for (const item of items) {
         const { commitment: c, part, qty_to_order, unit_cost, cost_src, cost_review } = item;
-        const liData = { order_id: order.id, part_id: part.id, commitment_id: c.id, vendor_id: vid, qty_ordered: qty_to_order, qty_received: 0, unit_cost, unit_price: unit_cost, extended_cost: unit_cost * qty_to_order, line_total: unit_cost * qty_to_order, cost_source_reference: cost_src, status: 'Ordered', is_legacy: false, legacy_link_status: 'linked', is_delta_order: false };
+        const liData = { order_id: order.id, part_id: part.id, commitment_id: c.id, vendor_id: vid, qty_ordered: qty_to_order, qty_received: 0, unit_cost, unit_price: unit_cost, extended_cost: unit_cost * qty_to_order, line_total: unit_cost * qty_to_order, cost_source_reference: cost_src, status: 'Ordered', is_legacy: false, legacy_link_status: 'linked', is_delta_order: false, source_id: item.source_id || null, price_ordered: item.price_ordered || unit_cost };
         if (isFwd && cost_review) liData.cost_requires_review = true;
         const li = await base44.asServiceRole.entities.PartPurchaseLineItem.create(liData);
         liIds.push(li.id);

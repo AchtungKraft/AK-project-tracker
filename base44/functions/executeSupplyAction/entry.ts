@@ -238,21 +238,41 @@ async function autoReserve(ctx, commitment_ids, payload) {
 }
 
 async function createPO(ctx, commitment_ids, payload) {
-  const {vendor_id,po_prefix='AK',vendor_order_data={}}=payload;
+  const {vendor_id,po_prefix='AK',vendor_order_data={},selected_sources={}}=payload;
   if(!commitment_ids?.length) throw new Error('PO_COMMITMENT_REQUIRED');
   const commitments=await ctx.base44.entities.PartCommitment.filter({id:{$in:commitment_ids}});
+  
+  // Phase 2: Fetch vendor sources for source-based resolution
+  const cPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+  const vendorSources = cPartIds.length > 0
+    ? await ctx.base44.entities.PartVendorSource.filter({ part_id: { $in: cPartIds }, is_active: true })
+    : [];
+  const sourceMap = new Map(vendorSources.map(s => [s.id, s]));
+  const sourcesByPart = new Map();
+  for (const s of vendorSources) {
+    if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
+    sourcesByPart.get(s.part_id).push(s);
+  }
+  
   const vg=new Map(), blocked=[];
   for (const c of commitments) {
     const [p]=await ctx.base44.entities.Part.filter({id:c.part_id});
     if(!p){blocked.push({commitment_id:c.id,reason_code:'PART_NOT_FOUND'});continue;}
-    const ev=vendor_id||p.default_vendor_id;
+    // Phase 2: Resolve vendor via selected_source → PartVendorSource → Part.default
+    let resolvedSource = selected_sources[c.id] ? sourceMap.get(selected_sources[c.id]) : null;
+    if (!resolvedSource) {
+      const partSources = sourcesByPart.get(c.part_id) || [];
+      resolvedSource = partSources.find(s => s.is_preferred) || null;
+    }
+    const ev=vendor_id||resolvedSource?.vendor_id||p.default_vendor_id;
     if(!ev) throw new Error(`PO_VENDOR_REQUIRED: ${c.id} (${p.part_name})`);
     const cn=readCanonical(c,ctx);
     if(cn.gap<=0){blocked.push({commitment_id:c.id,reason_code:'NO_GAP',gap:0});continue;}
     if(!vg.has(ev)) vg.set(ev,[]);
-    // FIX: Use || instead of ?? so that 0 falls through to Part.cost
-    const resolvedCost = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
-    const resolvedCostSource = (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
+    // Phase 2: Source cost → commitment snapshot → Part.cost → 0
+    const resolvedCost = (resolvedSource?.unit_cost > 0) ? resolvedSource.unit_cost : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
+    const resolvedCostSource = (resolvedSource?.unit_cost > 0) ? `vendor_source:${resolvedSource.id}` : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
+    const resolvedSourceId = selected_sources[c.id] || resolvedSource?.id || null;
     if (resolvedCost <= 0) {
       console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
       // Audit: log zero-cost PO creation
@@ -268,7 +288,7 @@ async function createPO(ctx, commitment_ids, payload) {
         });
       } catch (_e) { /* audit is best-effort */ }
     }
-    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource});
+    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource,source_id:resolvedSourceId,price_ordered:resolvedCost});
   }
   if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,commitment_count:items.length,total_qty:items.reduce((s,i)=>s+i.qty,0),estimated_cost:items.reduce((s,i)=>s+i.qty*i.unit_cost,0),items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost,cost_source:i.cost_source}))}))},blocked};
 
@@ -283,7 +303,7 @@ async function createPO(ctx, commitment_ids, payload) {
 
     for(const item of items) {
       const rq=Number(item.qty); if(!rq||rq<=0||!Number.isFinite(rq)) throw new Error(`CREATE_PO_INVALID_QTY: ${item.qty}`);
-      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,cost_source_reference:item.cost_source||null,cost_requires_review:item.cost_source==='missing',status:'Ordered'});
+      const li=await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.create({order_id:order.id,part_id:item.part.id,commitment_id:item.commitment.id,vendor_id:vid,qty_ordered:rq,qty_received:0,unit_cost:item.unit_cost,unit_retail:item.commitment.unit_retail_snapshot??0,extended_cost:item.unit_cost*rq,cost_source_reference:item.cost_source||null,cost_requires_review:item.cost_source==='missing',status:'Ordered',source_id:item.source_id||null,price_ordered:item.price_ordered||item.unit_cost});
       const curCov=item.commitment.covered_from_po??0, newCov=curCov+item.qty;
       const cn=readCanonical(item.commitment,ctx);
       const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov-cn.qty_installed);

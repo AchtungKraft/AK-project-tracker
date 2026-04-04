@@ -1,0 +1,63 @@
+{
+  "name": "PartVendorSource",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "vendor_part_number": {
+      "type": "string",
+      "description": "Vendor-specific part number/SKU for this source"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Vendor-specific cost per unit"
+    },
+    "is_preferred": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is the preferred/default source for this part"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this source is currently available"
+    },
+    "lead_time_days": {
+      "type": "number",
+      "description": "Expected lead time in days from this vendor"
+    },
+    "min_order_qty": {
+      "type": "number",
+      "default": 1,
+      "description": "Minimum order quantity for this vendor"
+    },
+    "last_ordered_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this source was last used for a PO"
+    },
+    "last_cost_update_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When cost was last updated for this source"
+    },
+    "order_url": {
+      "type": "string",
+      "description": "Direct URL for ordering from this vendor"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about this vendor source"
+    }
+  },
+  "required": [
+    "part_id",
+    "vendor_id"
+  ]
+}
