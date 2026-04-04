@@ -297,12 +297,31 @@ Deno.serve(async (req) => {
       }
       const coverage_percent = required_total > 0 ? Math.round((total_covered / required_total) * 100) : 0;
 
-      // Financial
-      const unit_cost = c.unit_cost_snapshot ?? part?.cost ?? 0;
+      // Financial — CANONICAL COST RESOLUTION via PartVendorSource
+      // Priority: 1. preferred PartVendorSource, 2. commitment snapshot, 3. part.cost
+      const partSources = sourcesByPart.get(c.part_id) || [];
+      const preferredSource = partSources.find(s => s.is_preferred) || partSources[0] || null;
+      let resolved_unit_cost = 0;
+      let cost_source_tag = 'missing';
+      if (preferredSource?.unit_cost > 0) {
+        resolved_unit_cost = preferredSource.unit_cost;
+        cost_source_tag = `vendor_source:${preferredSource.id}`;
+      } else if ((c.unit_cost_snapshot ?? 0) > 0) {
+        resolved_unit_cost = c.unit_cost_snapshot;
+        cost_source_tag = 'commitment_snapshot';
+      } else if ((part?.cost ?? 0) > 0) {
+        resolved_unit_cost = part.cost;
+        cost_source_tag = 'part_cost_fallback';
+      }
+      const invalid_cost = resolved_unit_cost <= 0;
+      const unit_cost = resolved_unit_cost;
       const unit_retail = c.unit_retail_snapshot ?? part?.retail_matrix_price ?? part?.retail_override ?? 0;
+      const resolved_cost_total = resolved_unit_cost * to_order;
       const planned_retail_total = c.planned_retail_total ?? (unit_retail * required_total);
       const covered_retail_total = c.covered_retail_total ?? 0;
-      const exposure_gap = c.exposure_gap ?? Math.max(0, planned_retail_total - covered_retail_total);
+      // CANONICAL EXPOSURE: (retail - resolved_cost) * to_order
+      const resolved_exposure = invalid_cost ? 0 : Math.max(0, (unit_retail - resolved_unit_cost) * to_order);
+      const exposure_gap = resolved_exposure;
 
       // Source type mapping
       const source_type = mapSourceType(c.supply_source_type);
@@ -453,13 +472,19 @@ Deno.serve(async (req) => {
         // Source type
         source_type,
 
-        // Financial
+        // Financial — resolved from PartVendorSource (canonical)
         unit_cost,
+        resolved_unit_cost,
+        resolved_cost_total,
+        cost_source_tag,
+        invalid_cost,
         unit_retail,
-        estimated_cost: to_order * unit_cost,
+        estimated_cost: resolved_cost_total,
+        planned_cost_total: resolved_unit_cost * required_total,
         planned_retail_total,
         covered_retail_total,
-        exposure_gap,
+        resolved_exposure,
+        exposure_gap: resolved_exposure,
         pool_balance: poolBalance,
         billing_status: c.billing_status || 'billable',
 
@@ -567,7 +592,7 @@ Deno.serve(async (req) => {
     const summary = {
       total_items: filtered.length,
       total_qty_to_order: filtered.reduce((sum, vm) => sum + vm.to_order, 0),
-      total_exposure: filtered.reduce((sum, vm) => sum + vm.exposure_gap, 0),
+      total_exposure: filtered.reduce((sum, vm) => sum + (vm.resolved_exposure ?? 0), 0),
       total_estimated_cost: filtered.reduce((sum, vm) => sum + vm.estimated_cost, 0),
       orderable_count: filtered.filter(vm => vm.is_orderable).length,
       blocked_count: filtered.filter(vm => !vm.is_orderable && vm.to_order > 0).length,

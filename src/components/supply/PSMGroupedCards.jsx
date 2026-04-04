@@ -80,7 +80,7 @@ function applySorting(items, sortMode) {
   const sorted = [...items];
   switch (sortMode) {
     case 'exposure_desc':
-      return sorted.sort((a, b) => (b.exposure_gap ?? 0) - (a.exposure_gap ?? 0));
+      return sorted.sort((a, b) => (b.resolved_exposure ?? 0) - (a.resolved_exposure ?? 0));
     case 'retail_desc':
       return sorted.sort((a, b) => (b.planned_retail_total ?? 0) - (a.planned_retail_total ?? 0));
     case 'required_desc':
@@ -101,7 +101,7 @@ export function PSMSummaryStrip({ items, tab }) {
   const isOrderingContext = tab === 'buy';
   const stats = useMemo(() => {
     const totalItems = items.length;
-    const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
     const installReadyCount = items.filter(i => 
@@ -278,10 +278,12 @@ export function PSMItemRow({
   const inv = commitment.inventory_snapshot || {};
   const reservedProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
   const toOrder = commitment.to_order ?? 0;
-  const exposureGap = commitment.exposure_gap ?? 0;
   const available = inv.available_global_active ?? inv.available ?? 0;
 
   // Resolve names
+  // CANONICAL: Use resolved_exposure from backend (no local derivation)
+  const resolvedExposure = commitment.resolved_exposure ?? commitment.exposure_gap ?? 0;
+
   const resolvedVendor = resolveVendorDisplay(
     commitment.vendor?.id || vendor?.id,
     vendor || commitment.vendor_name,
@@ -478,10 +480,16 @@ export function PSMItemRow({
             <span className="text-gray-500 block">RETAIL</span>
             <span className="text-white">{formatCurrencyUSD(commitment.planned_retail_total ?? 0)}</span>
           </div>
-          {exposureGap > 0 && (
+          {resolvedExposure > 0 && !commitment.invalid_cost && (
             <div className="text-center">
               <span className="text-gray-500 block">EXPO</span>
-              <span className="text-amber-400">{formatCurrencyUSD(exposureGap)}</span>
+              <span className="text-amber-400">{formatCurrencyUSD(resolvedExposure)}</span>
+            </div>
+          )}
+          {commitment.invalid_cost && toOrder > 0 && (
+            <div className="text-center">
+              <span className="text-gray-500 block">EXPO</span>
+              <span className="text-red-500 text-[9px]">NO COST</span>
             </div>
           )}
           <CostSourceBadge commitment={commitment} />
@@ -668,8 +676,8 @@ export function PSMGroupCard({
   const groupStats = useMemo(() => {
     const items = sortedItems;
     const totalQty = items.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
-    const totalCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
+    const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
       if (tab === 'receive') return i.on_order_qty > 0 && i.allowed?.canReceive;
@@ -1392,7 +1400,7 @@ function PSMGroupCardWithSubgroups({
   // Calculate group stats
   const groupStats = useMemo(() => {
     const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
     const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;

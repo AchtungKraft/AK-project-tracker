@@ -109,7 +109,7 @@ export default function GlobalNeedToOrder() {
 
   // Stats from canonical resolved fields (PartVendorSource-first)
   const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
-  const totalExposure = filteredItems.reduce((sum, i) => sum + (i.exposure_gap ?? 0), 0);
+  const totalExposure = filteredItems.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
   const totalCost = filteredItems.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.estimated_cost ?? 0), 0);
   const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
   const blockedCount = filteredItems.filter(i => !i.is_orderable).length;

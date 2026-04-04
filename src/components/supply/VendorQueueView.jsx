@@ -97,14 +97,13 @@ export default function VendorQueueView({ items, onSelectVendor }) {
       let urgentCount = 0;
       let savingsVsDefault = 0;
       let bestPriceCount = 0;
-      let totalExposure = 0;
+      let totalExposure = 0;  // Will be computed per-vendor using vendor-specific cost
       let totalToOrderQty = 0;
 
       for (const item of orderableItems) {
         parts.add(item.part_id);
         const toOrder = item.to_order ?? 0;
         totalToOrderQty += toOrder;
-        totalExposure += item.exposure_gap ?? 0;
 
         // Find this vendor's cost for this part (prefer PartVendorSource)
         const sources = sourcesByPart.get(item.part_id) || [];
@@ -125,6 +124,12 @@ export default function VendorQueueView({ items, onSelectVendor }) {
 
         if (vendorCost > 0 && defaultCost > 0 && vendorCost < defaultCost) {
           savingsVsDefault += (defaultCost - vendorCost) * toOrder;
+        }
+
+        // Vendor-specific exposure: (retail - this vendor cost) * qty
+        const itemRetail = item.unit_retail ?? 0;
+        if (vendorCost > 0 && itemRetail > 0) {
+          totalExposure += Math.max(0, (itemRetail - vendorCost) * toOrder);
         }
 
         const coveredFromPO = item.covered_from_po ?? 0;

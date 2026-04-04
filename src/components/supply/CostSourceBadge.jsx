@@ -19,7 +19,8 @@ export default function CostSourceBadge({ commitment, className }) {
   if (!commitment) return null;
 
   const hasPOLines = (commitment.order_line_item_ids || []).length > 0;
-  const cost = commitment.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
+  // CANONICAL: prefer resolved_unit_cost from PartVendorSource chain
+  const cost = commitment.resolved_unit_cost ?? commitment.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
   const hasOrders = (commitment.qty_ordered || 0) > 0;
   const hasCostOverride = commitment.cost_override === true;
   const hasRetailOverride = commitment.retail_override === true;
