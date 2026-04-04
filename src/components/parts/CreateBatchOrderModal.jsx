@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
  *   estimated_cost  // from read model
  * }
  */
-export default function CreateBatchOrderModal({ selectedItems, onClose, onSuccess }) {
+export default function CreateBatchOrderModal({ selectedItems, selectedVendorContext, onClose, onSuccess }) {
   const queryClient = useQueryClient();
   
   // UI-only state for tracking which items have been added to vendor cart
@@ -89,23 +89,42 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
     return `${prefix}_${mm}${dd}${yyyy}_${String(nextSeq).padStart(3, '0')}`;
   };
 
-  // PHASE 10B: State for vendor-grouped items - vendor comes from read model, not Part entity
+  // PHASE 10B: State for vendor-grouped items
+  // VENDOR CONTEXT OVERRIDE: If selectedVendorContext is set (from Vendor View),
+  // re-assign items that have a PartVendorSource for that vendor to that vendor group.
   const [vendorGroups, setVendorGroups] = useState(() => {
     const groups = {};
     
     selectedItems.forEach(item => {
-      // PHASE 10B: vendor_id comes from read model directly
-      const vendorId = item.vendor_id || 'unassigned';
+      // Determine effective vendor for this item
+      let vendorId = item.vendor_id || 'unassigned';
+      let vendorName = item.vendor_name || null;
       
-      // PHASE 10B: HARD ERROR if no commitment_id
-      if (!item.commitment_id) {
-        console.error('[PHASE 10B VIOLATION] Item missing commitment_id:', item);
+      // If a vendor context was set (from Vendor View selection), check if this item
+      // has a source for that vendor — if so, override the grouping vendor
+      if (selectedVendorContext?.vendor_id) {
+        const ctxVid = selectedVendorContext.vendor_id;
+        const itemDefaultVid = item.vendor_id;
+        // Item already assigned to selected vendor — keep it
+        if (itemDefaultVid === ctxVid) {
+          vendorId = ctxVid;
+          vendorName = selectedVendorContext.vendor_name;
+        } else {
+          // Check if item has a PartVendorSource for the selected vendor
+          const sources = item.sources || [];
+          const matchingSource = sources.find(s => s.vendor_id === ctxVid);
+          if (matchingSource) {
+            vendorId = ctxVid;
+            vendorName = selectedVendorContext.vendor_name;
+          }
+          // Otherwise: keep default vendor — this item doesn't have a source for the selected vendor
+        }
       }
-      
+
       if (!groups[vendorId]) {
         groups[vendorId] = {
           vendorId,
-          vendorName: item.vendor_name || null,
+          vendorName: vendorName,
           expanded: true,
           orderData: {
             po_prefix: 'AK',
@@ -122,16 +141,25 @@ export default function CreateBatchOrderModal({ selectedItems, onClose, onSucces
           items: [],
         };
       }
-      // PHASE 10B: Cost comes from read model (default_cost or estimated_cost)
-      const itemCost = item.default_cost ?? item.estimated_cost ?? 0;
+      // Determine cost — if vendor context override, try to use vendor source cost
+      let itemCost = item.default_cost ?? item.estimated_cost ?? 0;
+      if (selectedVendorContext?.vendor_id && vendorId === selectedVendorContext.vendor_id) {
+        const sources = item.sources || [];
+        const vendorSource = sources.find(s => s.vendor_id === selectedVendorContext.vendor_id);
+        if (vendorSource?.unit_cost > 0) {
+          itemCost = vendorSource.unit_cost;
+        }
+      }
+      
+      const isVendorOverride = vendorId !== (item.vendor_id || 'unassigned');
       groups[vendorId].items.push({
         ...item,
-        commitment_id: item.commitment_id, // Ensure commitment_id is preserved
+        commitment_id: item.commitment_id,
         qty_to_order: item.qty_to_order || 1,
         unit_cost: itemCost,
         original_cost: itemCost,
         cost_overridden: false,
-        vendorOverride: null,
+        vendorOverride: isVendorOverride ? vendorId : null,
       });
     });
     

@@ -68,6 +68,8 @@ export default function GlobalNeedToOrder() {
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [editingPartId, setEditingPartId] = useState(null);
   const [viewMode, setViewMode] = useState('parts'); // 'parts' | 'vendors'
+  const [selectedVendorContext, setSelectedVendorContext] = useState(null); // { vendor_id, vendor_name }
+  const [vendorSourcesByPart, setVendorSourcesByPart] = useState({}); // part_id -> PartVendorSource[]
 
   // Use canonical ops supply view
   // CRITICAL: vendor filter is NEVER set by vendor view selection — only by explicit dropdown
@@ -364,12 +366,12 @@ export default function GlobalNeedToOrder() {
             ) : (
               <VendorQueueView
                 items={filteredItems}
-                onSelectVendor={(vendor, itemIds) => {
-                  // PART 1 FIX: Selection ONLY — no filter mutation
-                  // itemIds come from VendorQueueView which knows about sources
+                onSelectVendor={(vendor, itemIds, sourcesByPartId) => {
+                  // Selection ONLY — no filter mutation
                   setSelectedItems(new Set(itemIds));
+                  setSelectedVendorContext({ vendor_id: vendor.id, vendor_name: vendor.vendor_name });
+                  setVendorSourcesByPart(sourcesByPartId || {});
                   setViewMode('parts');
-                  // DO NOT call setSelectedVendorFilter — that mutates the dataset
                 }}
               />
             )
@@ -407,7 +409,7 @@ export default function GlobalNeedToOrder() {
       {/* PSM Floating Action Bar */}
       <PSMFloatingActionBar
         selectedCount={selectedItems.size}
-        onClear={() => setSelectedItems(new Set())}
+        onClear={() => { setSelectedItems(new Set()); setSelectedVendorContext(null); }}
         onBatchPO={handleBatchCreatePO}
         isLoading={actionPreview.isPending}
         tab="buy"
@@ -436,10 +438,13 @@ export default function GlobalNeedToOrder() {
             default_cost: item.unit_cost,
             default_retail: item.unit_retail,
             order_url: item.order_url,
+            sources: vendorSourcesByPart[item.part_id] || [],
           }))}
+          selectedVendorContext={selectedVendorContext}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {
             setSelectedItems(new Set());
+            setSelectedVendorContext(null);
             refetch();
           }}
         />

@@ -20,7 +20,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  *
  * Props:
  *  - items: filteredItems from GlobalNeedToOrder (to_order > 0, canonical)
- *  - onSelectVendor(vendor, itemIds): called when user clicks a vendor row
+ *  - onSelectVendor(vendor, itemIds, sourcesByPartId): called when user clicks a vendor row
  */
 export default function VendorQueueView({ items, onSelectVendor }) {
   const partIds = useMemo(() => [...new Set(items.map(i => i.part_id).filter(Boolean))], [items]);
@@ -189,7 +189,8 @@ export default function VendorQueueView({ items, onSelectVendor }) {
             key={v.vendor_id}
             onClick={() => onSelectVendor(
               { id: v.vendor_id, vendor_name: v.vendor_name, color: v.color },
-              v._itemIds
+              v._itemIds,
+              Object.fromEntries(sourcesByPart)
             )}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-800/60",
