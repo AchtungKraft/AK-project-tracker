@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import { Building2, Search, ChevronRight, Package } from "lucide-react";
+import { Building2, Search, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,19 +10,23 @@ import { cn } from "@/lib/utils";
  * Displays vendors with counts of orderable parts.
  */
 export default function VendorSelector({ onSelectVendor }) {
-  const [vendors, setVendors] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      const vList = await base44.entities.Vendor.filter({ active: true }, 'vendor_name', 500);
-      setVendors(vList);
-      setLoading(false);
-    })();
-  }, []);
+  const { data: vendors = [], isLoading: loading } = useQuery({
+    queryKey: ['referenceData', 'vendors'],
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
+    staleTime: 300000,
+    gcTime: 600000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
 
-  const filtered = vendors.filter(v =>
+  const activeVendors = vendors.filter(v => v.active !== false);
+
+  const filtered = activeVendors.filter(v =>
     !search || v.vendor_name?.toLowerCase().includes(search.toLowerCase())
   );
 

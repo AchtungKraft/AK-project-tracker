@@ -34,7 +34,7 @@ export default function PartVendorSourcesSection({
   const [deletedIds, setDeletedIds] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // Fetch existing sources
+  // Fetch existing sources — shares cache with PartModal view/edit toggling
   const { data: serverSources = [], isLoading } = useQuery({
     queryKey: ["partVendorSources", partId],
     queryFn: async () => {
@@ -42,8 +42,10 @@ export default function PartVendorSourcesSection({
       return base44.entities.PartVendorSource.filter({ part_id: partId });
     },
     enabled: Boolean(partId),
-    staleTime: 60000,
+    staleTime: 120000,
+    gcTime: 300000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Initialize local state from server data
