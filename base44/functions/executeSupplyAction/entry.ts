@@ -307,6 +307,21 @@ async function createPO(ctx, commitment_ids, payload) {
     const resolvedCost = finalCost;
     const resolvedCostSource = finalCostSource;
     const resolvedSourceId = finalSourceId;
+    if (resolvedCost <= 0) {
+      console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
+      try {
+        await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({
+          commitment_id: c.id,
+          action_type: 'create',
+          trigger_source: 'manual',
+          triggered_by: ctx.user.email,
+          actor_email: ctx.user.email,
+          notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${p.part_name}. Cost source: ${resolvedCostSource}`,
+          timestamp: ctx.timestamp,
+        });
+      } catch (_e) { /* audit is best-effort */ }
+    }
+    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource,source_id:resolvedSourceId,price_ordered:resolvedCost});
   }
   // SINGLE-VENDOR ENFORCEMENT: if allow_multi_vendor=false and overrides result in multiple vendors, block
   if (!allow_multi_vendor && vg.size > 1) {
