@@ -121,6 +121,36 @@ export default function GlobalNeedToOrder() {
     }
   }, [filteredItems]);
 
+  // Build vendor override map from selectedVendorContext + sources
+  const buildVendorOverrideMap = (items) => {
+    if (!selectedVendorContext?.vendor_id) return { vendor_override_map: {}, source_override_map: {} };
+    const ctxVid = selectedVendorContext.vendor_id;
+    const vendor_override_map = {};
+    const source_override_map = {};
+    for (const item of items) {
+      if (!item.commitment_id) continue;
+      const defaultVid = item.vendor_id;
+      if (defaultVid === ctxVid) {
+        vendor_override_map[item.commitment_id] = ctxVid;
+        continue;
+      }
+      const sources = vendorSourcesByPart[item.part_id] || [];
+      const match = sources.find(s => s.vendor_id === ctxVid);
+      if (match) {
+        vendor_override_map[item.commitment_id] = ctxVid;
+        source_override_map[item.commitment_id] = {
+          vendor_id: ctxVid,
+          source_id: match.id,
+          source_cost: match.unit_cost || 0,
+          source_url: match.order_url || '',
+          source_vendor_part_number: match.vendor_part_number || '',
+        };
+      }
+      // else: no override, default vendor used
+    }
+    return { vendor_override_map, source_override_map };
+  };
+
   // Batch PO creation handler
   const handleBatchCreatePO = async () => {
     audit.trackClick('batch_create_po', { selected_count: selectedItems.size });
@@ -131,12 +161,17 @@ export default function GlobalNeedToOrder() {
     }
 
     const commitment_ids = selectedData.map(i => i.commitment_id);
+    const { vendor_override_map, source_override_map } = buildVendorOverrideMap(selectedData);
     
     try {
       const preview = await actionPreview.preview({
         action_type: 'CREATE_PO',
         commitment_ids,
-        payload: { allow_multi_vendor: false },
+        payload: {
+          allow_multi_vendor: false,
+          vendor_override_map,
+          source_override_map,
+        },
       });
 
       if (preview.blocked_items?.length > 0) {

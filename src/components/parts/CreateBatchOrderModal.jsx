@@ -366,6 +366,35 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
       };
     }
 
+    // Build vendor_override_map from modal grouping state
+    // Items that were moved to a different vendor group get override entries
+    const vendorOverrideMap = {};
+    const sourceOverrideMap = {};
+    for (const [groupVendorId, group] of Object.entries(vendorGroups)) {
+      for (const item of group.items) {
+        if (!item.commitment_id) continue;
+        const originalVendorId = item.vendor_id || 'unassigned';
+        // If item is in a group different from its original vendor, set override
+        if (groupVendorId !== originalVendorId && groupVendorId !== 'unassigned') {
+          vendorOverrideMap[item.commitment_id] = groupVendorId;
+          // If there's a matching source, include it
+          const sources = item.sources || [];
+          const matchingSource = sources.find(s => s.vendor_id === groupVendorId);
+          if (matchingSource) {
+            sourceOverrideMap[item.commitment_id] = {
+              vendor_id: groupVendorId,
+              source_id: matchingSource.id,
+              source_cost: matchingSource.unit_cost || 0,
+            };
+          }
+        }
+        // Also set overrides for vendor context items (even if they match default)
+        if (selectedVendorContext?.vendor_id === groupVendorId) {
+          vendorOverrideMap[item.commitment_id] = groupVendorId;
+        }
+      }
+    }
+
     // Route through canonical dispatcher - NO direct entity writes
     supplyAction.mutate({
       action_type: 'CREATE_PO',
@@ -374,7 +403,9 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
         po_prefix: Object.values(vendorGroups)[0]?.orderData?.po_prefix || 'AK',
         allow_multi_vendor: true,
         vendor_overrides: vendorOverrides,
-        vendor_order_data: vendorOrderData, // Phase 6.2A: Per-vendor freight/tariff
+        vendor_override_map: vendorOverrideMap,
+        source_override_map: sourceOverrideMap,
+        vendor_order_data: vendorOrderData,
       },
       dry_run: false
     });

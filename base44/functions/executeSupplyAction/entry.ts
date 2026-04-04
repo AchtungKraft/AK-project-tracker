@@ -239,7 +239,7 @@ async function autoReserve(ctx, commitment_ids, payload) {
 }
 
 async function createPO(ctx, commitment_ids, payload) {
-  const {vendor_id,po_prefix='AK',vendor_order_data={},selected_sources={}}=payload;
+  const {vendor_id,po_prefix='AK',vendor_order_data={},selected_sources={},vendor_override_map={},source_override_map={},allow_multi_vendor=true}=payload;
   if(!commitment_ids?.length) throw new Error('PO_COMMITMENT_REQUIRED');
   const commitments=await ctx.base44.entities.PartCommitment.filter({id:{$in:commitment_ids}});
   
@@ -265,31 +265,56 @@ async function createPO(ctx, commitment_ids, payload) {
       const partSources = sourcesByPart.get(c.part_id) || [];
       resolvedSource = partSources.find(s => s.is_preferred) || null;
     }
-    const ev=vendor_id||resolvedSource?.vendor_id||p.default_vendor_id;
+    // VENDOR OVERRIDE MAP: Use per-commitment override if provided, then global vendor_id, then source, then default
+    const overrideVid = vendor_override_map[c.id];
+    const sourceOverride = source_override_map[c.id];
+    let ev;
+    let finalCost, finalCostSource, finalSourceId;
+    
+    if (overrideVid) {
+      ev = overrideVid;
+      // If source override exists for this commitment, use its cost
+      if (sourceOverride?.source_cost > 0) {
+        finalCost = sourceOverride.source_cost;
+        finalCostSource = `vendor_source:${sourceOverride.source_id}`;
+        finalSourceId = sourceOverride.source_id;
+      } else {
+        // Look up PartVendorSource for the override vendor
+        const overrideSources = sourcesByPart.get(c.part_id) || [];
+        const matchSrc = overrideSources.find(s => s.vendor_id === overrideVid);
+        if (matchSrc?.unit_cost > 0) {
+          finalCost = matchSrc.unit_cost;
+          finalCostSource = `vendor_source:${matchSrc.id}`;
+          finalSourceId = matchSrc.id;
+        } else {
+          // Fallback cost chain
+          finalCost = (c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost > 0) ? p.cost : 0;
+          finalCostSource = (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost > 0) ? 'part_cost_fallback' : 'missing';
+          finalSourceId = matchSrc?.id || null;
+        }
+      }
+    } else {
+      ev = vendor_id || resolvedSource?.vendor_id || p.default_vendor_id;
+      finalCost = (resolvedSource?.unit_cost > 0) ? resolvedSource.unit_cost : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
+      finalCostSource = (resolvedSource?.unit_cost > 0) ? `vendor_source:${resolvedSource.id}` : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
+      finalSourceId = selected_sources[c.id] || resolvedSource?.id || null;
+    }
+    
     if(!ev) throw new Error(`PO_VENDOR_REQUIRED: ${c.id} (${p.part_name})`);
     const cn=readCanonical(c,ctx);
     if(cn.gap<=0){blocked.push({commitment_id:c.id,reason_code:'NO_GAP',gap:0});continue;}
     if(!vg.has(ev)) vg.set(ev,[]);
-    // Phase 2: Source cost → commitment snapshot → Part.cost → 0
-    const resolvedCost = (resolvedSource?.unit_cost > 0) ? resolvedSource.unit_cost : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? c.unit_cost_snapshot : (p.cost && p.cost > 0) ? p.cost : 0;
-    const resolvedCostSource = (resolvedSource?.unit_cost > 0) ? `vendor_source:${resolvedSource.id}` : (c.unit_cost_snapshot && c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (p.cost && p.cost > 0) ? 'part_cost_fallback' : 'missing';
-    const resolvedSourceId = selected_sources[c.id] || resolvedSource?.id || null;
-    if (resolvedCost <= 0) {
-      console.warn(`[CREATE_PO] PO line created with zero cost – check part pricing. commitment=${c.id} part=${p.id} (${p.part_name})`);
-      // Audit: log zero-cost PO creation
-      try {
-        await ctx.base44.asServiceRole.entities.CommitmentAuditLog.create({
-          commitment_id: c.id,
-          action_type: 'create',
-          trigger_source: 'manual',
-          triggered_by: ctx.user.email,
-          actor_email: ctx.user.email,
-          notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${p.part_name}. Cost source: ${resolvedCostSource}`,
-          timestamp: ctx.timestamp,
-        });
-      } catch (_e) { /* audit is best-effort */ }
-    }
-    vg.get(ev).push({commitment:c,part:p,qty:cn.gap,unit_cost:resolvedCost,cost_source:resolvedCostSource,source_id:resolvedSourceId,price_ordered:resolvedCost});
+    const resolvedCost = finalCost;
+    const resolvedCostSource = finalCostSource;
+    const resolvedSourceId = finalSourceId;
+  }
+  // SINGLE-VENDOR ENFORCEMENT: if allow_multi_vendor=false and overrides result in multiple vendors, block
+  if (!allow_multi_vendor && vg.size > 1) {
+    const vendorNames = Array.from(vg.keys()).map(vid => {
+      const items = vg.get(vid);
+      return items?.[0]?.part?.default_vendor_id === vid ? `${vid} (default)` : vid;
+    });
+    return { ok: false, error: `Selected items resolve to ${vg.size} vendors after source validation: ${vendorNames.join(', ')}. Use multi-vendor mode or select items for a single vendor.`, blocked, preview: { vendor_groups: Array.from(vg.entries()).map(([v, items]) => ({ vendor_id: v, line_count: items.length })) } };
   }
   if(ctx.dry_run) return {preview:{vendor_groups:Array.from(vg.entries()).map(([v,items])=>({vendor_id:v,line_count:items.length,commitment_count:items.length,total_qty:items.reduce((s,i)=>s+i.qty,0),estimated_cost:items.reduce((s,i)=>s+i.qty*i.unit_cost,0),items:items.map(i=>({commitment_id:i.commitment.id,part_name:i.part.part_name,qty:i.qty,unit_cost:i.unit_cost,cost_source:i.cost_source}))}))},blocked};
 
