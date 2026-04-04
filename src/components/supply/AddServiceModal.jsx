@@ -203,7 +203,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     setSaving(true);
     try {
       await base44.functions.invoke("executeServiceAction", {
-        action_type: "CREATE_WITH_LINE_ITEMS",
+        action_type: "CREATE",
         project_id: resolvedProjectId,
         service_id: serviceId,
         description: description.trim(),
