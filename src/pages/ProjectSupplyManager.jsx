@@ -61,6 +61,7 @@ import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBilli
 import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
+import { useServicesView } from "@/components/supply/useServicesView";
 import { Progress } from "@/components/ui/progress";
 import BulkPOPreviewModal from "@/components/supply/BulkPOPreviewModal";
 import BulkSyncResultModal from "@/components/supply/BulkSyncResultModal";
@@ -121,6 +122,11 @@ export default function ProjectSupplyManager() {
   // Remap legacy fund tab to invoice
   const remappedTab = rawTab === 'fund' ? 'invoice' : rawTab;
   const initialTab = ALLOWED_TABS.includes(remappedTab) ? remappedTab : 'plan';
+
+  // Canonical services read model — for financial summary integration
+  const { summary: servicesSummary } = useServicesView(
+    projectId ? { project_id: projectId } : {}
+  );
 
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -875,7 +881,7 @@ export default function ProjectSupplyManager() {
           )}
 
           {/* Financial Summary - Revenue + Cost Exposure + Capital Breakdown + Cashflow Risk */}
-          <PSMFinancialSummary enrichedCommitments={enrichedCommitments} metrics={metrics} />
+          <PSMFinancialSummary enrichedCommitments={enrichedCommitments} metrics={metrics} servicesSummary={servicesSummary} />
 
           {/* Financial overview consolidated into PSMFinancialSummary above */}
 

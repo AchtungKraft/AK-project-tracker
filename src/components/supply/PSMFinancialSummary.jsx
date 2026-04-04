@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
@@ -10,12 +10,13 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  * Three sections: PROJECT VALUE | SHOP CAPITAL | CLIENT BILLING
  * Plus: Profitability panel (Margin, Capital At Risk, Revenue Secured)
  * Plus: Cashflow risk warning banner
+ * Plus: Services totals (merged into cost/billing when servicesSummary provided)
  * 
- * All derived from enrichedCommitments + metrics — no API calls.
+ * All derived from enrichedCommitments + metrics + servicesSummary — no API calls.
  */
-export default function PSMFinancialSummary({ enrichedCommitments, metrics }) {
+export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary }) {
   const financial = useMemo(() => {
-    const totalCostExposure = enrichedCommitments.reduce(
+    const partsCostExposure = enrichedCommitments.reduce(
       (sum, c) => sum + (c.planned_cost_total ?? 0), 0
     );
     const totalStockCost = enrichedCommitments.reduce(
@@ -24,10 +25,22 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics }) {
     const totalOrderCost = enrichedCommitments.reduce(
       (sum, c) => sum + ((c.to_order ?? 0) * (c.unit_cost ?? 0)), 0
     );
-    return { totalCostExposure, totalStockCost, totalOrderCost };
-  }, [enrichedCommitments]);
+    
+    // Services financial data (from canonical getServicesView read model)
+    const serviceCost = servicesSummary?.total_cost ?? 0;
+    const serviceBillable = servicesSummary?.total_billable ?? 0;
+    const serviceCount = servicesSummary?.total ?? 0;
+    
+    // Combined totals
+    const totalCostExposure = partsCostExposure + serviceCost;
+    
+    return { 
+      totalCostExposure, totalStockCost, totalOrderCost,
+      partsCostExposure, serviceCost, serviceBillable, serviceCount,
+    };
+  }, [enrichedCommitments, servicesSummary]);
 
-  const retailValue = metrics.totalPlannedRetail;
+  const retailValue = metrics.totalPlannedRetail + financial.serviceBillable;
   const totalInvoiced = metrics.totalInvoiced;
   const totalPaid = metrics.totalPaid;
   const outstanding = metrics.invoiceOutstanding;
@@ -59,9 +72,19 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics }) {
             <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Shop Capital</p>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500">Cost Exposure</span>
+                <span className="text-[10px] text-gray-500">Cost Exposure (Total)</span>
                 <span className="text-sm font-bold text-red-400 font-mono">{formatCurrencyUSD(financial.totalCostExposure)}</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">├ Parts Cost</span>
+                <span className="text-xs text-red-400/70 font-mono">{formatCurrencyUSD(financial.partsCostExposure)}</span>
+              </div>
+              {financial.serviceCost > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-gray-500 flex items-center gap-1">├ Services Cost <Truck className="w-2.5 h-2.5" /></span>
+                  <span className="text-xs text-amber-400 font-mono">{formatCurrencyUSD(financial.serviceCost)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-gray-500">Stock Capital</span>
                 <span className="text-xs text-cyan-400 font-mono">{formatCurrencyUSD(financial.totalStockCost)}</span>
@@ -133,7 +156,7 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics }) {
           <div>
             <p className="text-sm font-semibold text-amber-300">Capital Ahead of Billing</p>
             <p className="text-xs text-amber-400/80">
-              Parts require {formatCurrencyUSD(financial.totalCostExposure)} cost but only {formatCurrencyUSD(totalInvoiced)} has been invoiced.
+              Project requires {formatCurrencyUSD(financial.totalCostExposure)} cost (parts + services) but only {formatCurrencyUSD(totalInvoiced)} has been invoiced.
             </p>
           </div>
         </div>

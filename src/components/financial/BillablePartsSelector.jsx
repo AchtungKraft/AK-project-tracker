@@ -10,20 +10,23 @@ import {
   Building2,
   Layers,
   AlertTriangle,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 
 /**
- * PHASE 3 — Billable Parts Selector with Vendor → Category → Parts Hierarchy
+ * PHASE 3 — Billable Items Selector with Vendor → Category → Items Hierarchy
  * 
  * CANONICAL data source: getBillingAndProcurementStates(projectId)
+ * 
+ * Supports both type="part" and type="service" items.
  * 
  * GROUPING HIERARCHY:
  *   Vendor (alphabetical, "Unknown Vendor" last)
  *     └── Category (alphabetical, "Uncategorized" last)
- *           └── Parts (by part_name, then commitment_id for stability)
+ *           └── Items (by part_name/description, then commitment_id for stability)
  * 
  * SELECTION PAYLOAD CONTRACT:
  *   {
@@ -42,7 +45,9 @@ import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 
 // Contract drift detection - PHASE 3 CANONICAL
 function validateItemContract(item, index) {
-  const required = ['id', 'part_id', 'part_name'];
+  // Services use service_id, not part_id
+  const isService = item.type === 'service';
+  const required = isService ? ['id'] : ['id', 'part_id', 'part_name'];
   const groupingFields = ['vendor_id', 'vendor_name', 'category_id', 'category_name'];
   const financialFields = ['gross_exposure', 'net_exposure', 'unit_retail'];
   const missing = [];
@@ -119,10 +124,14 @@ function groupByVendorThenCategory(items) {
     const qty = item.qty_remaining_to_bill ?? item.required_total ?? item.assigned_qty ?? 1;
     const unitPrice = item.unit_retail_snapshot ?? item.unit_retail ?? 0;
     
+    const isService = item.type === 'service';
+    
     const formattedItem = {
       part_commitment_id: item.id,
-      part_id: item.part_id,
-      part_name: item.part_name || 'Unknown Part',
+      type: item.type || 'part',
+      part_id: item.part_id || null,
+      service_id: item.service_id || null,
+      part_name: isService ? (item.description || item.service_name || 'Unknown Service') : (item.part_name || 'Unknown Part'),
       vendor_id: vendorId,
       vendor_name: vendorName,
       category_id: categoryId,
@@ -269,7 +278,9 @@ export default function BillablePartsSelector({
   const handleToggleItem = (item, checked) => {
     const payload = {
       part_commitment_id: item.part_commitment_id,
+      type: item.type || 'part',
       part_id: item.part_id,
+      service_id: item.service_id || null,
       part_name: item.part_name,
       vendor_id: item.vendor_id,
       vendor_name: item.vendor_name,
@@ -297,7 +308,9 @@ export default function BillablePartsSelector({
       .filter(item => !currentIds.has(item.part_commitment_id) && item.canInvoice !== false)
       .map(item => ({
         part_commitment_id: item.part_commitment_id,
+        type: item.type || 'part',
         part_id: item.part_id,
+        service_id: item.service_id || null,
         part_name: item.part_name,
         vendor_id: item.vendor_id,
         vendor_name: item.vendor_name,
@@ -545,9 +558,18 @@ export default function BillablePartsSelector({
                                       onCheckedChange={(checked) => handleToggleItem(item, checked)}
                                       disabled={isBlocked}
                                     />
-                                    <Package className="w-3 h-3 text-gray-500" />
+                                    {item.type === 'service' ? (
+                                      <Truck className="w-3 h-3 text-amber-500" />
+                                    ) : (
+                                      <Package className="w-3 h-3 text-gray-500" />
+                                    )}
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-white truncate">{item.part_name}</p>
+                                      <p className="text-sm text-white truncate">
+                                        {item.part_name}
+                                        {item.type === 'service' && (
+                                          <span className="ml-1.5 text-[10px] text-amber-400 font-mono">SERVICE</span>
+                                        )}
+                                      </p>
                                       <div className="flex items-center gap-2 text-xs text-gray-500">
                                         <span>Qty: {item.qty_remaining_to_bill}</span>
                                         <span>×</span>

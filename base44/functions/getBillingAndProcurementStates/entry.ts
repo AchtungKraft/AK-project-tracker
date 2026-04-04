@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 /**
  * Phase 7 — Billing & Procurement Lifecycle Engine
@@ -330,6 +330,28 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
   // PHASE 1: Track already-invoiced items via ProjectInvoiceLine (part_commitment_id)
   const queuedSourceIds = new Set(batchLines.map(bl => bl.part_commitment_id).filter(Boolean));
 
+  // ============================================
+  // PHASE 2: Fetch services for billability
+  // ============================================
+  let serviceCommitments = [];
+  let services = [];
+  let serviceVendors = [];
+  try {
+    const svcFilter = filters.project_id ? { project_id: filters.project_id } : {};
+    const hasServiceFilter = Object.keys(svcFilter).length > 0;
+    [serviceCommitments, services, serviceVendors] = await Promise.all([
+      hasServiceFilter
+        ? base44.entities.ServiceCommitment.filter(svcFilter)
+        : base44.entities.ServiceCommitment.list(),
+      base44.entities.Service.list(),
+      base44.entities.ServiceVendor.list(),
+    ]);
+  } catch (err) {
+    console.warn('[getBillingAndProcurementStates] Service fetch failed (non-fatal):', err.message);
+  }
+  const serviceMap = Object.fromEntries(services.map(s => [s.id, s]));
+  const serviceVendorMap = Object.fromEntries(serviceVendors.map(v => [v.id, v]));
+
   // Result categories
   const results = {
     assigned_needs_billing: [],
@@ -632,7 +654,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
 
   // PHASE 1 CANONICAL: Build canonical commitment exposure list for invoice modal
   // This is the SINGLE SOURCE OF TRUTH for invoiceable commitments
-  const canonicalCommitments = allItems.map(item => {
+  const canonicalPartCommitments = allItems.map(item => {
     // PHASE 3: Compute remaining_to_bill_qty from canonical sources
     const requiredQty = item.assigned_qty || 0;
     const invoicedQty = item.invoiced_qty || 0;
@@ -640,6 +662,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     
     return {
     id: item.commitment_id || item.id,
+    type: 'part',
     part_id: item.part_id,
     part_name: item.part_name,
     project_id: item.project_id,
@@ -685,6 +708,106 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
   };
   });
 
+  // ============================================
+  // PHASE 2: Build canonical service commitments for invoice modal
+  // Services with status=="completed" and total_billable > 0 are ready to bill
+  // ============================================
+  const canonicalServiceCommitments = [];
+  for (const sc of serviceCommitments) {
+    const svc = serviceMap[sc.service_id];
+    const vendor = sc.vendor_id ? serviceVendorMap[sc.vendor_id] : null;
+    const project = projectsMap[sc.project_id];
+    if (!project) continue;
+
+    // Effective cost: total_cost > 0 ? total_cost : (actual_cost ?? estimated_cost) * quantity
+    const effectiveCost = (sc.total_cost > 0) ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
+    const totalBillable = sc.total_billable || 0;
+    const isBilled = sc.status === 'billed';
+    const isCompleted = sc.status === 'completed';
+    const isReadyToBill = isCompleted && totalBillable > 0 && !isBilled;
+
+    const serviceRow = {
+      id: sc.id,
+      type: 'service',
+      service_id: sc.service_id,
+      service_name: svc?.name || 'Unknown Service',
+      service_category: svc?.category || 'other',
+      description: sc.description || '',
+      project_id: sc.project_id,
+      project_name: project.name,
+      vendor_id: sc.vendor_id || null,
+      vendor_name: vendor?.name || null,
+      status: sc.status || 'planned',
+      quantity: sc.quantity || 1,
+      total_cost: effectiveCost,
+      total_billable: totalBillable,
+      // Invoice compatibility fields
+      unit_retail: totalBillable,
+      unit_retail_snapshot: totalBillable,
+      unit_cost: effectiveCost,
+      unit_cost_snapshot: effectiveCost,
+      required_total: 1,
+      invoiced_qty: isBilled ? 1 : 0,
+      qty_remaining_to_bill: isReadyToBill ? 1 : 0,
+      gross_exposure: totalBillable,
+      gross_line_total: totalBillable,
+      credit_applied: 0,
+      credit_applied_line: 0,
+      net_exposure: isReadyToBill ? totalBillable : 0,
+      net_line_total: isReadyToBill ? totalBillable : 0,
+      invoiced_amount: isBilled ? totalBillable : 0,
+      billing_status: isBilled ? 'INVOICED' : 'NOT_INVOICED',
+      client_billing_status: isBilled ? 'INVOICED' : 'NOT_INVOICED',
+      billing_state: isBilled ? 'INVOICED' : 'NOT_INVOICED',
+      payment_status: 'UNPAID',
+      invoice_status: isBilled ? 'invoiced' : 'unbilled',
+      lifecycle_category: isReadyToBill ? 'INSTALLED_READY_TO_BILL' : null,
+      // Grouping: use service_category as category, vendor as vendor
+      category_id: svc?.category || 'service',
+      category_name: svc?.category ? svc.category.charAt(0).toUpperCase() + svc.category.slice(1) : 'Service',
+      part_category_id: null,
+      is_archived: false,
+      // Invoice eligibility
+      allowed: { canInvoice: isReadyToBill },
+      invoice_block_reason_code: !isReadyToBill ? (isBilled ? 'NO_OUTSTANDING' : 'NOT_COMPLETED') : null,
+      invoice_block_reason_text: !isReadyToBill ? (isBilled ? 'Already billed' : 'Service not yet completed') : null,
+      invoice_warning_code: null,
+      invoice_warning_text: null,
+      outstanding_retail_amount: isReadyToBill ? totalBillable : 0,
+    };
+
+    canonicalServiceCommitments.push(serviceRow);
+
+    // Also add to installed_ready_to_bill bucket
+    if (isReadyToBill) {
+      results.installed_ready_to_bill.push({
+        ...serviceRow,
+        lifecycle_category: 'INSTALLED_READY_TO_BILL',
+        recommended_action: 'Invoice Service',
+        line_total: totalBillable,
+        cost_total: effectiveCost,
+      });
+      kpis.installed_billing_count++;
+      kpis.installed_billing_revenue += totalBillable;
+    }
+  }
+
+  // Merge parts + services into unified canonical commitments
+  const canonicalCommitments = [...canonicalPartCommitments, ...canonicalServiceCommitments];
+
+  // Recompute allItems to include services added to installed_ready_to_bill
+  const allItemsWithServices = [
+    ...results.assigned_needs_billing,
+    ...results.billed_not_paid,
+    ...results.paid_ready_to_order,
+    ...results.ordered_waiting_receipt,
+    ...results.installed_ready_to_bill,
+  ];
+
+  // Recompute credit summary to include services
+  creditSummary.gross_exposure_global = allItemsWithServices.reduce((sum, i) => sum + (i.gross_line_total || i.line_total || 0), 0);
+  creditSummary.net_exposure_global = allItemsWithServices.reduce((sum, i) => sum + (i.net_line_total || i.line_total || 0), 0);
+
   // PHASE 1 CANONICAL: Build totals object
   const totals = {
     gross_exposure: creditSummary.gross_exposure_global,
@@ -693,6 +816,9 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     net_exposure: creditSummary.net_exposure_global,
     unbilled_count: results.assigned_needs_billing.length,
     unbilled_total: results.assigned_needs_billing.reduce((sum, i) => sum + (i.net_line_total || 0), 0),
+    // Phase 2: Service totals
+    services_ready_to_bill_count: canonicalServiceCommitments.filter(s => s.qty_remaining_to_bill > 0).length,
+    services_ready_to_bill_total: canonicalServiceCommitments.filter(s => s.qty_remaining_to_bill > 0).reduce((sum, s) => sum + s.total_billable, 0),
   };
 
   return {
