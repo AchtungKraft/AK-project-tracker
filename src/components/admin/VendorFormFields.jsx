@@ -15,11 +15,12 @@ import { Package, Truck } from "lucide-react";
  *   groups     — all VendorGroup records
  *   showType   — whether to show the vendor_type selector (true for edit, false for create when type comes from tab)
  */
-export default function VendorFormFields({ data, onChange, groups, showType = false, isLoading = false }) {
-  const vendorType = data.vendor_type || "PART";
+export default function VendorFormFields({ data, onChange, groups = [], showType = false, isLoading = false }) {
+  const vendorType = (data.vendor_type || "PART").toUpperCase();
 
-  const groupsForType = groups
-    .filter(g => g.vendor_type === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
+  const safeGroups = Array.isArray(groups) ? groups : [];
+  const groupsForType = safeGroups
+    .filter(g => (g.vendor_type || "").toUpperCase() === vendorType && g.is_active !== false && g.name !== "UNCATEGORIZED")
     .sort((a, b) => (a.sort_priority || 0) - (b.sort_priority || 0));
 
   const handleTypeChange = (newType) => {
