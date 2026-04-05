@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
 import {
   Select,
   SelectContent,
@@ -12,14 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Truck, Search, RefreshCw, Plus, Package,
+  Truck, Search, RefreshCw, Plus, Package, Settings,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import ServiceCommitmentCard from "@/components/supply/ServiceCommitmentCard";
 import AddServiceModal from "@/components/supply/AddServiceModal";
-import ServiceCatalogManager from "@/components/supply/ServiceCatalogManager";
 import { useServicesView, useInvalidateServicesView } from "@/components/supply/useServicesView";
 
 const STATUS_OPTIONS = [
@@ -31,7 +31,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ServicesDashboard() {
-  const [activeTab, setActiveTab] = useState("commitments");
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -124,13 +124,17 @@ export default function ServicesDashboard() {
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
               <Truck className="w-6 h-6 text-amber-400" />
-              Services Dashboard
+              Service Commitments
             </h1>
             <p className="text-sm text-gray-400">
               Manage shipping, plating, coating, and other non-inventory project costs
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button onClick={() => navigate("/AdminConfig")} variant="outline" size="sm" className="border-gray-700 text-white gap-1">
+              <Settings className="w-4 h-4" />
+              Manage Service Vendors
+            </Button>
             <Button onClick={() => refetch()} variant="outline" size="sm" className="border-gray-700 text-white">
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -162,21 +166,8 @@ export default function ServicesDashboard() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-black/40 border border-gray-800">
-            <TabsTrigger value="commitments" className="data-[state=active]:bg-gray-700 gap-1.5">
-              <Package className="w-4 h-4" />
-              All Service Commitments
-            </TabsTrigger>
-            <TabsTrigger value="catalog" className="data-[state=active]:bg-gray-700 gap-1.5">
-              <Truck className="w-4 h-4" />
-              Service Catalog
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Commitments Tab */}
-          <TabsContent value="commitments" className="mt-4 space-y-4">
+        {/* Service Commitments */}
+        <div className="space-y-4">
             {/* Filters */}
             <div className="flex flex-col md:flex-row gap-2 items-start md:items-center">
               <div className="relative flex-1 max-w-xs">
@@ -250,13 +241,7 @@ export default function ServicesDashboard() {
                 ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* Catalog Tab */}
-          <TabsContent value="catalog" className="mt-4">
-            <ServiceCatalogManager />
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
 
       {/* Add Modal */}
