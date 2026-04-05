@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, Loader2, FolderKanban, Trash2, Truck, Package, Clock, DollarSign } from "lucide-react";
 import GroupedProjectSelector from "@/components/supply/GroupedProjectSelector";
+import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
+import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { toast } from "sonner";
 
@@ -86,18 +88,15 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
-    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
-  });
+  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup, getFilteredVendors } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
 
-  // Vendor filtering: allowed vendors if set, otherwise all
-  const filteredVendors = useMemo(() => {
-    if (!selectedService?.allowed_vendor_ids?.length) return serviceVendors;
-    return serviceVendors.filter(v => selectedService.allowed_vendor_ids.includes(v.id));
-  }, [selectedService, serviceVendors]);
+  // Group-aware vendor filtering
+  const { vendors: filteredVendors, matchedGroup } = useMemo(
+    () => getFilteredVendors(selectedService),
+    [selectedService, getFilteredVendors]
+  );
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
 
@@ -327,6 +326,10 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
                     key={li._key}
                     lineItem={li}
                     serviceVendors={filteredVendors}
+                    vendorGroups={vendorGroups}
+                    groupsMap={groupsMap}
+                    vendorsByGroup={vendorsByGroup}
+                    matchedGroup={matchedGroup}
                     onChange={(field, val) => updateLineItem(li._key, field, val)}
                     onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
                     canRemove={lineItems.length > 1}
@@ -372,17 +375,16 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
                 </Button>
               </div>
             ) : (
-              <Select value={vendorId} onValueChange={setVendorId}>
-                <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                  <SelectValue placeholder="Select vendor (optional)..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {filteredVendors.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <GroupedVendorSelect
+                value={vendorId}
+                onValueChange={setVendorId}
+                vendors={filteredVendors}
+                vendorGroups={vendorGroups}
+                groupsMap={groupsMap}
+                vendorsByGroup={vendorsByGroup}
+                matchedGroup={matchedGroup}
+                placeholder="Select vendor (optional)..."
+              />
             )}
           </div>
 
@@ -406,7 +408,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 }
 
 /** Compact inline row for a single line item during creation */
-function InlineLineItemRow({ lineItem, serviceVendors, onChange, onRemove, canRemove = true }) {
+function InlineLineItemRow({ lineItem, serviceVendors, vendorGroups, groupsMap, vendorsByGroup, matchedGroup, onChange, onRemove, canRemove = true }) {
   const cfg = TYPE_CONFIG[lineItem.type] || TYPE_CONFIG.misc;
   const Icon = cfg.icon;
   const isLabor = lineItem.type === "internal_labor";
@@ -473,17 +475,17 @@ function InlineLineItemRow({ lineItem, serviceVendors, onChange, onRemove, canRe
 
       {/* Vendor for non-labor */}
       {!isLabor && serviceVendors.length > 0 && (
-        <Select value={lineItem.vendor_id || "__none__"} onValueChange={val => onChange("vendor_id", val === "__none__" ? "" : val)}>
-          <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white h-7 text-xs">
-            <SelectValue placeholder="Vendor (optional)" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">No vendor</SelectItem>
-            {serviceVendors.map(v => (
-              <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <GroupedVendorSelect
+          value={lineItem.vendor_id || "__none__"}
+          onValueChange={val => onChange("vendor_id", val === "__none__" ? "" : val)}
+          vendors={serviceVendors}
+          vendorGroups={vendorGroups}
+          groupsMap={groupsMap}
+          vendorsByGroup={vendorsByGroup}
+          matchedGroup={matchedGroup}
+          placeholder="Vendor (optional)"
+          className="bg-gray-900/50 border-gray-700 text-white h-7 text-xs"
+        />
       )}
     </div>
   );

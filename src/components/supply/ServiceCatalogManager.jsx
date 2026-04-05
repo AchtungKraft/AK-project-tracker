@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Edit2, Trash2, Truck, Users } from "lucide-react";
 import { toast } from "sonner";
+import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 
 const CATEGORIES = [
   "shipping", "finishing", "coating", "plating", "fabrication",
@@ -42,15 +43,22 @@ export default function ServiceCatalogManager() {
     queryFn: () => base44.entities.Service.list(),
   });
 
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
+  const { vendors: allActiveVendors, vendorGroups, groupsMap, vendorsByGroup } = useServiceVendorGroups();
+
+  // Also fetch inactive vendors for admin view
+  const { data: allServiceVendors = [] } = useQuery({
+    queryKey: ["serviceVendors-all"],
     queryFn: () => base44.entities.ServiceVendor.list(),
   });
 
-  const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
+  const vendorsMap = useMemo(() => new Map(allServiceVendors.map(v => [v.id, v])), [allServiceVendors]);
 
   const invalidateServices = () => queryClient.invalidateQueries({ queryKey: ["services-catalog"] });
-  const invalidateVendors = () => queryClient.invalidateQueries({ queryKey: ["serviceVendors"] });
+  const invalidateVendors = () => {
+    queryClient.invalidateQueries({ queryKey: ["serviceVendors"] });
+    queryClient.invalidateQueries({ queryKey: ["serviceVendors-all"] });
+    queryClient.invalidateQueries({ queryKey: ["vendorGroups-service"] });
+  };
 
   const handleDeleteService = async (id) => {
     try {
@@ -152,7 +160,7 @@ export default function ServiceCatalogManager() {
             </Button>
           </div>
 
-          {serviceVendors.length === 0 ? (
+          {allServiceVendors.length === 0 ? (
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-8 text-center">
                 <Users className="w-10 h-10 mx-auto mb-3 text-gray-600" />
@@ -160,31 +168,42 @@ export default function ServiceCatalogManager() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {serviceVendors.map(v => (
-                <Card key={v.id} className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-white">{v.name}</p>
-                        <Badge variant="outline" className="text-[10px] border-gray-600 text-gray-400 mt-1">{v.category || "general"}</Badge>
-                        {v.contact_name && <p className="text-xs text-gray-500 mt-1">{v.contact_name}</p>}
-                        {v.contact_email && <p className="text-xs text-gray-500">{v.contact_email}</p>}
-                        {v.contact_phone && <p className="text-xs text-gray-500">{v.contact_phone}</p>}
-                        {!v.is_active && <Badge variant="outline" className="text-[10px] border-red-600 text-red-400 mt-1">Inactive</Badge>}
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditVendorModal(v)}>
-                          <Edit2 className="w-3.5 h-3.5 text-gray-400" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteVendorConfirm(v)}>
-                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                        </Button>
-                      </div>
+            <div className="space-y-4">
+              {vendorGroups.map(group => {
+                const gVendors = allServiceVendors.filter(v => v.vendor_group_id === group.id);
+                if (gVendors.length === 0) return null;
+                return (
+                  <div key={group.id}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-[10px] border-blue-600/50 text-blue-400">{group.name}</Badge>
+                      <span className="text-[10px] text-gray-500">{gVendors.length} vendor{gVendors.length !== 1 ? 's' : ''}</span>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {gVendors.map(v => (
+                        <VendorCard key={v.id} vendor={v} groupName={group.name} onEdit={() => setEditVendorModal(v)} onDelete={() => setDeleteVendorConfirm(v)} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Ungrouped vendors */}
+              {(() => {
+                const ungrouped = allServiceVendors.filter(v => !v.vendor_group_id || !groupsMap.has(v.vendor_group_id));
+                if (ungrouped.length === 0) return null;
+                return (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-[10px] border-gray-600 text-gray-400">Ungrouped</Badge>
+                      <span className="text-[10px] text-gray-500">{ungrouped.length} vendor{ungrouped.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {ungrouped.map(v => (
+                        <VendorCard key={v.id} vendor={v} onEdit={() => setEditVendorModal(v)} onDelete={() => setDeleteVendorConfirm(v)} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </TabsContent>
@@ -194,7 +213,9 @@ export default function ServiceCatalogManager() {
       {editModal && (
         <ServiceEditModal
           service={editModal === "new" ? null : editModal}
-          serviceVendors={serviceVendors}
+          serviceVendors={allServiceVendors}
+          vendorGroups={vendorGroups}
+          groupsMap={groupsMap}
           onClose={() => setEditModal(null)}
           onSuccess={() => { invalidateServices(); setEditModal(null); }}
         />
@@ -218,6 +239,7 @@ export default function ServiceCatalogManager() {
       {editVendorModal && (
         <VendorEditModal
           vendor={editVendorModal === "new" ? null : editVendorModal}
+          vendorGroups={vendorGroups}
           onClose={() => setEditVendorModal(null)}
           onSuccess={() => { invalidateVendors(); setEditVendorModal(null); }}
         />
@@ -241,13 +263,14 @@ export default function ServiceCatalogManager() {
 }
 
 // ── SERVICE EDIT MODAL ──
-function ServiceEditModal({ service, serviceVendors, onClose, onSuccess }) {
+function ServiceEditModal({ service, serviceVendors, vendorGroups, groupsMap, onClose, onSuccess }) {
   const isNew = !service;
   const [name, setName] = useState(service?.name || "");
   const [category, setCategory] = useState(service?.category || "other");
   const [description, setDescription] = useState(service?.description || "");
   const [defaultVendorId, setDefaultVendorId] = useState(service?.default_vendor_id || "");
   const [allowedVendorIds, setAllowedVendorIds] = useState(service?.allowed_vendor_ids || []);
+  const [preferredGroupId, setPreferredGroupId] = useState(service?.preferred_vendor_group_id || "");
   const [isActive, setIsActive] = useState(service?.is_active !== false);
   const [saving, setSaving] = useState(false);
 
@@ -262,6 +285,7 @@ function ServiceEditModal({ service, serviceVendors, onClose, onSuccess }) {
       const data = {
         name: name.trim(),
         category,
+        preferred_vendor_group_id: preferredGroupId || null,
         description: description.trim() || null,
         default_vendor_id: defaultVendorId || null,
         allowed_vendor_ids: allowedVendorIds,
@@ -296,6 +320,17 @@ function ServiceEditModal({ service, serviceVendors, onClose, onSuccess }) {
                 {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c.replace("_", " ")}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label className="text-gray-300">Preferred Vendor Group</Label>
+            <Select value={preferredGroupId || "__none__"} onValueChange={v => setPreferredGroupId(v === "__none__" ? "" : v)}>
+              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1"><SelectValue placeholder="Auto-match by category" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Auto-match by category</SelectItem>
+                {(vendorGroups || []).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-gray-500 mt-1">Links this service to a vendor group for smart filtering</p>
           </div>
           <div>
             <Label className="text-gray-300">Default Vendor</Label>
@@ -339,14 +374,46 @@ function ServiceEditModal({ service, serviceVendors, onClose, onSuccess }) {
   );
 }
 
+// ── VENDOR CARD ──
+function VendorCard({ vendor, groupName, onEdit, onDelete }) {
+  return (
+    <Card className="bg-gray-800/50 border-gray-700">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">{vendor.name}</p>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              {groupName && <Badge variant="outline" className="text-[10px] border-blue-600/40 text-blue-400">{groupName}</Badge>}
+              <Badge variant="outline" className="text-[10px] border-gray-600 text-gray-400">{vendor.category || "general"}</Badge>
+              {!vendor.is_active && <Badge variant="outline" className="text-[10px] border-red-600 text-red-400">Inactive</Badge>}
+            </div>
+            {vendor.contact_name && <p className="text-xs text-gray-500 mt-1">{vendor.contact_name}</p>}
+            {vendor.contact_email && <p className="text-xs text-gray-500">{vendor.contact_email}</p>}
+            {vendor.contact_phone && <p className="text-xs text-gray-500">{vendor.contact_phone}</p>}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+              <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onDelete}>
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── VENDOR EDIT MODAL ──
-function VendorEditModal({ vendor, onClose, onSuccess }) {
+function VendorEditModal({ vendor, vendorGroups, onClose, onSuccess }) {
   const isNew = !vendor;
   const [name, setName] = useState(vendor?.name || "");
   const [category, setCategory] = useState(vendor?.category || "general");
   const [contactName, setContactName] = useState(vendor?.contact_name || "");
   const [contactEmail, setContactEmail] = useState(vendor?.contact_email || "");
   const [contactPhone, setContactPhone] = useState(vendor?.contact_phone || "");
+  const [vendorGroupId, setVendorGroupId] = useState(vendor?.vendor_group_id || "");
   const [notes, setNotes] = useState(vendor?.notes || "");
   const [isActive, setIsActive] = useState(vendor?.is_active !== false);
   const [saving, setSaving] = useState(false);
@@ -359,6 +426,7 @@ function VendorEditModal({ vendor, onClose, onSuccess }) {
     try {
       const data = {
         name: name.trim(), category,
+        vendor_group_id: vendorGroupId || null,
         contact_name: contactName.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
@@ -387,7 +455,17 @@ function VendorEditModal({ vendor, onClose, onSuccess }) {
             <Input value={name} onChange={e => setName(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
           </div>
           <div>
-            <Label className="text-gray-300">Category</Label>
+            <Label className="text-gray-300">Vendor Group</Label>
+            <Select value={vendorGroupId || "__none__"} onValueChange={v => setVendorGroupId(v === "__none__" ? "" : v)}>
+              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1"><SelectValue placeholder="Select group..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {(vendorGroups || []).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-gray-300">Category (legacy)</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>

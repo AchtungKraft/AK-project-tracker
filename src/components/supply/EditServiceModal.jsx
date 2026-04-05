@@ -22,6 +22,8 @@ import {
 import { Loader2, Save, FolderKanban, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
+import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,17 +80,14 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
-    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
-  });
+  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup, getFilteredVendors } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
 
-  const filteredVendors = useMemo(() => {
-    if (!selectedService?.allowed_vendor_ids?.length) return serviceVendors;
-    return serviceVendors.filter(v => selectedService.allowed_vendor_ids.includes(v.id));
-  }, [selectedService, serviceVendors]);
+  const { vendors: filteredVendors, matchedGroup } = useMemo(
+    () => getFilteredVendors(selectedService),
+    [selectedService, getFilteredVendors]
+  );
 
   const isBilled = commitment.status === "billed";
 
@@ -224,17 +223,17 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
 
           <div>
             <Label className="text-gray-300">Service Vendor</Label>
-            <Select value={vendorId || "__none__"} onValueChange={setVendorId} disabled={isBilled}>
-              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                <SelectValue placeholder="Select vendor..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {filteredVendors.map(v => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <GroupedVendorSelect
+              value={vendorId || "__none__"}
+              onValueChange={setVendorId}
+              vendors={filteredVendors}
+              vendorGroups={vendorGroups}
+              groupsMap={groupsMap}
+              vendorsByGroup={vendorsByGroup}
+              matchedGroup={matchedGroup}
+              placeholder="Select vendor..."
+              disabled={isBilled}
+            />
           </div>
 
           <div>

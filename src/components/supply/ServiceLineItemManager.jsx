@@ -22,6 +22,8 @@ import {
 import { Plus, Trash2, Edit2, Clock, Truck, DollarSign, Package, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
+import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 
 const TYPE_CONFIG = {
   vendor_cost: { label: "Vendor Cost", icon: Truck, color: "text-purple-400" },
@@ -48,10 +50,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
     enabled: !!commitmentId,
   });
 
-  const { data: serviceVendors = [] } = useQuery({
-    queryKey: ["serviceVendors"],
-    queryFn: () => base44.entities.ServiceVendor.filter({ is_active: true }),
-  });
+  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup } = useServiceVendorGroups();
 
   const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
 
@@ -175,6 +174,9 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
           template={editModal === "new" ? templateType : null}
           commitmentId={commitmentId}
           serviceVendors={serviceVendors}
+          vendorGroups={vendorGroups}
+          groupsMap={groupsMap}
+          vendorsByGroup={vendorsByGroup}
           onClose={() => { setEditModal(null); setTemplateType(null); }}
           onSuccess={() => { invalidate(); setEditModal(null); setTemplateType(null); }}
         />
@@ -183,7 +185,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
   );
 }
 
-function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, onClose, onSuccess }) {
+function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, vendorGroups, groupsMap, vendorsByGroup, onClose, onSuccess }) {
   const isNew = !lineItem;
   const defaults = template || lineItem || {};
 
@@ -312,17 +314,16 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, o
                   </Button>
                 </div>
               ) : (
-                <Select value={vendorId} onValueChange={setVendorId}>
-                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                    <SelectValue placeholder="Optional..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {serviceVendors.map(v => (
-                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <GroupedVendorSelect
+                  value={vendorId}
+                  onValueChange={setVendorId}
+                  vendors={serviceVendors}
+                  vendorGroups={vendorGroups || []}
+                  groupsMap={groupsMap || new Map()}
+                  vendorsByGroup={vendorsByGroup || new Map()}
+                  placeholder="Optional..."
+                  showAllGrouped
+                />
               )}
             </div>
           )}

@@ -24,6 +24,10 @@
       "default": "other",
       "description": "Service category"
     },
+    "preferred_vendor_group_id": {
+      "type": "string",
+      "description": "Reference to VendorGroup (vendor_type=SERVICE). Replaces fuzzy category matching for vendor filtering."
+    },
     "default_vendor_id": {
       "type": "string",
       "description": "Reference to preferred ServiceVendor"

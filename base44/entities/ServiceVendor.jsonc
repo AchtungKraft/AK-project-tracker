@@ -6,6 +6,10 @@
       "type": "string",
       "description": "Service vendor name"
     },
+    "vendor_group_id": {
+      "type": "string",
+      "description": "Reference to VendorGroup (vendor_type=SERVICE). Primary grouping key."
+    },
     "category": {
       "type": "string",
       "enum": [
@@ -23,7 +27,7 @@
         "other"
       ],
       "default": "general",
-      "description": "Vendor specialty category"
+      "description": "LEGACY: Vendor specialty category. Use vendor_group_id for canonical grouping."
     },
     "contact_name": {
       "type": "string",
