@@ -8,7 +8,7 @@
     },
     "vendor_group_id": {
       "type": "string",
-      "description": "Reference to VendorGroup (vendor_type=SERVICE). Primary grouping key."
+      "description": "Reference to VendorGroup (vendor_type=SERVICE). REQUIRED. Primary grouping key."
     },
     "category": {
       "type": "string",
@@ -71,6 +71,7 @@
     }
   },
   "required": [
-    "name"
+    "name",
+    "vendor_group_id"
   ]
 }

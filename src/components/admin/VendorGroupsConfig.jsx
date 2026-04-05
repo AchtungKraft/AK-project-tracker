@@ -17,9 +17,16 @@ const TYPE_CONFIG = {
   SERVICE: { label: "Service Vendors", icon: Truck, color: "text-amber-400", bg: "bg-amber-900/30 border-amber-700/40" },
 };
 
+const LINE_ITEM_TYPE_OPTIONS = [
+  { value: "vendor_cost", label: "Vendor Cost" },
+  { value: "shipping", label: "Shipping" },
+  { value: "internal_labor", label: "Internal Labor" },
+  { value: "misc", label: "Misc" },
+];
+
 export default function VendorGroupsConfig() {
   const queryClient = useQueryClient();
-  const [newGroup, setNewGroup] = useState({ name: "", vendor_type: "PART", sort_priority: 0 });
+  const [newGroup, setNewGroup] = useState({ name: "", vendor_type: "PART", sort_priority: 0, default_line_item_type: "vendor_cost" });
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState(null);
   const [seeding, setSeeding] = useState(false);
@@ -35,7 +42,8 @@ export default function VendorGroupsConfig() {
     mutationFn: (data) => base44.entities.VendorGroup.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["referenceData", "vendorGroups"] });
-      setNewGroup({ name: "", vendor_type: "PART", sort_priority: 0 });
+      queryClient.invalidateQueries({ queryKey: ["vendorGroups-service"] });
+      setNewGroup({ name: "", vendor_type: "PART", sort_priority: 0, default_line_item_type: "vendor_cost" });
       toast.success("Group created");
     },
   });
@@ -136,6 +144,21 @@ export default function VendorGroupsConfig() {
               className="bg-gray-800 border-gray-700 text-white"
             />
           </div>
+          {newGroup.vendor_type === "SERVICE" && (
+            <div className="w-40">
+              <Label className="text-gray-400 text-xs">Default Line Type *</Label>
+              <Select value={newGroup.default_line_item_type} onValueChange={(v) => setNewGroup({ ...newGroup, default_line_item_type: v })}>
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LINE_ITEM_TYPE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-1">
             {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Add
@@ -166,7 +189,7 @@ export default function VendorGroupsConfig() {
                 groups={serviceGroups}
                 editingId={editingId}
                 editData={editData}
-                onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0 }); }}
+                onStartEdit={(g) => { setEditingId(g.id); setEditData({ name: g.name, sort_priority: g.sort_priority || 0, default_line_item_type: g.default_line_item_type || "vendor_cost" }); }}
                 onSaveEdit={() => updateMutation.mutate({ id: editingId, data: { ...editData } })}
                 onCancelEdit={() => { setEditingId(null); setEditData(null); }}
                 onEditDataChange={setEditData}
@@ -189,6 +212,7 @@ export default function VendorGroupsConfig() {
 function GroupColumn({ title, type, groups, editingId, editData, onStartEdit, onSaveEdit, onCancelEdit, onEditDataChange, onDelete, isSaving }) {
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.icon;
+  const isService = type === "SERVICE";
 
   return (
     <div>
@@ -202,41 +226,63 @@ function GroupColumn({ title, type, groups, editingId, editData, onStartEdit, on
         <div className="space-y-1.5">
           {groups.map((g) => {
             const isEditing = editingId === g.id;
+            const lineLabel = LINE_ITEM_TYPE_OPTIONS.find(o => o.value === g.default_line_item_type)?.label;
             return (
-              <div key={g.id} className={cn("p-2.5 rounded-lg border flex items-center gap-2", cfg.bg)}>
+              <div key={g.id} className={cn("p-2.5 rounded-lg border", cfg.bg)}>
                 {isEditing && editData ? (
-                  <>
-                    <Input
-                      value={editData.name}
-                      onChange={(e) => onEditDataChange({ ...editData, name: e.target.value })}
-                      className="bg-gray-800 border-gray-700 text-white h-7 text-sm flex-1"
-                    />
-                    <Input
-                      type="number"
-                      value={editData.sort_priority}
-                      onChange={(e) => onEditDataChange({ ...editData, sort_priority: parseInt(e.target.value) || 0 })}
-                      className="bg-gray-800 border-gray-700 text-white h-7 text-sm w-16"
-                    />
-                    <Button size="icon" variant="ghost" onClick={onSaveEdit} disabled={isSaving} className="h-7 w-7 text-green-400">
-                      <Check className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={onCancelEdit} className="h-7 w-7 text-gray-400">
-                      <XIcon className="w-3.5 h-3.5" />
-                    </Button>
-                  </>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editData.name}
+                        onChange={(e) => onEditDataChange({ ...editData, name: e.target.value })}
+                        className="bg-gray-800 border-gray-700 text-white h-7 text-sm flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={editData.sort_priority}
+                        onChange={(e) => onEditDataChange({ ...editData, sort_priority: parseInt(e.target.value) || 0 })}
+                        className="bg-gray-800 border-gray-700 text-white h-7 text-sm w-16"
+                      />
+                    </div>
+                    {isService && (
+                      <Select value={editData.default_line_item_type || "vendor_cost"} onValueChange={(v) => onEditDataChange({ ...editData, default_line_item_type: v })}>
+                        <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-7 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LINE_ITEM_TYPE_OPTIONS.map(o => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={onSaveEdit} disabled={isSaving} className="h-7 w-7 text-green-400">
+                        <Check className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={onCancelEdit} className="h-7 w-7 text-gray-400">
+                        <XIcon className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    </div>
                 ) : (
-                  <>
+                  <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[10px] bg-gray-800/50 text-gray-400 border-gray-700 shrink-0">
                       #{g.sort_priority || 0}
                     </Badge>
                     <span className="text-sm text-white flex-1 truncate">{g.name}</span>
+                    {isService && lineLabel && (
+                      <Badge variant="outline" className="text-[9px] border-green-700/50 text-green-400 shrink-0">
+                        {lineLabel}
+                      </Badge>
+                    )}
                     <Button size="icon" variant="ghost" onClick={() => onStartEdit(g)} className="h-7 w-7 text-blue-400">
                       <Edit2 className="w-3 h-3" />
                     </Button>
                     <Button size="icon" variant="ghost" onClick={() => onDelete(g.id)} className="h-7 w-7 text-red-400">
                       <Trash2 className="w-3 h-3" />
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
             );

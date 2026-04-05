@@ -106,14 +106,18 @@ async function createServiceCommitment(base44, user, payload) {
     console.warn(`[CREATE] Legacy cost field detected! estimated_cost=${estimated_cost} actual_cost=${actual_cost} by=${user.email} — IGNORED`);
   }
 
+  // ── Service must have a vendor group ──
+  const [service] = await base44.asServiceRole.entities.Service.filter({ id: service_id });
+  if (!service) throw new Error('Service not found');
+  if (!service.preferred_vendor_group_id) throw new Error('Service must have a vendor group assigned in Admin');
+
   // ── Vendor ↔ Group validation ──
   if (vendor_id) {
-    const [service] = await base44.asServiceRole.entities.Service.filter({ id: service_id });
-    if (service?.preferred_vendor_group_id) {
-      const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: vendor_id });
-      if (vendor && vendor.vendor_group_id !== service.preferred_vendor_group_id) {
-        throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
-      }
+    const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: vendor_id });
+    if (!vendor) throw new Error('Vendor not found');
+    if (!vendor.vendor_group_id) throw new Error(`Vendor "${vendor.name}" has no vendor group assigned`);
+    if (vendor.vendor_group_id !== service.preferred_vendor_group_id) {
+      throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
     }
   }
 
@@ -238,13 +242,15 @@ async function updateService(base44, user, payload) {
   // ── Vendor ↔ Group validation ──
   const effectiveServiceId = service_id || c.service_id;
   const effectiveVendorId = vendor_id !== undefined ? vendor_id : c.vendor_id;
+  const [svcRecord] = await base44.asServiceRole.entities.Service.filter({ id: effectiveServiceId });
+  if (!svcRecord) throw new Error('Service not found');
+  if (!svcRecord.preferred_vendor_group_id) throw new Error('Service must have a vendor group assigned in Admin');
   if (effectiveVendorId) {
-    const [service] = await base44.asServiceRole.entities.Service.filter({ id: effectiveServiceId });
-    if (service?.preferred_vendor_group_id) {
-      const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: effectiveVendorId });
-      if (vendor && vendor.vendor_group_id !== service.preferred_vendor_group_id) {
-        throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
-      }
+    const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: effectiveVendorId });
+    if (!vendor) throw new Error('Vendor not found');
+    if (!vendor.vendor_group_id) throw new Error(`Vendor "${vendor.name}" has no vendor group assigned`);
+    if (vendor.vendor_group_id !== svcRecord.preferred_vendor_group_id) {
+      throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
     }
   }
 
@@ -401,12 +407,18 @@ async function reassignProject(base44, user, payload) {
 
 // ── CREATE SERVICE VENDOR (inline) ──
 async function createServiceVendor(base44, user, payload) {
-  const { name, category, contact_name, contact_email, contact_phone } = payload;
+  const { name, vendor_group_id, contact_name, contact_email, contact_phone } = payload;
   if (!name) throw new Error('name required');
+  if (!vendor_group_id) throw new Error('vendor_group_id required — every vendor must belong to a group');
+
+  // Verify group exists
+  const [group] = await base44.asServiceRole.entities.VendorGroup.filter({ id: vendor_group_id });
+  if (!group) throw new Error('Vendor group not found');
+  if (group.vendor_type !== 'SERVICE') throw new Error('Vendor group must be of type SERVICE');
 
   const vendor = await base44.asServiceRole.entities.ServiceVendor.create({
     name,
-    category: category || 'general',
+    vendor_group_id,
     contact_name: contact_name || null,
     contact_email: contact_email || null,
     contact_phone: contact_phone || null,

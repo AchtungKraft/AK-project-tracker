@@ -12,39 +12,11 @@ import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Truck, Globe, Phone, S
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const CATEGORY_OPTIONS = [
-  { value: "shipping", label: "Shipping" },
-  { value: "finishing", label: "Finishing" },
-  { value: "coating", label: "Coating" },
-  { value: "plating", label: "Plating" },
-  { value: "fabrication", label: "Fabrication" },
-  { value: "upholstery", label: "Upholstery" },
-  { value: "electrical", label: "Electrical" },
-  { value: "paint", label: "Paint" },
-  { value: "machine_work", label: "Machine Work" },
-  { value: "inspection", label: "Inspection" },
-  { value: "general", label: "General" },
-  { value: "other", label: "Other" },
-];
 
-const CATEGORY_COLORS = {
-  shipping: "bg-blue-900/50 text-blue-400 border-blue-700/50",
-  finishing: "bg-amber-900/50 text-amber-400 border-amber-700/50",
-  coating: "bg-emerald-900/50 text-emerald-400 border-emerald-700/50",
-  plating: "bg-purple-900/50 text-purple-400 border-purple-700/50",
-  fabrication: "bg-orange-900/50 text-orange-400 border-orange-700/50",
-  upholstery: "bg-pink-900/50 text-pink-400 border-pink-700/50",
-  electrical: "bg-cyan-900/50 text-cyan-400 border-cyan-700/50",
-  paint: "bg-red-900/50 text-red-400 border-red-700/50",
-  machine_work: "bg-gray-800/50 text-gray-300 border-gray-600/50",
-  inspection: "bg-indigo-900/50 text-indigo-400 border-indigo-700/50",
-  general: "bg-gray-800/50 text-gray-400 border-gray-700/50",
-  other: "bg-gray-800/50 text-gray-400 border-gray-700/50",
-};
 
 const EMPTY_FORM = {
   name: "",
-  category: "general",
+  vendor_group_id: "",
   contact_name: "",
   contact_email: "",
   contact_phone: "",
@@ -70,6 +42,15 @@ export default function ServiceVendorsConfig() {
     queryKey: ["services-catalog-admin"],
     queryFn: () => base44.entities.Service.list(),
   });
+
+  const { data: vendorGroups = [] } = useQuery({
+    queryKey: ["vendorGroups-service"],
+    queryFn: async () => {
+      const all = await base44.entities.VendorGroup.filter({ vendor_type: "SERVICE", is_active: true });
+      return all.sort((a, b) => (a.sort_priority || 0) - (b.sort_priority || 0));
+    },
+  });
+  const groupsMap = new Map(vendorGroups.map(g => [g.id, g]));
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ServiceVendor.create(data),
@@ -103,7 +84,8 @@ export default function ServiceVendorsConfig() {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    if (!newVendor.name.trim()) return;
+    if (!newVendor.name.trim()) { toast.error("Name required"); return; }
+    if (!newVendor.vendor_group_id) { toast.error("Vendor Group required"); return; }
     createMutation.mutate({ ...newVendor, is_active: true });
   };
 
@@ -111,7 +93,7 @@ export default function ServiceVendorsConfig() {
     setEditingId(vendor.id);
     setEditData({
       name: vendor.name || "",
-      category: vendor.category || "general",
+      vendor_group_id: vendor.vendor_group_id || "",
       contact_name: vendor.contact_name || "",
       contact_email: vendor.contact_email || "",
       contact_phone: vendor.contact_phone || "",
@@ -160,14 +142,14 @@ export default function ServiceVendorsConfig() {
               />
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Category</Label>
-              <Select value={newVendor.category} onValueChange={(v) => setNewVendor({ ...newVendor, category: v })}>
+              <Label className="text-gray-400 text-xs">Vendor Group *</Label>
+              <Select value={newVendor.vendor_group_id} onValueChange={(v) => setNewVendor({ ...newVendor, vendor_group_id: v })}>
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue />
+                  <SelectValue placeholder="Select group..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORY_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  {vendorGroups.map(g => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -278,6 +260,8 @@ export default function ServiceVendorsConfig() {
                   key={vendor.id}
                   vendor={vendor}
                   services={services}
+                  vendorGroups={vendorGroups}
+                  groupsMap={groupsMap}
                   isEditing={editingId === vendor.id}
                   editData={editData}
                   onEditDataChange={setEditData}
@@ -305,6 +289,8 @@ export default function ServiceVendorsConfig() {
                   key={vendor.id}
                   vendor={vendor}
                   services={services}
+                  vendorGroups={vendorGroups}
+                  groupsMap={groupsMap}
                   isEditing={editingId === vendor.id}
                   editData={editData}
                   onEditDataChange={setEditData}
@@ -324,10 +310,9 @@ export default function ServiceVendorsConfig() {
   );
 }
 
-function VendorRow({ vendor, services = [], isEditing, editData, onEditDataChange, onStartEdit, onSaveEdit, onCancelEdit, onToggleActive, onDelete, isSaving }) {
+function VendorRow({ vendor, services = [], vendorGroups = [], groupsMap = new Map(), isEditing, editData, onEditDataChange, onStartEdit, onSaveEdit, onCancelEdit, onToggleActive, onDelete, isSaving }) {
   const servicesMap = new Map(services.map(s => [s.id, s]));
-  const catLabel = CATEGORY_OPTIONS.find(c => c.value === vendor.category)?.label || vendor.category || "General";
-  const catColor = CATEGORY_COLORS[vendor.category] || CATEGORY_COLORS.general;
+  const group = groupsMap.get(vendor.vendor_group_id);
 
   if (isEditing && editData) {
     return (
@@ -338,11 +323,11 @@ function VendorRow({ vendor, services = [], isEditing, editData, onEditDataChang
             <Input value={editData.name} onChange={e => onEditDataChange({ ...editData, name: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
           </div>
           <div>
-            <Label className="text-gray-400 text-xs">Category</Label>
-            <Select value={editData.category} onValueChange={v => onEditDataChange({ ...editData, category: v })}>
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white"><SelectValue /></SelectTrigger>
+            <Label className="text-gray-400 text-xs">Vendor Group *</Label>
+            <Select value={editData.vendor_group_id || ""} onValueChange={v => onEditDataChange({ ...editData, vendor_group_id: v })}>
+              <SelectTrigger className="bg-gray-800 border-gray-700 text-white"><SelectValue placeholder="Select group..." /></SelectTrigger>
               <SelectContent>
-                {CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                {vendorGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -411,7 +396,11 @@ function VendorRow({ vendor, services = [], isEditing, editData, onEditDataChang
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-white">{vendor.name}</span>
-          <Badge variant="outline" className={`text-[10px] ${catColor}`}>{catLabel}</Badge>
+          {group ? (
+            <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">{group.name}</Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] border-red-600/50 text-red-400">No Group!</Badge>
+          )}
           {vendor.is_active === false && (
             <Badge variant="outline" className="text-[10px] bg-gray-800 text-gray-500 border-gray-700">Inactive</Badge>
           )}

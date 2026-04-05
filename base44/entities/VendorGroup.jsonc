@@ -14,6 +14,17 @@
       ],
       "description": "Which vendor domain this group belongs to"
     },
+    "default_line_item_type": {
+      "type": "string",
+      "enum": [
+        "vendor_cost",
+        "shipping",
+        "internal_labor",
+        "misc"
+      ],
+      "default": "vendor_cost",
+      "description": "Default line item type for services in this group. Drives behavior deterministically \u2014 no string guessing."
+    },
     "sort_priority": {
       "type": "number",
       "default": 0,

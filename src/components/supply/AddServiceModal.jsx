@@ -34,17 +34,7 @@ const TYPE_CONFIG = {
   misc: { label: "Misc", icon: DollarSign, color: "text-gray-400" },
 };
 
-/**
- * Resolve default line item type from the vendor group name.
- * Uses simple keyword matching on the group name.
- */
-function resolveDefaultLineType(groupName) {
-  if (!groupName) return "vendor_cost";
-  const lower = groupName.toLowerCase();
-  if (lower.includes("shipping") || lower.includes("freight") || lower.includes("logistics")) return "shipping";
-  if (lower.includes("labor") || lower.includes("internal")) return "internal_labor";
-  return "vendor_cost";
-}
+// No string-guessing. Line item type comes from VendorGroup.default_line_item_type.
 
 /**
  * AddServiceModal — Line-Item-Driven Create Flow
@@ -115,9 +105,9 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     const groupVendors = vendorsByGroup.get(groupId) || [];
     setVendorId(groupVendors[0]?.id || "");
 
-    // Resolve line item type from group name
+    // Line item type is admin-defined on the VendorGroup — no guessing
     const group = groupsMap.get(groupId);
-    const defaultType = resolveDefaultLineType(group?.name);
+    const defaultType = group?.default_line_item_type || "vendor_cost";
     const defaultDesc = defaultType === "shipping" ? "Shipping / Freight" : `${svc.name || "Service"} Cost`;
     setLineItems([{
       _key: Date.now(),
@@ -137,6 +127,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       const res = await base44.functions.invoke("executeServiceAction", {
         action_type: "CREATE_SERVICE_VENDOR",
         name: newVendorName.trim(),
+        vendor_group_id: selectedGroupId,
       });
       setVendorId(res.data.vendor.id);
       toast.success("Vendor created");
