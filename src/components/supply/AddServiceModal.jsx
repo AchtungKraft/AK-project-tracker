@@ -240,7 +240,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
         </DialogHeader>
 
         <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
-          {/* ── Project ── (compact) */}
+          {/* Project (compact) */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <FolderKanban className="w-4 h-4 text-blue-400" />
@@ -290,7 +290,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
             />
           </div>
 
-          {/* ── Line Items Section (PRIMARY — right after service select) ── */}
+          {/* Line Items Section - PRIMARY */}
           <div className="bg-gray-800/30 border border-green-800/40 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-green-400" />
