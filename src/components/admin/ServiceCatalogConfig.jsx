@@ -1,30 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export default function ServiceCatalogConfig() {
   const queryClient = useQueryClient();
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newGroupId, setNewGroupId] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState(null);
 
-  const { data: services = [], isLoading } = useQuery({
+  const { data: services = [], isLoading: loadingServices } = useQuery({
     queryKey: ["services-catalog-admin"],
     queryFn: () => base44.entities.Service.list(),
   });
 
-  const { data: vendorGroups = [] } = useQuery({
+  const { data: vendorGroups = [], isLoading: loadingGroups } = useQuery({
     queryKey: ["vendorGroups-service"],
     queryFn: async () => {
       const all = await base44.entities.VendorGroup.filter({ vendor_type: "SERVICE", is_active: true });
@@ -32,176 +26,67 @@ export default function ServiceCatalogConfig() {
     },
   });
 
-  const groupsMap = new Map(vendorGroups.map(g => [g.id, g]));
+  const servicesByGroup = useMemo(() => {
+    const map = {};
+    for (const g of vendorGroups) map[g.id] = [];
+    const orphans = [];
+    for (const svc of services) {
+      const gid = svc.preferred_vendor_group_id;
+      if (gid && map[gid]) {
+        map[gid].push(svc);
+      } else {
+        orphans.push(svc);
+      }
+    }
+    return { grouped: map, orphans };
+  }, [services, vendorGroups]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["services-catalog-admin"] });
     queryClient.invalidateQueries({ queryKey: ["services-catalog"] });
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!newName.trim()) { toast.error("Name required"); return; }
-    if (!newGroupId) { toast.error("Vendor Group required"); return; }
-    setCreating(true);
-    try {
-      await base44.entities.Service.create({
-        name: newName.trim(),
-        preferred_vendor_group_id: newGroupId,
-        description: newDescription.trim() || null,
-        is_active: true,
-      });
-      toast.success("Service created");
-      setNewName("");
-      setNewGroupId("");
-      setNewDescription("");
-      invalidate();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const startEdit = (svc) => {
-    setEditingId(svc.id);
-    setEditData({
-      name: svc.name || "",
-      preferred_vendor_group_id: svc.preferred_vendor_group_id || "",
-      description: svc.description || "",
-      is_active: svc.is_active !== false,
-    });
-  };
-
-  const saveEdit = async () => {
-    if (!editData.name.trim()) { toast.error("Name required"); return; }
-    if (!editData.preferred_vendor_group_id) { toast.error("Vendor Group required"); return; }
-    try {
-      await base44.entities.Service.update(editingId, editData);
-      toast.success("Service updated");
-      setEditingId(null);
-      setEditData(null);
-      invalidate();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const toggleActive = async (svc) => {
-    await base44.entities.Service.update(svc.id, { is_active: !svc.is_active });
-    invalidate();
-  };
-
-  const handleDelete = async (svc) => {
-    if (!confirm(`Delete service "${svc.name}"?`)) return;
-    await base44.entities.Service.delete(svc.id);
-    toast.success("Deleted");
-    invalidate();
-  };
-
-  const active = services.filter(s => s.is_active !== false);
-  const inactive = services.filter(s => s.is_active === false);
+  const isLoading = loadingServices || loadingGroups;
 
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
         <CardTitle className="text-white text-base flex items-center gap-2">
           <Layers className="w-5 h-5 text-purple-400" />
-          Service Catalog
+          Services by Vendor Group
         </CardTitle>
         <p className="text-sm text-gray-400 mt-1">
-          Manage service types. Each service must be assigned to a Vendor Group.
+          Services are organized under their Vendor Group. Add new services within a group.
         </p>
       </CardHeader>
-      <CardContent className="p-4 space-y-6">
-        {/* Create Form */}
-        <form onSubmit={handleCreate} className="space-y-3 p-4 bg-gray-900/50 rounded-lg">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <Label className="text-gray-400 text-xs">Service Name *</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Chrome Plating" className="bg-gray-800 border-gray-700 text-white" />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Vendor Group *</Label>
-              <Select value={newGroupId} onValueChange={setNewGroupId}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendorGroups.map(g => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Description</Label>
-              <Input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Optional..." className="bg-gray-800 border-gray-700 text-white" />
-            </div>
-          </div>
-          <Button type="submit" disabled={creating} className="gap-2">
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add Service
-          </Button>
-        </form>
-
-        {vendorGroups.length === 0 && (
-          <div className="text-center py-4 text-amber-400 text-sm bg-amber-900/20 border border-amber-700/40 rounded-lg">
-            No vendor groups found. Create vendor groups first in the "Vendor Groups" tab.
+      <CardContent className="p-4 space-y-4">
+        {vendorGroups.length === 0 && !isLoading && (
+          <div className="text-center py-4 text-amber-400 text-sm bg-amber-900/20 border border-amber-700/40 rounded-lg flex items-center justify-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            No SERVICE vendor groups found. Create groups first in the "Vendor Groups" tab.
           </div>
         )}
 
-        {/* Active Services */}
-        <div>
-          <Label className="text-gray-400 text-xs mb-3 block">Active Services ({active.length})</Label>
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : active.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No services yet</div>
-          ) : (
-            <div className="space-y-2">
-              {active.map(svc => (
-                <ServiceRow
-                  key={svc.id}
-                  svc={svc}
-                  groupsMap={groupsMap}
-                  vendorGroups={vendorGroups}
-                  isEditing={editingId === svc.id}
-                  editData={editData}
-                  onEditDataChange={setEditData}
-                  onStartEdit={() => startEdit(svc)}
-                  onSaveEdit={saveEdit}
-                  onCancelEdit={() => { setEditingId(null); setEditData(null); }}
-                  onToggleActive={() => toggleActive(svc)}
-                  onDelete={() => handleDelete(svc)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {isLoading ? (
+          <div className="text-center py-8 text-gray-500">Loading...</div>
+        ) : (
+          <div className="space-y-3">
+            {vendorGroups.map(group => (
+              <GroupSection
+                key={group.id}
+                group={group}
+                services={servicesByGroup.grouped[group.id] || []}
+                onInvalidate={invalidate}
+              />
+            ))}
 
-        {/* Inactive */}
-        {inactive.length > 0 && (
-          <div>
-            <Label className="text-gray-400 text-xs mb-3 block">Inactive Services ({inactive.length})</Label>
-            <div className="space-y-2 opacity-60">
-              {inactive.map(svc => (
-                <ServiceRow
-                  key={svc.id}
-                  svc={svc}
-                  groupsMap={groupsMap}
-                  vendorGroups={vendorGroups}
-                  isEditing={editingId === svc.id}
-                  editData={editData}
-                  onEditDataChange={setEditData}
-                  onStartEdit={() => startEdit(svc)}
-                  onSaveEdit={saveEdit}
-                  onCancelEdit={() => { setEditingId(null); setEditData(null); }}
-                  onToggleActive={() => toggleActive(svc)}
-                  onDelete={() => handleDelete(svc)}
-                />
-              ))}
-            </div>
+            {servicesByGroup.orphans.length > 0 && (
+              <OrphanSection
+                services={servicesByGroup.orphans}
+                vendorGroups={vendorGroups}
+                onInvalidate={invalidate}
+              />
+            )}
           </div>
         )}
       </CardContent>
@@ -209,66 +94,230 @@ export default function ServiceCatalogConfig() {
   );
 }
 
-function ServiceRow({ svc, groupsMap, vendorGroups, isEditing, editData, onEditDataChange, onStartEdit, onSaveEdit, onCancelEdit, onToggleActive, onDelete }) {
-  const group = groupsMap.get(svc.preferred_vendor_group_id);
+function GroupSection({ group, services, onInvalidate }) {
+  const [expanded, setExpanded] = useState(true);
+  const [addingName, setAddingName] = useState("");
+  const [addingDesc, setAddingDesc] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
-  if (isEditing && editData) {
+  const active = services.filter(s => s.is_active !== false);
+  const inactive = services.filter(s => s.is_active === false);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!addingName.trim()) return;
+    setCreating(true);
+    try {
+      await base44.entities.Service.create({
+        name: addingName.trim(),
+        preferred_vendor_group_id: group.id,
+        description: addingDesc.trim() || null,
+        is_active: true,
+      });
+      toast.success(`Service "${addingName.trim()}" created in ${group.name}`);
+      setAddingName("");
+      setAddingDesc("");
+      setShowAdd(false);
+      onInvalidate();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const lineTypeLabel = {
+    vendor_cost: "Vendor Cost",
+    shipping: "Shipping",
+    internal_labor: "Internal Labor",
+    misc: "Misc",
+  }[group.default_line_item_type] || group.default_line_item_type;
+
+  return (
+    <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 p-3 hover:bg-amber-900/30 transition-colors text-left"
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-amber-400 shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-amber-400 shrink-0" />
+        )}
+        <span className="font-medium text-amber-300 flex-1">{group.name}</span>
+        <Badge variant="outline" className="text-[9px] border-green-700/50 text-green-400 shrink-0">
+          {lineTypeLabel}
+        </Badge>
+        <Badge variant="outline" className="text-[10px] border-amber-600/50 text-amber-400 shrink-0">
+          {active.length} active
+        </Badge>
+        {inactive.length > 0 && (
+          <Badge variant="outline" className="text-[10px] border-gray-600/50 text-gray-500 shrink-0">
+            {inactive.length} inactive
+          </Badge>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-amber-700/30 p-3 space-y-2">
+          {active.length === 0 && inactive.length === 0 && !showAdd && (
+            <p className="text-gray-500 text-sm text-center py-2">No services in this group yet</p>
+          )}
+
+          {active.map(svc => (
+            <ServiceRow key={svc.id} svc={svc} onInvalidate={onInvalidate} />
+          ))}
+
+          {inactive.length > 0 && (
+            <div className="opacity-50 space-y-2 pt-2 border-t border-gray-700/30">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider">Inactive</span>
+              {inactive.map(svc => (
+                <ServiceRow key={svc.id} svc={svc} onInvalidate={onInvalidate} />
+              ))}
+            </div>
+          )}
+
+          {showAdd ? (
+            <form onSubmit={handleCreate} className="flex items-end gap-2 pt-2 border-t border-amber-700/30">
+              <div className="flex-1">
+                <Label className="text-gray-400 text-[10px]">Service Name *</Label>
+                <Input
+                  value={addingName}
+                  onChange={e => setAddingName(e.target.value)}
+                  placeholder="e.g. Chrome Plating"
+                  className="bg-gray-800 border-gray-700 text-white h-8 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-gray-400 text-[10px]">Description</Label>
+                <Input
+                  value={addingDesc}
+                  onChange={e => setAddingDesc(e.target.value)}
+                  placeholder="Optional..."
+                  className="bg-gray-800 border-gray-700 text-white h-8 text-sm"
+                />
+              </div>
+              <Button type="submit" size="sm" disabled={creating} className="gap-1 h-8">
+                {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                Add
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setShowAdd(false); setAddingName(""); setAddingDesc(""); }} className="h-8">
+                <XIcon className="w-3 h-3" />
+              </Button>
+            </form>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowAdd(true)}
+              className="text-amber-400 hover:text-amber-300 gap-1 w-full mt-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Service to {group.name}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceRow({ svc, onInvalidate }) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+
+  const startEdit = () => {
+    setEditName(svc.name || "");
+    setEditDesc(svc.description || "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editName.trim()) { toast.error("Name required"); return; }
+    await base44.entities.Service.update(svc.id, { name: editName.trim(), description: editDesc.trim() || null });
+    toast.success("Updated");
+    setEditing(false);
+    onInvalidate();
+  };
+
+  const toggleActive = async () => {
+    await base44.entities.Service.update(svc.id, { is_active: !svc.is_active });
+    onInvalidate();
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete service "${svc.name}"?`)) return;
+    await base44.entities.Service.delete(svc.id);
+    toast.success("Deleted");
+    onInvalidate();
+  };
+
+  if (editing) {
     return (
-      <div className="p-3 bg-gray-900/70 rounded-lg border border-gray-700 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <Label className="text-gray-400 text-xs">Name *</Label>
-            <Input value={editData.name} onChange={e => onEditDataChange({ ...editData, name: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
-          </div>
-          <div>
-            <Label className="text-gray-400 text-xs">Vendor Group *</Label>
-            <Select value={editData.preferred_vendor_group_id} onValueChange={v => onEditDataChange({ ...editData, preferred_vendor_group_id: v })}>
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white"><SelectValue placeholder="Select group..." /></SelectTrigger>
-              <SelectContent>
-                {vendorGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-gray-400 text-xs">Description</Label>
-            <Input value={editData.description} onChange={e => onEditDataChange({ ...editData, description: e.target.value })} className="bg-gray-800 border-gray-700 text-white" />
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={onSaveEdit} className="gap-1"><Check className="w-3.5 h-3.5" /> Save</Button>
-          <Button size="sm" variant="outline" onClick={onCancelEdit} className="gap-1"><XIcon className="w-3.5 h-3.5" /> Cancel</Button>
-        </div>
+      <div className="flex items-center gap-2 p-2 bg-gray-800/50 rounded-md">
+        <Input value={editName} onChange={e => setEditName(e.target.value)} className="bg-gray-800 border-gray-700 text-white h-7 text-sm flex-1" />
+        <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description..." className="bg-gray-800 border-gray-700 text-white h-7 text-sm flex-1" />
+        <Button size="icon" variant="ghost" onClick={saveEdit} className="h-7 w-7 text-green-400">
+          <Check className="w-3.5 h-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" onClick={() => setEditing(false)} className="h-7 w-7 text-gray-400">
+          <XIcon className="w-3.5 h-3.5" />
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-white">{svc.name}</span>
-          {group ? (
-            <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">{group.name}</Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] border-red-600/50 text-red-400">No Group!</Badge>
-          )}
-          {svc.is_active === false && (
-            <Badge variant="outline" className="text-[10px] bg-gray-800 text-gray-500 border-gray-700">Inactive</Badge>
-          )}
+    <div className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md hover:bg-gray-900/60 transition-colors">
+      <span className="text-sm text-white flex-1 truncate">{svc.name}</span>
+      {svc.description && <span className="text-[10px] text-gray-500 truncate max-w-[150px]">{svc.description}</span>}
+      {svc.is_active === false && (
+        <Badge variant="outline" className="text-[10px] bg-gray-800 text-gray-500 border-gray-700">Inactive</Badge>
+      )}
+      <Button size="icon" variant="ghost" onClick={toggleActive} className="h-7 w-7 text-gray-400" title={svc.is_active !== false ? "Deactivate" : "Activate"}>
+        <span className="text-xs">{svc.is_active !== false ? "✓" : "○"}</span>
+      </Button>
+      <Button size="icon" variant="ghost" onClick={startEdit} className="h-7 w-7 text-blue-400">
+        <Edit2 className="w-3 h-3" />
+      </Button>
+      <Button size="icon" variant="ghost" onClick={handleDelete} className="h-7 w-7 text-red-400">
+        <Trash2 className="w-3 h-3" />
+      </Button>
+    </div>
+  );
+}
+
+function OrphanSection({ services, vendorGroups, onInvalidate }) {
+  const reassign = async (svcId, groupId) => {
+    await base44.entities.Service.update(svcId, { preferred_vendor_group_id: groupId });
+    toast.success("Reassigned");
+    onInvalidate();
+  };
+
+  return (
+    <div className="rounded-lg border border-red-700/40 bg-red-900/20 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-red-400" />
+        <span className="text-sm font-medium text-red-300">Ungrouped Services ({services.length})</span>
+      </div>
+      <p className="text-xs text-gray-400">These services have no vendor group or their group was deleted. Reassign them.</p>
+      {services.map(svc => (
+        <div key={svc.id} className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md">
+          <span className="text-sm text-white flex-1 truncate">{svc.name}</span>
+          <select
+            className="bg-gray-800 border border-gray-700 text-white text-xs rounded px-2 py-1"
+            defaultValue=""
+            onChange={e => { if (e.target.value) reassign(svc.id, e.target.value); }}
+          >
+            <option value="" disabled>Reassign to...</option>
+            {vendorGroups.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
         </div>
-        {svc.description && <p className="text-xs text-gray-500 mt-0.5">{svc.description}</p>}
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <Button size="icon" variant="ghost" onClick={onToggleActive} className="h-8 w-8 text-gray-400" title={svc.is_active !== false ? "Deactivate" : "Activate"}>
-          <span className="text-xs">{svc.is_active !== false ? "✓" : "○"}</span>
-        </Button>
-        <Button size="icon" variant="ghost" onClick={onStartEdit} className="h-8 w-8 text-blue-400">
-          <Edit2 className="w-4 h-4" />
-        </Button>
-        <Button size="icon" variant="ghost" onClick={onDelete} className="h-8 w-8 text-red-400">
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </div>
+      ))}
     </div>
   );
 }

@@ -45,7 +45,7 @@ export default function AdminConfig() {
             <TabsTrigger value="pricing-matrix">Pricing Matrix</TabsTrigger>
             <TabsTrigger value="pricing-guardrails">Pricing Guardrails</TabsTrigger>
             <TabsTrigger value="vendor-groups">Vendor Groups</TabsTrigger>
-            <TabsTrigger value="service-catalog">Service Catalog</TabsTrigger>
+            <TabsTrigger value="service-catalog">Services (by Group)</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
