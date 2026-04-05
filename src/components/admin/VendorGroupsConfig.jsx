@@ -264,7 +264,7 @@ function GroupColumn({ title, type, groups, editingId, editData, onStartEdit, on
                         <XIcon className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[10px] bg-gray-800/50 text-gray-400 border-gray-700 shrink-0">
