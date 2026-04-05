@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Save, FolderKanban, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
@@ -80,11 +81,17 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, matchGroupForService } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap, matchGroupForService } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
-  const matchedGroup = matchGroupForService(selectedService);
-  const selectedGroupId = matchedGroup?.id || null;
+  const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
+  const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) : null;
+
+  // Lock vendor dropdown to ONLY the service's group
+  const lockedVendorGroups = selectedGroup ? [selectedGroup] : [];
+  const lockedVendorsByGroup = selectedGroupId
+    ? new Map([[selectedGroupId, vendorsByGroup.get(selectedGroupId) || []]])
+    : new Map();
 
   const isBilled = commitment.status === "billed";
 
@@ -194,18 +201,39 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
 
           <div>
             <Label className="text-gray-300">Service *</Label>
-            <Select value={serviceId} onValueChange={setServiceId} disabled={isBilled}>
+            <Select value={serviceId} onValueChange={(id) => {
+              setServiceId(id);
+              // Reset vendor when service changes
+              const svc = services.find(s => s.id === id);
+              const gid = svc?.preferred_vendor_group_id;
+              const gVendors = gid ? (vendorsByGroup.get(gid) || []) : [];
+              if (svc?.default_vendor_id && gVendors.some(v => v.id === svc.default_vendor_id)) {
+                setVendorId(svc.default_vendor_id);
+              } else {
+                setVendorId(gVendors[0]?.id || "");
+              }
+            }} disabled={isBilled}>
               <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                 <SelectValue placeholder="Select a service..." />
               </SelectTrigger>
               <SelectContent>
-                {services.map(s => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name} {s.category ? `(${s.category})` : ""}
-                  </SelectItem>
-                ))}
+                {services.map(s => {
+                  const g = groupsMap.get(s.preferred_vendor_group_id);
+                  return (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} {g ? `(${g.name})` : ""}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
+            {selectedGroup && (
+              <div className="mt-1.5">
+                <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">
+                  Vendor Group: {selectedGroup.name}
+                </Badge>
+              </div>
+            )}
           </div>
 
           <div>
@@ -223,11 +251,12 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
             <GroupedVendorSelect
               value={vendorId || "__none__"}
               onValueChange={setVendorId}
-              vendorGroups={vendorGroups}
-              vendorsByGroup={vendorsByGroup}
+              vendorGroups={lockedVendorGroups}
+              vendorsByGroup={lockedVendorsByGroup}
               selectedGroupId={selectedGroupId}
               placeholder="Select vendor..."
               disabled={isBilled}
+              showNone={true}
             />
           </div>
 

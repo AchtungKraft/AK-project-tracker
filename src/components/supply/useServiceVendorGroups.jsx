@@ -48,56 +48,33 @@ export default function useServiceVendorGroups() {
   );
 
   /**
-   * Match a VendorGroup to a Service using:
-   * 1. service.preferred_vendor_group_id (canonical)
-   * 2. Fuzzy match service.category → group.name (fallback)
+   * Match a VendorGroup to a Service using preferred_vendor_group_id (canonical only).
+   * No fuzzy fallback — the relationship is enforced.
    */
   const matchGroupForService = (service) => {
     if (!service) return null;
-    // Canonical link
     if (service.preferred_vendor_group_id) {
       return groupsMap.get(service.preferred_vendor_group_id) || null;
-    }
-    // Fuzzy fallback: category → group name
-    if (service.category) {
-      const cat = service.category.toLowerCase().replace(/_/g, " ");
-      return vendorGroups.find(g =>
-        g.name.toLowerCase().includes(cat) || cat.includes(g.name.toLowerCase())
-      ) || null;
     }
     return null;
   };
 
   /**
-   * Get filtered vendors for a service with priority:
-   * 1. Vendors in matched group
-   * 2. Allowed vendors (if service.allowed_vendor_ids is set)
-   * 3. All vendors (fallback)
-   *
-   * Returns { vendors: ServiceVendor[], matchedGroup: VendorGroup | null }
+   * Get filtered vendors for a service — LOCKED to the service's vendor group.
+   * No fallback to all vendors.
    */
   const getFilteredVendors = (service) => {
-    if (!service) return { vendors, matchedGroup: null };
+    if (!service) return { vendors: [], matchedGroup: null };
 
     const matchedGroup = matchGroupForService(service);
 
-    // Priority 1: Vendors in matched group
     if (matchedGroup) {
       const groupVendors = vendorsByGroup.get(matchedGroup.id) || [];
-      if (groupVendors.length > 0) {
-        return { vendors: groupVendors, matchedGroup };
-      }
+      return { vendors: groupVendors, matchedGroup };
     }
 
-    // Priority 2: Allowed vendors
-    if (service.allowed_vendor_ids?.length) {
-      const allowedSet = new Set(service.allowed_vendor_ids);
-      const allowed = vendors.filter(v => allowedSet.has(v.id));
-      if (allowed.length > 0) return { vendors: allowed, matchedGroup };
-    }
-
-    // Priority 3: All vendors
-    return { vendors, matchedGroup };
+    // No group assigned — return empty (should not happen with enforced schema)
+    return { vendors: [], matchedGroup: null };
   };
 
   return {

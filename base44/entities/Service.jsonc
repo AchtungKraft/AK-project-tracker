@@ -22,11 +22,11 @@
         "other"
       ],
       "default": "other",
-      "description": "Service category"
+      "description": "LEGACY: Service category. Use preferred_vendor_group_id for canonical grouping."
     },
     "preferred_vendor_group_id": {
       "type": "string",
-      "description": "Reference to VendorGroup (vendor_type=SERVICE). Replaces fuzzy category matching for vendor filtering."
+      "description": "Reference to VendorGroup (vendor_type=SERVICE). REQUIRED. Canonical link that determines which vendors are available for this service."
     },
     "default_vendor_id": {
       "type": "string",
@@ -50,6 +50,7 @@
     }
   },
   "required": [
-    "name"
+    "name",
+    "preferred_vendor_group_id"
   ]
 }

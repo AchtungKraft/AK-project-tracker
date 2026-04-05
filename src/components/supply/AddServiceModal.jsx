@@ -88,11 +88,17 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, matchGroupForService } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap, matchGroupForService } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
-  const matchedGroup = matchGroupForService(selectedService);
-  const selectedGroupId = matchedGroup?.id || null;
+  const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
+  const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) : null;
+
+  // Lock vendor dropdown to ONLY the service's group
+  const lockedVendorGroups = selectedGroup ? [selectedGroup] : [];
+  const lockedVendorsByGroup = selectedGroupId
+    ? new Map([[selectedGroupId, vendorsByGroup.get(selectedGroupId) || []]])
+    : new Map();
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
 
@@ -100,13 +106,13 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   const handleServiceChange = (id) => {
     setServiceId(id);
     const svc = services.find(s => s.id === id);
-    // Auto-fill vendor: prefer default, then first vendor in matched group
-    if (svc?.default_vendor_id) {
+    // Auto-fill vendor from group (canonical)
+    const groupId = svc?.preferred_vendor_group_id;
+    const groupVendors = groupId ? (vendorsByGroup.get(groupId) || []) : [];
+    if (svc?.default_vendor_id && groupVendors.some(v => v.id === svc.default_vendor_id)) {
       setVendorId(svc.default_vendor_id);
     } else {
-      const groupId = svc?.preferred_vendor_group_id;
-      const defaultVendor = groupId ? (vendorsByGroup.get(groupId) || [])[0] : null;
-      setVendorId(defaultVendor?.id || "");
+      setVendorId(groupVendors[0]?.id || "");
     }
     // Always create a default line item on service select (no exceptions)
     if (svc) {
@@ -268,13 +274,23 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
                 <SelectValue placeholder="Select a service..." />
               </SelectTrigger>
               <SelectContent>
-                {services.map(s => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name} {s.category ? `(${s.category})` : ""}
-                  </SelectItem>
-                ))}
+                {services.map(s => {
+                  const g = groupsMap.get(s.preferred_vendor_group_id);
+                  return (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} {g ? `(${g.name})` : ""}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
+            {selectedGroup && (
+              <div className="mt-1.5 flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">
+                  Vendor Group: {selectedGroup.name}
+                </Badge>
+              </div>
+            )}
           </div>
 
           <div>
@@ -321,14 +337,14 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               ) : (
                 lineItems.map(li => (
                   <InlineLineItemRow
-                    key={li._key}
-                    lineItem={li}
-                    vendorGroups={vendorGroups}
-                    vendorsByGroup={vendorsByGroup}
-                    selectedGroupId={selectedGroupId}
-                    onChange={(field, val) => updateLineItem(li._key, field, val)}
-                    onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
-                    canRemove={lineItems.length > 1}
+                  key={li._key}
+                  lineItem={li}
+                  vendorGroups={lockedVendorGroups}
+                  vendorsByGroup={lockedVendorsByGroup}
+                  selectedGroupId={selectedGroupId}
+                  onChange={(field, val) => updateLineItem(li._key, field, val)}
+                  onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
+                  canRemove={lineItems.length > 1}
                   />
                 ))
               )}
@@ -355,7 +371,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
           <div className="border-t border-gray-700/50" />
 
-          {/* ── Vendor ── */}
+          {/* ── Vendor (locked to group) ── */}
           <div>
             <div className="flex items-center justify-between">
               <Label className="text-gray-300 text-xs">Primary Vendor</Label>
@@ -374,10 +390,11 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               <GroupedVendorSelect
                 value={vendorId}
                 onValueChange={setVendorId}
-                vendorGroups={vendorGroups}
-                vendorsByGroup={vendorsByGroup}
+                vendorGroups={lockedVendorGroups}
+                vendorsByGroup={lockedVendorsByGroup}
                 selectedGroupId={selectedGroupId}
-                placeholder="Select vendor (optional)..."
+                placeholder="Select vendor..."
+                showNone={true}
               />
             )}
           </div>
@@ -403,6 +420,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
 /** Compact inline row for a single line item during creation */
 function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGroupId, onChange, onRemove, canRemove = true }) {
+  // vendorGroups and vendorsByGroup are already locked to the service's group
   const cfg = TYPE_CONFIG[lineItem.type] || TYPE_CONFIG.misc;
   const Icon = cfg.icon;
   const isLabor = lineItem.type === "internal_labor";

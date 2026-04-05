@@ -106,6 +106,17 @@ async function createServiceCommitment(base44, user, payload) {
     console.warn(`[CREATE] Legacy cost field detected! estimated_cost=${estimated_cost} actual_cost=${actual_cost} by=${user.email} — IGNORED`);
   }
 
+  // ── Vendor ↔ Group validation ──
+  if (vendor_id) {
+    const [service] = await base44.asServiceRole.entities.Service.filter({ id: service_id });
+    if (service?.preferred_vendor_group_id) {
+      const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: vendor_id });
+      if (vendor && vendor.vendor_group_id !== service.preferred_vendor_group_id) {
+        throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
+      }
+    }
+  }
+
   if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
     throw new Error('At least one line item is required');
   }
@@ -223,6 +234,19 @@ async function updateService(base44, user, payload) {
   const [c] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: commitment_id });
   if (!c) throw new Error('ServiceCommitment not found');
   if (c.status === 'billed') throw new Error('Cannot edit a billed service commitment');
+
+  // ── Vendor ↔ Group validation ──
+  const effectiveServiceId = service_id || c.service_id;
+  const effectiveVendorId = vendor_id !== undefined ? vendor_id : c.vendor_id;
+  if (effectiveVendorId) {
+    const [service] = await base44.asServiceRole.entities.Service.filter({ id: effectiveServiceId });
+    if (service?.preferred_vendor_group_id) {
+      const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: effectiveVendorId });
+      if (vendor && vendor.vendor_group_id !== service.preferred_vendor_group_id) {
+        throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group. Vendor group must match.`);
+      }
+    }
+  }
 
   const updates = {};
   if (service_id !== undefined) updates.service_id = service_id;
