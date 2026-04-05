@@ -88,15 +88,11 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup, getFilteredVendors } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, matchGroupForService } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
-
-  // Group-aware vendor filtering
-  const { vendors: filteredVendors, matchedGroup } = useMemo(
-    () => getFilteredVendors(selectedService),
-    [selectedService, getFilteredVendors]
-  );
+  const matchedGroup = matchGroupForService(selectedService);
+  const selectedGroupId = matchedGroup?.id || null;
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
 
@@ -104,11 +100,13 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   const handleServiceChange = (id) => {
     setServiceId(id);
     const svc = services.find(s => s.id === id);
-    // Auto-fill vendor
+    // Auto-fill vendor: prefer default, then first vendor in matched group
     if (svc?.default_vendor_id) {
       setVendorId(svc.default_vendor_id);
     } else {
-      setVendorId("");
+      const groupId = svc?.preferred_vendor_group_id;
+      const defaultVendor = groupId ? (vendorsByGroup.get(groupId) || [])[0] : null;
+      setVendorId(defaultVendor?.id || "");
     }
     // Always create a default line item on service select (no exceptions)
     if (svc) {
@@ -325,11 +323,9 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
                   <InlineLineItemRow
                     key={li._key}
                     lineItem={li}
-                    serviceVendors={filteredVendors}
                     vendorGroups={vendorGroups}
-                    groupsMap={groupsMap}
                     vendorsByGroup={vendorsByGroup}
-                    matchedGroup={matchedGroup}
+                    selectedGroupId={selectedGroupId}
                     onChange={(field, val) => updateLineItem(li._key, field, val)}
                     onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
                     canRemove={lineItems.length > 1}
@@ -378,11 +374,9 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               <GroupedVendorSelect
                 value={vendorId}
                 onValueChange={setVendorId}
-                vendors={filteredVendors}
                 vendorGroups={vendorGroups}
-                groupsMap={groupsMap}
                 vendorsByGroup={vendorsByGroup}
-                matchedGroup={matchedGroup}
+                selectedGroupId={selectedGroupId}
                 placeholder="Select vendor (optional)..."
               />
             )}
@@ -408,7 +402,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 }
 
 /** Compact inline row for a single line item during creation */
-function InlineLineItemRow({ lineItem, serviceVendors, vendorGroups, groupsMap, vendorsByGroup, matchedGroup, onChange, onRemove, canRemove = true }) {
+function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGroupId, onChange, onRemove, canRemove = true }) {
   const cfg = TYPE_CONFIG[lineItem.type] || TYPE_CONFIG.misc;
   const Icon = cfg.icon;
   const isLabor = lineItem.type === "internal_labor";
@@ -474,15 +468,13 @@ function InlineLineItemRow({ lineItem, serviceVendors, vendorGroups, groupsMap, 
       </div>
 
       {/* Vendor for non-labor */}
-      {!isLabor && serviceVendors.length > 0 && (
+      {!isLabor && (
         <GroupedVendorSelect
           value={lineItem.vendor_id || "__none__"}
           onValueChange={val => onChange("vendor_id", val === "__none__" ? "" : val)}
-          vendors={serviceVendors}
           vendorGroups={vendorGroups}
-          groupsMap={groupsMap}
           vendorsByGroup={vendorsByGroup}
-          matchedGroup={matchedGroup}
+          selectedGroupId={selectedGroupId}
           placeholder="Vendor (optional)"
           className="bg-gray-900/50 border-gray-700 text-white h-7 text-xs"
         />

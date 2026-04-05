@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -80,14 +80,11 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup, getFilteredVendors } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, matchGroupForService } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
-
-  const { vendors: filteredVendors, matchedGroup } = useMemo(
-    () => getFilteredVendors(selectedService),
-    [selectedService, getFilteredVendors]
-  );
+  const matchedGroup = matchGroupForService(selectedService);
+  const selectedGroupId = matchedGroup?.id || null;
 
   const isBilled = commitment.status === "billed";
 
@@ -226,11 +223,9 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
             <GroupedVendorSelect
               value={vendorId || "__none__"}
               onValueChange={setVendorId}
-              vendors={filteredVendors}
               vendorGroups={vendorGroups}
-              groupsMap={groupsMap}
               vendorsByGroup={vendorsByGroup}
-              matchedGroup={matchedGroup}
+              selectedGroupId={selectedGroupId}
               placeholder="Select vendor..."
               disabled={isBilled}
             />

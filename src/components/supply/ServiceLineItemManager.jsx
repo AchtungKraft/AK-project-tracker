@@ -50,7 +50,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
     enabled: !!commitmentId,
   });
 
-  const { vendors: serviceVendors, vendorGroups, groupsMap, vendorsByGroup } = useServiceVendorGroups();
+  const { vendors: serviceVendors, vendorGroups, vendorsByGroup } = useServiceVendorGroups();
 
   const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
 
@@ -173,9 +173,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
           lineItem={editModal === "new" ? null : editModal}
           template={editModal === "new" ? templateType : null}
           commitmentId={commitmentId}
-          serviceVendors={serviceVendors}
           vendorGroups={vendorGroups}
-          groupsMap={groupsMap}
           vendorsByGroup={vendorsByGroup}
           onClose={() => { setEditModal(null); setTemplateType(null); }}
           onSuccess={() => { invalidate(); setEditModal(null); setTemplateType(null); }}
@@ -185,7 +183,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
   );
 }
 
-function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, vendorGroups, groupsMap, vendorsByGroup, onClose, onSuccess }) {
+function LineItemEditModal({ lineItem, template, commitmentId, vendorGroups, vendorsByGroup, onClose, onSuccess }) {
   const isNew = !lineItem;
   const defaults = template || lineItem || {};
 
@@ -317,12 +315,9 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceVendors, v
                 <GroupedVendorSelect
                   value={vendorId}
                   onValueChange={setVendorId}
-                  vendors={serviceVendors}
                   vendorGroups={vendorGroups || []}
-                  groupsMap={groupsMap || new Map()}
                   vendorsByGroup={vendorsByGroup || new Map()}
                   placeholder="Optional..."
-                  showAllGrouped
                 />
               )}
             </div>
