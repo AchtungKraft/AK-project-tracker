@@ -6,14 +6,15 @@ import { useQuery } from "@tanstack/react-query";
  * Shared hook — fetches ServiceVendors + SERVICE VendorGroups,
  * builds group-aware lookup structures.
  *
+ * Consumers should use service.preferred_vendor_group_id directly
+ * to look up vendors via vendorsByGroup.get(groupId).
+ *
  * Returns:
  *  - vendors: all active ServiceVendor[]
  *  - vendorGroups: VendorGroup[] (SERVICE type only)
  *  - groupsMap: Map<groupId, VendorGroup>
  *  - vendorsByGroup: Map<groupId, ServiceVendor[]>
  *  - ungroupedVendors: ServiceVendor[] with no group
- *  - getFilteredVendors(service): priority-ordered vendor list for a service
- *  - matchGroupForService(service): best-match VendorGroup for a service
  *  - isLoading
  */
 export default function useServiceVendorGroups() {
@@ -47,44 +48,12 @@ export default function useServiceVendorGroups() {
     [vendorsByGroup]
   );
 
-  /**
-   * Match a VendorGroup to a Service using preferred_vendor_group_id (canonical only).
-   * No fuzzy fallback — the relationship is enforced.
-   */
-  const matchGroupForService = (service) => {
-    if (!service) return null;
-    if (service.preferred_vendor_group_id) {
-      return groupsMap.get(service.preferred_vendor_group_id) || null;
-    }
-    return null;
-  };
-
-  /**
-   * Get filtered vendors for a service — LOCKED to the service's vendor group.
-   * No fallback to all vendors.
-   */
-  const getFilteredVendors = (service) => {
-    if (!service) return { vendors: [], matchedGroup: null };
-
-    const matchedGroup = matchGroupForService(service);
-
-    if (matchedGroup) {
-      const groupVendors = vendorsByGroup.get(matchedGroup.id) || [];
-      return { vendors: groupVendors, matchedGroup };
-    }
-
-    // No group assigned — return empty (should not happen with enforced schema)
-    return { vendors: [], matchedGroup: null };
-  };
-
   return {
     vendors,
     vendorGroups,
     groupsMap,
     vendorsByGroup,
     ungroupedVendors,
-    getFilteredVendors,
-    matchGroupForService,
     isLoading: loadingV || loadingG,
   };
 }

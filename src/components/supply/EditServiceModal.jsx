@@ -81,7 +81,7 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, groupsMap, matchGroupForService } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
   const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
@@ -203,15 +203,11 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
             <Label className="text-gray-300">Service *</Label>
             <Select value={serviceId} onValueChange={(id) => {
               setServiceId(id);
-              // Reset vendor when service changes
+              // Reset vendor when service changes — use first vendor in group
               const svc = services.find(s => s.id === id);
               const gid = svc?.preferred_vendor_group_id;
               const gVendors = gid ? (vendorsByGroup.get(gid) || []) : [];
-              if (svc?.default_vendor_id && gVendors.some(v => v.id === svc.default_vendor_id)) {
-                setVendorId(svc.default_vendor_id);
-              } else {
-                setVendorId(gVendors[0]?.id || "");
-              }
+              setVendorId(gVendors[0]?.id || "");
             }} disabled={isBilled}>
               <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                 <SelectValue placeholder="Select a service..." />

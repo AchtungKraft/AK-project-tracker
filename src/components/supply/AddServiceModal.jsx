@@ -34,20 +34,17 @@ const TYPE_CONFIG = {
   misc: { label: "Misc", icon: DollarSign, color: "text-gray-400" },
 };
 
-// Map service category → default first line item type
-const CATEGORY_TO_LINE_TYPE = {
-  shipping: "shipping",
-  finishing: "vendor_cost",
-  coating: "vendor_cost",
-  plating: "vendor_cost",
-  fabrication: "vendor_cost",
-  upholstery: "vendor_cost",
-  electrical: "vendor_cost",
-  paint: "vendor_cost",
-  machine_work: "vendor_cost",
-  inspection: "vendor_cost",
-  other: "vendor_cost",
-};
+/**
+ * Resolve default line item type from the vendor group name.
+ * Uses simple keyword matching on the group name.
+ */
+function resolveDefaultLineType(groupName) {
+  if (!groupName) return "vendor_cost";
+  const lower = groupName.toLowerCase();
+  if (lower.includes("shipping") || lower.includes("freight") || lower.includes("logistics")) return "shipping";
+  if (lower.includes("labor") || lower.includes("internal")) return "internal_labor";
+  return "vendor_cost";
+}
 
 /**
  * AddServiceModal — Line-Item-Driven Create Flow
@@ -88,7 +85,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, groupsMap, matchGroupForService } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
   const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
@@ -106,28 +103,31 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   const handleServiceChange = (id) => {
     setServiceId(id);
     const svc = services.find(s => s.id === id);
-    // Auto-fill vendor from group (canonical)
-    const groupId = svc?.preferred_vendor_group_id;
-    const groupVendors = groupId ? (vendorsByGroup.get(groupId) || []) : [];
-    if (svc?.default_vendor_id && groupVendors.some(v => v.id === svc.default_vendor_id)) {
-      setVendorId(svc.default_vendor_id);
-    } else {
-      setVendorId(groupVendors[0]?.id || "");
+    if (!svc) return;
+
+    const groupId = svc.preferred_vendor_group_id;
+    if (!groupId) {
+      toast.error("Service must have a vendor group assigned in Admin");
+      return;
     }
-    // Always create a default line item on service select (no exceptions)
-    if (svc) {
-      const defaultType = CATEGORY_TO_LINE_TYPE[svc.category] || "vendor_cost";
-      const defaultDesc = defaultType === "shipping" ? "Shipping / Freight" : `${svc.name || "Service"} Cost`;
-      setLineItems([{
-        _key: Date.now(),
-        type: defaultType,
-        description: defaultDesc,
-        vendor_id: svc.default_vendor_id || "",
-        cost: "",
-        billing_rate: "",
-        quantity: "1",
-      }]);
-    }
+
+    // Auto-fill vendor: first vendor in group
+    const groupVendors = vendorsByGroup.get(groupId) || [];
+    setVendorId(groupVendors[0]?.id || "");
+
+    // Resolve line item type from group name
+    const group = groupsMap.get(groupId);
+    const defaultType = resolveDefaultLineType(group?.name);
+    const defaultDesc = defaultType === "shipping" ? "Shipping / Freight" : `${svc.name || "Service"} Cost`;
+    setLineItems([{
+      _key: Date.now(),
+      type: defaultType,
+      description: defaultDesc,
+      vendor_id: groupVendors[0]?.id || "",
+      cost: "",
+      billing_rate: "",
+      quantity: "1",
+    }]);
   };
 
   const handleCreateVendor = async () => {
@@ -209,7 +209,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
         project_id: resolvedProjectId,
         service_id: serviceId,
         description: description.trim(),
-        vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : (selectedService?.default_vendor_id || null),
+        vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
         quantity: 1,
         notes: notes.trim() || null,
         line_items: lineItems.map(li => {
