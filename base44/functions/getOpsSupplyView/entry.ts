@@ -507,6 +507,8 @@ Deno.serve(async (req) => {
           vendor_name: vendorMap.get(s.vendor_id)?.vendor_name || 'Unknown',
           unit_cost: s.unit_cost || 0,
           is_preferred: s.is_preferred || false,
+          order_url: s.order_url || null,
+          vendor_part_number: s.vendor_part_number || null,
         })),
         has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
 
