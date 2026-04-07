@@ -84,7 +84,9 @@ export default function VendorSourceLink({ primaryUrl, primaryVendorName, allSou
   const hasMultiple = sourcesWithUrls.length > 1;
   const hasAny = primaryUrl || sourcesWithUrls.length > 0;
 
-  if (!hasAny) return null;
+  if (!hasAny) {
+    return <span className="text-gray-600 text-[10px] italic">no link</span>;
+  }
 
   // Single source or no popover needed — just a labeled link
   if (!hasMultiple) {

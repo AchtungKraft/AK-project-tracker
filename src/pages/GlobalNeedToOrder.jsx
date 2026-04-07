@@ -574,7 +574,11 @@ export default function GlobalNeedToOrder() {
 
               const effectiveVid = selectedVendorContext?.vendor_id || agg.vendor_id;
               const primary = resolvePrimarySource(agg.sources, effectiveVid);
-              agg.order_url = primary?.order_url || null;
+              // Robust fallback chain: primary source → any commitment's order_url → any source with a URL
+              agg.order_url = primary?.order_url
+                || agg.commitments.find(c => c.order_url)?.order_url
+                || agg.sources.find(s => s.order_url)?.order_url
+                || null;
               agg.default_cost = primary?.unit_cost || agg.commitments[0]?.default_cost || 0;
             }
 

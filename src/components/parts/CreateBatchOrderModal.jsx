@@ -120,8 +120,12 @@ function SingleLineItem({
   getProjectName, showProject,
   primaryUrl, primaryVendorName, allSources,
 }) {
-  // If no explicit URL props passed, resolve from the single item's sources
-  const effectiveUrl = primaryUrl ?? resolvePrimaryURL([{ item }], vendorId) ?? (item.order_url?.startsWith('http') ? item.order_url : null);
+  // Robust fallback: explicit prop → resolve from sources → item.order_url → any source URL
+  const effectiveUrl = primaryUrl
+    ?? resolvePrimaryURL([{ item }], vendorId)
+    ?? (item.order_url && typeof item.order_url === 'string' && item.order_url.startsWith('http') ? item.order_url : null)
+    ?? (item.sources || []).find(s => s.order_url)?.order_url
+    ?? null;
   const effectiveSources = allSources?.length > 0 ? allSources : getAllSources([{ item }]);
 
   return (
@@ -313,17 +317,16 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     const flatItems = [];
     for (const item of selectedItems) {
       if (Array.isArray(item.commitments) && item.commitments.length > 0) {
-        // Aggregated item — expand into commitment-level entries
-        // CRITICAL: Each entry gets the PARENT's merged sources array,
-        // not just the commitment's own vendor_sources
         const mergedSources = item.sources || [];
+        // Robust parent-level URL: aggregated order_url → first source with URL
+        const parentUrl = item.order_url || mergedSources.find(s => s.order_url)?.order_url || null;
         for (const c of item.commitments) {
           flatItems.push({
             ...c,
             commitment_id: c.commitment_id,
             vendor_id: c.vendor_id || item.vendor_id,
             vendor_name: c.vendor_name || item.vendor_name,
-            order_url: item.order_url,
+            order_url: parentUrl,
             default_cost: item.default_cost,
             sources: mergedSources,
             _agg_part_id: item.part_id,
