@@ -30,8 +30,16 @@ function PartLineGroup({
   const [expanded, setExpanded] = useState(false);
 
   // Resolve primary URL and all sources for this part
-  const primaryUrl = resolvePrimaryURL(partGroup.entries, vendorId);
-  const allSources = getAllSources(partGroup.entries);
+  // Use pre-merged partGroup.sources when available, fall back to entry-level resolution
+  const primaryUrl = partGroup.sources?.length
+    ? (partGroup.sources.find(s => s.vendor_id === vendorId)?.order_url
+       || partGroup.order_url
+       || partGroup.sources.find(s => s.order_url)?.order_url
+       || null)
+    : resolvePrimaryURL(partGroup.entries, vendorId);
+  const allSources = partGroup.sources?.length
+    ? partGroup.sources
+    : getAllSources(partGroup.entries);
 
   // Single commitment — render inline (no expand needed)
   if (!isMulti) {
@@ -910,10 +918,22 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
                             part_id: pKey,
                             part_name: item.part_name || item.part?.part_name,
                             order_url: item.order_url,
+                            sources: [],
                             entries: [],
                           });
                         }
-                        partMap.get(pKey).entries.push({ item, idx });
+                        const pg = partMap.get(pKey);
+                        pg.entries.push({ item, idx });
+                        // Merge sources from each item into the part group
+                        for (const s of (item.sources || [])) {
+                          if (s.vendor_id && !pg.sources.find(ex => ex.vendor_id === s.vendor_id)) {
+                            pg.sources.push(s);
+                          }
+                        }
+                        // Also pick up best order_url if current group has none
+                        if (!pg.order_url && item.order_url) {
+                          pg.order_url = item.order_url;
+                        }
                       });
 
                       return Array.from(partMap.values()).map(partGroup => {
