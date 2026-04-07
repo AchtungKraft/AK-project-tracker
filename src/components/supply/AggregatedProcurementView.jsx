@@ -12,31 +12,61 @@ import {
 } from "@/components/ui/select";
 import {
   ChevronDown, ChevronUp, ShoppingCart, AlertTriangle,
-  ArrowUpDown, Layers, Package
+  ArrowUpDown, Package, ExternalLink, Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { PSMItemRow } from "@/components/supply/PSMGroupedCards";
 
 /**
- * AggregatedProcurementView - Part-level grouped procurement view
- * 
- * Groups commitment-level items by part_id + vendor_id to show
- * "what do we actually order?" instead of "what does each project need?"
- * 
- * CANONICAL: Aggregation is VISUAL ONLY - backend still receives commitment_ids.
+ * AggregatedProcurementView - Vendor → Part hierarchy procurement view
+ *
+ * HARD RULE: Never renders raw commitments at top level.
+ * Structure: Vendor → Part (aggregated) → commitments[] (expanded only)
+ *
+ * CANONICAL: Aggregation is VISUAL ONLY — backend still receives commitment_ids.
  */
 
+// ============================================================================
+// VENDOR SOURCE RESOLVER — canonical for order_url and unit_cost
+// ============================================================================
+export function resolveActiveVendorSource(part_id, vendor_id, item, vendorSourcesByPart) {
+  if (!vendor_id) return null;
+
+  // 1. Override sources (from VendorQueueView selection)
+  const overrideSources = vendorSourcesByPart?.[part_id] || [];
+  const override = overrideSources.find(s => s.vendor_id === vendor_id);
+  if (override) return override;
+
+  // 2. Item-embedded vendor_sources (from read model)
+  const sources = item?.vendor_sources || [];
+  const match = sources.find(s => s.vendor_id === vendor_id);
+  if (match) return match;
+
+  // 3. Fallback to item defaults if vendor matches
+  if (item?.vendor_id === vendor_id || item?.vendor?.id === vendor_id) {
+    return {
+      order_url: item.order_url,
+      unit_cost: item.resolved_unit_cost ?? item.unit_cost,
+      vendor_part_number: item.vendor_part_number ?? item.part?.vendor_part_number,
+    };
+  }
+
+  return null;
+}
+
+// ============================================================================
+// SORT OPTIONS
+// ============================================================================
 const SORT_OPTIONS = [
   { value: 'to_order_desc', label: 'Qty to Order (High → Low)' },
   { value: 'cost_desc', label: 'Total Cost (High → Low)' },
   { value: 'exposure_desc', label: 'Exposure (High → Low)' },
   { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'commitments_desc', label: 'Commitments (High → Low)' },
 ];
 
-function applySorting(items, sortMode) {
-  const sorted = [...items];
+function sortParts(parts, sortMode) {
+  const sorted = [...parts];
   switch (sortMode) {
     case 'to_order_desc':
       return sorted.sort((a, b) => b.total_to_order - a.total_to_order);
@@ -44,8 +74,6 @@ function applySorting(items, sortMode) {
       return sorted.sort((a, b) => b.total_cost - a.total_cost);
     case 'exposure_desc':
       return sorted.sort((a, b) => b.total_exposure - a.total_exposure);
-    case 'commitments_desc':
-      return sorted.sort((a, b) => b.commitments.length - a.commitments.length);
     case 'alphabetical':
       return sorted.sort((a, b) => (a.part_name || '').localeCompare(b.part_name || ''));
     default:
@@ -53,11 +81,11 @@ function applySorting(items, sortMode) {
   }
 }
 
-/**
- * AggregatedRow - Single part-level aggregated row with expandable commitments
- */
-function AggregatedRow({
-  agg,
+// ============================================================================
+// AGGREGATED PART ROW — one row per part per vendor
+// ============================================================================
+function AggregatedPartRow({
+  partAgg,
   isExpanded,
   onToggle,
   selectedItems,
@@ -71,63 +99,63 @@ function AggregatedRow({
   categoriesMap,
   vendorsMap,
 }) {
-  const allIds = agg.commitments.map(c => c.id);
-  const orderableIds = agg.commitments
+  const orderableIds = partAgg.commitments
     .filter(c => c.allowed?.canCreatePO && (c.to_order ?? 0) > 0)
     .map(c => c.id);
   const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
   const someSelected = orderableIds.some(id => selectedItems.has(id));
 
-  const projectNames = [...new Set(agg.commitments.map(c => c.project_name).filter(Boolean))];
+  const projectNames = [...new Set(partAgg.commitments.map(c => c.project_name).filter(Boolean))];
+  const isMultiProject = partAgg.commitments.length > 1;
 
   return (
-    <Card className="bg-black/40 border-gray-800 overflow-hidden">
-      {/* Aggregated Header */}
+    <div className="border-b border-gray-800/50 last:border-b-0">
+      {/* Part Row */}
       <div
-        className="flex items-center gap-2 p-2 md:p-3 cursor-pointer hover:bg-gray-800/30 transition-colors border-l-4 border-l-purple-600"
+        className="flex items-center gap-2 p-2 md:p-3 cursor-pointer hover:bg-gray-800/30 transition-colors"
         onClick={onToggle}
       >
-        {/* Select All */}
+        {/* Select All underlying commitments */}
         <Checkbox
           checked={allSelected}
           indeterminate={someSelected && !allSelected}
-          onCheckedChange={() => onSelectAll?.(agg.commitments)}
+          onCheckedChange={() => onSelectAll?.(partAgg.commitments)}
           onClick={(e) => e.stopPropagation()}
           disabled={orderableIds.length === 0}
         />
 
         {/* Expand */}
         {isExpanded ? (
-          <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <ChevronUp className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
         )}
 
         {/* Thumbnail */}
-        {agg.featured_photo && (
+        {partAgg.featured_photo && (
           <div className="w-8 h-8 bg-gray-800 rounded flex-shrink-0 overflow-hidden hidden sm:block">
-            <img src={agg.featured_photo} alt="" className="w-full h-full object-contain" />
+            <img src={partAgg.featured_photo} alt="" className="w-full h-full object-contain" />
           </div>
         )}
 
         {/* Part Info */}
-        <div className="flex-1 min-w-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPartClick?.({ id: partAgg.part_id }, partAgg.commitments[0]);
+          }}
+          className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
+        >
           <div className="flex items-center gap-2">
-            <p className="text-white text-sm font-medium truncate">{agg.part_name || 'Unknown Part'}</p>
-            {agg.commitments.length > 1 && (
+            <p className="text-white text-sm font-medium truncate">{partAgg.part_name}</p>
+            {isMultiProject && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50 whitespace-nowrap">
-                {agg.commitments.length} projects
+                {partAgg.commitments.length} projects
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 truncate">
-            {agg.vendor_part_number && <span className="font-mono">{agg.vendor_part_number}</span>}
-            {agg.vendor_name && (
-              <>
-                <span>·</span>
-                <span className="truncate">{agg.vendor_name}</span>
-              </>
-            )}
+            {partAgg.vendor_part_number && <span className="font-mono">{partAgg.vendor_part_number}</span>}
             {projectNames.length > 0 && (
               <>
                 <span>·</span>
@@ -137,24 +165,24 @@ function AggregatedRow({
               </>
             )}
           </div>
-        </div>
+        </button>
 
         {/* Aggregated Metrics */}
         <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono flex-shrink-0">
           <div className="text-center">
             <span className="text-gray-500 block">TO ORDER</span>
-            <span className={agg.total_to_order > 0 ? "text-red-400 font-semibold text-sm" : "text-gray-500"}>
-              {agg.total_to_order}
+            <span className={partAgg.total_to_order > 0 ? "text-red-400 font-semibold text-sm" : "text-gray-500"}>
+              {partAgg.total_to_order}
             </span>
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">COST</span>
-            <span className="text-yellow-400">{formatCurrencyUSD(agg.total_cost)}</span>
+            <span className="text-yellow-400">{formatCurrencyUSD(partAgg.total_cost)}</span>
           </div>
-          {agg.total_exposure > 0 && (
+          {partAgg.total_exposure > 0 && (
             <div className="text-center">
               <span className="text-gray-500 block">EXPO</span>
-              <span className="text-amber-400">{formatCurrencyUSD(agg.total_exposure)}</span>
+              <span className="text-amber-400">{formatCurrencyUSD(partAgg.total_exposure)}</span>
             </div>
           )}
         </div>
@@ -162,24 +190,32 @@ function AggregatedRow({
         {/* Mobile metrics */}
         <div className="flex lg:hidden items-center gap-2 flex-shrink-0">
           <Badge variant="secondary" className="bg-red-900/50 text-red-400 text-[10px]">
-            {agg.total_to_order} qty
+            {partAgg.total_to_order} qty
           </Badge>
         </div>
 
-        {/* Commitment count */}
-        <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px]">
-          {agg.commitments.length}
-        </Badge>
+        {/* Order URL link */}
+        {partAgg.order_url && (
+          <a
+            href={partAgg.order_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-blue-400 hover:text-blue-300 flex-shrink-0"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )}
       </div>
 
       {/* Expanded: Show underlying commitments */}
       {isExpanded && (
-        <div className="border-t border-gray-800">
+        <div className="ml-6 border-l-2 border-gray-700/50">
           <div className="px-3 py-1 bg-gray-900/30 text-[10px] text-gray-500 flex items-center gap-2">
             <Package className="w-3 h-3" />
-            Individual project commitments for this part:
+            Per-project commitments:
           </div>
-          {agg.commitments.map(commitment => (
+          {partAgg.commitments.map(commitment => (
             <PSMItemRow
               key={commitment.id}
               commitment={commitment}
@@ -197,13 +233,142 @@ function AggregatedRow({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// VENDOR GROUP CARD — contains aggregated parts for one vendor
+// ============================================================================
+function VendorGroupCard({
+  vendorGroup,
+  sortMode,
+  isExpanded,
+  onToggle,
+  expandedParts,
+  onTogglePart,
+  selectedItems,
+  onSelectAllVendor,
+  onSelectAllPart,
+  onItemSelect,
+  onPartClick,
+  onCreatePO,
+  onReceive,
+  onDeltaOrder,
+  onBatchPO,
+  actionsEnabled,
+  categoriesMap,
+  vendorsMap,
+}) {
+  const sortedParts = useMemo(
+    () => sortParts(vendorGroup.parts, sortMode),
+    [vendorGroup.parts, sortMode]
+  );
+
+  const totalQty = vendorGroup.parts.reduce((s, p) => s + p.total_to_order, 0);
+  const totalCost = vendorGroup.parts.reduce((s, p) => s + p.total_cost, 0);
+  const totalExposure = vendorGroup.parts.reduce((s, p) => s + p.total_exposure, 0);
+  const allCommitments = vendorGroup.parts.flatMap(p => p.commitments);
+  const orderableIds = allCommitments
+    .filter(c => c.allowed?.canCreatePO && (c.to_order ?? 0) > 0)
+    .map(c => c.id);
+  const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
+  const someSelected = orderableIds.some(id => selectedItems.has(id));
+
+  return (
+    <Card className="bg-black/40 border-gray-800 overflow-hidden">
+      {/* Vendor Header */}
+      <div
+        className="flex items-center gap-2 p-2 md:p-3 cursor-pointer hover:bg-gray-800/30 transition-colors border-l-4 border-l-blue-500"
+        onClick={onToggle}
+      >
+        <Checkbox
+          checked={allSelected}
+          indeterminate={someSelected && !allSelected}
+          onCheckedChange={() => onSelectAllVendor?.(allCommitments)}
+          onClick={(e) => e.stopPropagation()}
+          disabled={orderableIds.length === 0}
+        />
+
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        )}
+
+        <Building2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+
+        <span className="text-sm font-semibold text-white flex-1 truncate">
+          {vendorGroup.vendor_name || 'No Vendor'}
+        </span>
+
+        <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px]">
+          {sortedParts.length} parts
+        </Badge>
+
+        <div className="hidden md:flex items-center gap-3 text-[10px] font-mono">
+          <span className="text-gray-400">Qty <span className="text-red-400">{totalQty}</span></span>
+          <span className="text-gray-400">Cost <span className="text-yellow-400">{formatCurrencyUSD(totalCost)}</span></span>
+          {totalExposure > 0 && (
+            <span className="text-amber-400">
+              <AlertTriangle className="w-3 h-3 inline mr-0.5" />
+              {formatCurrencyUSD(totalExposure)}
+            </span>
+          )}
+        </div>
+
+        {orderableIds.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Select all orderable, then trigger batch
+              onSelectAllVendor?.(allCommitments);
+              setTimeout(() => onBatchPO?.(), 100);
+            }}
+            className="border-purple-700 text-purple-400 hover:bg-purple-900/30 h-6 text-[10px]"
+          >
+            <ShoppingCart className="w-3 h-3 mr-1" />
+            Order All
+          </Button>
+        )}
+      </div>
+
+      {/* Vendor Parts */}
+      {isExpanded && (
+        <div className="border-t border-gray-800">
+          {sortedParts.length === 0 ? (
+            <p className="text-center py-6 text-gray-500">No parts</p>
+          ) : (
+            sortedParts.map(partAgg => (
+              <AggregatedPartRow
+                key={partAgg.part_id}
+                partAgg={partAgg}
+                isExpanded={expandedParts.has(`${vendorGroup.vendor_id}::${partAgg.part_id}`)}
+                onToggle={() => onTogglePart(`${vendorGroup.vendor_id}::${partAgg.part_id}`)}
+                selectedItems={selectedItems}
+                onSelectAll={onSelectAllPart}
+                onItemSelect={onItemSelect}
+                onPartClick={onPartClick}
+                onCreatePO={onCreatePO}
+                onReceive={onReceive}
+                onDeltaOrder={onDeltaOrder}
+                actionsEnabled={actionsEnabled}
+                categoriesMap={categoriesMap}
+                vendorsMap={vendorsMap}
+              />
+            ))
+          )}
+        </div>
+      )}
     </Card>
   );
 }
 
-/**
- * AggregatedProcurementView - Main container
- */
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 export default function AggregatedProcurementView({
   items,
   selectedItems,
@@ -216,26 +381,45 @@ export default function AggregatedProcurementView({
   actionsEnabled = true,
   categoriesMap,
   vendorsMap,
+  vendorSourcesByPart = {},
 }) {
-  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [expandedVendors, setExpandedVendors] = useState(new Set(['__ALL__']));
+  const [expandedParts, setExpandedParts] = useState(new Set());
   const [sortMode, setSortMode] = useState('to_order_desc');
 
-  // AGGREGATION LAYER: Group by part_id + vendor_id
-  const aggregatedItems = useMemo(() => {
-    const map = new Map();
+  // ============================================================================
+  // AGGREGATION: Vendor → Part → Commitments[]
+  // HARD RULE: One row per part per vendor. Never raw commitments at top level.
+  // ============================================================================
+  const vendorGroups = useMemo(() => {
+    const vMap = new Map();
 
     for (const item of items) {
-      const key = `${item.part_id}::${item.vendor_id || item.vendor?.id || 'none'}`;
+      const vKey = item.vendor_id || item.vendor?.id || 'unassigned';
+      const vName = item.vendor_name || item.vendor?.vendor_name || 'No Vendor';
 
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          part_id: item.part_id,
+      if (!vMap.has(vKey)) {
+        vMap.set(vKey, {
+          vendor_id: vKey === 'unassigned' ? null : vKey,
+          vendor_name: vName,
+          partsMap: new Map(),
+        });
+      }
+
+      const vendor = vMap.get(vKey);
+      const pKey = item.part_id;
+
+      if (!vendor.partsMap.has(pKey)) {
+        // Resolve vendor source for order_url and cost
+        const source = resolveActiveVendorSource(pKey, vKey === 'unassigned' ? null : vKey, item, vendorSourcesByPart);
+
+        vendor.partsMap.set(pKey, {
+          part_id: pKey,
           part_name: item.part_name || item.part?.part_name || 'Unknown',
-          vendor_part_number: item.vendor_part_number || item.part?.vendor_part_number || null,
+          vendor_part_number: source?.vendor_part_number || item.vendor_part_number || item.part?.vendor_part_number || null,
           featured_photo: item.featured_photo || item.part?.featured_photo || null,
-          vendor_id: item.vendor_id || item.vendor?.id || null,
-          vendor_name: item.vendor_name || item.vendor?.vendor_name || null,
+          order_url: source?.order_url || item.order_url || null,
+          resolved_unit_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost ?? 0,
           total_to_order: 0,
           total_cost: 0,
           total_exposure: 0,
@@ -243,47 +427,85 @@ export default function AggregatedProcurementView({
         });
       }
 
-      const agg = map.get(key);
-      agg.total_to_order += (item.to_order ?? 0);
-      agg.total_cost += (item.resolved_cost_total ?? item.estimated_cost ?? item.planned_cost_total ?? 0);
-      agg.total_exposure += (item.resolved_exposure ?? item.exposure_gap ?? 0);
-      agg.commitments.push(item);
+      const part = vendor.partsMap.get(pKey);
+      const toOrder = item.to_order ?? 0;
+      part.total_to_order += toOrder;
+      part.total_cost += (item.resolved_cost_total ?? item.estimated_cost ?? item.planned_cost_total ?? 0);
+      part.total_exposure += (item.resolved_exposure ?? item.exposure_gap ?? 0);
+      part.commitments.push(item);
     }
 
-    return Array.from(map.values());
-  }, [items]);
+    // Convert maps to arrays and sort vendors alphabetically
+    const result = Array.from(vMap.values()).map(v => ({
+      ...v,
+      parts: Array.from(v.partsMap.values()),
+    }));
+    result.sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
 
-  // Apply sorting
-  const sortedAggregated = useMemo(() => {
-    return applySorting(aggregatedItems, sortMode);
-  }, [aggregatedItems, sortMode]);
+    return result;
+  }, [items, vendorSourcesByPart]);
 
-  // Aggregate stats
-  const stats = useMemo(() => ({
-    uniqueParts: aggregatedItems.length,
-    totalCommitments: items.length,
-    totalQty: aggregatedItems.reduce((s, a) => s + a.total_to_order, 0),
-    totalCost: aggregatedItems.reduce((s, a) => s + a.total_cost, 0),
-    totalExposure: aggregatedItems.reduce((s, a) => s + a.total_exposure, 0),
-    multiProjectParts: aggregatedItems.filter(a => a.commitments.length > 1).length,
-  }), [aggregatedItems, items.length]);
+  // DEV GUARD: Detect duplicate part rows within a vendor
+  if (import.meta.env.DEV) {
+    for (const vg of vendorGroups) {
+      const seen = new Set();
+      for (const p of vg.parts) {
+        const key = `${p.part_id}-${vg.vendor_id}`;
+        if (seen.has(key)) {
+          console.warn('[DUPLICATE PART ROW IN ORDER VIEW]', key, vg.vendor_name, p.part_name);
+        }
+        seen.add(key);
+      }
+    }
+  }
 
-  // Toggle row expansion
-  const toggleRow = (key) => {
-    setExpandedRows(prev => {
+  // Stats
+  const stats = useMemo(() => {
+    const allParts = vendorGroups.flatMap(v => v.parts);
+    return {
+      vendorCount: vendorGroups.length,
+      uniqueParts: allParts.length,
+      totalCommitments: items.length,
+      totalQty: allParts.reduce((s, p) => s + p.total_to_order, 0),
+      totalCost: allParts.reduce((s, p) => s + p.total_cost, 0),
+      totalExposure: allParts.reduce((s, p) => s + p.total_exposure, 0),
+      multiProjectParts: allParts.filter(p => p.commitments.length > 1).length,
+    };
+  }, [vendorGroups, items.length]);
+
+  // Expand/collapse helpers
+  const isVendorExpanded = (vKey) => expandedVendors.has('__ALL__') || expandedVendors.has(vKey);
+
+  const toggleVendor = (vKey) => {
+    setExpandedVendors(prev => {
+      if (prev.has('__ALL__')) {
+        // Switch from all-expanded to explicit — expand all except clicked
+        const next = new Set(vendorGroups.map(v => v.vendor_id || 'unassigned'));
+        next.delete(vKey);
+        return next;
+      }
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(vKey)) next.delete(vKey);
+      else next.add(vKey);
       return next;
     });
   };
 
-  // Select all in aggregated row
-  const selectAllInRow = (commitments) => {
+  const togglePart = (partKey) => {
+    setExpandedParts(prev => {
+      const next = new Set(prev);
+      if (next.has(partKey)) next.delete(partKey);
+      else next.add(partKey);
+      return next;
+    });
+  };
+
+  // Selection helpers — always operate on commitment_ids
+  const selectAllForGroup = (commitments) => {
     const orderableIds = commitments
       .filter(c => c.allowed?.canCreatePO && (c.to_order ?? 0) > 0)
       .map(c => c.id);
-    const allSelected = orderableIds.every(id => selectedItems.has(id));
+    const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
 
     setSelectedItems(prev => {
       const next = new Set(prev);
@@ -296,7 +518,6 @@ export default function AggregatedProcurementView({
     });
   };
 
-  // Select single item
   const selectItem = (commitmentId) => {
     setSelectedItems(prev => {
       const next = new Set(prev);
@@ -306,14 +527,18 @@ export default function AggregatedProcurementView({
     });
   };
 
-  if (items.length === 0) {
-    return null;
-  }
+  if (items.length === 0) return null;
 
   return (
     <div className="space-y-3">
-      {/* Aggregation Summary Bar */}
+      {/* Aggregation Summary */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+        <Card className="bg-black/40 border-blue-900/50">
+          <CardContent className="p-2 text-center">
+            <p className="text-[9px] text-gray-500 uppercase">Vendors</p>
+            <p className="text-lg font-bold text-blue-400">{stats.vendorCount}</p>
+          </CardContent>
+        </Card>
         <Card className="bg-black/40 border-purple-900/50">
           <CardContent className="p-2 text-center">
             <p className="text-[9px] text-gray-500 uppercase">Unique Parts</p>
@@ -324,14 +549,6 @@ export default function AggregatedProcurementView({
           <CardContent className="p-2 text-center">
             <p className="text-[9px] text-gray-500 uppercase">Commitments</p>
             <p className="text-lg font-bold text-gray-300">{stats.totalCommitments}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-black/40 border-blue-900/50">
-          <CardContent className="p-2 text-center">
-            <p className="text-[9px] text-gray-500 uppercase">Multi-Project</p>
-            <p className={cn("text-lg font-bold", stats.multiProjectParts > 0 ? "text-blue-400" : "text-gray-500")}>
-              {stats.multiProjectParts}
-            </p>
           </CardContent>
         </Card>
         <Card className="bg-black/40 border-red-900/50">
@@ -359,7 +576,7 @@ export default function AggregatedProcurementView({
       {/* Sort Control */}
       <div className="flex items-center gap-2">
         <ArrowUpDown className="w-4 h-4 text-gray-500" />
-        <span className="text-[10px] text-gray-500 uppercase">Sort</span>
+        <span className="text-[10px] text-gray-500 uppercase">Sort Parts</span>
         <Select value={sortMode} onValueChange={setSortMode}>
           <SelectTrigger className="w-52 h-8 text-xs bg-gray-900 border-gray-700">
             <SelectValue />
@@ -371,24 +588,32 @@ export default function AggregatedProcurementView({
           </SelectContent>
         </Select>
         <span className="text-[10px] text-gray-500 ml-2">
-          {stats.uniqueParts} parts from {stats.totalCommitments} commitments
+          {stats.vendorCount} vendors · {stats.uniqueParts} parts · {stats.totalCommitments} commitments
+          {stats.multiProjectParts > 0 && (
+            <span className="text-purple-400 ml-1">({stats.multiProjectParts} multi-project)</span>
+          )}
         </span>
       </div>
 
-      {/* Aggregated Rows */}
-      {sortedAggregated.map(agg => (
-        <AggregatedRow
-          key={agg.key}
-          agg={agg}
-          isExpanded={expandedRows.has(agg.key)}
-          onToggle={() => toggleRow(agg.key)}
+      {/* Vendor Groups */}
+      {vendorGroups.map(vg => (
+        <VendorGroupCard
+          key={vg.vendor_id || 'unassigned'}
+          vendorGroup={vg}
+          sortMode={sortMode}
+          isExpanded={isVendorExpanded(vg.vendor_id || 'unassigned')}
+          onToggle={() => toggleVendor(vg.vendor_id || 'unassigned')}
+          expandedParts={expandedParts}
+          onTogglePart={togglePart}
           selectedItems={selectedItems}
-          onSelectAll={selectAllInRow}
+          onSelectAllVendor={selectAllForGroup}
+          onSelectAllPart={selectAllForGroup}
           onItemSelect={selectItem}
           onPartClick={onPartClick}
           onCreatePO={onCreatePO}
           onReceive={onReceive}
           onDeltaOrder={onDeltaOrder}
+          onBatchPO={onBatchPO}
           actionsEnabled={actionsEnabled}
           categoriesMap={categoriesMap}
           vendorsMap={vendorsMap}

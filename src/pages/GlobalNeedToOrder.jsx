@@ -29,7 +29,7 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import VendorQueueView from "@/components/supply/VendorQueueView";
-import AggregatedProcurementView from "@/components/supply/AggregatedProcurementView";
+import AggregatedProcurementView, { resolveActiveVendorSource } from "@/components/supply/AggregatedProcurementView";
 // VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import { cn } from "@/lib/utils";
 
@@ -447,6 +447,7 @@ export default function GlobalNeedToOrder() {
                 onDeltaOrder={handleDeltaOrder}
                 onBatchPO={handleBatchCreatePO}
                 actionsEnabled={true}
+                vendorSourcesByPart={vendorSourcesByPart}
               />
             )
           ) : isLoading ? (
@@ -499,23 +500,31 @@ export default function GlobalNeedToOrder() {
 
       {showBatchOrderModal && (
         <CreateBatchOrderModal
-          selectedItems={getSelectedItemsData().map(item => ({
-            commitment_id: item.commitment_id,
-            part_id: item.part_id,
-            part_name: item.part_name,
-            vendor_id: item.vendor_id,
-            vendor_name: item.vendor_name,
-            project_id: item.project_id,
-            project_name: item.project_name,
-            qty_to_order: item.to_order,
-            estimated_cost: item.resolved_cost_total ?? item.estimated_cost,
-            default_cost: item.resolved_unit_cost ?? item.unit_cost,
-            default_retail: item.unit_retail,
-            order_url: item.order_url,
-            cost_source_tag: item.cost_source_tag,
-            invalid_cost: item.invalid_cost,
-            sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
-          }))}
+          selectedItems={getSelectedItemsData().map(item => {
+            const source = resolveActiveVendorSource(
+              item.part_id,
+              item.vendor_id,
+              item,
+              vendorSourcesByPart
+            );
+            return {
+              commitment_id: item.commitment_id,
+              part_id: item.part_id,
+              part_name: item.part_name,
+              vendor_id: item.vendor_id,
+              vendor_name: item.vendor_name,
+              project_id: item.project_id,
+              project_name: item.project_name,
+              qty_to_order: item.to_order,
+              estimated_cost: item.resolved_cost_total ?? item.estimated_cost,
+              default_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost,
+              default_retail: item.unit_retail,
+              order_url: source?.order_url ?? item.order_url,
+              cost_source_tag: item.cost_source_tag,
+              invalid_cost: item.invalid_cost,
+              sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
+            };
+          })}
           selectedVendorContext={selectedVendorContext}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {
