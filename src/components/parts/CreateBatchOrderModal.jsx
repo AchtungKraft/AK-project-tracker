@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarSign, Truck, AlertCircle, Link as LinkIcon } from "lucide-react";
 import { useSupplyAction } from "@/components/supply/useSupplyState";
 import { cn } from "@/lib/utils";
+import VendorSourceLink, { resolvePrimaryURL, getAllSources } from "@/components/parts/VendorSourceLink";
 
 /**
  * PartLineGroup - Aggregated part row within a vendor group
@@ -22,11 +23,15 @@ import { cn } from "@/lib/utils";
  */
 function PartLineGroup({
   partGroup, totalQty, totalCost, allMarked, isMulti,
-  vendorId, cartMarkedItems, toggleCartMarked,
+  vendorId, groupVendorName, cartMarkedItems, toggleCartMarked,
   updateLineItem, removeLineItem, moveItemToVendor,
   activeVendors, getProjectName,
 }) {
   const [expanded, setExpanded] = useState(false);
+
+  // Resolve primary URL and all sources for this part
+  const primaryUrl = resolvePrimaryURL(partGroup.entries, vendorId);
+  const allSources = getAllSources(partGroup.entries);
 
   // Single commitment — render inline (no expand needed)
   if (!isMulti) {
@@ -38,6 +43,7 @@ function PartLineGroup({
         updateLineItem={updateLineItem} removeLineItem={removeLineItem}
         moveItemToVendor={moveItemToVendor} activeVendors={activeVendors}
         getProjectName={getProjectName} showProject={true}
+        primaryUrl={primaryUrl} primaryVendorName={groupVendorName} allSources={allSources}
       />
     );
   }
@@ -72,17 +78,11 @@ function PartLineGroup({
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50">
               {partGroup.entries.length} projects
             </Badge>
-            {partGroup.order_url && partGroup.order_url.startsWith('http') && (
-              <a
-                href={partGroup.order_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 flex-shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <LinkIcon className="w-3 h-3" />
-              </a>
-            )}
+            <VendorSourceLink
+              primaryUrl={primaryUrl}
+              primaryVendorName={groupVendorName}
+              allSources={allSources}
+            />
           </div>
         </div>
         <span className="text-sm font-mono text-red-400 w-12 text-center">{totalQty}</span>
@@ -100,6 +100,7 @@ function PartLineGroup({
               updateLineItem={updateLineItem} removeLineItem={removeLineItem}
               moveItemToVendor={moveItemToVendor} activeVendors={activeVendors}
               getProjectName={getProjectName} showProject={true}
+              primaryUrl={null} primaryVendorName={null} allSources={[]}
             />
           ))}
         </div>
@@ -117,7 +118,12 @@ function SingleLineItem({
   updateLineItem, removeLineItem,
   moveItemToVendor, activeVendors,
   getProjectName, showProject,
+  primaryUrl, primaryVendorName, allSources,
 }) {
+  // If no explicit URL props passed, resolve from the single item's sources
+  const effectiveUrl = primaryUrl ?? resolvePrimaryURL([{ item }], vendorId) ?? (item.order_url?.startsWith('http') ? item.order_url : null);
+  const effectiveSources = allSources?.length > 0 ? allSources : getAllSources([{ item }]);
+
   return (
     <div
       className={cn(
@@ -152,18 +158,11 @@ function SingleLineItem({
             "text-sm truncate",
             cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
           )}>{item.part_name || item.part?.part_name}</p>
-          {item.order_url && item.order_url.startsWith('http') && (
-            <a
-              href={item.order_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 ml-1 flex-shrink-0"
-              onClick={(e) => e.stopPropagation()}
-              title="Open Vendor Page"
-            >
-              <LinkIcon className="w-3 h-3" />
-            </a>
-          )}
+          <VendorSourceLink
+            primaryUrl={effectiveUrl}
+            primaryVendorName={primaryVendorName}
+            allSources={effectiveSources}
+          />
         </div>
         {showProject && (
           <p className="text-xs text-gray-500">{getProjectName(item)}</p>
@@ -926,6 +925,7 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
                             allMarked={allMarked}
                             isMulti={isMulti}
                             vendorId={vendorId}
+                            groupVendorName={group.vendorName || getVendorName(vendorId, group.vendorName)}
                             cartMarkedItems={cartMarkedItems}
                             toggleCartMarked={toggleCartMarked}
                             updateLineItem={updateLineItem}
