@@ -500,16 +500,32 @@ Deno.serve(async (req) => {
         // Commitment status (canonical)
         commitment_status: c.commitment_status || 'planned',
 
-        // Multi-source info
-        vendor_sources: (sourcesByPart.get(c.part_id) || []).map(s => ({
-          source_id: s.id,
-          vendor_id: s.vendor_id,
-          vendor_name: vendorMap.get(s.vendor_id)?.vendor_name || 'Unknown',
-          unit_cost: s.unit_cost || 0,
-          is_preferred: s.is_preferred || false,
-          order_url: s.order_url || null,
-          vendor_part_number: s.vendor_part_number || null,
-        })),
+        // Multi-source info — synthesize fallback from Part if no PartVendorSource records exist
+        vendor_sources: (() => {
+          const realSources = (sourcesByPart.get(c.part_id) || []).map(s => ({
+            source_id: s.id,
+            vendor_id: s.vendor_id,
+            vendor_name: vendorMap.get(s.vendor_id)?.vendor_name || 'Unknown',
+            unit_cost: s.unit_cost || 0,
+            is_preferred: s.is_preferred || false,
+            order_url: s.order_url || null,
+            vendor_part_number: s.vendor_part_number || null,
+          }));
+          if (realSources.length > 0) return realSources;
+          // Fallback: synthesize from Part.default_vendor_id + Part.order_url
+          if (part?.default_vendor_id && (part?.order_url || (part?.cost ?? 0) > 0)) {
+            return [{
+              source_id: null,
+              vendor_id: part.default_vendor_id,
+              vendor_name: vendorMap.get(part.default_vendor_id)?.vendor_name || 'Unknown',
+              unit_cost: part.cost || 0,
+              is_preferred: true,
+              order_url: part.order_url || null,
+              vendor_part_number: part.vendor_part_number || null,
+            }];
+          }
+          return [];
+        })(),
         has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
 
         // PSM-compatible nested shape aliases (allows PSMGroupedView to consume this data)
