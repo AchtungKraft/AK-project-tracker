@@ -80,7 +80,24 @@ function PartLineGroup({
         {expanded ? <ChevronUp className="w-3 h-3 text-gray-500" /> : <ChevronDown className="w-3 h-3 text-gray-500" />}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm text-white truncate">{partGroup.part_name}</p>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-sm text-white truncate cursor-help">{partGroup.part_name}</p>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start" className="max-w-xs bg-black border border-gray-700 text-xs p-3 space-y-1">
+                  <div className="text-white font-medium leading-tight">{partGroup.part_name}</div>
+                  {partGroup.entries?.[0]?.item?.vendor_part_number && (
+                    <div className="text-gray-400 text-[11px]">#{partGroup.entries[0].item.vendor_part_number}</div>
+                  )}
+                  {(partGroup.entries?.[0]?.item?.part?.notes || partGroup.entries?.[0]?.item?.notes) && (
+                    <div className="text-gray-300 text-[11px] leading-snug">
+                      {partGroup.entries[0].item.part?.notes || partGroup.entries[0].item.notes}
+                    </div>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50">
               {partGroup.entries.length} projects
             </Badge>
@@ -164,10 +181,25 @@ function SingleLineItem({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
-          <p className={cn(
-            "text-sm truncate",
-            cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
-          )}>{item.part_name || item.part?.part_name}</p>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className={cn(
+                  "text-sm truncate cursor-help",
+                  cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
+                )}>{item.part_name || item.part?.part_name || 'Unknown Part'}</p>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-xs bg-black border border-gray-700 text-xs p-3 space-y-1">
+                <div className="text-white font-medium leading-tight">{item.part_name || item.part?.part_name || 'Unknown Part'}</div>
+                {(item.vendor_part_number || item.part?.vendor_part_number) && (
+                  <div className="text-gray-400 text-[11px]">#{item.vendor_part_number || item.part?.vendor_part_number}</div>
+                )}
+                {(item.part?.notes || item.notes) && (
+                  <div className="text-gray-300 text-[11px] leading-snug">{item.part?.notes || item.notes}</div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <VendorSourceLink
             primaryUrl={effectiveUrl}
             primaryVendorName={primaryVendorName}
