@@ -29,13 +29,11 @@ function PartLineGroup({
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  // Resolve primary URL and all sources for this part
-  // Use pre-merged partGroup.sources when available, fall back to entry-level resolution
+  // Resolve primary URL — STRICT: only match the current PO vendor, no cross-vendor fallback
   const primaryUrl = partGroup.sources?.length
-    ? (partGroup.sources.find(s => s.vendor_id === vendorId)?.order_url
-       || partGroup.order_url
-       || partGroup.sources.find(s => s.order_url)?.order_url
-       || null)
+    ? (vendorId && vendorId !== 'unassigned'
+        ? (partGroup.sources.find(s => s.vendor_id === vendorId)?.order_url || null)
+        : (partGroup.order_url || partGroup.sources.find(s => s.order_url)?.order_url || null))
     : resolvePrimaryURL(partGroup.entries, vendorId);
   const allSources = partGroup.sources?.length
     ? partGroup.sources
@@ -326,15 +324,16 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     for (const item of selectedItems) {
       if (Array.isArray(item.commitments) && item.commitments.length > 0) {
         const mergedSources = item.sources || [];
-        // Robust parent-level URL: aggregated order_url → first source with URL
-        const parentUrl = item.order_url || mergedSources.find(s => s.order_url)?.order_url || null;
         for (const c of item.commitments) {
+          // STRICT: resolve URL only for the child's actual vendor, no cross-vendor fallback
+          const childVendorId = selectedVendorContext?.vendor_id || c.vendor_id || item.vendor_id;
+          const childSource = mergedSources.find(s => s.vendor_id === childVendorId);
           flatItems.push({
             ...c,
             commitment_id: c.commitment_id,
             vendor_id: c.vendor_id || item.vendor_id,
             vendor_name: c.vendor_name || item.vendor_name,
-            order_url: parentUrl,
+            order_url: childSource?.order_url || null,
             default_cost: item.default_cost,
             sources: mergedSources,
             _agg_part_id: item.part_id,
@@ -611,37 +610,31 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
       };
     }
 
-    // Build vendor_override_map from modal grouping state
-    // Items that were moved to a different vendor group get override entries
+    // Build vendor_override_map and source_override_map for ALL grouped items
+    // STRICT: Always set source override when a matching source exists for the group vendor
     const vendorOverrideMap = {};
     const sourceOverrideMap = {};
     for (const [groupVendorId, group] of Object.entries(vendorGroups)) {
       for (const item of group.items) {
-        if (!item.commitment_id) continue;
-        const originalVendorId = item.vendor_id || 'unassigned';
-        // If item is in a group different from its original vendor, set override
-        if (groupVendorId !== originalVendorId && groupVendorId !== 'unassigned') {
-          vendorOverrideMap[item.commitment_id] = groupVendorId;
-          // If there's a matching source, include it
-          const sources = item.sources || [];
-          const matchingSource = sources.find(s => s.vendor_id === groupVendorId);
-          if (matchingSource) {
-            sourceOverrideMap[item.commitment_id] = {
-              vendor_id: groupVendorId,
-              source_id: matchingSource.id,
-              source_cost: matchingSource.unit_cost || 0,
-            };
-          }
-        }
-        // Also set overrides for vendor context items (even if they match default)
-        if (selectedVendorContext?.vendor_id === groupVendorId) {
-          vendorOverrideMap[item.commitment_id] = groupVendorId;
+        if (!item.commitment_id || groupVendorId === 'unassigned') continue;
+
+        vendorOverrideMap[item.commitment_id] = groupVendorId;
+
+        const sources = item.sources || [];
+        const matchingSource = sources.find(s => s.vendor_id === groupVendorId);
+        if (matchingSource) {
+          sourceOverrideMap[item.commitment_id] = {
+            vendor_id: groupVendorId,
+            source_id: matchingSource.source_id || matchingSource.id || null,
+            source_cost: matchingSource.unit_cost || 0,
+            source_url: matchingSource.order_url || '',
+            source_vendor_part_number: matchingSource.vendor_part_number || '',
+          };
         }
       }
     }
 
-    // Build qty_override_map from modal's user-edited quantities
-    // This is the ONLY authoritative source for ordered qty — backend MUST use it
+    // Build qty_override_map and cost_override_map from modal's user-edited values
     const qtyOverrideMap = {};
     const costOverrideMap = {};
     for (const [groupVendorId, group] of Object.entries(vendorGroups)) {

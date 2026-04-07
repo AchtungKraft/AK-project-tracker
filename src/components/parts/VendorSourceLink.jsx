@@ -9,22 +9,24 @@ import {
 
 /**
  * Resolve the primary URL for a part based on the PO vendor.
- * Priority: sources matching vendor → any item.order_url fallback
+ * STRICT: When a group vendor is known, only return that vendor's URL.
+ * No cross-vendor fallback — prevents label/URL mismatch.
  */
 export function resolvePrimaryURL(partEntries, groupVendorId) {
   const vendorId = groupVendorId;
 
-  // 1. Scan all entries for a source matching this vendor
+  // Strict vendor match — no cross-vendor fallback
   if (vendorId && vendorId !== 'unassigned') {
     for (const entry of partEntries) {
       const item = entry.item || entry;
       const sources = item.sources || item.vendor_sources || [];
-      const match = sources.find(s => s.vendor_id === vendorId);
-      if (match?.order_url) return match.order_url;
+      const match = sources.find(s => s.vendor_id === vendorId && s.order_url);
+      if (match) return match.order_url;
     }
+    return null; // No URL for this vendor — do NOT fall back to another vendor
   }
 
-  // 2. Fallback: any entry's order_url
+  // Only for unassigned / no vendor context: use generic fallbacks
   for (const entry of partEntries) {
     const item = entry.item || entry;
     if (item.order_url && typeof item.order_url === 'string' && item.order_url.startsWith('http')) {
@@ -32,13 +34,11 @@ export function resolvePrimaryURL(partEntries, groupVendorId) {
     }
   }
 
-  // 3. Fallback: first source with any order_url
   for (const entry of partEntries) {
     const item = entry.item || entry;
     const sources = item.sources || item.vendor_sources || [];
-    for (const s of sources) {
-      if (s.order_url) return s.order_url;
-    }
+    const any = sources.find(s => s.order_url);
+    if (any) return any.order_url;
   }
 
   return null;
