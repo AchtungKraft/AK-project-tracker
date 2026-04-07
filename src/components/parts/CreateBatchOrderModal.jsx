@@ -59,6 +59,10 @@ function PartLineGroup({
   // Multi-commitment — aggregated row with expand
   return (
     <div className="rounded border border-gray-700/50">
+      {/* DIAGNOSTIC: Visual debug strip */}
+      <div className="text-[10px] text-yellow-500 px-2 py-0.5 bg-yellow-900/10 border-b border-yellow-700/20">
+        DEBUG: sources={partGroup.sources?.length || 0} | urls={partGroup.sources?.filter(s => s.order_url)?.length || 0} | order_url={primaryUrl ? '✓' : '✗'}
+      </div>
       {/* Aggregated header */}
       <div
         className={cn(
@@ -280,6 +284,17 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     });
   };
   
+  // DIAGNOSTIC: Log modal input data
+  console.log('[MODAL INPUT] selectedItems', selectedItems.map(i => ({
+    part_id: i.part_id,
+    part_name: i.part_name,
+    vendor_id: i.vendor_id,
+    order_url: i.order_url,
+    sources_count: i.sources?.length,
+    sources: i.sources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url, vendor_name: s.vendor_name })),
+    commitments_count: i.commitments?.length,
+  })));
+
   // PHASE 10B: Validate items — aggregated items use commitments[], legacy use commitment_id
   const isAggregated = selectedItems.some(item => Array.isArray(item.commitments) && item.commitments.length > 0);
   if (!isAggregated) {
@@ -328,6 +343,13 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
         const mergedSources = item.sources || [];
         // Robust parent-level URL: aggregated order_url → first source with URL
         const parentUrl = item.order_url || mergedSources.find(s => s.order_url)?.order_url || null;
+        // DIAGNOSTIC: trace flattening
+        console.log('[MODAL FLATTEN]', {
+          part_name: item.part_name,
+          parentUrl,
+          mergedSources_count: mergedSources.length,
+          mergedSources: mergedSources.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url })),
+        });
         for (const c of item.commitments) {
           flatItems.push({
             ...c,
@@ -924,6 +946,14 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
                         }
                         const pg = partMap.get(pKey);
                         pg.entries.push({ item, idx });
+                        // DIAGNOSTIC: trace item sources during part grouping
+                        console.log('[MODAL PART GROUP BUILD]', {
+                          part_id: pKey,
+                          part_name: item.part_name,
+                          item_sources_count: item.sources?.length,
+                          item_sources: item.sources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url })),
+                          item_order_url: item.order_url,
+                        });
                         // Merge sources from each item into the part group
                         for (const s of (item.sources || [])) {
                           if (s.vendor_id && !pg.sources.find(ex => ex.vendor_id === s.vendor_id)) {
@@ -935,6 +965,18 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
                           pg.order_url = item.order_url;
                         }
                       });
+
+                      // DIAGNOSTIC: log final part groups
+                      for (const pg of partMap.values()) {
+                        console.log('[MODAL FINAL PART GROUP]', {
+                          part_id: pg.part_id,
+                          part_name: pg.part_name,
+                          entries_count: pg.entries.length,
+                          merged_sources_count: pg.sources?.length,
+                          merged_sources: pg.sources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url })),
+                          order_url: pg.order_url,
+                        });
+                      }
 
                       return Array.from(partMap.values()).map(partGroup => {
                         const totalQty = partGroup.entries.reduce((s, e) => s + (e.item.qty_to_order || 0), 0);

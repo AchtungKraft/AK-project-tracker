@@ -580,6 +580,22 @@ export default function GlobalNeedToOrder() {
                 || agg.sources.find(s => s.order_url)?.order_url
                 || null;
               agg.default_cost = primary?.unit_cost || agg.commitments[0]?.default_cost || 0;
+
+              // DIAGNOSTIC: trace source data through aggregation
+              console.log('[GNO AGGREGATED PART]', {
+                part_name: agg.part_name,
+                part_id: agg.part_id,
+                sources_count: agg.sources?.length,
+                sources_with_urls: agg.sources?.filter(s => s.order_url)?.length,
+                sources: agg.sources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url, vendor_name: s.vendor_name })),
+                order_url: agg.order_url,
+                override_sources_count: overrideSources.length,
+                commitment_vendor_sources: agg.commitments.map(c => ({
+                  commitment_id: c.commitment_id,
+                  vendor_sources_count: c.vendor_sources?.length,
+                  vendor_sources: c.vendor_sources?.map(vs => ({ vendor_id: vs.vendor_id, order_url: vs.order_url })),
+                })),
+              });
             }
 
             return Array.from(map.values());

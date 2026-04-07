@@ -79,6 +79,14 @@ export function getAllSources(partEntries) {
  *  - allSources: array from getAllSources()
  */
 export default function VendorSourceLink({ primaryUrl, primaryVendorName, allSources = [] }) {
+  // DIAGNOSTIC: trace what VendorSourceLink receives
+  console.log('[VendorSourceLink DEBUG]', {
+    primaryUrl,
+    primaryVendorName,
+    allSources_count: allSources?.length,
+    allSources: allSources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url, vendor_name: s.vendor_name })),
+    sources_with_urls: allSources?.filter(s => s.order_url)?.length,
+  });
   // Filter sources that have URLs for the popover
   const sourcesWithUrls = allSources.filter(s => s.order_url);
   const hasMultiple = sourcesWithUrls.length > 1;
