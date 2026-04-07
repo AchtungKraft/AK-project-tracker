@@ -29,6 +29,7 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import VendorQueueView from "@/components/supply/VendorQueueView";
+import AggregatedProcurementView from "@/components/supply/AggregatedProcurementView";
 // VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import { cn } from "@/lib/utils";
 
@@ -67,7 +68,7 @@ export default function GlobalNeedToOrder() {
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [editingPartId, setEditingPartId] = useState(null);
-  const [viewMode, setViewMode] = useState('parts'); // 'parts' | 'vendors'
+  const [viewMode, setViewMode] = useState('procurement'); // 'procurement' | 'parts' | 'vendors'
   const [selectedVendorContext, setSelectedVendorContext] = useState(null); // { vendor_id, vendor_name }
   const [vendorSourcesByPart, setVendorSourcesByPart] = useState({}); // part_id -> PartVendorSource[]
 
@@ -241,6 +242,18 @@ export default function GlobalNeedToOrder() {
               {/* View Mode Toggle */}
               <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700">
                 <Button
+                  variant={viewMode === 'procurement' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('procurement')}
+                  className={cn(
+                    "gap-1.5 h-7 text-xs",
+                    viewMode === 'procurement' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  Order
+                </Button>
+                <Button
                   variant={viewMode === 'parts' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('parts')}
@@ -250,7 +263,7 @@ export default function GlobalNeedToOrder() {
                   )}
                 >
                   <List className="w-3.5 h-3.5" />
-                  Parts
+                  Commitments
                 </Button>
                 <Button
                   variant={viewMode === 'vendors' ? 'default' : 'ghost'}
@@ -392,7 +405,7 @@ export default function GlobalNeedToOrder() {
           {/* PSM Summary Strip */}
           <PSMSummaryStrip items={filteredItems} tab="buy" />
 
-          {/* Main Content — Parts or Vendors view */}
+          {/* Main Content — Procurement, Parts, or Vendors view */}
           {viewMode === 'vendors' ? (
             isLoading ? (
               <Card className="bg-black/40 border-gray-800">
@@ -408,6 +421,32 @@ export default function GlobalNeedToOrder() {
                   setVendorSourcesByPart(sourcesByPartId || {});
                   setViewMode('parts');
                 }}
+              />
+            )
+          ) : viewMode === 'procurement' ? (
+            isLoading ? (
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
+              </Card>
+            ) : filteredItems.length === 0 ? (
+              <Card className="bg-black/40 border-gray-800">
+                <CardContent className="p-8 text-center">
+                  <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
+                  <p className="text-gray-400">No items need ordering</p>
+                  <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <AggregatedProcurementView
+                items={filteredItems}
+                selectedItems={selectedItems}
+                setSelectedItems={setSelectedItems}
+                onPartClick={handlePartClick}
+                onCreatePO={handleCreatePO}
+                onReceive={handleReceive}
+                onDeltaOrder={handleDeltaOrder}
+                onBatchPO={handleBatchCreatePO}
+                actionsEnabled={true}
               />
             )
           ) : isLoading ? (
