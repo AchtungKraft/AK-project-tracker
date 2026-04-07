@@ -9,24 +9,36 @@ import {
 
 /**
  * Resolve the primary URL for a part based on the PO vendor.
- * Priority: override sources → commitment sources → item fallback
+ * Priority: sources matching vendor → any item.order_url fallback
  */
 export function resolvePrimaryURL(partEntries, groupVendorId) {
   const vendorId = groupVendorId;
-  if (!vendorId || vendorId === 'unassigned') return null;
 
-  // Scan all entries for a source matching this vendor
+  // 1. Scan all entries for a source matching this vendor
+  if (vendorId && vendorId !== 'unassigned') {
+    for (const entry of partEntries) {
+      const item = entry.item || entry;
+      const sources = item.sources || item.vendor_sources || [];
+      const match = sources.find(s => s.vendor_id === vendorId);
+      if (match?.order_url) return match.order_url;
+    }
+  }
+
+  // 2. Fallback: any entry's order_url
+  for (const entry of partEntries) {
+    const item = entry.item || entry;
+    if (item.order_url && typeof item.order_url === 'string' && item.order_url.startsWith('http')) {
+      return item.order_url;
+    }
+  }
+
+  // 3. Fallback: first source with any order_url
   for (const entry of partEntries) {
     const item = entry.item || entry;
     const sources = item.sources || item.vendor_sources || [];
-    const match = sources.find(s => s.vendor_id === vendorId);
-    if (match?.order_url) return match.order_url;
-  }
-
-  // Fallback: first entry's order_url if it belongs to this vendor
-  const first = partEntries[0]?.item || partEntries[0];
-  if (first?.order_url && first.order_url.startsWith('http')) {
-    return first.order_url;
+    for (const s of sources) {
+      if (s.order_url) return s.order_url;
+    }
   }
 
   return null;
@@ -35,6 +47,7 @@ export function resolvePrimaryURL(partEntries, groupVendorId) {
 /**
  * Collect all unique vendor sources across all commitments for a part.
  * Returns array of { vendor_id, vendor_name, order_url, unit_cost }
+ * Includes sources even if they lack order_url (for display purposes).
  */
 export function getAllSources(partEntries) {
   const map = new Map();
@@ -43,11 +56,11 @@ export function getAllSources(partEntries) {
     const item = entry.item || entry;
     const sources = item.sources || item.vendor_sources || [];
     for (const s of sources) {
-      if (s.vendor_id && s.order_url && !map.has(s.vendor_id)) {
+      if (s.vendor_id && !map.has(s.vendor_id)) {
         map.set(s.vendor_id, {
           vendor_id: s.vendor_id,
           vendor_name: s.vendor_name || s.vendor_id,
-          order_url: s.order_url,
+          order_url: s.order_url || null,
           unit_cost: s.unit_cost,
         });
       }
@@ -66,17 +79,20 @@ export function getAllSources(partEntries) {
  *  - allSources: array from getAllSources()
  */
 export default function VendorSourceLink({ primaryUrl, primaryVendorName, allSources = [] }) {
-  const hasMultiple = allSources.length > 1;
-  const hasAny = primaryUrl || allSources.length > 0;
+  // Filter sources that have URLs for the popover
+  const sourcesWithUrls = allSources.filter(s => s.order_url);
+  const hasMultiple = sourcesWithUrls.length > 1;
+  const hasAny = primaryUrl || sourcesWithUrls.length > 0;
 
   if (!hasAny) return null;
 
-  // Single source — just a labeled link
+  // Single source or no popover needed — just a labeled link
   if (!hasMultiple) {
-    if (!primaryUrl) return null;
+    const url = primaryUrl || sourcesWithUrls[0]?.order_url;
+    if (!url) return null;
     return (
       <a
-        href={primaryUrl}
+        href={url}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-[10px] flex-shrink-0"
@@ -112,7 +128,7 @@ export default function VendorSourceLink({ primaryUrl, primaryVendorName, allSou
         <div className="text-[10px] text-gray-500 px-2 py-1 uppercase tracking-wider">
           Available Sources
         </div>
-        {allSources.map(source => {
+        {sourcesWithUrls.map(source => {
           const isPrimary = source.order_url === primaryUrl;
           return (
             <a
