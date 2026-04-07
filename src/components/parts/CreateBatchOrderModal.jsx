@@ -309,11 +309,14 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     const groups = {};
 
     // Flatten aggregated items into commitment-level entries for backend,
-    // but preserve aggregated display info
+    // but preserve aggregated display info + FULL merged sources from parent
     const flatItems = [];
     for (const item of selectedItems) {
       if (Array.isArray(item.commitments) && item.commitments.length > 0) {
         // Aggregated item — expand into commitment-level entries
+        // CRITICAL: Each entry gets the PARENT's merged sources array,
+        // not just the commitment's own vendor_sources
+        const mergedSources = item.sources || [];
         for (const c of item.commitments) {
           flatItems.push({
             ...c,
@@ -322,8 +325,8 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
             vendor_name: c.vendor_name || item.vendor_name,
             order_url: item.order_url,
             default_cost: item.default_cost,
-            sources: c.sources || item.sources || [],
-            _agg_part_id: item.part_id, // track aggregation parent
+            sources: mergedSources,
+            _agg_part_id: item.part_id,
           });
         }
       } else {

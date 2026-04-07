@@ -501,27 +501,50 @@ export default function GlobalNeedToOrder() {
       {showBatchOrderModal && (
         <CreateBatchOrderModal
           selectedItems={(() => {
+            // Merge all vendor sources across commitments + override context
+            function mergeSources(commitments, overrideSources) {
+              const srcMap = new Map();
+              for (const c of commitments) {
+                for (const s of (c.vendor_sources || [])) {
+                  if (s.vendor_id && !srcMap.has(s.vendor_id)) {
+                    srcMap.set(s.vendor_id, s);
+                  }
+                }
+              }
+              for (const s of overrideSources) {
+                if (s.vendor_id && !srcMap.has(s.vendor_id)) {
+                  srcMap.set(s.vendor_id, s);
+                }
+              }
+              return Array.from(srcMap.values());
+            }
+
+            // Resolve primary source from merged sources
+            function resolvePrimarySource(mergedSources, vendorId) {
+              if (!vendorId || vendorId === 'unassigned') return null;
+              return mergedSources.find(s => s.vendor_id === vendorId) || null;
+            }
+
             // AGGREGATION: One row per part per vendor
             const map = new Map();
-            for (const item of getSelectedItemsData()) {
+            const allItems = getSelectedItemsData();
+            
+            for (const item of allItems) {
               const vid = item.vendor_id || item.vendor?.id || 'unassigned';
               const key = `${item.part_id}::${vid}`;
               if (!map.has(key)) {
-                const source = resolveActiveVendorSource(item.part_id, vid === 'unassigned' ? null : vid, item, vendorSourcesByPart);
                 map.set(key, {
-                  // Aggregated identity
                   part_id: item.part_id,
                   part_name: item.part_name,
                   vendor_id: item.vendor_id,
                   vendor_name: item.vendor_name,
-                  // Resolved source fields
-                  order_url: source?.order_url ?? item.order_url,
-                  default_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost,
                   default_retail: item.unit_retail,
                   cost_source_tag: item.cost_source_tag,
                   invalid_cost: item.invalid_cost,
-                  sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
-                  // Aggregation accumulators
+                  // Placeholders — resolved after all commitments collected
+                  order_url: null,
+                  default_cost: 0,
+                  sources: [],
                   qty_to_order: 0,
                   estimated_cost: 0,
                   commitments: [],
@@ -540,9 +563,21 @@ export default function GlobalNeedToOrder() {
                 project_name: item.project_name,
                 qty_to_order: item.to_order,
                 default_cost: item.resolved_unit_cost ?? item.unit_cost,
-                sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
+                vendor_sources: item.vendor_sources || [],
               });
             }
+
+            // Post-aggregation: merge sources + resolve primary for each group
+            for (const agg of map.values()) {
+              const overrideSources = vendorSourcesByPart[agg.part_id] || [];
+              agg.sources = mergeSources(agg.commitments, overrideSources);
+
+              const effectiveVid = selectedVendorContext?.vendor_id || agg.vendor_id;
+              const primary = resolvePrimarySource(agg.sources, effectiveVid);
+              agg.order_url = primary?.order_url || null;
+              agg.default_cost = primary?.unit_cost || agg.commitments[0]?.default_cost || 0;
+            }
+
             return Array.from(map.values());
           })()}
           selectedVendorContext={selectedVendorContext}
