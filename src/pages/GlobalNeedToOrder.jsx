@@ -500,31 +500,51 @@ export default function GlobalNeedToOrder() {
 
       {showBatchOrderModal && (
         <CreateBatchOrderModal
-          selectedItems={getSelectedItemsData().map(item => {
-            const source = resolveActiveVendorSource(
-              item.part_id,
-              item.vendor_id,
-              item,
-              vendorSourcesByPart
-            );
-            return {
-              commitment_id: item.commitment_id,
-              part_id: item.part_id,
-              part_name: item.part_name,
-              vendor_id: item.vendor_id,
-              vendor_name: item.vendor_name,
-              project_id: item.project_id,
-              project_name: item.project_name,
-              qty_to_order: item.to_order,
-              estimated_cost: item.resolved_cost_total ?? item.estimated_cost,
-              default_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost,
-              default_retail: item.unit_retail,
-              order_url: source?.order_url ?? item.order_url,
-              cost_source_tag: item.cost_source_tag,
-              invalid_cost: item.invalid_cost,
-              sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
-            };
-          })}
+          selectedItems={(() => {
+            // AGGREGATION: One row per part per vendor
+            const map = new Map();
+            for (const item of getSelectedItemsData()) {
+              const vid = item.vendor_id || item.vendor?.id || 'unassigned';
+              const key = `${item.part_id}::${vid}`;
+              if (!map.has(key)) {
+                const source = resolveActiveVendorSource(item.part_id, vid === 'unassigned' ? null : vid, item, vendorSourcesByPart);
+                map.set(key, {
+                  // Aggregated identity
+                  part_id: item.part_id,
+                  part_name: item.part_name,
+                  vendor_id: item.vendor_id,
+                  vendor_name: item.vendor_name,
+                  // Resolved source fields
+                  order_url: source?.order_url ?? item.order_url,
+                  default_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost,
+                  default_retail: item.unit_retail,
+                  cost_source_tag: item.cost_source_tag,
+                  invalid_cost: item.invalid_cost,
+                  sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
+                  // Aggregation accumulators
+                  qty_to_order: 0,
+                  estimated_cost: 0,
+                  commitments: [],
+                });
+              }
+              const agg = map.get(key);
+              agg.qty_to_order += (item.to_order ?? 0);
+              agg.estimated_cost += (item.resolved_cost_total ?? item.estimated_cost ?? 0);
+              agg.commitments.push({
+                commitment_id: item.commitment_id,
+                part_id: item.part_id,
+                part_name: item.part_name,
+                vendor_id: item.vendor_id,
+                vendor_name: item.vendor_name,
+                project_id: item.project_id,
+                project_name: item.project_name,
+                qty_to_order: item.to_order,
+                default_cost: item.resolved_unit_cost ?? item.unit_cost,
+                sources: item.vendor_sources || vendorSourcesByPart[item.part_id] || [],
+              });
+            }
+            return Array.from(map.values());
+          })()}
           selectedVendorContext={selectedVendorContext}
           onClose={() => setShowBatchOrderModal(false)}
           onSuccess={() => {

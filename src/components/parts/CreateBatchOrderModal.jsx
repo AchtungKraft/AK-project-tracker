@@ -17,6 +17,218 @@ import { useSupplyAction } from "@/components/supply/useSupplyState";
 import { cn } from "@/lib/utils";
 
 /**
+ * PartLineGroup - Aggregated part row within a vendor group
+ * Shows one row per part with expandable per-project commitment breakdown
+ */
+function PartLineGroup({
+  partGroup, totalQty, totalCost, allMarked, isMulti,
+  vendorId, cartMarkedItems, toggleCartMarked,
+  updateLineItem, removeLineItem, moveItemToVendor,
+  activeVendors, getProjectName,
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Single commitment — render inline (no expand needed)
+  if (!isMulti) {
+    const { item, idx } = partGroup.entries[0];
+    return (
+      <SingleLineItem
+        item={item} idx={idx} vendorId={vendorId}
+        cartMarkedItems={cartMarkedItems} toggleCartMarked={toggleCartMarked}
+        updateLineItem={updateLineItem} removeLineItem={removeLineItem}
+        moveItemToVendor={moveItemToVendor} activeVendors={activeVendors}
+        getProjectName={getProjectName} showProject={true}
+      />
+    );
+  }
+
+  // Multi-commitment — aggregated row with expand
+  return (
+    <div className="rounded border border-gray-700/50">
+      {/* Aggregated header */}
+      <div
+        className={cn(
+          "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-800/30 transition-colors",
+          allMarked && "bg-green-900/20"
+        )}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <Checkbox
+          checked={allMarked}
+          onCheckedChange={() => {
+            partGroup.entries.forEach(e => {
+              if (allMarked || !cartMarkedItems.has(e.item.commitment_id)) {
+                toggleCartMarked(e.item.commitment_id);
+              }
+            });
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="border-gray-600"
+        />
+        {expanded ? <ChevronUp className="w-3 h-3 text-gray-500" /> : <ChevronDown className="w-3 h-3 text-gray-500" />}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-white truncate">{partGroup.part_name}</p>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50">
+              {partGroup.entries.length} projects
+            </Badge>
+            {partGroup.order_url && partGroup.order_url.startsWith('http') && (
+              <a
+                href={partGroup.order_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <LinkIcon className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        </div>
+        <span className="text-sm font-mono text-red-400 w-12 text-center">{totalQty}</span>
+        <span className="text-xs text-gray-400 font-mono w-20 text-right">${totalCost.toFixed(2)}</span>
+      </div>
+
+      {/* Expanded: per-project commitment lines */}
+      {expanded && (
+        <div className="border-t border-gray-700/50 ml-4">
+          {partGroup.entries.map(({ item, idx }) => (
+            <SingleLineItem
+              key={item.commitment_id || idx}
+              item={item} idx={idx} vendorId={vendorId}
+              cartMarkedItems={cartMarkedItems} toggleCartMarked={toggleCartMarked}
+              updateLineItem={updateLineItem} removeLineItem={removeLineItem}
+              moveItemToVendor={moveItemToVendor} activeVendors={activeVendors}
+              getProjectName={getProjectName} showProject={true}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * SingleLineItem - Individual commitment line within the modal
+ */
+function SingleLineItem({
+  item, idx, vendorId,
+  cartMarkedItems, toggleCartMarked,
+  updateLineItem, removeLineItem,
+  moveItemToVendor, activeVendors,
+  getProjectName, showProject,
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 p-2 bg-gray-800/30 rounded transition-colors",
+        cartMarkedItems.has(item.commitment_id) && "bg-green-900/20 border border-green-700/30"
+      )}
+    >
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Checkbox
+                checked={cartMarkedItems.has(item.commitment_id)}
+                onCheckedChange={() => toggleCartMarked(item.commitment_id)}
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "border-gray-600",
+                  cartMarkedItems.has(item.commitment_id) && "border-green-500 data-[state=checked]:bg-green-600"
+                )}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {cartMarkedItems.has(item.commitment_id) ? "Added to cart" : "Mark as added to cart"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1">
+          <p className={cn(
+            "text-sm truncate",
+            cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
+          )}>{item.part_name || item.part?.part_name}</p>
+          {item.order_url && item.order_url.startsWith('http') && (
+            <a
+              href={item.order_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 ml-1 flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+              title="Open Vendor Page"
+            >
+              <LinkIcon className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+        {showProject && (
+          <p className="text-xs text-gray-500">{getProjectName(item)}</p>
+        )}
+      </div>
+
+      {vendorId === 'unassigned' && (
+        <Select value="" onValueChange={(v) => moveItemToVendor(vendorId, idx, v)}>
+          <SelectTrigger className="w-32 h-7 bg-gray-800 border-gray-600 text-xs">
+            <SelectValue placeholder="Assign vendor" />
+          </SelectTrigger>
+          <SelectContent>
+            {activeVendors.filter(v => !v.parent_id).map(v => (
+              <SelectItem key={v.id} value={v.id} className="text-xs">{v.vendor_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <Input
+        type="number"
+        min="1"
+        value={item.qty_to_order}
+        onChange={(e) => updateLineItem(vendorId, idx, 'qty_to_order', parseInt(e.target.value) || 1)}
+        className="w-16 h-7 bg-gray-800 border-gray-700 text-sm text-center"
+      />
+
+      <div className="flex items-center gap-1 w-28">
+        <span className="text-gray-500 text-xs">$</span>
+        <Input
+          type="number"
+          step="0.01"
+          min="0"
+          value={item.unit_cost}
+          onChange={(e) => updateLineItem(vendorId, idx, 'unit_cost', parseFloat(e.target.value) || 0)}
+          className={cn(
+            "h-7 bg-gray-800 text-sm",
+            item.cost_overridden ? "border-yellow-600 bg-yellow-900/20" : "border-gray-700",
+            (!item.unit_cost || item.unit_cost <= 0) && "border-red-600 bg-red-900/20"
+          )}
+          title={item.cost_overridden ? `Original: $${item.original_cost?.toFixed(2)}` : "Unit Cost"}
+          placeholder="Unit Cost"
+        />
+        {item.cost_overridden && (
+          <span className="text-yellow-500 text-xs" title="Cost manually overridden">*</span>
+        )}
+      </div>
+
+      <span className="text-xs text-gray-400 w-16 text-right">
+        ${((item.qty_to_order || 0) * (item.unit_cost || 0)).toFixed(2)}
+      </span>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => removeLineItem(vendorId, idx)}
+        className="h-7 w-7 text-gray-500 hover:text-red-400"
+      >
+        <Trash2 className="w-3 h-3" />
+      </Button>
+    </div>
+  );
+}
+
+/**
  * CreateBatchOrderModal - Create orders from selected commitments grouped by vendor
  * 
  * PHASE 10B: COMMITMENT-ONLY ORDERING
@@ -57,10 +269,13 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     });
   };
   
-  // PHASE 10B: Validate all items have commitment_id and vendor_id
-  const invalidItems = selectedItems.filter(item => !item.commitment_id || !item.vendor_id);
-  if (invalidItems.length > 0) {
-    console.error('[PHASE 10B VIOLATION] Items missing commitment_id or vendor_id:', invalidItems);
+  // PHASE 10B: Validate items — aggregated items use commitments[], legacy use commitment_id
+  const isAggregated = selectedItems.some(item => Array.isArray(item.commitments) && item.commitments.length > 0);
+  if (!isAggregated) {
+    const invalidItems = selectedItems.filter(item => !item.commitment_id || !item.vendor_id);
+    if (invalidItems.length > 0) {
+      console.error('[PHASE 10B VIOLATION] Items missing commitment_id or vendor_id:', invalidItems);
+    }
   }
   
   // Only fetch vendors for display names (not for deriving vendor from parts)
@@ -90,12 +305,34 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
   };
 
   // PHASE 10B: State for vendor-grouped items
-  // VENDOR CONTEXT OVERRIDE: If selectedVendorContext is set (from Vendor View),
-  // re-assign items that have a PartVendorSource for that vendor to that vendor group.
+  // Supports BOTH aggregated items (with .commitments[]) and legacy single items (with .commitment_id)
   const [vendorGroups, setVendorGroups] = useState(() => {
     const groups = {};
+
+    // Flatten aggregated items into commitment-level entries for backend,
+    // but preserve aggregated display info
+    const flatItems = [];
+    for (const item of selectedItems) {
+      if (Array.isArray(item.commitments) && item.commitments.length > 0) {
+        // Aggregated item — expand into commitment-level entries
+        for (const c of item.commitments) {
+          flatItems.push({
+            ...c,
+            commitment_id: c.commitment_id,
+            vendor_id: c.vendor_id || item.vendor_id,
+            vendor_name: c.vendor_name || item.vendor_name,
+            order_url: item.order_url,
+            default_cost: item.default_cost,
+            sources: c.sources || item.sources || [],
+            _agg_part_id: item.part_id, // track aggregation parent
+          });
+        }
+      } else {
+        flatItems.push(item);
+      }
+    }
     
-    selectedItems.forEach(item => {
+    flatItems.forEach(item => {
       // Determine effective vendor for this item
       let vendorId = item.vendor_id || 'unassigned';
       let vendorName = item.vendor_name || null;
@@ -105,19 +342,16 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
       if (selectedVendorContext?.vendor_id) {
         const ctxVid = selectedVendorContext.vendor_id;
         const itemDefaultVid = item.vendor_id;
-        // Item already assigned to selected vendor — keep it
         if (itemDefaultVid === ctxVid) {
           vendorId = ctxVid;
           vendorName = selectedVendorContext.vendor_name;
         } else {
-          // Check if item has a PartVendorSource for the selected vendor
           const sources = item.sources || [];
           const matchingSource = sources.find(s => s.vendor_id === ctxVid);
           if (matchingSource) {
             vendorId = ctxVid;
             vendorName = selectedVendorContext.vendor_name;
           }
-          // Otherwise: keep default vendor — this item doesn't have a source for the selected vendor
         }
       }
 
@@ -134,14 +368,12 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
             order_date: new Date().toISOString().split('T')[0],
             eta_date: '',
             notes: '',
-            // Phase 6: Freight + Tariff at PO header level
             freight_cost: 0,
             tariff_cost: 0,
           },
           items: [],
         };
       }
-      // Determine cost — if vendor context override, try to use vendor source cost
       let itemCost = item.default_cost ?? item.estimated_cost ?? 0;
       if (selectedVendorContext?.vendor_id && vendorId === selectedVendorContext.vendor_id) {
         const sources = item.sources || [];
@@ -434,7 +666,7 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
     });
   };
 
-  const activeVendors = vendors.filter(v => v.active);
+  const activeVendors = vendors.filter(v => v.active !== false);
   const hasUnassignedVendor = Object.keys(vendorGroups).includes('unassigned');
   const groupCount = Object.keys(vendorGroups).length;
   
@@ -661,125 +893,50 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
 
                   <Separator className="bg-gray-700" />
 
-                  {/* Line Items */}
+                  {/* Line Items — Aggregated by part within vendor group */}
                   <div className="space-y-2">
-                    {group.items.map((item, idx) => (
-                      <div 
-                        key={idx} 
-                        className={cn(
-                          "flex items-center gap-2 p-2 bg-gray-800/30 rounded transition-colors",
-                          cartMarkedItems.has(item.commitment_id) && "bg-green-900/20 border border-green-700/30"
-                        )}
-                      >
-                        {/* Cart tracking checkbox - UI only */}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div>
-                                <Checkbox
-                                  checked={cartMarkedItems.has(item.commitment_id)}
-                                  onCheckedChange={() => toggleCartMarked(item.commitment_id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className={cn(
-                                    "border-gray-600",
-                                    cartMarkedItems.has(item.commitment_id) && "border-green-500 data-[state=checked]:bg-green-600"
-                                  )}
-                                />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                              {cartMarkedItems.has(item.commitment_id) ? "Added to cart" : "Mark as added to cart"}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1">
-                            {/* PHASE 10B: part_name comes from read model directly */}
-                            <p className={cn(
-                              "text-sm truncate",
-                              cartMarkedItems.has(item.commitment_id) ? "text-green-300" : "text-white"
-                            )}>{item.part_name || item.part?.part_name}</p>
-                            {item.order_url && item.order_url.startsWith('http') && (
-                              <a
-                                href={item.order_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-400 hover:text-blue-300 ml-1 flex-shrink-0"
-                                onClick={(e) => e.stopPropagation()}
-                                title="Open Vendor Page"
-                              >
-                                <LinkIcon className="w-3 h-3" />
-                              </a>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500">
-                            {/* PHASE 10B: project info comes from read model directly */}
-                            {getProjectName(item)}
-                          </p>
-                        </div>
-                        
-                        {vendorId === 'unassigned' && (
-                          <Select
-                            value=""
-                            onValueChange={(v) => moveItemToVendor(vendorId, idx, v)}
-                          >
-                            <SelectTrigger className="w-32 h-7 bg-gray-800 border-gray-600 text-xs">
-                              <SelectValue placeholder="Assign vendor" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {activeVendors.filter(v => !v.parent_id).map(v => (
-                                <SelectItem key={v.id} value={v.id} className="text-xs">
-                                  {v.vendor_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.qty_to_order}
-                          onChange={(e) => updateLineItem(vendorId, idx, 'qty_to_order', parseInt(e.target.value) || 1)}
-                          className="w-16 h-7 bg-gray-800 border-gray-700 text-sm text-center"
-                        />
-                        
-                        <div className="flex items-center gap-1 w-28">
-                          <span className="text-gray-500 text-xs">$</span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={item.unit_cost}
-                            onChange={(e) => updateLineItem(vendorId, idx, 'unit_cost', parseFloat(e.target.value) || 0)}
-                            className={cn(
-                              "h-7 bg-gray-800 text-sm",
-                              item.cost_overridden ? "border-yellow-600 bg-yellow-900/20" : "border-gray-700",
-                              (!item.unit_cost || item.unit_cost <= 0) && "border-red-600 bg-red-900/20"
-                            )}
-                            title={item.cost_overridden ? `Original: $${item.original_cost?.toFixed(2)}` : "Unit Cost"}
-                            placeholder="Unit Cost"
+                    {(() => {
+                      // Aggregate items by part_id within this vendor group
+                      const partMap = new Map();
+                      group.items.forEach((item, idx) => {
+                        const pKey = item.part_id;
+                        if (!partMap.has(pKey)) {
+                          partMap.set(pKey, {
+                            part_id: pKey,
+                            part_name: item.part_name || item.part?.part_name,
+                            order_url: item.order_url,
+                            entries: [],
+                          });
+                        }
+                        partMap.get(pKey).entries.push({ item, idx });
+                      });
+
+                      return Array.from(partMap.values()).map(partGroup => {
+                        const totalQty = partGroup.entries.reduce((s, e) => s + (e.item.qty_to_order || 0), 0);
+                        const totalCost = partGroup.entries.reduce((s, e) => s + (e.item.qty_to_order || 0) * (e.item.unit_cost || 0), 0);
+                        const allMarked = partGroup.entries.every(e => cartMarkedItems.has(e.item.commitment_id));
+                        const isMulti = partGroup.entries.length > 1;
+
+                        return (
+                          <PartLineGroup
+                            key={partGroup.part_id}
+                            partGroup={partGroup}
+                            totalQty={totalQty}
+                            totalCost={totalCost}
+                            allMarked={allMarked}
+                            isMulti={isMulti}
+                            vendorId={vendorId}
+                            cartMarkedItems={cartMarkedItems}
+                            toggleCartMarked={toggleCartMarked}
+                            updateLineItem={updateLineItem}
+                            removeLineItem={removeLineItem}
+                            moveItemToVendor={moveItemToVendor}
+                            activeVendors={activeVendors}
+                            getProjectName={getProjectName}
                           />
-                          {item.cost_overridden && (
-                            <span className="text-yellow-500 text-xs" title="Cost manually overridden">*</span>
-                          )}
-                        </div>
-                        
-                        <span className="text-xs text-gray-400 w-16 text-right">
-                          ${((item.qty_to_order || 0) * (item.unit_cost || 0)).toFixed(2)}
-                        </span>
-                        
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeLineItem(vendorId, idx)}
-                          className="h-7 w-7 text-gray-500 hover:text-red-400"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}
