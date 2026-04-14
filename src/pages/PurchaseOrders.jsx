@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
@@ -137,6 +137,7 @@ const STATUS_TOGGLES = [
 
 export default function PurchaseOrders() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
@@ -216,7 +217,9 @@ export default function PurchaseOrders() {
   }, [sortedOrders, groupBy, thenBy, buildSubGroups]);
 
   const handleNavigate = (orderId) => {
-    navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`);
+    navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`, {
+      state: { from: location.pathname },
+    });
   };
 
   const toggleStatus = useCallback((key) => {

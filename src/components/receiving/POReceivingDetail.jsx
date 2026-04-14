@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPageUrl } from "@/utils";
 import { supplyKeys } from "@/components/supply/useProjectSupplyView";
@@ -56,6 +56,15 @@ const LOCATION_NONE = "__none__";
 export default function POReceivingDetail({ po, locations, isLoading, refetch }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const routeLocation = useLocation();
+
+  const handleBack = useCallback(() => {
+    if (routeLocation.state?.from) {
+      navigate(routeLocation.state.from);
+    } else {
+      navigate("/PurchaseOrders");
+    }
+  }, [routeLocation.state, navigate]);
   
   const [lineInputs, setLineInputs] = useState({});
   const [selectedLines, setSelectedLines] = useState(new Set());
@@ -357,10 +366,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={async () => {
-            await queryClient.invalidateQueries({ queryKey: ['poReceivingView', null], exact: false });
-            navigate(createPageUrl('POReceiving'));
-          }} className="p-2">
+          <Button variant="ghost" onClick={handleBack} className="p-2">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>

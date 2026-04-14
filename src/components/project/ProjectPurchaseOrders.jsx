@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { orderKeys } from "@/components/financial/queryKeyFactories";
@@ -77,6 +77,7 @@ function groupOrders(orders) {
  */
 export default function ProjectPurchaseOrders({ projectId }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [vendorFilter, setVendorFilter] = useState("all");
   const [sortBy, setSortBy] = useState("most_remaining");
@@ -144,7 +145,9 @@ export default function ProjectPurchaseOrders({ projectId }) {
   const { ready, partial, full } = useMemo(() => groupOrders(sortedOrders), [sortedOrders]);
 
   const handleNavigate = (orderId) => {
-    navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`);
+    navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`, {
+      state: { from: location.pathname },
+    });
   };
 
   if (isLoading) {

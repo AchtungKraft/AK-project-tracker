@@ -32,7 +32,7 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
         </Badge>
       </div>
       
-        <Card className="bg-gray-900/30 border-gray-800 opacity-70">
+        <Card className="bg-gray-900/30 border-gray-800">
           <Table>
             <TableHeader>
               <TableRow className="border-gray-800 hover:bg-transparent">
@@ -50,7 +50,7 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
               {lines.map(line => (
                 <TableRow 
                   key={line.line_item_id} 
-                  className="border-gray-800 opacity-50"
+                  className="border-gray-800 bg-green-950/10"
                 >
                   <TableCell>
                     <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -68,7 +68,7 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
                         <button
                           type="button"
                           onClick={() => onOpenPart?.(line.part_id)}
-                          className="font-medium text-blue-400/70 hover:text-blue-300 hover:underline text-sm text-left"
+                          className="font-medium text-blue-400 hover:text-blue-300 hover:underline text-sm text-left"
                         >
                           {line.part_name}
                         </button>
@@ -78,12 +78,12 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-gray-500">{line.qty_ordered}</TableCell>
-                  <TableCell className="text-right font-mono text-green-600">{line.qty_received}</TableCell>
-                  <TableCell className="text-right font-mono text-gray-500 text-sm">
+                  <TableCell className="text-right font-mono text-gray-300">{line.qty_ordered}</TableCell>
+                  <TableCell className="text-right font-mono text-green-400">{line.qty_received}</TableCell>
+                  <TableCell className="text-right font-mono text-gray-300 text-sm">
                     {(line.unit_cost ?? 0) > 0 ? `$${(line.unit_cost).toFixed(2)}` : '$0'}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-gray-500 text-sm">
+                  <TableCell className="text-right font-mono text-gray-300 text-sm">
                     ${((line.unit_cost || 0) * (line.qty_ordered || 0)).toFixed(2)}
                   </TableCell>
                   <TableCell>
