@@ -162,7 +162,7 @@ export default function PurchaseOrders() {
       });
       return res.data;
     },
-    staleTime: 30000,
+    staleTime: 0,
   });
 
   const orders = data?.orders || [];
