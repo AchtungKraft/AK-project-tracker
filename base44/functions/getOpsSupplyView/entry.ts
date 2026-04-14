@@ -1,18 +1,45 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ── Retry wrapper for transient failures (429, network) ──────────────
-async function fetchWithRetry(fn, { retries = 2, delay = 400 } = {}) {
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   try { return await fn(); }
   catch (err) {
     const msg = err?.message || '';
     const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
     if (retries > 0 && isRetryable) {
-      const jitter = Math.random() * 200;
+      const jitter = Math.random() * 400;
       await new Promise(r => setTimeout(r, delay + jitter));
       return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
     }
     throw err;
   }
+}
+
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
+
+// ── Short-term response cache ────────────────────────────────────────
+const cache = new Map();
+function getCached(key, ttl = 10000) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
 }
 
 /**
@@ -48,6 +75,13 @@ Deno.serve(async (req) => {
 
     const { mode = 'ORDERING', filters = {} } = await req.json();
 
+    // ── Cache check ──
+    const cacheKey = `opsSupply:${mode}:${JSON.stringify(filters)}`;
+    const cachedResult = getCached(cacheKey);
+    if (cachedResult) {
+      return Response.json(cachedResult);
+    }
+
     // PERF: Timing start
     const _perfStart = Date.now();
     
@@ -74,18 +108,18 @@ Deno.serve(async (req) => {
     const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
     
     // PHASE 3: Fetch reference data SCOPED by commitment-derived IDs (no global scans)
-    const [parts, projects] = await Promise.all([
-      commitmentPartIds.length > 0
-        ? base44.entities.Part.filter({ id: { $in: commitmentPartIds } })
-        : [],
-      commitmentProjectIds.length > 0
-        ? base44.entities.Project.filter({ id: { $in: commitmentProjectIds } })
-        : [],
-    ]);
+    const [parts, projects] = await runBatched([
+      () => commitmentPartIds.length > 0
+        ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: commitmentPartIds } }))
+        : Promise.resolve([]),
+      () => commitmentProjectIds.length > 0
+        ? fetchWithRetry(() => base44.entities.Project.filter({ id: { $in: commitmentProjectIds } }))
+        : Promise.resolve([]),
+    ], 2, 150);
     
     // Phase 2: Fetch vendor sources for multi-source display
     const vendorSources = commitmentPartIds.length > 0
-      ? await base44.entities.PartVendorSource.filter({ part_id: { $in: commitmentPartIds }, is_active: true })
+      ? await fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: commitmentPartIds }, is_active: true }))
       : [];
     const sourcesByPart = new Map();
     for (const s of vendorSources) {
@@ -100,33 +134,33 @@ Deno.serve(async (req) => {
     ])];
     const derivedCategoryIds = [...new Set(parts.map(p => p.part_category_id).filter(Boolean))];
 
-    const [vendors, categories] = await Promise.all([
-      derivedVendorIds.length > 0
-        ? base44.entities.Vendor.filter({ id: { $in: derivedVendorIds } })
-        : [],
-      derivedCategoryIds.length > 0
-        ? base44.entities.PartCategory.filter({ id: { $in: derivedCategoryIds } })
-        : [],
-    ]);
+    const [vendors, categories] = await runBatched([
+      () => derivedVendorIds.length > 0
+        ? fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: derivedVendorIds } }))
+        : Promise.resolve([]),
+      () => derivedCategoryIds.length > 0
+        ? fetchWithRetry(() => base44.entities.PartCategory.filter({ id: { $in: derivedCategoryIds } }))
+        : Promise.resolve([]),
+    ], 2, 150);
     
     // PHASE 4: Fetch line items scoped to commitments, then derive orders
-    const [lineItems, projectInvoices] = await Promise.all([
-      commitmentIds.length > 0
-        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
-        : [],
-      commitmentProjectIds.length > 0
-        ? base44.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } })
-        : [],
-    ]);
+    const [lineItems, projectInvoices] = await runBatched([
+      () => commitmentIds.length > 0
+        ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
+        : Promise.resolve([]),
+      () => commitmentProjectIds.length > 0
+        ? fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } }))
+        : Promise.resolve([]),
+    ], 2, 150);
     
     // Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
     const invoiceIds = projectInvoices.map(i => i.id);
     
-    const [orders, projectInvoiceLines] = await Promise.all([
-      orderIds.length > 0 ? base44.entities.Order.filter({ id: { $in: orderIds } }) : [],
-      invoiceIds.length > 0 ? base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }) : [],
-    ]);
+    const [orders, projectInvoiceLines] = await runBatched([
+      () => orderIds.length > 0 ? fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } })) : Promise.resolve([]),
+      () => invoiceIds.length > 0 ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } })) : Promise.resolve([]),
+    ], 2, 150);
     
     // DEPRECATED: pools removed - forward model only
     const pools = [];
@@ -654,18 +688,26 @@ Deno.serve(async (req) => {
       filteredCount: filtered.length,
     });
     
-    return Response.json({
+    const responsePayload = {
       success: true,
       timestamp: new Date().toISOString(),
       mode,
       items: filtered,
       summary,
       filter_options: filterOptions,
-    });
+    };
+
+    setCache(cacheKey, responsePayload);
+    return Response.json(responsePayload);
 
   } catch (error) {
-    console.error("getOpsSupplyView error:", error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error?.message || '';
+    const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+    console.error("getOpsSupplyView error:", { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg });
+    return Response.json({
+      success: false, data: null,
+      error: { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg }
+    }, { status: isRateLimit ? 429 : 500 });
   }
 });
 

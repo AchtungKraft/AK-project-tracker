@@ -1,5 +1,47 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
+  try { return await fn(); }
+  catch (err) {
+    const msg = err?.message || '';
+    const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
+    if (retries > 0 && isRetryable) {
+      const jitter = Math.random() * 400;
+      await new Promise(r => setTimeout(r, delay + jitter));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
+
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
+
+// ── Short-term response cache ────────────────────────────────────────
+const cache = new Map();
+function getCached(key, ttl = 10000) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 /**
  * getAllPurchaseOrders - Global PO dashboard read model
  * 
@@ -35,6 +77,13 @@ Deno.serve(async (req) => {
     const { filters = {} } = await req.json();
     const svc = base44.asServiceRole;
 
+    // ── Cache check ──
+    const cacheKey = `allPOs:${JSON.stringify(filters)}`;
+    const cachedResult = getCached(cacheKey);
+    if (cachedResult) {
+      return Response.json(cachedResult);
+    }
+
     // Build order query
     const orderQuery = {};
     if (filters.status && filters.status !== 'all') {
@@ -45,10 +94,10 @@ Deno.serve(async (req) => {
     }
 
     // Round 1: Orders + reference data
-    const [allOrders, allProjects] = await Promise.all([
-      svc.entities.Order.filter(orderQuery, '-created_date', 200),
-      svc.entities.Project.list('-created_date', 200),
-    ]);
+    const [allOrders, allProjects] = await runBatched([
+      () => fetchWithRetry(() => svc.entities.Order.filter(orderQuery, '-created_date', 200)),
+      () => fetchWithRetry(() => svc.entities.Project.list('-created_date', 200)),
+    ], 2, 150);
 
     if (allOrders.length === 0) {
       return Response.json({
@@ -62,17 +111,17 @@ Deno.serve(async (req) => {
     const orderIds = allOrders.map(o => o.id);
     const vendorIds = [...new Set(allOrders.map(o => o.vendor_id).filter(Boolean))];
 
-    // Round 2: Line items + vendors + parts
-    const [lineItems, vendors, allParts] = await Promise.all([
-      svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } }),
-      vendorIds.length > 0 ? svc.entities.Vendor.filter({ id: { $in: vendorIds } }) : Promise.resolve([]),
-      svc.entities.Part.list('-created_date', 500),
-    ]);
+    // Round 2: Line items + vendors + parts (controlled batch)
+    const [lineItems, vendors, allParts] = await runBatched([
+      () => fetchWithRetry(() => svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } })),
+      () => vendorIds.length > 0 ? fetchWithRetry(() => svc.entities.Vendor.filter({ id: { $in: vendorIds } })) : Promise.resolve([]),
+      () => fetchWithRetry(() => svc.entities.Part.list('-created_date', 500)),
+    ], 3, 150);
 
     // Round 3: Commitments for project linkage (only IDs found in line items)
     const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
     const commitments = commitmentIds.length > 0
-      ? await svc.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
+      ? await fetchWithRetry(() => svc.entities.PartCommitment.filter({ id: { $in: commitmentIds } }))
       : [];
 
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
@@ -192,7 +241,7 @@ Deno.serve(async (req) => {
     const tEnd = Date.now();
     console.log(`[getAllPurchaseOrders] orders=${poViews.length} lines=${lineItems.length} | total=${tEnd - t0}ms`);
 
-    return Response.json({
+    const responsePayload = {
       success: true,
       orders: poViews,
       summary,
@@ -201,10 +250,18 @@ Deno.serve(async (req) => {
         projects: [...allProjectIds].map(id => ({ id, name: projectMap.get(id)?.name || 'Unknown' })),
         statuses: allStatuses,
       },
-    });
+    };
+
+    setCache(cacheKey, responsePayload);
+    return Response.json(responsePayload);
 
   } catch (error) {
-    console.error("getAllPurchaseOrders error:", error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error?.message || '';
+    const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+    console.error("getAllPurchaseOrders error:", { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg });
+    return Response.json({
+      success: false,
+      error: { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg }
+    }, { status: isRateLimit ? 429 : 500 });
   }
 });

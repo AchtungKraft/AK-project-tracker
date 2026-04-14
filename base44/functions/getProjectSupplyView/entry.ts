@@ -1,18 +1,45 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ── Retry wrapper for transient failures (429, network) ──────────────
-async function fetchWithRetry(fn, { retries = 2, delay = 400 } = {}) {
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   try { return await fn(); }
   catch (err) {
     const msg = err?.message || '';
     const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
     if (retries > 0 && isRetryable) {
-      const jitter = Math.random() * 200;
+      const jitter = Math.random() * 400;
       await new Promise(r => setTimeout(r, delay + jitter));
       return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
     }
     throw err;
   }
+}
+
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
+
+// ── Short-term response cache ────────────────────────────────────────
+const cache = new Map();
+function getCached(key, ttl = 10000) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
 }
 
 /**
@@ -49,32 +76,40 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
 
+    // ── Cache check ──
+    const cacheKey = `projectSupply:${project_id}:${JSON.stringify(filters)}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return Response.json(cached);
+    }
+
     // PERF: Timing start
     const _perfStart = Date.now();
     
     // PHASE 1: Fetch project + commitments first to scope subsequent queries
     const [
-      project,
+      projectArr,
       commitments,
       categories,
       projectInvoices,
-    ] = await Promise.all([
-      fetchWithRetry(() => base44.entities.Project.filter({ id: project_id })).then(r => r[0]),
-      fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id })),
-      fetchWithRetry(() => base44.entities.PartCategory.list()),
-      fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id })),
-    ]);
+    ] = await runBatched([
+      () => fetchWithRetry(() => base44.entities.Project.filter({ id: project_id })),
+      () => fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id })),
+      () => fetchWithRetry(() => base44.entities.PartCategory.list()),
+      () => fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id })),
+    ], 3, 150);
+    const project = projectArr[0];
 
     // PHASE 2: Scope parts and vendors to only those referenced by commitments
     const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
-    const [parts, vendorSources] = await Promise.all([
-      partIdsFromCommitments.length > 0
+    const [parts, vendorSources] = await runBatched([
+      () => partIdsFromCommitments.length > 0
         ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } }))
-        : [],
-      partIdsFromCommitments.length > 0
+        : Promise.resolve([]),
+      () => partIdsFromCommitments.length > 0
         ? fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true }))
-        : [],
-    ]);
+        : Promise.resolve([]),
+    ], 2, 150);
     
     // Build source lookup by part
     const sourcesByPart = new Map();
@@ -93,12 +128,15 @@ Deno.serve(async (req) => {
 
     // PHASE 3: Fetch line items scoped to commitments, and invoice lines
     const commitmentIds = commitments.map(c => c.id);
-    const [lineItems, projectInvoiceLines] = await Promise.all([
-      commitmentIds.length > 0 
+    const invoiceIdsForLines = projectInvoices.map(i => i.id);
+    const [lineItems, projectInvoiceLines] = await runBatched([
+      () => commitmentIds.length > 0 
         ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
-        : [],
-      fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } })),
-    ]);
+        : Promise.resolve([]),
+      () => invoiceIdsForLines.length > 0
+        ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIdsForLines } }))
+        : Promise.resolve([]),
+    ], 2, 150);
     
     // PERF FIX: Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
@@ -663,7 +701,7 @@ Deno.serve(async (req) => {
       });
     }
     
-    return Response.json({
+    const responsePayload = {
       success: true,
       timestamp: new Date().toISOString(),
       project: {
@@ -678,7 +716,10 @@ Deno.serve(async (req) => {
       categories: categories.filter(c => c.active !== false).map(c => ({ id: c.id, name: c.name, color: c.color })),
       // DELTA MODEL: Include integrity warnings for legacy contamination detection
       integrity_warnings: integrityWarnings.length > 0 ? integrityWarnings : null,
-    });
+    };
+
+    setCache(cacheKey, responsePayload);
+    return Response.json(responsePayload);
 
   } catch (error) {
     const msg = error?.message || '';

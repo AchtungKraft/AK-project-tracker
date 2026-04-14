@@ -1,4 +1,34 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
+  try { return await fn(); }
+  catch (err) {
+    const msg = err?.message || '';
+    const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
+    if (retries > 0 && isRetryable) {
+      const jitter = Math.random() * 400;
+      await new Promise(r => setTimeout(r, delay + jitter));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
+
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
 
 /**
  * getProjectPurchaseOrders - Project-level PO visibility
@@ -33,7 +63,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch commitments for this project to scope line items
-    const commitments = await base44.entities.PartCommitment.filter({ project_id });
+    const commitments = await fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id }));
     const commitmentIds = commitments.map(c => c.id);
     
     if (commitmentIds.length === 0) {
@@ -47,7 +77,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch line items scoped to project commitments
-    const lineItems = await base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } });
+    const lineItems = await fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }));
     
     // Derive order IDs and fetch orders
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
@@ -62,16 +92,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const orders = await base44.entities.Order.filter({ id: { $in: orderIds } });
+    const orders = await fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }));
 
     // Fetch reference data scoped by IDs
     const partIds = [...new Set(lineItems.map(li => li.part_id).filter(Boolean))];
     const vendorIds = [...new Set([...orders.map(o => o.vendor_id), ...lineItems.map(li => li.vendor_id)].filter(Boolean))];
 
-    const [parts, vendors] = await Promise.all([
-      partIds.length > 0 ? base44.entities.Part.filter({ id: { $in: partIds } }) : [],
-      vendorIds.length > 0 ? base44.entities.Vendor.filter({ id: { $in: vendorIds } }) : [],
-    ]);
+    const [parts, vendors] = await runBatched([
+      () => partIds.length > 0 ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: partIds } })) : Promise.resolve([]),
+      () => vendorIds.length > 0 ? fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: vendorIds } })) : Promise.resolve([]),
+    ], 2, 150);
 
     const partMap = new Map(parts.map(p => [p.id, p]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
@@ -168,7 +198,12 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("getProjectPurchaseOrders error:", error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error?.message || '';
+    const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+    console.error("getProjectPurchaseOrders error:", { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg });
+    return Response.json({
+      success: false,
+      error: { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg }
+    }, { status: isRateLimit ? 429 : 500 });
   }
 });

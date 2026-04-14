@@ -1,4 +1,46 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
+  try { return await fn(); }
+  catch (err) {
+    const msg = err?.message || '';
+    const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
+    if (retries > 0 && isRetryable) {
+      const jitter = Math.random() * 400;
+      await new Promise(r => setTimeout(r, delay + jitter));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
+
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
+
+// ── Short-term response cache ────────────────────────────────────────
+const cache = new Map();
+function getCached(key, ttl = 10000) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
 
 /** 
  * getPOReceivingView - PO-centric receiving read model
@@ -71,12 +113,19 @@ Deno.serve(async (req) => {
     // =============================================
     if (order_id) {
 
-      // ROUND 1: Core data — order, lines, locations
-      const [orderResults, lineItems, locations] = await Promise.all([
-        svc.entities.Order.filter({ id: order_id }),
-        svc.entities.PartPurchaseLineItem.filter({ order_id }),
-        svc.entities.Location.filter({ active: { $ne: false } }),
-      ]);
+      // ── Cache check (detail mode) ──
+      const detailCacheKey = `poReceivingDetail:${order_id}`;
+      const detailCached = getCached(detailCacheKey);
+      if (detailCached) {
+        return Response.json(detailCached);
+      }
+
+      // ROUND 1: Core data — order, lines, locations (batched to max 3)
+      const [orderResults, lineItems, locations] = await runBatched([
+        () => fetchWithRetry(() => svc.entities.Order.filter({ id: order_id })),
+        () => fetchWithRetry(() => svc.entities.PartPurchaseLineItem.filter({ order_id })),
+        () => fetchWithRetry(() => svc.entities.Location.filter({ active: { $ne: false } })),
+      ], 3, 150);
       const tDB1 = Date.now();
 
       const order = orderResults[0];
@@ -89,20 +138,19 @@ Deno.serve(async (req) => {
       const vendorIds = [...new Set([order.vendor_id, ...lineItems.map(li => li.vendor_id)].filter(Boolean))];
       const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
 
-      // ROUND 2: ALL reference data in ONE parallel batch
-      const [parts, vendors, commitments, projects] = await Promise.all([
-        partIds.length > 0
-          ? svc.entities.Part.filter({ id: { $in: partIds } })
+      // ROUND 2: ALL reference data in controlled batch (max 3 concurrent)
+      const [parts, vendors, commitments, projects] = await runBatched([
+        () => partIds.length > 0
+          ? fetchWithRetry(() => svc.entities.Part.filter({ id: { $in: partIds } }))
           : Promise.resolve([]),
-        vendorIds.length > 0
-          ? svc.entities.Vendor.filter({ id: { $in: vendorIds } })
+        () => vendorIds.length > 0
+          ? fetchWithRetry(() => svc.entities.Vendor.filter({ id: { $in: vendorIds } }))
           : Promise.resolve([]),
-        commitmentIds.length > 0
-          ? svc.entities.PartCommitment.filter({ id: { $in: commitmentIds } })
+        () => commitmentIds.length > 0
+          ? fetchWithRetry(() => svc.entities.PartCommitment.filter({ id: { $in: commitmentIds } }))
           : Promise.resolve([]),
-        // Projects: small table, fetched once in parallel — avoids 3rd DB round
-        svc.entities.Project.list(),
-      ]);
+        () => fetchWithRetry(() => svc.entities.Project.list()),
+      ], 3, 150);
       const tDB2 = Date.now();
 
       // Build lookup maps
@@ -188,13 +236,15 @@ Deno.serve(async (req) => {
       // regression diagnosis. Do not remove. Format: auth | db_round1 | db_round2 | build | total
       console.log(`[POReceiving:detail] order=${order_id} lines=${lineItems.length} parts=${partIds.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
-      return Response.json({
+      const detailResult = {
         success: true,
         timestamp: new Date().toISOString(),
         po,
         locations: locationOptions,
         _perf: { total_ms: tEnd - t0, line_count: lineItems.length },
-      });
+      };
+      setCache(detailCacheKey, detailResult);
+      return Response.json(detailResult);
     }
 
     // =============================================
@@ -208,11 +258,18 @@ Deno.serve(async (req) => {
       orderQuery.vendor_id = filters.vendor_id;
     }
 
-    // ROUND 1: Orders + locations in parallel (no line items yet — scope them by order IDs in round 2)
-    const [filteredOrders, locations] = await Promise.all([
-      svc.entities.Order.filter(orderQuery, '-created_date', 100),
-      svc.entities.Location.filter({ active: { $ne: false } }),
-    ]);
+    // ── Cache check (list mode) ──
+    const listCacheKey = `poReceivingList:${JSON.stringify(filters)}`;
+    const listCached = getCached(listCacheKey);
+    if (listCached) {
+      return Response.json(listCached);
+    }
+
+    // ROUND 1: Orders + locations in batched parallel
+    const [filteredOrders, locations] = await runBatched([
+      () => fetchWithRetry(() => svc.entities.Order.filter(orderQuery, '-created_date', 100)),
+      () => fetchWithRetry(() => svc.entities.Location.filter({ active: { $ne: false } })),
+    ], 2, 150);
     const tDB1 = Date.now();
 
     if (filteredOrders.length === 0) {
@@ -239,13 +296,12 @@ Deno.serve(async (req) => {
       if (o.vendor_id) vendorIds.add(o.vendor_id);
     }
 
-    // ROUND 2: Line items scoped to order IDs + vendors + parts in parallel
-    // Parts fetched for part_names summary on cards (names only, no full schema)
-    const [scopedLineItems, vendors, allParts] = await Promise.all([
-      svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } }),
-      vendorIds.size > 0 ? svc.entities.Vendor.filter({ id: { $in: [...vendorIds] } }) : Promise.resolve([]),
-      svc.entities.Part.list('-created_date', 500),
-    ]);
+    // ROUND 2: Line items scoped to order IDs + vendors + parts in controlled batch
+    const [scopedLineItems, vendors, allParts] = await runBatched([
+      () => fetchWithRetry(() => svc.entities.PartPurchaseLineItem.filter({ order_id: { $in: orderIds } })),
+      () => vendorIds.size > 0 ? fetchWithRetry(() => svc.entities.Vendor.filter({ id: { $in: [...vendorIds] } })) : Promise.resolve([]),
+      () => fetchWithRetry(() => svc.entities.Part.list('-created_date', 500)),
+    ], 3, 150);
     const tDB2 = Date.now();
     const partNameMap = new Map(allParts.map(p => [p.id, p.part_name]));
 
@@ -371,7 +427,7 @@ Deno.serve(async (req) => {
     // regression diagnosis. Do not remove. Format: auth | db_round1 | db_round2 | build | total
     console.log(`[POReceiving:list] orders=${poViews.length} lines=${scopedLineItems.length} parts=${allParts.length} | auth=${tAuth-t0}ms db_round1=${tDB1-tAuth}ms db_round2=${tDB2-tDB1}ms build=${tEnd-tDB2}ms total=${tEnd-t0}ms`);
 
-    return Response.json({
+    const listResult = {
       success: true,
       timestamp: new Date().toISOString(),
       orders: poViews,
@@ -380,10 +436,17 @@ Deno.serve(async (req) => {
       filter_options: {
         vendors: vendorIdsSet.map(id => ({ id, vendor_name: vendorMap.get(id)?.vendor_name || 'Unknown' })),
       },
-    });
+    };
+    setCache(listCacheKey, listResult);
+    return Response.json(listResult);
 
   } catch (error) {
-    console.error("getPOReceivingView error:", error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error?.message || '';
+    const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+    console.error("getPOReceivingView error:", { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg });
+    return Response.json({
+      success: false,
+      error: { type: isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN', message: msg }
+    }, { status: isRateLimit ? 429 : 500 });
   }
 });

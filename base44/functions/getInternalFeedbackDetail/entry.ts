@@ -22,17 +22,41 @@ async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   }
 }
 
+// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+async function runBatched(tasks, batchSize = 3, delay = 150) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
+}
+
+// ── Short-term response cache ────────────────────────────────────────
+const cache = new Map();
+function getCached(key, ttl = 10000) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
+  return item.data;
+}
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 // ── Server-side comment normalizer (authoritative) ──────────────────
 function normalizeComment(comment, attachments) {
-    // Gather attachments belonging to this comment
     const commentAttachments = attachments.filter(a => a.comment_id === comment.id);
 
-    // --- content chain: content_html → content_fallback → body ---
     const contentHtml = comment.content_html || null;
     const body = comment.body || '';
     const contentFallback = comment.content_fallback || body;
 
-    // --- links: merge inline + attachment-sourced ---
     let links = [];
     if (Array.isArray(comment.links) && comment.links.length > 0) {
         links = comment.links.map((link, idx) => {
@@ -48,7 +72,6 @@ function normalizeComment(comment, attachments) {
             };
         });
     } else {
-        // Fall back to attachment-sourced links
         links = commentAttachments
             .filter(a => a.attachment_type === 'link')
             .map((a, idx) => ({
@@ -60,8 +83,6 @@ function normalizeComment(comment, attachments) {
             }));
     }
 
-    // --- photos: merge inline + attachment-sourced ---
-    // SAFETY: Exclude SVG to prevent injection (only allow raster image mimes)
     const isSafeImage = (a) => {
         if (a.mime_type && a.mime_type.toLowerCase() === 'image/svg+xml') return false;
         return a.attachment_type === 'image';
@@ -76,7 +97,6 @@ function normalizeComment(comment, attachments) {
             .filter(Boolean);
     }
 
-    // --- files: merge inline + attachment-sourced ---
     let files = [];
     if (Array.isArray(comment.files) && comment.files.length > 0) {
         files = comment.files.map(f => ({
@@ -109,7 +129,6 @@ function normalizeComment(comment, attachments) {
         posted_at: comment.posted_at,
         created_date: comment.created_date,
         created_by: comment.created_by,
-        // Enrichment fields (added later)
         author: comment.author || null,
         author_display_name: comment.author_display_name || null,
     };
@@ -161,30 +180,31 @@ Deno.serve(async (req) => {
             });
         }
 
-        // STEP A: Fetch request-scoped entities in two small batches to avoid rate limiting
-        // Batch 1: Core data (request + comments + decisions)
+        // ── Cache check ──
+        const cacheKey = `feedbackDetail:${requestId}`;
+        const cached = getCached(cacheKey);
+        if (cached) {
+            return Response.json(cached, { headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // STEP A: Fetch request-scoped entities in controlled batches (max 3 concurrent)
         const [
             requests,
             commentsRaw,
             decisionsRaw,
-        ] = await Promise.all([
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
-        ]);
-
-        // Batch 2: Secondary data (attachments, tasks, links)
-        const [
             attachmentsRaw,
             todoTasksRaw,
             linkedTasks,
             taskGroupsRaw,
-        ] = await Promise.all([
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).catch(() => []),
-        ]);
+        ] = await runBatched([
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).catch(() => []),
+        ], 3, 150);
 
         const request = requests[0];
         if (!request) {
@@ -231,23 +251,18 @@ Deno.serve(async (req) => {
             if (link.task_id) taskIds.add(link.task_id);
         });
 
-        // STEP C: Fetch project data + referenced people in smaller batches
-        // Batch C1: Project + access
-        const [projects, projectClientAccesses] = await Promise.all([
-            projectIdForAccess 
+        // STEP C: Fetch project data + referenced people in controlled batches
+        const [projects, projectClientAccesses, users, clientContacts, tasks] = await runBatched([
+            () => projectIdForAccess 
                 ? fetchWithRetry(() => base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess }))
                 : Promise.resolve([]),
-            projectIdForAccess
+            () => projectIdForAccess
                 ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess }))
                 : Promise.resolve([]),
-        ]);
-
-        // Batch C2: People + tasks
-        const [users, clientContacts, tasks] = await Promise.all([
-            fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
-            fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
-            fetchByIdsBatched(base44.asServiceRole.entities.Task, [...taskIds]),
-        ]);
+            () => fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
+            () => fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
+            () => fetchByIdsBatched(base44.asServiceRole.entities.Task, [...taskIds]),
+        ], 3, 150);
 
         const activeAccesses = projectClientAccesses.filter(pa => pa.access_status === 'active');
         const accessContactIds = activeAccesses.map(pa => pa.client_contact_id).filter(id => !clientContactIds.has(id));
@@ -370,7 +385,7 @@ Deno.serve(async (req) => {
 
         console.log(`[getInternalFeedbackDetail] ${executionTime}ms | Users:${users.length} Contacts:${allClientContacts.length}`);
 
-        return Response.json({
+        const result = {
             success: true,
             request: enrichedRequest,
             comments: enrichedComments,
@@ -386,7 +401,11 @@ Deno.serve(async (req) => {
             assignableContacts,
             primaryClientSlug,
             _debug: { executionTimeMs: executionTime, userCount: users.length, contactCount: allClientContacts.length }
-        }, {
+        };
+
+        setCache(cacheKey, result);
+
+        return Response.json(result, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
 
