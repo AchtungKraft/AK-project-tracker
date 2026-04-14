@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, ShoppingCart, AlertTriangle, ExternalLink } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, AlertTriangle, ExternalLink, DollarSign } from "lucide-react";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -86,13 +86,22 @@ export default function OrderPartModal({
         throw new Error('PO_VENDOR_REQUIRED: Cannot create PO without vendor_id');
       }
 
+      // Validate cost
+      const unitCost = Number(formData.unit_price);
+      if (!Number.isFinite(unitCost) || unitCost <= 0) {
+        throw new Error('Unit cost must be greater than $0');
+      }
+
       // CANONICAL: Use executeSupplyAction with CREATE_PO for commitment-based ordering
+      // Pass qty and cost overrides so the backend uses modal-edited values
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'CREATE_PO',
         commitment_ids: [part.commitment_id],
         payload: {
           vendor_id: vendorId,
           po_prefix: 'AK',
+          qty_override_map: { [part.commitment_id]: qty },
+          cost_override_map: { [part.commitment_id]: unitCost },
           vendor_order_data: {
             [vendorId]: {
               order_number: '',
@@ -213,7 +222,7 @@ export default function OrderPartModal({
             </div>
           </div>
 
-          {/* PHASE 10B: Quantity and Cost - pre-populated from read model */}
+          {/* Quantity and Cost — editable, pre-populated from read model */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-gray-400 text-xs">Quantity to Order</Label>
@@ -227,15 +236,30 @@ export default function OrderPartModal({
               />
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Unit Cost (from commitment)</Label>
+              <Label className="text-gray-400 text-xs flex items-center gap-1">
+                <DollarSign className="w-3 h-3" />
+                Unit Cost
+              </Label>
               <Input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 value={formData.unit_price}
-                disabled
-                className="bg-gray-800 border-gray-700 opacity-60"
+                onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
+                className={`bg-gray-800 border-gray-700 ${
+                  formData.unit_price !== '' && (Number(formData.unit_price) <= 0 || !Number.isFinite(Number(formData.unit_price)))
+                    ? 'border-red-500 focus:ring-red-500'
+                    : ''
+                }`}
+                disabled={isBlockedByProjectGuard}
+                placeholder="0.00"
               />
+              {formData.unit_price !== '' && Number(formData.unit_price) <= 0 && (
+                <p className="text-red-400 text-xs mt-1">Cost must be greater than $0</p>
+              )}
+              {(formData.unit_price === '' || formData.unit_price === undefined) && (
+                <p className="text-red-400 text-xs mt-1">Cost is required</p>
+              )}
             </div>
           </div>
 
@@ -259,7 +283,7 @@ export default function OrderPartModal({
               <Button
                 type="submit"
                 className="bg-red-600 hover:bg-red-700"
-                disabled={createOrderMutation.isPending || isBlockedByProjectGuard}
+                disabled={createOrderMutation.isPending || isBlockedByProjectGuard || !Number.isFinite(Number(formData.unit_price)) || Number(formData.unit_price) <= 0}
               >
                 {createOrderMutation.isPending ? (
                   <>
@@ -284,7 +308,7 @@ export default function OrderPartModal({
         label: isBlockedByProjectGuard ? 'Commitment Required' : (createOrderMutation.isPending ? 'Creating...' : 'Create PO'),
         onClick: handleSubmit,
         icon: Plus,
-        disabled: createOrderMutation.isPending || isBlockedByProjectGuard,
+        disabled: createOrderMutation.isPending || isBlockedByProjectGuard || !Number.isFinite(Number(formData.unit_price)) || Number(formData.unit_price) <= 0,
         loading: createOrderMutation.isPending,
       }}
       secondaryActions={[
