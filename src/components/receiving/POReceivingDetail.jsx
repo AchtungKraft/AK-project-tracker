@@ -44,6 +44,7 @@ import POReceivingCompletedLines from "./POReceivingCompletedLines";
 import DeletePOConfirmModal from "./DeletePOConfirmModal";
 import EditOrderModal from "@/components/parts/EditOrderModal";
 import POStatusBadge from "@/components/supply/POStatusBadge";
+import POFinancialSummary from "./POFinancialSummary";
 
 const LOCATION_NONE = "__none__";
 
@@ -371,6 +372,11 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-white font-mono">{effectivePO.po_number}</h1>
               <POStatusBadge status={effectivePO.status} size="lg" />
+              {effectivePO.billing_status && effectivePO.billing_status !== 'Not Invoiced' && (
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                  {effectivePO.billing_status}
+                </Badge>
+              )}
               {optimisticDeltas && (
                 <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs animate-pulse">
                   Syncing...
@@ -495,6 +501,9 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
         </Card>
       </div>
 
+      {/* Financial Summary */}
+      <POFinancialSummary po={effectivePO} refetch={refetch} />
+
       {/* Progress bar */}
       <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
         <div 
@@ -571,6 +580,8 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
                 <TableHead className="text-right w-20">Ordered</TableHead>
                 <TableHead className="text-right w-20">Received</TableHead>
                 <TableHead className="text-right w-20">Remaining</TableHead>
+                <TableHead className="text-right w-24">Unit Cost</TableHead>
+                <TableHead className="text-right w-24">Ext. Cost</TableHead>
                 <TableHead className="w-28">Receive Qty</TableHead>
                 <TableHead className="w-48">Location</TableHead>
                 <TableHead>Project</TableHead>

@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
       case 'SYNC_PO_COST': result = await syncPOCost(ctx, commitment_ids, payload); break;
       case 'DELETE_PO': result = await deletePO(ctx, payload); break;
       case 'MARK_ORDERED': result = await markOrdered(ctx, payload); break;
+      case 'UPDATE_PO_COSTS': result = await updatePOCosts(ctx, payload); break;
       default: return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
     }
     if (!dry_run) {
@@ -922,6 +923,30 @@ async function markOrdered(ctx, payload) {
   ctx.mutations.push({ entity: 'Order', id: order_id, action: 'MARK_ORDERED' });
   console.log(`[MARK_ORDERED] PO=${order.po_number} order_id=${order_id} from=${currentStatus} to=Ordered order_date=${updates.order_date || order.order_date}`);
   return { success: true, order_id, po_number: order.po_number, old_status: currentStatus, new_status: 'Ordered', order_date: updates.order_date || order.order_date };
+}
+
+async function updatePOCosts(ctx, payload) {
+  const { order_id, freight_cost, tariff_cost } = payload;
+  if (!order_id) throw new Error('order_id required');
+  const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
+  if (!order) throw new Error('Order not found');
+  const updates = {};
+  if (freight_cost !== undefined) {
+    const v = Number(freight_cost);
+    if (!Number.isFinite(v) || v < 0) throw new Error('freight_cost must be >= 0');
+    updates.freight_cost = v;
+  }
+  if (tariff_cost !== undefined) {
+    const v = Number(tariff_cost);
+    if (!Number.isFinite(v) || v < 0) throw new Error('tariff_cost must be >= 0');
+    updates.tariff_cost = v;
+  }
+  if (Object.keys(updates).length === 0) return { success: true, message: 'No changes' };
+  if (ctx.dry_run) return { preview: { order_id, updates } };
+  await ctx.base44.asServiceRole.entities.Order.update(order_id, updates);
+  ctx.mutations.push({ entity: 'Order', id: order_id, action: 'UPDATE_PO_COSTS' });
+  console.log(`[UPDATE_PO_COSTS] PO=${order.po_number} order_id=${order_id}`, updates);
+  return { success: true, order_id, po_number: order.po_number, updates };
 }
 
 async function addStock(ctx,payload) {

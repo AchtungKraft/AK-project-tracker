@@ -59,6 +59,12 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
       <TableCell className="text-right font-mono text-gray-300">{line.qty_ordered}</TableCell>
       <TableCell className="text-right font-mono text-green-400">{line.qty_received}</TableCell>
       <TableCell className="text-right font-mono font-bold text-blue-400">{line.qty_remaining}</TableCell>
+      <TableCell className="text-right font-mono text-gray-300 text-sm">
+        {(line.unit_cost ?? 0) > 0 ? `$${(line.unit_cost).toFixed(2)}` : <span className="text-red-400">$0</span>}
+      </TableCell>
+      <TableCell className="text-right font-mono text-gray-300 text-sm">
+        ${((line.unit_cost || 0) * (line.qty_ordered || 0)).toFixed(2)}
+      </TableCell>
       <TableCell>
         <Input
           type="number"

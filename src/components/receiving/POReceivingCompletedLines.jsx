@@ -40,6 +40,8 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
                 <TableHead>Part</TableHead>
                 <TableHead className="text-right w-20">Ordered</TableHead>
                 <TableHead className="text-right w-20">Received</TableHead>
+                <TableHead className="text-right w-24">Unit Cost</TableHead>
+                <TableHead className="text-right w-24">Ext. Cost</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Project</TableHead>
               </TableRow>
@@ -72,6 +74,12 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
                   </TableCell>
                   <TableCell className="text-right font-mono text-gray-500">{line.qty_ordered}</TableCell>
                   <TableCell className="text-right font-mono text-green-600">{line.qty_received}</TableCell>
+                  <TableCell className="text-right font-mono text-gray-500 text-sm">
+                    {(line.unit_cost ?? 0) > 0 ? `$${(line.unit_cost).toFixed(2)}` : '$0'}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-gray-500 text-sm">
+                    ${((line.unit_cost || 0) * (line.qty_ordered || 0)).toFixed(2)}
+                  </TableCell>
                   <TableCell>
                     <Badge className={cn(
                       "text-xs",
