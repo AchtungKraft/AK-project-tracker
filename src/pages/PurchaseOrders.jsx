@@ -143,7 +143,7 @@ export default function PurchaseOrders() {
   const [vendorFilter, setVendorFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [groupBy, setGroupBy] = useState("status");
-  const [thenBy, setThenBy] = useState("none");
+  const [thenBy, setThenBy] = useState("vendor");
   const [sortKey, setSortKey] = useState("newest");
   const [visibleStatuses, setVisibleStatuses] = useState(
     () => new Set(["Draft", "Ordered", "Partial", "Received", "Cancelled"])
