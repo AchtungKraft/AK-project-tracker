@@ -1,4 +1,19 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 400 } = {}) {
+  try { return await fn(); }
+  catch (err) {
+    const msg = err?.message || '';
+    const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
+    if (retries > 0 && isRetryable) {
+      const jitter = Math.random() * 200;
+      await new Promise(r => setTimeout(r, delay + jitter));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
 
 /**
  * getProjectSupplyView - Canonical read model for project supply state
@@ -44,20 +59,20 @@ Deno.serve(async (req) => {
       categories,
       projectInvoices,
     ] = await Promise.all([
-      base44.entities.Project.filter({ id: project_id }).then(r => r[0]),
-      base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.PartCategory.list(),
-      base44.entities.ProjectInvoice.filter({ project_id }),
+      fetchWithRetry(() => base44.entities.Project.filter({ id: project_id })).then(r => r[0]),
+      fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id })),
+      fetchWithRetry(() => base44.entities.PartCategory.list()),
+      fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id })),
     ]);
 
     // PHASE 2: Scope parts and vendors to only those referenced by commitments
     const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const [parts, vendorSources] = await Promise.all([
       partIdsFromCommitments.length > 0
-        ? base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
+        ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } }))
         : [],
       partIdsFromCommitments.length > 0
-        ? base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true })
+        ? fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true }))
         : [],
     ]);
     
@@ -73,22 +88,22 @@ Deno.serve(async (req) => {
       ...vendorSources.map(s => s.vendor_id).filter(Boolean),
     ])];
     const vendors = vendorIdsFromParts.length > 0
-      ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
+      ? await fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } }))
       : [];
 
     // PHASE 3: Fetch line items scoped to commitments, and invoice lines
     const commitmentIds = commitments.map(c => c.id);
     const [lineItems, projectInvoiceLines] = await Promise.all([
       commitmentIds.length > 0 
-        ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
+        ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
         : [],
-      base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } }),
+      fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoices.map(i => i.id) } })),
     ]);
     
     // PERF FIX: Derive orders from line items (no full scan)
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
     const orders = orderIds.length > 0
-      ? await base44.entities.Order.filter({ id: { $in: orderIds } })
+      ? await fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }))
       : [];
 
     if (!project) {
@@ -189,10 +204,10 @@ Deno.serve(async (req) => {
     
     // Handle empty part list gracefully
     const allCommitmentsForParts = partIdsInProject.length > 0
-      ? await base44.entities.PartCommitment.filter({
+      ? await fetchWithRetry(() => base44.entities.PartCommitment.filter({
           part_id: { $in: partIdsInProject },
           commitment_status: { $nin: ['cancelled', 'closed'] }
-        })
+        }))
       : [];
     
     // Build canonical part inventory map with GLOBAL totals
@@ -666,8 +681,14 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("getProjectSupplyView error:", error);
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error?.message || '';
+    const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+    const errorType = isRateLimit ? 'RATE_LIMIT' : msg === 'TIMEOUT' ? 'TIMEOUT' : 'UNKNOWN';
+    console.error("getProjectSupplyView error:", { type: errorType, message: msg });
+    return Response.json({
+      success: false, data: null,
+      error: { type: errorType, message: isRateLimit ? 'Rate limit exceeded' : msg }
+    }, { status: isRateLimit ? 429 : 500 });
   }
 });
 

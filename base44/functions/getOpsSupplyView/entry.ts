@@ -1,4 +1,19 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 400 } = {}) {
+  try { return await fn(); }
+  catch (err) {
+    const msg = err?.message || '';
+    const isRetryable = err?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests') || err?.name === 'FetchError' || msg.includes('ECONNRESET');
+    if (retries > 0 && isRetryable) {
+      const jitter = Math.random() * 200;
+      await new Promise(r => setTimeout(r, delay + jitter));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
 
 /**
  * getOpsSupplyView - Canonical read model for operations/global supply state
