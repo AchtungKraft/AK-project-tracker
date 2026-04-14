@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isMarkingOrdered, setIsMarkingOrdered] = useState(false);
   // Optimistic PO overlay — applied on top of server PO data for instant UI
   const [optimisticDeltas, setOptimisticDeltas] = useState(null);
   const initializedForRef = useRef(null);
@@ -382,6 +384,44 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mark as Ordered — only visible for Draft (or legacy Pending) POs */}
+          {(effectivePO.status === 'Draft' || effectivePO.status === 'Pending') && (
+            <Button
+              size="sm"
+              disabled={isMarkingOrdered}
+              onClick={async () => {
+                setIsMarkingOrdered(true);
+                try {
+                  const response = await base44.functions.invoke('executeSupplyAction', {
+                    action_type: 'MARK_ORDERED',
+                    commitment_ids: [],
+                    payload: { order_id: effectivePO.order_id },
+                    dry_run: false,
+                  });
+                  const result = response.data;
+                  if (result?.error) throw new Error(result.error);
+                  toast.success(`${effectivePO.po_number} marked as Ordered`);
+                  queryClient.invalidateQueries({ queryKey: ['poReceivingView'], exact: false });
+                  queryClient.invalidateQueries({ queryKey: ['orders'] });
+                  queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders'], exact: false });
+                  initializedForRef.current = null;
+                  await refetch();
+                } catch (error) {
+                  toast.error('Failed: ' + error.message);
+                } finally {
+                  setIsMarkingOrdered(false);
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isMarkingOrdered ? (
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-1" />
+              )}
+              Mark as Ordered
+            </Button>
+          )}
           {effectivePO.status !== 'Cancelled' && (
             <Button
               variant="outline"

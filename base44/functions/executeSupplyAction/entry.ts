@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
       case 'CANCEL_COMMITMENT': result = await cancelCommitment(ctx, commitment_ids, payload); break;
       case 'SYNC_PO_COST': result = await syncPOCost(ctx, commitment_ids, payload); break;
       case 'DELETE_PO': result = await deletePO(ctx, payload); break;
+      case 'MARK_ORDERED': result = await markOrdered(ctx, payload); break;
       default: return Response.json({ error: `Unknown action_type: ${action_type}` }, { status: 400 });
     }
     if (!dry_run) {
@@ -899,6 +900,28 @@ async function deletePO(ctx, payload) {
     restored: restoredCommitments,
     affected_part_ids: [...affectedParts],
   };
+}
+
+async function markOrdered(ctx, payload) {
+  const { order_id } = payload;
+  if (!order_id) throw new Error('order_id required');
+  const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
+  if (!order) throw new Error('Order not found');
+  // Guard: only Draft (or legacy Pending) can transition to Ordered
+  const currentStatus = order.status;
+  if (currentStatus !== 'Draft' && currentStatus !== 'Pending') {
+    return { success: false, error: `Cannot mark as Ordered — current status is "${currentStatus}". Only Draft POs can be marked as Ordered.`, error_code: 'INVALID_STATUS_TRANSITION' };
+  }
+  if (ctx.dry_run) return { preview: { order_id, current_status: currentStatus, new_status: 'Ordered' } };
+  const updates = { status: 'Ordered' };
+  // Set order_date if not already set
+  if (!order.order_date) {
+    updates.order_date = new Date().toISOString().slice(0, 10);
+  }
+  await ctx.base44.asServiceRole.entities.Order.update(order_id, updates);
+  ctx.mutations.push({ entity: 'Order', id: order_id, action: 'MARK_ORDERED' });
+  console.log(`[MARK_ORDERED] PO=${order.po_number} order_id=${order_id} from=${currentStatus} to=Ordered order_date=${updates.order_date || order.order_date}`);
+  return { success: true, order_id, po_number: order.po_number, old_status: currentStatus, new_status: 'Ordered', order_date: updates.order_date || order.order_date };
 }
 
 async function addStock(ctx,payload) {

@@ -1,0 +1,121 @@
+{
+  "name": "Order",
+  "type": "object",
+  "properties": {
+    "po_number": {
+      "type": "string",
+      "description": "Purchase order number (format: PREFIX_MMDDYYYY_SEQ)"
+    },
+    "po_prefix": {
+      "type": "string",
+      "default": "AK",
+      "description": "Prefix for PO number (default: AK)"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "order_number": {
+      "type": "string",
+      "description": "External order/confirmation number from vendor"
+    },
+    "order_url": {
+      "type": "string",
+      "description": "URL to order confirmation or tracking page"
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date order was placed"
+    },
+    "eta_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Expected arrival date"
+    },
+    "received_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date order was fully received"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Ordered",
+        "Partial",
+        "Received",
+        "Cancelled"
+      ],
+      "default": "Draft",
+      "description": "Order status. Canonical lifecycle: Draft \u2192 Ordered \u2192 Partial \u2192 Received. Pending is removed."
+    },
+    "shipping_cost": {
+      "type": "number",
+      "description": "DEPRECATED: Use freight_cost. Legacy shipping/handling cost."
+    },
+    "freight_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Freight/shipping cost for this order (PO header level)"
+    },
+    "tariff_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Tariff/duty cost for this order (PO header level)"
+    },
+    "tax": {
+      "type": "number",
+      "description": "Tax amount"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Order notes"
+    },
+    "pdf_attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "uploaded_date": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "PDF documents (invoices, packing slips, etc.)"
+    },
+    "billing_status": {
+      "type": "string",
+      "enum": [
+        "Not Invoiced",
+        "Client Invoiced",
+        "Client Paid"
+      ],
+      "default": "Not Invoiced",
+      "description": "Order-level billing status"
+    },
+    "invoice_number": {
+      "type": "string",
+      "description": "Invoice number for this order"
+    },
+    "invoice_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date invoice was sent"
+    },
+    "invoice_notes": {
+      "type": "string",
+      "description": "Billing notes"
+    }
+  },
+  "required": [
+    "vendor_id"
+  ]
+}
