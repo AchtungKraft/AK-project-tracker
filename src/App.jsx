@@ -54,7 +54,7 @@ const AuthenticatedApp = () => {
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}
-          path={`/${path}`}
+          path={`/${path.toLowerCase()}`}
           element={
             <LayoutWrapper currentPageName={path}>
               <Page />
@@ -63,7 +63,7 @@ const AuthenticatedApp = () => {
         />
       ))}
 
-      <Route path="/PurchaseOrders" element={
+      <Route path="/purchaseorders" element={
         <LayoutWrapper currentPageName="PurchaseOrders">
           <PurchaseOrders />
         </LayoutWrapper>
