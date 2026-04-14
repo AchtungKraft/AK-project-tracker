@@ -45,6 +45,7 @@ import DeletePOConfirmModal from "./DeletePOConfirmModal";
 import EditOrderModal from "@/components/parts/EditOrderModal";
 import POStatusBadge from "@/components/supply/POStatusBadge";
 import POFinancialSummary from "./POFinancialSummary";
+import PartModal from "@/components/parts/PartModal";
 
 const LOCATION_NONE = "__none__";
 
@@ -66,11 +67,11 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   const [selectedLines, setSelectedLines] = useState(new Set());
   const [defaultLocation, setDefaultLocation] = useState(LOCATION_NONE);
   const [isReceiving, setIsReceiving] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isMarkingOrdered, setIsMarkingOrdered] = useState(false);
+  const [selectedPartId, setSelectedPartId] = useState(null);
   // Optimistic PO overlay — applied on top of server PO data for instant UI
   const [optimisticDeltas, setOptimisticDeltas] = useState(null);
   const initializedForRef = useRef(null);
@@ -590,13 +591,14 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             <TableBody>
               {openLines.map(line => (
                 <POReceivingLineRow
-                  key={line.line_item_id}
-                  line={line}
-                  input={lineInputs[line.line_item_id] || { receive_qty: 0, location_id: LOCATION_NONE }}
-                  isSelected={selectedLines.has(line.line_item_id)}
-                  locations={locations}
-                  onToggle={toggleLine}
-                  onUpdateInput={updateLineInput}
+                key={line.line_item_id}
+                line={line}
+                input={lineInputs[line.line_item_id] || { receive_qty: 0, location_id: LOCATION_NONE }}
+                isSelected={selectedLines.has(line.line_item_id)}
+                locations={locations}
+                onToggle={toggleLine}
+                onUpdateInput={updateLineInput}
+                onOpenPart={(partId) => setSelectedPartId(partId)}
                 />
               ))}
             </TableBody>
@@ -610,12 +612,11 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
         </Card>
       )}
 
-      {/* Completed Lines Section */}
+      {/* Completed Lines Section — always visible */}
       {completedLines.length > 0 && (
         <POReceivingCompletedLines
           lines={completedLines}
-          showCompleted={showCompleted}
-          onToggle={() => setShowCompleted(!showCompleted)}
+          onOpenPart={(partId) => setSelectedPartId(partId)}
         />
       )}
 
@@ -671,6 +672,14 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             initializedForRef.current = null;
             refetch();
           }}
+        />
+      )}
+
+      {/* Part Detail Modal */}
+      {selectedPartId && (
+        <PartModal
+          partId={selectedPartId}
+          onClose={() => setSelectedPartId(null)}
         />
       )}
 

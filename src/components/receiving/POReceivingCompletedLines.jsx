@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Package, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,22 +17,22 @@ import { cn } from "@/lib/utils";
  * Memoized — only re-renders when lines array or toggle state changes.
  */
 const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines({ 
-  lines, 
-  showCompleted, 
-  onToggle 
+  lines,
+  onOpenPart, 
 }) {
   return (
     <div>
-      <button 
-        onClick={onToggle}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-2"
-      >
-        {showCompleted ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        Received Into Inventory ({lines.length} items)
-      </button>
+      <div className="flex items-center gap-2 mb-3">
+        <CheckCircle2 className="w-4 h-4 text-green-600" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-green-400">
+          Completed / Received Items
+        </h3>
+        <Badge variant="outline" className="text-[10px] text-gray-400 border-gray-600">
+          {lines.length}
+        </Badge>
+      </div>
       
-      {showCompleted && (
-        <Card className="bg-gray-900/30 border-gray-800">
+        <Card className="bg-gray-900/30 border-gray-800 opacity-70">
           <Table>
             <TableHeader>
               <TableRow className="border-gray-800 hover:bg-transparent">
@@ -65,7 +65,13 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
                         </div>
                       )}
                       <div>
-                        <div className="font-medium text-gray-400 text-sm">{line.part_name}</div>
+                        <button
+                          type="button"
+                          onClick={() => onOpenPart?.(line.part_id)}
+                          className="font-medium text-blue-400/70 hover:text-blue-300 hover:underline text-sm text-left"
+                        >
+                          {line.part_name}
+                        </button>
                         {line.vendor_part_number && (
                           <div className="text-xs text-gray-600 font-mono">{line.vendor_part_number}</div>
                         )}
@@ -98,7 +104,6 @@ const POReceivingCompletedLines = React.memo(function POReceivingCompletedLines(
             </TableBody>
           </Table>
         </Card>
-      )}
     </div>
   );
 });

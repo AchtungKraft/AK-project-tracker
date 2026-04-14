@@ -25,6 +25,7 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
   locations,
   onToggle,
   onUpdateInput,
+  onOpenPart,
 }) {
   return (
     <TableRow
@@ -49,7 +50,13 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
             </div>
           )}
           <div>
-            <div className="font-medium text-white text-sm">{line.part_name}</div>
+            <button
+              type="button"
+              onClick={() => onOpenPart?.(line.part_id)}
+              className="font-medium text-blue-400 hover:text-blue-300 hover:underline text-sm text-left"
+            >
+              {line.part_name}
+            </button>
             {line.vendor_part_number && (
               <div className="text-xs text-gray-500 font-mono">{line.vendor_part_number}</div>
             )}
