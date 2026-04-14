@@ -9,13 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableHead,
@@ -46,6 +39,7 @@ import EditOrderModal from "@/components/parts/EditOrderModal";
 import POStatusBadge from "@/components/supply/POStatusBadge";
 import POFinancialSummary from "./POFinancialSummary";
 import PartModal from "@/components/parts/PartModal";
+import LocationSelect from "@/components/common/LocationSelect";
 
 const LOCATION_NONE = "__none__";
 
@@ -532,24 +526,19 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-gray-500" />
-                  <Select value={defaultLocation} onValueChange={setDefaultLocation}>
-                    <SelectTrigger className="w-48 bg-gray-800 border-gray-600">
-                      <SelectValue placeholder="Default location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={LOCATION_NONE}>No location</SelectItem>
-                      {locations?.map(loc => (
-                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">Apply Location to Selected:</span>
+                  <LocationSelect
+                    value={defaultLocation === LOCATION_NONE ? '' : defaultLocation}
+                    onValueChange={(v) => setDefaultLocation(v || LOCATION_NONE)}
+                    className="w-48 bg-gray-800 border-gray-600"
+                  />
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={applyDefaultLocation}
                     disabled={defaultLocation === LOCATION_NONE || selectedLines.size === 0}
                   >
-                    Apply to Selected
+                    Apply
                   </Button>
                 </div>
               </div>
@@ -595,7 +584,6 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
                 line={line}
                 input={lineInputs[line.line_item_id] || { receive_qty: 0, location_id: LOCATION_NONE }}
                 isSelected={selectedLines.has(line.line_item_id)}
-                locations={locations}
                 onToggle={toggleLine}
                 onUpdateInput={updateLineInput}
                 onOpenPart={(partId) => setSelectedPartId(partId)}
