@@ -23,6 +23,7 @@ import {
   ArrowUpDown, Layers, ExternalLink, DollarSign, RefreshCw
 } from "lucide-react";
 import CostSourceBadge from "@/components/supply/CostSourceBadge";
+import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
@@ -284,9 +285,11 @@ export function PSMItemRow({
   // CANONICAL: Use resolved_exposure from backend (no local derivation)
   const resolvedExposure = commitment.resolved_exposure ?? commitment.exposure_gap ?? 0;
 
+  // CANONICAL: Resolve vendor display using source-first resolution
+  const canonicalVendor = resolveDefaultVendor(commitment, null, {});
   const resolvedVendor = resolveVendorDisplay(
-    commitment.vendor?.id || vendor?.id,
-    vendor || commitment.vendor_name,
+    canonicalVendor?.vendor_id || commitment.vendor?.id || vendor?.id,
+    canonicalVendor?.vendor_name || vendor || commitment.vendor_name,
     vendorsMap
   );
   const resolvedCategory = resolveCategoryDisplay(
@@ -836,8 +839,10 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
 
   try {
     if (mode === 'vendor') {
-      const vendorId = item.vendor?.id || item.vendor_id || null;
-      const vendorNameRaw = item.vendor?.vendor_name || item.vendor_name || null;
+      // CANONICAL: Use resolver to determine vendor from sources, not stale item.vendor_id
+      const resolved = resolveDefaultVendor(item, null, {});
+      const vendorId = resolved?.vendor_id || item.vendor?.id || item.vendor_id || null;
+      const vendorNameRaw = resolved?.vendor_name || item.vendor?.vendor_name || item.vendor_name || null;
       const vendorDisplay = resolveVendorDisplay(vendorId, vendorNameRaw, vendorsMap);
       return {
         key: vendorId || 'unassigned',

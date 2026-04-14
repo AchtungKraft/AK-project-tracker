@@ -306,7 +306,14 @@ Deno.serve(async (req) => {
       .filter(c => c.commitment_status !== 'cancelled')
       .map(c => {
         const part = partMap.get(c.part_id);
-        const vendor = part ? vendorMap.get(part.default_vendor_id) : null;
+        // CANONICAL VENDOR RESOLUTION: PartVendorSource first, then Part.default_vendor_id
+        const partSources_forVendor = sourcesByPart.get(c.part_id) || [];
+        const preferredVendorSource = partSources_forVendor.find(s => s.is_preferred && s.is_active !== false)
+          || partSources_forVendor.find(s => s.is_active !== false)
+          || null;
+        const resolvedVendorId = preferredVendorSource?.vendor_id || part?.default_vendor_id || null;
+        const vendor = resolvedVendorId ? vendorMap.get(resolvedVendorId) : null;
+        const has_vendor = !!vendor || partSources_forVendor.length > 0;
         const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
         const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
@@ -367,7 +374,7 @@ Deno.serve(async (req) => {
         
         const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
           { required_total, reserved_from_stock, covered_from_po, qty_installed },
-          !!vendor,
+          has_vendor,
           {
             physical_stock: partInv.physical_stock,
             reserved_total: partInv.reserved_global,
@@ -409,8 +416,8 @@ Deno.serve(async (req) => {
           order_number: firstOrderId ? (orderMap.get(firstOrderId)?.order_number || orderMap.get(firstOrderId)?.po_number || null) : null,
           project_id: c.project_id,
           project_name: project.name,
-          vendor_id: vendor?.id || null,
-          vendor_name: vendor?.vendor_name || null,
+          vendor_id: vendor?.id || preferredVendorSource?.vendor_id || null,
+          vendor_name: vendor?.vendor_name || (preferredVendorSource ? (vendorMap.get(preferredVendorSource.vendor_id)?.vendor_name || 'Unknown') : null),
           category_id: category?.id || null,
           category_name: category?.name || null,
           category_color: category?.color || '#6b7280',

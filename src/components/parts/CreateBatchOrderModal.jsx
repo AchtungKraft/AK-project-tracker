@@ -314,9 +314,15 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
   // PHASE 10B: Validate items — aggregated items use commitments[], legacy use commitment_id
   const isAggregated = selectedItems.some(item => Array.isArray(item.commitments) && item.commitments.length > 0);
   if (!isAggregated) {
-    const invalidItems = selectedItems.filter(item => !item.commitment_id || !item.vendor_id);
+    // Validate using resolver — items with sources ARE valid even without stale vendor_id
+    const invalidItems = selectedItems.filter(item => {
+      if (!item.commitment_id) return true;
+      // Check if item has a resolvable vendor (source-first, then stale)
+      const resolved = resolveDefaultVendor(item, selectedVendorContext, {});
+      return !resolved?.vendor_id;
+    });
     if (invalidItems.length > 0) {
-      console.error('[PHASE 10B VIOLATION] Items missing commitment_id or vendor_id:', invalidItems);
+      console.error('[PHASE 10B VIOLATION] Items missing commitment_id or resolvable vendor:', invalidItems);
     }
   }
   
