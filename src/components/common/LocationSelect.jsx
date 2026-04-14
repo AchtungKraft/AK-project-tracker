@@ -85,11 +85,11 @@ export default function LocationSelect({ value, onValueChange, className }) {
           </SelectItem>
           
           {parentLocations
-            .sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''))
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
             .map(parent => {
             const children = locations
               .filter(l => l.parent_id === parent.id && l.active !== false)
-              .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
+              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
             return (
               <React.Fragment key={parent.id}>
                 <SelectItem value={parent.id}>
@@ -109,7 +109,7 @@ export default function LocationSelect({ value, onValueChange, className }) {
           {/* Orphan locations (parent missing) */}
           {locations
             .filter(l => l.parent_id && !parentLocations.find(p => p.id === l.parent_id) && l.active !== false)
-            .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''))
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
             .map(loc => (
               <SelectItem key={loc.id} value={loc.id}>
                 <span style={{ color: loc.color || '#8B5CF6' }}>{loc.bin_description || loc.location_area}</span>
