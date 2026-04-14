@@ -17,15 +17,22 @@ export default function POStatusGroup({
   onNavigate,
   defaultCollapsed = false,
   showProject = false,
+  forceCollapsed,
+  onToggle,
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
+  const collapsed = forceCollapsed !== undefined ? forceCollapsed : localCollapsed;
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setLocalCollapsed(prev => !prev);
+  };
 
   if (orders.length === 0) return null;
 
   return (
     <div>
       <button
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={handleToggle}
         className="flex items-center gap-2 mb-2 group"
       >
         <h2 className={cn("text-xs font-semibold uppercase tracking-wider", colorClass)}>
