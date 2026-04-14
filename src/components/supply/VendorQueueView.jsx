@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 
 /**
  * VendorQueueView — Vendor-grouped summary with multi-source intelligence.
@@ -65,10 +66,17 @@ export default function VendorQueueView({ items, onSelectVendor }) {
     return map;
   }, [vendorSources]);
 
+  // Build sourcesByPartObj for the resolver (Object form, not Map)
+  const sourcesByPartObj = useMemo(() => Object.fromEntries(sourcesByPart), [sourcesByPart]);
+
   // Build vendor queue with source intelligence
   const vendorQueue = useMemo(() => {
     const allVendorIds = new Set();
+    // Collect all vendor IDs from canonical resolution + sources
     for (const item of items) {
+      const resolved = resolveDefaultVendor(item, null, sourcesByPartObj);
+      if (resolved?.vendor_id) allVendorIds.add(resolved.vendor_id);
+      // Also include stale vendor for backward compat
       const vid = item.vendor?.id || item.vendor_id;
       if (vid) allVendorIds.add(vid);
     }
@@ -81,10 +89,12 @@ export default function VendorQueueView({ items, onSelectVendor }) {
     for (const vendorId of allVendorIds) {
       const vendor = vendorMap.get(vendorId);
 
-      // Find items this vendor can supply (default assignment OR has a PartVendorSource)
+      // Find items this vendor can supply (resolved default OR has a PartVendorSource)
       const matchedItems = items.filter(item => {
-        const defaultVid = item.vendor?.id || item.vendor_id;
-        if (defaultVid === vendorId) return true;
+        // Check if this vendor is the resolved default for the item
+        const resolved = resolveDefaultVendor(item, null, sourcesByPartObj);
+        if (resolved?.vendor_id === vendorId) return true;
+        // Also match if vendor has a configured source for the part
         const sources = sourcesByPart.get(item.part_id) || [];
         return sources.some(s => s.vendor_id === vendorId);
       });
@@ -161,7 +171,7 @@ export default function VendorQueueView({ items, onSelectVendor }) {
       if (b.total_value !== a.total_value) return b.total_value - a.total_value;
       return b.parts_count - a.parts_count;
     });
-  }, [items, vendorSources, vendorMap, sourcesByPart]);
+  }, [items, vendorSources, vendorMap, sourcesByPart, sourcesByPartObj]);
 
   if (vendorQueue.length === 0) {
     return (

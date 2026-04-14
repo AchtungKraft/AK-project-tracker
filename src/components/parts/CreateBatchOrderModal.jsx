@@ -16,6 +16,7 @@ import { Loader2, Package, Trash2, ChevronDown, ChevronUp, ExternalLink, DollarS
 import { useSupplyAction } from "@/components/supply/useSupplyState";
 import { cn } from "@/lib/utils";
 import VendorSourceLink, { resolvePrimaryURL, getAllSources } from "@/components/parts/VendorSourceLink";
+import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 
 /**
  * PartLineGroup - Aggregated part row within a vendor group
@@ -376,28 +377,25 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
       }
     }
     
-    flatItems.forEach(item => {
-      // Determine effective vendor for this item
-      let vendorId = item.vendor_id || 'unassigned';
-      let vendorName = item.vendor_name || null;
-      
-      // If a vendor context was set (from Vendor View selection), check if this item
-      // has a source for that vendor — if so, override the grouping vendor
-      if (selectedVendorContext?.vendor_id) {
-        const ctxVid = selectedVendorContext.vendor_id;
-        const itemDefaultVid = item.vendor_id;
-        if (itemDefaultVid === ctxVid) {
-          vendorId = ctxVid;
-          vendorName = selectedVendorContext.vendor_name;
-        } else {
-          const sources = item.sources || [];
-          const matchingSource = sources.find(s => s.vendor_id === ctxVid);
-          if (matchingSource) {
-            vendorId = ctxVid;
-            vendorName = selectedVendorContext.vendor_name;
-          }
+    // Build a sources-by-part object from flat items for the resolver
+    const sourcesByPartFromItems = {};
+    for (const item of flatItems) {
+      if (item.sources?.length > 0 && item._agg_part_id) {
+        if (!sourcesByPartFromItems[item._agg_part_id]) {
+          sourcesByPartFromItems[item._agg_part_id] = item.sources;
         }
       }
+    }
+
+    flatItems.forEach(item => {
+      // Canonical vendor resolution: source-first, context override, then stale fallback
+      const resolverSources = sourcesByPartFromItems[item.part_id] 
+        ? { [item.part_id]: sourcesByPartFromItems[item.part_id].filter(s => s.is_active !== false) }
+        : {};
+      const resolved = resolveDefaultVendor(item, selectedVendorContext, resolverSources);
+      
+      let vendorId = resolved?.vendor_id || item.vendor_id || 'unassigned';
+      let vendorName = resolved?.vendor_name || item.vendor_name || null;
 
       if (!groups[vendorId]) {
         groups[vendorId] = {
@@ -418,14 +416,9 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
           items: [],
         };
       }
-      let itemCost = item.default_cost ?? item.estimated_cost ?? 0;
-      if (selectedVendorContext?.vendor_id && vendorId === selectedVendorContext.vendor_id) {
-        const sources = item.sources || [];
-        const vendorSource = sources.find(s => s.vendor_id === selectedVendorContext.vendor_id);
-        if (vendorSource?.unit_cost > 0) {
-          itemCost = vendorSource.unit_cost;
-        }
-      }
+      
+      // Use resolved cost from source, fall back to item defaults
+      let itemCost = resolved?.unit_cost || item.default_cost || item.estimated_cost || 0;
       
       const isVendorOverride = vendorId !== (item.vendor_id || 'unassigned');
       groups[vendorId].items.push({

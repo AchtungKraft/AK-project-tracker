@@ -30,6 +30,7 @@ import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import VendorQueueView from "@/components/supply/VendorQueueView";
 import AggregatedProcurementView, { resolveActiveVendorSource } from "@/components/supply/AggregatedProcurementView";
+import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 // VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import { cn } from "@/lib/utils";
 
@@ -122,32 +123,29 @@ export default function GlobalNeedToOrder() {
     }
   }, [filteredItems]);
 
-  // Build vendor override map from selectedVendorContext + sources
+  // Build vendor override map using canonical resolver (source-first, even without explicit context)
   const buildVendorOverrideMap = (items) => {
-    if (!selectedVendorContext?.vendor_id) return { vendor_override_map: {}, source_override_map: {} };
-    const ctxVid = selectedVendorContext.vendor_id;
     const vendor_override_map = {};
     const source_override_map = {};
     for (const item of items) {
       if (!item.commitment_id) continue;
-      const defaultVid = item.vendor_id;
-      if (defaultVid === ctxVid) {
-        vendor_override_map[item.commitment_id] = ctxVid;
-        continue;
+      const resolved = resolveDefaultVendor(item, selectedVendorContext, vendorSourcesByPart);
+      if (!resolved?.vendor_id) continue;
+      
+      // Only set override if resolved vendor differs from item's stale vendor
+      const staleVid = item.vendor_id || item.vendor?.id;
+      if (resolved.vendor_id !== staleVid || resolved.source_id) {
+        vendor_override_map[item.commitment_id] = resolved.vendor_id;
+        if (resolved.source_id) {
+          source_override_map[item.commitment_id] = {
+            vendor_id: resolved.vendor_id,
+            source_id: resolved.source_id,
+            source_cost: resolved.unit_cost || 0,
+            source_url: resolved.order_url || '',
+            source_vendor_part_number: resolved.vendor_part_number || '',
+          };
+        }
       }
-      const sources = vendorSourcesByPart[item.part_id] || [];
-      const match = sources.find(s => s.vendor_id === ctxVid);
-      if (match) {
-        vendor_override_map[item.commitment_id] = ctxVid;
-        source_override_map[item.commitment_id] = {
-          vendor_id: ctxVid,
-          source_id: match.id,
-          source_cost: match.unit_cost || 0,
-          source_url: match.order_url || '',
-          source_vendor_part_number: match.vendor_part_number || '',
-        };
-      }
-      // else: no override, default vendor used
     }
     return { vendor_override_map, source_override_map };
   };
@@ -191,15 +189,17 @@ export default function GlobalNeedToOrder() {
 
   // PSM callback handlers — bridge PSM component API to GNO modals
   const handleCreatePO = (commitment) => {
+    // Use canonical resolver for vendor defaults
+    const resolved = resolveDefaultVendor(commitment, selectedVendorContext, vendorSourcesByPart);
     setOrderModalPart({
       commitment_id: commitment.commitment_id || commitment.id,
       part_id: commitment.part_id,
       part_name: commitment.part?.part_name || commitment.part_name,
-      vendor_id: commitment.vendor_id || commitment.vendor?.id,
-      vendor_name: commitment.vendor?.vendor_name || commitment.vendor_name,
+      vendor_id: resolved?.vendor_id || commitment.vendor_id || commitment.vendor?.id,
+      vendor_name: resolved?.vendor_name || commitment.vendor?.vendor_name || commitment.vendor_name,
       qty_to_order: commitment.to_order ?? 0,
       estimated_cost: commitment.estimated_cost,
-      default_cost: commitment.unit_cost,
+      default_cost: resolved?.unit_cost || commitment.unit_cost,
       default_retail: commitment.unit_retail,
     });
   };
@@ -525,25 +525,28 @@ export default function GlobalNeedToOrder() {
               return mergedSources.find(s => s.vendor_id === vendorId) || null;
             }
 
-            // AGGREGATION: One row per part per vendor
+            // AGGREGATION: One row per part per RESOLVED vendor (source-first)
             const map = new Map();
             const allItems = getSelectedItemsData();
             
             for (const item of allItems) {
-              const vid = item.vendor_id || item.vendor?.id || 'unassigned';
+              // Canonical resolution: source-defined vendor takes precedence
+              const resolved = resolveDefaultVendor(item, selectedVendorContext, vendorSourcesByPart);
+              const vid = resolved?.vendor_id || 'unassigned';
+              const vName = resolved?.vendor_name || item.vendor_name || 'Unknown';
               const key = `${item.part_id}::${vid}`;
+
               if (!map.has(key)) {
                 map.set(key, {
                   part_id: item.part_id,
                   part_name: item.part_name,
-                  vendor_id: item.vendor_id,
-                  vendor_name: item.vendor_name,
+                  vendor_id: vid,
+                  vendor_name: vName,
                   default_retail: item.unit_retail,
                   cost_source_tag: item.cost_source_tag,
                   invalid_cost: item.invalid_cost,
-                  // Placeholders — resolved after all commitments collected
-                  order_url: null,
-                  default_cost: 0,
+                  order_url: resolved?.order_url || null,
+                  default_cost: resolved?.unit_cost || 0,
                   sources: [],
                   qty_to_order: 0,
                   estimated_cost: 0,
@@ -557,45 +560,32 @@ export default function GlobalNeedToOrder() {
                 commitment_id: item.commitment_id,
                 part_id: item.part_id,
                 part_name: item.part_name,
-                vendor_id: item.vendor_id,
-                vendor_name: item.vendor_name,
+                vendor_id: vid,
+                vendor_name: vName,
                 project_id: item.project_id,
                 project_name: item.project_name,
                 qty_to_order: item.to_order,
-                default_cost: item.resolved_unit_cost ?? item.unit_cost,
+                default_cost: resolved?.unit_cost || item.resolved_unit_cost || item.unit_cost || 0,
                 vendor_sources: item.vendor_sources || [],
               });
             }
 
-            // Post-aggregation: merge sources + resolve primary for each group
+            // Post-aggregation: merge sources + ensure resolved fields are set
             for (const agg of map.values()) {
               const overrideSources = vendorSourcesByPart[agg.part_id] || [];
               agg.sources = mergeSources(agg.commitments, overrideSources);
 
-              const effectiveVid = selectedVendorContext?.vendor_id || agg.vendor_id;
-              const primary = resolvePrimarySource(agg.sources, effectiveVid);
-              // Robust fallback chain: primary source → any commitment's order_url → any source with a URL
-              agg.order_url = primary?.order_url
-                || agg.commitments.find(c => c.order_url)?.order_url
-                || agg.sources.find(s => s.order_url)?.order_url
-                || null;
-              agg.default_cost = primary?.unit_cost || agg.commitments[0]?.default_cost || 0;
-
-              // DIAGNOSTIC: trace source data through aggregation
-              console.log('[GNO AGGREGATED PART]', {
-                part_name: agg.part_name,
-                part_id: agg.part_id,
-                sources_count: agg.sources?.length,
-                sources_with_urls: agg.sources?.filter(s => s.order_url)?.length,
-                sources: agg.sources?.map(s => ({ vendor_id: s.vendor_id, order_url: s.order_url, vendor_name: s.vendor_name })),
-                order_url: agg.order_url,
-                override_sources_count: overrideSources.length,
-                commitment_vendor_sources: agg.commitments.map(c => ({
-                  commitment_id: c.commitment_id,
-                  vendor_sources_count: c.vendor_sources?.length,
-                  vendor_sources: c.vendor_sources?.map(vs => ({ vendor_id: vs.vendor_id, order_url: vs.order_url })),
-                })),
-              });
+              // Fill in order_url/cost from sources if resolver didn't provide them
+              if (!agg.order_url) {
+                const primary = resolvePrimarySource(agg.sources, agg.vendor_id);
+                agg.order_url = primary?.order_url
+                  || agg.sources.find(s => s.order_url)?.order_url
+                  || null;
+              }
+              if (!agg.default_cost || agg.default_cost === 0) {
+                const primary = resolvePrimarySource(agg.sources, agg.vendor_id);
+                agg.default_cost = primary?.unit_cost || agg.commitments[0]?.default_cost || 0;
+              }
             }
 
             return Array.from(map.values());

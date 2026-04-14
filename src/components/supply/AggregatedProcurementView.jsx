@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { PSMItemRow } from "@/components/supply/PSMGroupedCards";
+import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 
 /**
  * AggregatedProcurementView - Vendor → Part hierarchy procurement view
@@ -28,7 +29,8 @@ import { PSMItemRow } from "@/components/supply/PSMGroupedCards";
  */
 
 // ============================================================================
-// VENDOR SOURCE RESOLVER — canonical for order_url and unit_cost
+// VENDOR SOURCE RESOLVER — retained for backward compat (per-vendor URL lookup)
+// For DEFAULT vendor resolution, use resolveDefaultVendor instead.
 // ============================================================================
 export function resolveActiveVendorSource(part_id, vendor_id, item, vendorSourcesByPart) {
   if (!vendor_id) return null;
@@ -395,8 +397,10 @@ export default function AggregatedProcurementView({
     const vMap = new Map();
 
     for (const item of items) {
-      const vKey = item.vendor_id || item.vendor?.id || 'unassigned';
-      const vName = item.vendor_name || item.vendor?.vendor_name || 'No Vendor';
+      // Canonical resolution: source-defined vendor takes precedence over stale commitment vendor
+      const resolved = resolveDefaultVendor(item, null, vendorSourcesByPart);
+      const vKey = resolved?.vendor_id || item.vendor_id || item.vendor?.id || 'unassigned';
+      const vName = resolved?.vendor_name || item.vendor_name || item.vendor?.vendor_name || 'No Vendor';
 
       if (!vMap.has(vKey)) {
         vMap.set(vKey, {
@@ -410,16 +414,13 @@ export default function AggregatedProcurementView({
       const pKey = item.part_id;
 
       if (!vendor.partsMap.has(pKey)) {
-        // Resolve vendor source for order_url and cost
-        const source = resolveActiveVendorSource(pKey, vKey === 'unassigned' ? null : vKey, item, vendorSourcesByPart);
-
         vendor.partsMap.set(pKey, {
           part_id: pKey,
           part_name: item.part_name || item.part?.part_name || 'Unknown',
-          vendor_part_number: source?.vendor_part_number || item.vendor_part_number || item.part?.vendor_part_number || null,
+          vendor_part_number: resolved?.vendor_part_number || item.vendor_part_number || item.part?.vendor_part_number || null,
           featured_photo: item.featured_photo || item.part?.featured_photo || null,
-          order_url: source?.order_url || item.order_url || null,
-          resolved_unit_cost: source?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost ?? 0,
+          order_url: resolved?.order_url || item.order_url || null,
+          resolved_unit_cost: resolved?.unit_cost ?? item.resolved_unit_cost ?? item.unit_cost ?? 0,
           total_to_order: 0,
           total_cost: 0,
           total_exposure: 0,
