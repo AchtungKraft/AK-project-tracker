@@ -15,7 +15,7 @@ async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   }
 }
 
-// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+// ── Controlled batching — adaptive size, 150ms gap ────────────────
 async function runBatched(tasks, batchSize = 3, delay = 150) {
   const results = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -30,9 +30,9 @@ async function runBatched(tasks, batchSize = 3, delay = 150) {
   return results;
 }
 
-// ── Short-term response cache ────────────────────────────────────────
+// ── Short-term response cache (15s for project supply) ───────────
 const cache = new Map();
-function getCached(key, ttl = 10000) {
+function getCached(key, ttl = 15000) {
   const item = cache.get(key);
   if (!item) return null;
   if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
@@ -46,8 +46,6 @@ function setCache(key, data) {
  * getProjectSupplyView - Canonical read model for project supply state
  * 
  * Returns SupplyCommitmentViewModel[] shaped data.
- * UI components MUST NOT compute coverage, to_order, or next_action locally.
- * 
  * This is the ONLY source of truth for ProjectSupplyManager.
  */
 
@@ -76,76 +74,49 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
 
-    // ── Cache check ──
+    // ── Cache check (15s TTL) ──
     const cacheKey = `projectSupply:${project_id}:${JSON.stringify(filters)}`;
     const cached = getCached(cacheKey);
     if (cached) {
       return Response.json(cached);
     }
 
-    // PERF: Timing start
     const _perfStart = Date.now();
     
-    // PHASE 1: Fetch project + commitments first to scope subsequent queries
-    const [
-      projectArr,
-      commitments,
-      categories,
-      projectInvoices,
-    ] = await runBatched([
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 1: Fetch project + commitments + invoices in parallel
+    // Categories removed from here — fetched scoped later
+    // ══════════════════════════════════════════════════════════════
+    const [projectArr, commitments, projectInvoices] = await runBatched([
       () => fetchWithRetry(() => base44.entities.Project.filter({ id: project_id })),
       () => fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id })),
-      () => fetchWithRetry(() => base44.entities.PartCategory.list()),
       () => fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id })),
     ], 3, 150);
     const project = projectArr[0];
 
-    // PHASE 2: Scope parts and vendors to only those referenced by commitments
-    const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
-    const [parts, vendorSources] = await runBatched([
-      () => partIdsFromCommitments.length > 0
-        ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } }))
-        : Promise.resolve([]),
-      () => partIdsFromCommitments.length > 0
-        ? fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true }))
-        : Promise.resolve([]),
-    ], 2, 150);
-    
-    // Build source lookup by part
-    const sourcesByPart = new Map();
-    for (const s of vendorSources) {
-      if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
-      sourcesByPart.get(s.part_id).push(s);
-    }
-    
-    const vendorIdsFromParts = [...new Set([
-      ...parts.map(p => p.default_vendor_id).filter(Boolean),
-      ...vendorSources.map(s => s.vendor_id).filter(Boolean),
-    ])];
-    const vendors = vendorIdsFromParts.length > 0
-      ? await fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } }))
-      : [];
-
-    // PHASE 3: Fetch line items scoped to commitments, and invoice lines
-    const commitmentIds = commitments.map(c => c.id);
-    const invoiceIdsForLines = projectInvoices.map(i => i.id);
-    const [lineItems, projectInvoiceLines] = await runBatched([
-      () => commitmentIds.length > 0 
-        ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
-        : Promise.resolve([]),
-      () => invoiceIdsForLines.length > 0
-        ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIdsForLines } }))
-        : Promise.resolve([]),
-    ], 2, 150);
-    
-    // PERF FIX: Derive orders from line items (no full scan)
-    const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
-    const orders = orderIds.length > 0
-      ? await fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }))
-      : [];
-
     if (!project) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    // ── EARLY EXIT: No commitments = minimal response ──
+    if (commitments.length === 0) {
+      const emptyResponse = {
+        success: true,
+        timestamp: new Date().toISOString(),
+        project: { id: project.id, name: project.name, client_name: project.client_name, financial_model_version: 'forward' },
+        items: [],
+        tab_counts: { all: 0, plan: 0, buy: 0, receive: 0, install: 0, invoice: projectInvoices.filter(inv => inv.status !== 'void').length },
+        summary: {
+          total_commitments: 0, total_required: 0, total_reserved: 0, total_covered: 0, total_to_order: 0, total_installed: 0,
+          total_planned_retail: 0, total_planned_cost: 0, total_invoiced: 0, total_paid: 0, invoice_outstanding: 0, unbilled_retail: 0,
+          supply_coverage_summary: { full: 0, partial: 0, none: 0, over: 0 }, install_percent: 0,
+          by_status: { planned: 0, ordered: 0, received: 0, allocated: 0, installed: 0 },
+        },
+        categories: [],
+        integrity_warnings: null,
+      };
+      setCache(cacheKey, emptyResponse);
+      return Response.json(emptyResponse);
     }
 
     // FORWARD MODEL ENFORCEMENT
@@ -153,13 +124,74 @@ Deno.serve(async (req) => {
       console.warn(`[FORWARD MIGRATION] Project ${project_id} has legacy model, treating as forward`);
     }
 
+    // PHASE 2: Scope IDs from commitments
+    const commitmentIds = commitments.map(c => c.id);
+    const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
+    const invoiceIdsForLines = projectInvoices.map(i => i.id);
+    
+    // ── Adaptive batch size ──
+    const adaptiveBatch = partIdsFromCommitments.length > 40 ? 2 : 3;
+
+    // PHASE 3: Fetch parts + vendorSources + lineItems + invoiceLines + globalCommitments ALL IN PARALLEL
+    // (Previously: parts/vendorSources in batch → vendors sequential → lineItems/invoiceLines in batch → orders sequential → globalCommitments sequential)
+    // Now: ONE big parallel batch for all independent fetches
+    const [parts, vendorSources, lineItems, projectInvoiceLines, allCommitmentsForParts] = await runBatched([
+      () => partIdsFromCommitments.length > 0
+        ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } }))
+        : Promise.resolve([]),
+      () => partIdsFromCommitments.length > 0
+        ? fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: partIdsFromCommitments }, is_active: true }))
+        : Promise.resolve([]),
+      () => commitmentIds.length > 0 
+        ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
+        : Promise.resolve([]),
+      () => invoiceIdsForLines.length > 0
+        ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIdsForLines } }))
+        : Promise.resolve([]),
+      () => partIdsFromCommitments.length > 0
+        ? fetchWithRetry(() => base44.entities.PartCommitment.filter({
+            part_id: { $in: partIdsFromCommitments },
+            commitment_status: { $nin: ['cancelled', 'closed'] }
+          }))
+        : Promise.resolve([]),
+    ], adaptiveBatch, 150);
+
+    // Build source lookup by part
+    const sourcesByPart = new Map();
+    for (const s of vendorSources) {
+      if (!sourcesByPart.has(s.part_id)) sourcesByPart.set(s.part_id, []);
+      sourcesByPart.get(s.part_id).push(s);
+    }
+
+    // Derive vendor IDs, category IDs, order IDs from fetched data
+    const vendorIdsFromParts = [...new Set([
+      ...parts.map(p => p.default_vendor_id).filter(Boolean),
+      ...vendorSources.map(s => s.vendor_id).filter(Boolean),
+    ])];
+    const derivedCategoryIds = [...new Set(parts.map(p => p.part_category_id).filter(Boolean))];
+    const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
+
+    // PHASE 4: Fetch vendors + categories + orders IN PARALLEL
+    // (Previously: vendors sequential after parts, then orders sequential after lineItems)
+    const [vendors, categories, orders] = await runBatched([
+      () => vendorIdsFromParts.length > 0
+        ? fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } }))
+        : Promise.resolve([]),
+      () => derivedCategoryIds.length > 0
+        ? fetchWithRetry(() => base44.entities.PartCategory.filter({ id: { $in: derivedCategoryIds } }))
+        : Promise.resolve([]),
+      () => orderIds.length > 0
+        ? fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }))
+        : Promise.resolve([]),
+    ], adaptiveBatch, 150);
+
     // Build lookup maps
     const partMap = new Map(parts.map(p => [p.id, p]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const orderMap = new Map(orders.map(o => [o.id, o]));
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
-    // FORWARD MODEL: Calculate invoice-based billing metrics using ProjectInvoice entity
+    // FORWARD MODEL: Invoice-based billing metrics
     const paidInvoices = projectInvoices.filter(inv => inv.status === 'paid');
     const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
     const totalPaid = paidInvoices.reduce((sum, inv) => sum + (inv.paid_amount || inv.total || 0), 0);
@@ -167,32 +199,23 @@ Deno.serve(async (req) => {
 
     // ============================================================================
     // PREPAY GATING: Build commitment-level invoice & payment maps
-    // This resolves prepay at COMMITMENT level, not project level
     // ============================================================================
-    
-    // 1. invoiceById map
-    const invoiceById = new Map(projectInvoices.map(inv => [inv.id, inv]));
-    
-    // 2. paidRatioByInvoiceId - proportion of invoice that has been paid
     const paidRatioByInvoiceId = new Map();
     for (const inv of projectInvoices) {
       if (inv.status === 'paid') {
         paidRatioByInvoiceId.set(inv.id, 1);
       } else if ((inv.paid_amount || 0) > 0 && (inv.total || 0) > 0) {
-        const ratio = Math.min(1, Math.max(0, inv.paid_amount / inv.total));
-        paidRatioByInvoiceId.set(inv.id, ratio);
+        paidRatioByInvoiceId.set(inv.id, Math.min(1, Math.max(0, inv.paid_amount / inv.total)));
       } else {
         paidRatioByInvoiceId.set(inv.id, 0);
       }
     }
     
-    // 3. Filter invoice lines for this project's invoices only
     const invoiceIdsInProject = new Set(projectInvoices.map(inv => inv.id));
     const relevantInvoiceLines = projectInvoiceLines.filter(
       line => invoiceIdsInProject.has(line.invoice_id) && line.part_commitment_id
     );
     
-    // 4. commitmentInvoicedRetail and commitmentPaidRetail
     const commitmentInvoicedRetailMap = new Map();
     const commitmentPaidRetailMap = new Map();
     
@@ -201,13 +224,8 @@ Deno.serve(async (req) => {
       const lineRetail = line.line_total ?? ((line.qty || 0) * (line.unit_price || 0));
       const paidRatio = paidRatioByInvoiceId.get(line.invoice_id) ?? 0;
       
-      // Accumulate invoiced retail
-      const currentInvoiced = commitmentInvoicedRetailMap.get(commitmentId) ?? 0;
-      commitmentInvoicedRetailMap.set(commitmentId, currentInvoiced + lineRetail);
-      
-      // Accumulate paid retail (lineRetail * paidRatio)
-      const currentPaid = commitmentPaidRetailMap.get(commitmentId) ?? 0;
-      commitmentPaidRetailMap.set(commitmentId, currentPaid + (lineRetail * paidRatio));
+      commitmentInvoicedRetailMap.set(commitmentId, (commitmentInvoicedRetailMap.get(commitmentId) ?? 0) + lineRetail);
+      commitmentPaidRetailMap.set(commitmentId, (commitmentPaidRetailMap.get(commitmentId) ?? 0) + (lineRetail * paidRatio));
     }
 
     // Group line items by commitment
@@ -221,7 +239,6 @@ Deno.serve(async (req) => {
       }
     });
     
-    // PART 1: Normalize billing_status to canonical billing_state (NOT_INVOICED, INVOICED, PAID)
     function normalizeBillingState(billingStatus) {
       if (!billingStatus) return 'NOT_INVOICED';
       const normalized = String(billingStatus).toLowerCase().trim();
@@ -231,39 +248,21 @@ Deno.serve(async (req) => {
     }
 
     // ============================================================================
-    // PHASE 2: CANONICAL PART-LEVEL INVENTORY MAP
-    // This computes GLOBAL reserved/on_order across ALL active commitments for each part
-    // "Reserved" = SUM(reserved_from_stock) across ALL commitments (not just this project)
+    // CANONICAL PART-LEVEL INVENTORY MAP (global)
     // ============================================================================
-    
-    // PERF FIX: Fetch global commitments in parallel with initial data
-    // This was previously sequential - now parallel
-    const partIdsInProject = [...new Set(commitments.map(c => c.part_id))];
-    
-    // Handle empty part list gracefully
-    const allCommitmentsForParts = partIdsInProject.length > 0
-      ? await fetchWithRetry(() => base44.entities.PartCommitment.filter({
-          part_id: { $in: partIdsInProject },
-          commitment_status: { $nin: ['cancelled', 'closed'] }
-        }))
-      : [];
-    
-    // Build canonical part inventory map with GLOBAL totals
     const partInventoryMap = new Map();
     
-    // Initialize from Part entities
-    for (const partId of partIdsInProject) {
+    for (const partId of partIdsFromCommitments) {
       const part = partMap.get(partId);
       partInventoryMap.set(partId, {
         physical_stock: part?.physical_stock ?? 0,
-        reserved_global: 0,  // Will be summed from ALL commitments
+        reserved_global: 0,
         on_order_global: 0,
         to_order_global: 0,
-        available: 0,  // Computed after aggregation
+        available: 0,
       });
     }
     
-    // Aggregate from ALL commitments (global, not just this project)
     for (const c of allCommitmentsForParts) {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
@@ -277,38 +276,19 @@ Deno.serve(async (req) => {
       inv.to_order_global += Math.max(0, required - reserved - covered - (c.qty_installed ?? 0));
     }
     
-    // Calculate available after aggregation
     for (const [partId, inv] of partInventoryMap.entries()) {
       inv.available = Math.max(0, inv.physical_stock - inv.reserved_global);
     }
-    
-    // Legacy alias for backward compatibility
-    const getPartInv = (partId) => {
-      const inv = partInventoryMap.get(partId);
-      return {
-        total_reserved: inv?.reserved_global ?? 0,
-        total_covered: inv?.on_order_global ?? 0,
-        total_to_order: inv?.to_order_global ?? 0,
-      };
-    };
 
     // ============================================================================
-    // PHASE: DELTA COMMITMENT MODEL - INTEGRITY ASSERTION
-    // Detect legacy contamination where required_total was mutated after lifecycle progress
+    // INTEGRITY ASSERTION
     // ============================================================================
     const integrityWarnings = [];
     for (const c of commitments) {
       if (c.commitment_status === 'cancelled') continue;
-      
-      // If source_type !== "scope_addition" but commitment_version > 1, check for suspicious patterns
       if (c.source_type !== 'scope_addition' && (c.commitment_version ?? 1) > 1) {
-        // Check if required_total > original estimates (legacy contamination signal)
         const required = c.required_total ?? c.qty_committed ?? 0;
         const invoiced = c.invoiced_qty ?? 0;
-        const installed = c.qty_installed ?? 0;
-        const covered = c.covered_from_po ?? 0;
-        
-        // Warn if required_total exceeds invoiced/installed/covered (evidence of upward mutation)
         if (invoiced > 0 && required > invoiced) {
           integrityWarnings.push({
             commitment_id: c.id,
@@ -320,10 +300,6 @@ Deno.serve(async (req) => {
         }
       }
     }
-    
-    if (integrityWarnings.length > 0) {
-      console.warn(`[DELTA_MODEL] ${integrityWarnings.length} integrity warnings detected for project ${project_id}`, integrityWarnings);
-    }
 
     // Build SupplyCommitmentViewModel for each commitment
     const viewModels = commitments
@@ -334,84 +310,29 @@ Deno.serve(async (req) => {
         const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
         const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
-        // Canonical quantities
         const required_total = c.required_total ?? c.qty_committed ?? 0;
         let reserved_from_stock = c.reserved_from_stock ?? c.qty_reserved ?? 0;
         const covered_from_po = c.covered_from_po ?? c.qty_ordered ?? 0;
         const qty_installed = c.qty_installed ?? 0;
 
-        // ============================================================================
-        // AUTO-ALLOCATION: If physical stock exists but reserved_from_stock is 0,
-        // auto-allocate available stock to reduce to_order.
-        // This fixes the "stock > 0 but to_order > 0" drift condition.
-        // GUARD: Skip if already fully covered (reserved + covered + installed >= required)
-        // ============================================================================
+        // AUTO-ALLOCATION
         const partInvForAlloc = partInventoryMap.get(c.part_id);
         const alreadyCovered = reserved_from_stock + covered_from_po + qty_installed;
         const gap = Math.max(0, required_total - alreadyCovered);
         if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
           const autoReserve = Math.min(gap, partInvForAlloc.available);
           reserved_from_stock += autoReserve;
-          // Deduct from available pool so other commitments don't double-count
           partInvForAlloc.available -= autoReserve;
           partInvForAlloc.reserved_global += autoReserve;
-          
-          // DRIFT DETECTION: Log auto-allocation
-          console.warn(`[AUTO_ALLOCATE] commitment=${c.id} part=${c.part_id} ` +
-            `auto_reserved=${autoReserve} gap_before=${gap} gap_after=${gap - autoReserve} ` +
-            `physical=${partInvForAlloc.physical_stock} reserved_global=${partInvForAlloc.reserved_global}`);
         }
 
-        // COVERAGE MODEL:
-        // required_total is satisfied by:
-        // - reserved_from_stock (allocated inventory)
-        // - covered_from_po (incoming supply)
-        // - qty_installed (consumed supply)
-        // - remaining gap becomes to_order
         const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
         const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
 
-        // ============================================================================
-        // PHASE 9C: COVERAGE INVARIANT CHECK
-        // Coverage Invariant: required_total MUST equal reserved + covered + installed + to_order
-        // Over-coverage (sum > required) is a DATA issue — warn but don't crash.
-        // Under-coverage (sum < required) should not happen given to_order = max(0, ...).
-        // ============================================================================
-        const coverage_sum = reserved_from_stock + covered_from_po + qty_installed + to_order;
-        if (Math.abs(coverage_sum - required_total) > 0.01) {
-          // Over-coverage: reserved + covered exceeds required (data drift, not code bug)
-          // Log warning but continue — crashing blocks the entire project view
-          console.warn(
-            `[COVERAGE_DRIFT] part=${c.part_id} commitment=${c.id} ` +
-            `required=${required_total} reserved=${reserved_from_stock} covered=${covered_from_po} installed=${qty_installed} to_order=${to_order} sum=${coverage_sum}`
-          );
-        }
-        
-        // ============================================================================
-        // PHASE 2: CANONICAL INVENTORY SNAPSHOT
-        // Use pre-computed global inventory map (includes ALL commitments, not just this project)
-        // ============================================================================
         const partInv = partInventoryMap.get(c.part_id) || {
-          physical_stock: 0,
-          reserved_global: 0,
-          on_order_global: 0,
-          to_order_global: 0,
-          available: 0,
+          physical_stock: 0, reserved_global: 0, on_order_global: 0, to_order_global: 0, available: 0,
         };
-        
-        const physical_stock = partInv.physical_stock;
-        const reserved_global = partInv.reserved_global;
-        
-        // Check over-allocation at part level (using GLOBAL reserved)
-        // Warn but don't crash — over-allocation is a data drift issue
-        if (reserved_global > physical_stock + 0.001) {
-          console.warn(
-            `[OVER_ALLOCATION] part=${c.part_id} physical=${physical_stock} ` +
-            `reserved_global=${reserved_global} excess=${reserved_global - physical_stock}`
-          );
-        }
 
-        // Calculate on-order and received from line items (commitment-scoped)
         const on_order_qty = commitmentLineItems.reduce((sum, li) => {
           const order = orderMap.get(li.order_id);
           if (order && ['Ordered', 'Partial'].includes(order.status)) {
@@ -422,21 +343,14 @@ Deno.serve(async (req) => {
 
         const received_qty = commitmentLineItems.reduce((sum, li) => sum + (li.qty_received || 0), 0);
 
-        // Coverage status (commitment-scoped)
         const total_covered = reserved_from_stock + covered_from_po;
         let coverage_status;
-        if (total_covered >= required_total && required_total > 0) {
-          coverage_status = 'FULL';
-        } else if (total_covered > required_total) {
-          coverage_status = 'OVER';
-        } else if (total_covered > 0) {
-          coverage_status = 'PARTIAL';
-        } else {
-          coverage_status = 'NONE';
-        }
+        if (total_covered >= required_total && required_total > 0) coverage_status = 'FULL';
+        else if (total_covered > required_total) coverage_status = 'OVER';
+        else if (total_covered > 0) coverage_status = 'PARTIAL';
+        else coverage_status = 'NONE';
         const coverage_percent = required_total > 0 ? Math.round((total_covered / required_total) * 100) : 0;
 
-        // Financial
         const unit_cost = c.unit_cost_snapshot ?? part?.cost ?? 0;
         const unit_retail = c.unit_retail_snapshot ?? part?.retail_matrix_price ?? part?.retail_override ?? 0;
         const planned_cost_total = c.planned_cost_total ?? (unit_cost * required_total);
@@ -444,18 +358,8 @@ Deno.serve(async (req) => {
         const covered_retail_total = c.covered_retail_total ?? 0;
         const exposure_gap = c.exposure_gap ?? Math.max(0, planned_retail_total - covered_retail_total);
 
-        // Source type mapping
         const source_type = mapSourceType(c.supply_source_type);
 
-        // Determine next action and block status
-        // PHASE 2: Use canonical global inventory for action determination
-        const partInventoryForAction = {
-          physical_stock: partInv.physical_stock,
-          reserved_total: partInv.reserved_global,
-          available: partInv.available,
-        };
-        
-        // PREPAY GATING: Pass commitment-level payment data
         const prepayContext = {
           invoicedRetail: commitmentInvoicedRetailMap.get(c.id) ?? 0,
           paidRetail: commitmentPaidRetailMap.get(c.id) ?? 0,
@@ -464,46 +368,30 @@ Deno.serve(async (req) => {
         const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
           { required_total, reserved_from_stock, covered_from_po, qty_installed },
           !!vendor,
-          partInventoryForAction,
-          c, // Pass raw commitment for billing flag access
-          prepayContext // Pass prepay resolution data
+          {
+            physical_stock: partInv.physical_stock,
+            reserved_total: partInv.reserved_global,
+            available: partInv.available,
+          },
+          c,
+          prepayContext
         );
 
-        // ============================================================================
-        // PHASE 2B: CANONICAL INVENTORY SNAPSHOT
-        // All UI views MUST use these values - NO local calculations allowed
-        // UI must display BOTH global reserved AND this-project reserved
-        // ============================================================================
         const inventory_snapshot = {
-          // CANONICAL: Part-level physical stock (GLOBAL)
           physical_stock_global: partInv.physical_stock,
-          // Deprecated aliases for backward compatibility:
           physical: partInv.physical_stock,
           physical_stock: partInv.physical_stock,
-          
-          // CANONICAL: GLOBAL reserved across ALL active commitments
           reserved_global_active: partInv.reserved_global,
-          // Deprecated aliases:
           reserved: partInv.reserved_global,
           reserved_total: partInv.reserved_global,
-          
-          // CANONICAL: THIS PROJECT's reserved allocation
           reserved_this_project: reserved_from_stock,
-          
-          // CANONICAL: Available = physical - global reserved (can allocate more from available)
           available_global_active: partInv.available,
-          // Deprecated alias:
           available: partInv.available,
-          
-          // CANONICAL: Global aggregates
           on_order_total: partInv.on_order_global,
           to_order_total: partInv.to_order_global,
-          
-          // CANONICAL: "Needed" for this commitment = required - installed
           needed: Math.max(0, required_total - qty_installed),
         };
 
-        // Derive first order_id for "View PO" navigation
         const firstOrderId = commitmentLineItems.length > 0
           ? (commitmentLineItems.find(li => {
               const o = orderMap.get(li.order_id);
@@ -527,19 +415,16 @@ Deno.serve(async (req) => {
           category_name: category?.name || null,
           category_color: category?.color || '#6b7280',
 
-          // Canonical quantities
           required_total,
           reserved_from_stock,
           covered_from_po,
           qty_installed,
 
-          // Derived quantities
           to_order,
           on_order_qty,
           received_qty,
           available_to_install,
 
-          // Coverage debug fields (helps diagnose allocation drift)
           coverage_total: reserved_from_stock + covered_from_po + qty_installed,
           coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed),
           coverage_actual: reserved_from_stock + covered_from_po + qty_installed + to_order,
@@ -561,19 +446,15 @@ Deno.serve(async (req) => {
             drift: Math.abs((reserved_from_stock + covered_from_po + qty_installed + to_order) - required_total) > 0.01,
           },
 
-          // Coverage state
           coverage_status,
           coverage_percent,
 
-          // Next action
           next_action,
           block_reason_code,
           block_reason_message: block_reason_code ? BLOCK_MESSAGES[block_reason_code] : null,
 
-          // Source type
           source_type,
 
-          // Multi-source info
           vendor_sources: (sourcesByPart.get(c.part_id) || []).map(s => ({
             source_id: s.id,
             vendor_id: s.vendor_id,
@@ -583,27 +464,20 @@ Deno.serve(async (req) => {
           })),
           has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
 
-          // Financial
           unit_cost,
           covered_retail_total,
           exposure_gap,
           billing_status: c.billing_status || 'billable',
           
-          // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
           billing_state: normalizeBillingState(c.billing_status),
           
-          // CANONICAL: invoiced_qty for invoice eligibility (Phase 7)
-          // Invoice eligibility = required_total - invoiced_qty > 0
           invoiced_qty: c.invoiced_qty ?? 0,
           invoiced_amount: c.invoiced_amount ?? 0,
           
-          // PART 3: Inventory location for expanded detail view
           inventory_location: c.inventory_location || null,
 
-          // Inventory snapshot
           inventory_snapshot,
 
-          // Raw commitment data for mutations
           _raw: {
             commitment_status: c.commitment_status,
             billing_status: c.billing_status,
@@ -612,7 +486,6 @@ Deno.serve(async (req) => {
             order_line_item_ids: c.order_line_item_ids,
           },
 
-          // PREPAY DIAGNOSTICS (dev mode only - helps debug prepay gating)
           ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
         };
       });
@@ -640,7 +513,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Compute tab counts (FORWARD MODEL - no fund tab)
+    // Compute tab counts
     const tabCounts = {
       all: viewModels.length,
       plan: viewModels.length,
@@ -650,7 +523,7 @@ Deno.serve(async (req) => {
       invoice: projectInvoices.filter(inv => inv.status !== 'void').length,
     };
 
-    // Summary statistics (FORWARD MODEL - invoice-based)
+    // Summary statistics
     const totalPlannedRetail = viewModels.reduce((sum, vm) => sum + vm.planned_retail_total, 0);
     const totalPlannedCost = viewModels.reduce((sum, vm) => sum + vm.planned_cost_total, 0);
     const totalInstalledQty = viewModels.reduce((sum, vm) => sum + vm.qty_installed, 0);
@@ -663,14 +536,12 @@ Deno.serve(async (req) => {
       total_covered: viewModels.reduce((sum, vm) => sum + vm.covered_from_po, 0),
       total_to_order: viewModels.reduce((sum, vm) => sum + vm.to_order, 0),
       total_installed: totalInstalledQty,
-      // FORWARD MODEL: Invoice-based billing metrics
       total_planned_retail: totalPlannedRetail,
       total_planned_cost: totalPlannedCost,
       total_invoiced: totalInvoiced,
       total_paid: totalPaid,
       invoice_outstanding: invoiceOutstanding,
       unbilled_retail: Math.max(0, totalPlannedRetail - totalInvoiced),
-      // Supply coverage (not financial)
       supply_coverage_summary: {
         full: viewModels.filter(vm => vm.coverage_status === 'FULL').length,
         partial: viewModels.filter(vm => vm.coverage_status === 'PARTIAL').length,
@@ -687,19 +558,16 @@ Deno.serve(async (req) => {
       },
     };
 
-    // PERF: Timing log (dev only)
-    if (typeof Deno !== 'undefined') {
-      console.log('[PERF] getProjectSupplyView', Date.now() - _perfStart, 'ms', {
-        entityCounts: {
-          commitments: commitments.length,
-          parts: parts.length,
-          lineItems: lineItems.length,
-          orders: orders.length,
-          invoices: projectInvoices.length,
-          invoiceLines: projectInvoiceLines.length,
-        }
-      });
-    }
+    console.log('[PERF] getProjectSupplyView', Date.now() - _perfStart, 'ms', {
+      entityCounts: {
+        commitments: commitments.length,
+        parts: parts.length,
+        lineItems: lineItems.length,
+        orders: orders.length,
+        invoices: projectInvoices.length,
+        invoiceLines: projectInvoiceLines.length,
+      }
+    });
     
     const responsePayload = {
       success: true,
@@ -708,13 +576,12 @@ Deno.serve(async (req) => {
         id: project.id,
         name: project.name,
         client_name: project.client_name,
-        financial_model_version: 'forward', // Always forward
+        financial_model_version: 'forward',
       },
       items: filtered,
       tab_counts: tabCounts,
       summary,
       categories: categories.filter(c => c.active !== false).map(c => ({ id: c.id, name: c.name, color: c.color })),
-      // DELTA MODEL: Include integrity warnings for legacy contamination detection
       integrity_warnings: integrityWarnings.length > 0 ? integrityWarnings : null,
     };
 
@@ -737,7 +604,6 @@ Deno.serve(async (req) => {
 // HELPER FUNCTIONS
 // ============================================================================
 
-// FORWARD MODEL: Simplified block messages (no pool/funding blocks)
 const BLOCK_MESSAGES = {
   NO_VENDOR: 'No vendor assigned to part',
   NEGATIVE_AVAILABLE: 'Available stock is negative',
@@ -758,8 +624,6 @@ function mapSourceType(legacyType) {
   return mapping[legacyType] || 'SHOP_PURCHASED';
 }
 
-// PHASE 9H: Strict billing gating + auto-reserve enforcement
-// PHASE 10: Prepay gating uses commitment-level payment resolution
 function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}, prepayContext = {}) {
   const {
     required_total = 0,
@@ -770,23 +634,13 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
 
   const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
   const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
-  const available_stock = partInventory.available ?? 0;
 
-  // ============================================================================
-  // PREPAY GATING: Commitment-level payment resolution
-  // Uses actual invoice lines and payment data, NOT stale billing_status
-  // ============================================================================
   const requires_prepay = !!rawCommitment.requires_prepay;
   
-  // Build prepay diagnostics (always computed if requires_prepay, for debugging)
   let prepay_diagnostics = null;
   if (requires_prepay) {
     const invoicedRetail = prepayContext.invoicedRetail ?? 0;
     const paidRetail = prepayContext.paidRetail ?? 0;
-    
-    // Prepay is satisfied when:
-    // 1. Commitment has been invoiced (invoicedRetail > 0)
-    // 2. Paid amount >= invoiced amount (with 0.01 tolerance for rounding)
     const prepaySatisfied = invoicedRetail > 0 && paidRetail >= (invoicedRetail - 0.01);
     
     prepay_diagnostics = {
@@ -796,35 +650,26 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
     };
     
     if (!prepaySatisfied) {
-      return { 
-        next_action: 'BLOCKED_PREPAY', 
-        block_reason_code: 'REQUIRES_PREPAY',
-        prepay_diagnostics,
-      };
+      return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY', prepay_diagnostics };
     }
   }
 
-  // Only block: no vendor
   if (to_order > 0 && !partHasVendor) {
     return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR', prepay_diagnostics };
   }
 
-  // Allow CREATE_PO when to_order > 0 (auto-allocation already handled upstream)
   if (to_order > 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
   
-  // If covered_from_po > 0 but not enough to install, need to receive
   if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }
   
-  // If we have stock available to install
   if (available_to_install > 0 && qty_installed < required_total) {
     return { next_action: 'INSTALL', block_reason_code: null, prepay_diagnostics };
   }
   
-  // Check if fully installed
   if (qty_installed >= required_total && required_total > 0) {
     return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
   }

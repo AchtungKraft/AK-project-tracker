@@ -22,7 +22,7 @@ async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   }
 }
 
-// ── Controlled batching — max 3 concurrent, 150ms gap ────────────────
+// ── Controlled batching — adaptive size, 150ms gap ────────────────
 async function runBatched(tasks, batchSize = 3, delay = 150) {
   const results = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -37,7 +37,7 @@ async function runBatched(tasks, batchSize = 3, delay = 150) {
   return results;
 }
 
-// ── Short-term response cache ────────────────────────────────────────
+// ── Short-term response cache (10s for feedback detail) ──────────
 const cache = new Map();
 function getCached(key, ttl = 10000) {
   const item = cache.get(key);
@@ -187,25 +187,12 @@ Deno.serve(async (req) => {
             return Response.json(cached, { headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // STEP A: Fetch request-scoped entities in controlled batches (max 3 concurrent)
-        const [
-            requests,
-            commentsRaw,
-            decisionsRaw,
-            attachmentsRaw,
-            todoTasksRaw,
-            linkedTasks,
-            taskGroupsRaw,
-        ] = await runBatched([
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
-            () => fetchWithRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).catch(() => []),
-        ], 3, 150);
-
+        // ══════════════════════════════════════════════════════════════
+        // STEP A: Fetch request FIRST for early exit, then parallelize
+        // the remaining request-scoped entities
+        // ══════════════════════════════════════════════════════════════
+        const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
+        
         const request = requests[0];
         if (!request) {
             return Response.json({ 
@@ -219,6 +206,32 @@ Deno.serve(async (req) => {
         }
 
         const projectIdForAccess = request.project_id || projectId;
+
+        // STEP A2: Fetch all request-scoped entities + project data IN PARALLEL
+        // (Previously these were 2 sequential runBatched calls — now 1 combined batch)
+        const [
+            commentsRaw,
+            decisionsRaw,
+            attachmentsRaw,
+            todoTasksRaw,
+            linkedTasks,
+            taskGroupsRaw,
+            projectArr,
+            projectClientAccesses,
+        ] = await runBatched([
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
+            () => fetchWithRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).catch(() => []),
+            () => projectIdForAccess 
+                ? fetchWithRetry(() => base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess }))
+                : Promise.resolve([]),
+            () => projectIdForAccess
+                ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess }))
+                : Promise.resolve([]),
+        ], 4, 150);
 
         // STEP B: Derive minimal ID sets from request-scoped data
         const internalUserIds = new Set();
@@ -251,31 +264,33 @@ Deno.serve(async (req) => {
             if (link.task_id) taskIds.add(link.task_id);
         });
 
-        // STEP C: Fetch project data + referenced people in controlled batches
-        const [projects, projectClientAccesses, users, clientContacts, tasks] = await runBatched([
-            () => projectIdForAccess 
-                ? fetchWithRetry(() => base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess }))
-                : Promise.resolve([]),
-            () => projectIdForAccess
-                ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess }))
-                : Promise.resolve([]),
+        // Include access contact IDs upfront so we fetch ALL contacts in one batch
+        const activeAccesses = projectClientAccesses.filter(pa => pa.access_status === 'active');
+        activeAccesses.forEach(pa => {
+            if (pa.client_contact_id) clientContactIds.add(pa.client_contact_id);
+        });
+
+        // STEP C: Fetch people + tasks + teamMembers ALL IN ONE parallel batch
+        // (Previously: users/contacts/tasks in one batch, then additionalContacts, then teamMembers — 3 sequential rounds)
+        const [users, allClientContacts, tasks, teamMembers] = await runBatched([
             () => fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
             () => fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
             () => fetchByIdsBatched(base44.asServiceRole.entities.Task, [...taskIds]),
-        ], 3, 150);
-
-        const activeAccesses = projectClientAccesses.filter(pa => pa.access_status === 'active');
-        const accessContactIds = activeAccesses.map(pa => pa.client_contact_id).filter(id => !clientContactIds.has(id));
-        
-        const additionalContacts = accessContactIds.length > 0 
-            ? await fetchWithRetry(() => fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, accessContactIds))
-            : [];
-        
-        const allClientContacts = [...clientContacts, ...additionalContacts];
+            () => projectIdForAccess
+                ? fetchWithRetry(() => base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true }))
+                : Promise.resolve([]),
+        ], 4, 150);
 
         // Build lookup maps
         const userMap = new Map(users.map(u => [u.id, { id: u.id, full_name: u.full_name, email: u.email }]));
         const contactMap = new Map(allClientContacts.map(c => [c.id, { id: c.id, name: c.name, url_slug: c.url_slug, active: c.active }]));
+
+        // Fetch any AK team member users not already in userMap (single targeted batch)
+        const neededAkUserIds = teamMembers.filter(tm => tm.user_id && !userMap.has(tm.user_id)).map(tm => tm.user_id);
+        if (neededAkUserIds.length > 0) {
+            const akUsers = await fetchWithRetry(() => fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds));
+            akUsers.forEach(u => userMap.set(u.id, { id: u.id, full_name: u.full_name, email: u.email }));
+        }
 
         // Sort by timestamps
         const comments = [...commentsRaw].sort((a, b) => 
@@ -359,25 +374,14 @@ Deno.serve(async (req) => {
             }
         }
 
-        let assignableUsers = [];
-        if (projectIdForAccess) {
-            const teamMembers = await fetchWithRetry(() => base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true }));
-            const akUserIds = teamMembers.filter(tm => tm.user_id).map(tm => tm.user_id);
-            const neededAkUserIds = akUserIds.filter(id => !userMap.has(id));
-            
-            if (neededAkUserIds.length > 0) {
-                const akUsers = await fetchWithRetry(() => fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds));
-                akUsers.forEach(u => userMap.set(u.id, { id: u.id, full_name: u.full_name, email: u.email }));
-            }
-            
-            assignableUsers = teamMembers
-                .filter(tm => tm.user_id)
-                .map(tm => {
-                    const userRecord = userMap.get(tm.user_id);
-                    return userRecord ? { id: userRecord.id, full_name: tm.full_name || userRecord.full_name, type: 'internal_user' } : null;
-                })
-                .filter(Boolean);
-        }
+        // Build assignable users from team members (already fetched in parallel above)
+        const assignableUsers = teamMembers
+            .filter(tm => tm.user_id)
+            .map(tm => {
+                const userRecord = userMap.get(tm.user_id);
+                return userRecord ? { id: userRecord.id, full_name: tm.full_name || userRecord.full_name, type: 'internal_user' } : null;
+            })
+            .filter(Boolean);
 
         const assignableContacts = projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }));
 
@@ -394,7 +398,7 @@ Deno.serve(async (req) => {
             todoTasks: enrichedTodoTasks,
             taskGroups,
             linkedTasks: linkedTaskDetails,
-            project: projects[0] || null,
+            project: projectArr[0] || null,
             users: [...userMap.values()],
             clientContacts: [...contactMap.values()],
             assignableUsers,
