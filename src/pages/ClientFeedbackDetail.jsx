@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload } from "lucide-react";
+import useFileUploader from "../components/clientportal/useFileUploader";
+import FileUploadStatusList from "../components/clientportal/FileUploadStatusList";
 import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
 // Note: Send, Paperclip, LinkIcon removed — now in FeedbackCommentComposer
 import { format } from "date-fns";
@@ -46,8 +48,7 @@ export default function ClientFeedbackDetail() {
   const [showRequestDecisionForm, setShowRequestDecisionForm] = useState(false);
   const [requestDecisionType, setRequestDecisionType] = useState('');
   const [requestDecisionNote, setRequestDecisionNote] = useState('');
-  const [reviewNewImages, setReviewNewImages] = useState([]);
-  const [isUploadingReviewImages, setIsUploadingReviewImages] = useState(false);
+  const reviewImageUploader = useFileUploader();
   const [selectedImage, setSelectedImage] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -174,7 +175,7 @@ export default function ClientFeedbackDetail() {
         // Only invalidate the current request - not global lists
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         setRequestDecisionNote('');
-        setReviewNewImages([]);
+        reviewImageUploader.clearAll();
         setShowRequestDecisionForm(false);
         toast.success('Decision recorded');
       } else {
@@ -281,7 +282,7 @@ export default function ClientFeedbackDetail() {
 
     submitDecisionMutation.mutate({
       ...payload,
-      newImages: payload.newImages || reviewNewImages // Use passed newImages or default to reviewNewImages state
+      newImages: payload.newImages || reviewImageUploader.uploadedUrls
     });
   };
 
@@ -418,7 +419,7 @@ export default function ClientFeedbackDetail() {
                     decision: 'approved',
                     note: '',
                     targetAttachmentIds: null,
-                    newImages: reviewNewImages,
+                    newImages: reviewImageUploader.uploadedUrls,
                   })}
                   className="bg-green-600 hover:bg-green-700 text-white border-green-600"
                 >
@@ -497,7 +498,7 @@ export default function ClientFeedbackDetail() {
                       decision: 'approved',
                       note: '',
                       targetAttachmentIds: null,
-                      newImages: reviewNewImages,
+                      newImages: reviewImageUploader.uploadedUrls,
                     })}
                     className="flex-1 h-10 bg-green-600 hover:bg-green-700 text-white"
                   >
@@ -803,7 +804,7 @@ export default function ClientFeedbackDetail() {
                 <div className="flex items-center gap-2">
                   <label className="cursor-pointer">
                     <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md transition-colors text-sm text-gray-300">
-                      {isUploadingReviewImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      {reviewImageUploader.isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                       Upload Images
                     </div>
                     <input 
@@ -811,43 +812,26 @@ export default function ClientFeedbackDetail() {
                       multiple 
                       accept="image/*" 
                       className="hidden" 
-                      onChange={async (e) => {
-                        const files = Array.from(e.target.files || []);
-                        if (files.length === 0) return;
-                        
-                        setIsUploadingReviewImages(true);
-                        try {
-                          const uploadPromises = files.map(file => base44.integrations.Core.UploadFile({ file }));
-                          const results = await Promise.all(uploadPromises);
-                          const urls = results.map(r => r.file_url);
-                          setReviewNewImages(prev => [...prev, ...urls]);
-                          toast.success('Images uploaded');
-                        } catch (error) {
-                          console.error(error);
-                          toast.error('Failed to upload images');
-                        } finally {
-                          setIsUploadingReviewImages(false);
-                        }
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        reviewImageUploader.addFiles(files);
+                        e.target.value = "";
                       }}
-                      disabled={isUploadingReviewImages} 
+                      disabled={reviewImageUploader.isUploading} 
                     />
                   </label>
-                  <span className="text-xs text-gray-500">{reviewNewImages.length} images added</span>
+                  <span className="text-xs text-gray-500">{reviewImageUploader.uploadedUrls.length} images added</span>
                 </div>
                 
-                {reviewNewImages.length > 0 && (
-                  <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
-                    {reviewNewImages.map((url, idx) => (
-                      <div key={idx} className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden border border-gray-700">
-                        <img src={url} alt="" className="w-full h-full object-cover" />
-                        <button 
-                          onClick={() => setReviewNewImages(prev => prev.filter(u => u !== url))}
-                          className="absolute top-0 right-0 bg-red-600 text-white p-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                {reviewImageUploader.files.length > 0 && (
+                  <div className="mt-2">
+                    <FileUploadStatusList
+                      files={reviewImageUploader.files}
+                      onRemove={reviewImageUploader.removeFile}
+                      onRetry={reviewImageUploader.retryFailed}
+                      mode="image"
+                    />
                   </div>
                 )}
               </div>
@@ -866,9 +850,9 @@ export default function ClientFeedbackDetail() {
                   decision: requestDecisionType,
                   note: requestDecisionNote,
                   targetAttachmentIds: null,
-                  newImages: reviewNewImages, // From modal upload
+                  newImages: reviewImageUploader.uploadedUrls,
                 })}
-                disabled={submitDecisionMutation.isPending}
+                disabled={submitDecisionMutation.isPending || reviewImageUploader.isUploading}
                 className={requestDecisionType === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}>
 
                   {submitDecisionMutation.isPending ?

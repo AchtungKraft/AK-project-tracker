@@ -3,7 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // with backward compatibility for body-only payloads
 
 // ── Retry wrapper for transient failures (429, network) ──────────────
-async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
+async function fetchWithRetry(fn, { retries = 2, delay = 600 } = {}) {
   try {
     return await fn();
   } catch (err) {
@@ -16,11 +16,28 @@ async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
       msg.includes('ECONNRESET');
 
     if (retries > 0 && isRetryable) {
-      await new Promise(r => setTimeout(r, delay));
+      const jitter = Math.random() * 200;
+      await new Promise(r => setTimeout(r, delay + jitter));
       return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
     }
     throw err;
   }
+}
+
+// ── Safe batching for secondary writes (max 2 concurrent) ────────────
+async function runBatched(tasks, batchSize = 2, delay = 150) {
+  if (!tasks || tasks.length === 0) return [];
+  const results = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    results.push(...batchResults);
+    if (i + batchSize < tasks.length) {
+      const jitter = Math.random() * 150;
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+  return results;
 }
 
 Deno.serve(async (req) => {
@@ -89,12 +106,17 @@ Deno.serve(async (req) => {
 
         const comment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.create(commentData));
 
-        // Also create ClientFeedbackAttachment records for backward compat with thread rendering
+        // ── SECONDARY WRITES: Attachment records (non-fatal) ─────────────
+        // Core comment already saved above. Attachment failures are warnings,
+        // not errors — the comment is already persisted.
         const attachments = [];
+        const warnings = [];
+
+        const attachmentTasks = [];
 
         if (photos && photos.length > 0) {
             for (const photoUrl of photos) {
-                const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                attachmentTasks.push(() => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: comment.id,
                     attachment_type: 'image',
@@ -102,14 +124,13 @@ Deno.serve(async (req) => {
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
                     posted_at: currentTimestamp
-                }));
-                attachments.push(attachment);
+                })));
             }
         }
 
         if (files && files.length > 0) {
             for (const file of files) {
-                const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                attachmentTasks.push(() => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: comment.id,
                     attachment_type: 'file',
@@ -118,16 +139,14 @@ Deno.serve(async (req) => {
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
                     posted_at: currentTimestamp
-                }));
-                attachments.push(attachment);
+                })));
             }
         }
 
-        // Structured links also saved as attachment records for legacy thread rendering
         if (links && Array.isArray(links) && links.length > 0) {
             for (const link of links) {
                 if (link && link.url && link.url.trim()) {
-                    const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                    attachmentTasks.push(() => fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                         request_id: requestId,
                         comment_id: comment.id,
                         attachment_type: 'link',
@@ -136,27 +155,40 @@ Deno.serve(async (req) => {
                         created_by_type: 'internal_user',
                         created_by_id: user.id,
                         posted_at: currentTimestamp
-                    }));
-                    attachments.push(attachment);
+                    })));
                 }
             }
         }
 
-        // AUTO-REOPEN IF ARCHIVED
-        const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
-        const request = requests[0];
-        if (request && request.status === 'archived') {
-            await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                status: 'posted',
-                archived_at: null
-            }));
+        // Run attachment writes in batches of 2 — non-fatal
+        if (attachmentTasks.length > 0) {
+            try {
+                const results = await runBatched(attachmentTasks, 2, 150);
+                attachments.push(...results);
+            } catch (attErr) {
+                console.warn('ATTACHMENT_WRITE_PARTIAL_FAILURE', { commentId: comment.id, error: attErr?.message });
+                warnings.push({ type: 'ATTACHMENT_WRITE_FAILED', message: attErr?.message });
+            }
         }
 
-        return Response.json({
-            success: true,
-            comment,
-            attachments
-        });
+        // AUTO-REOPEN IF ARCHIVED (non-fatal)
+        try {
+            const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
+            const request = requests[0];
+            if (request && request.status === 'archived') {
+                await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+                    status: 'posted',
+                    archived_at: null
+                }));
+            }
+        } catch (reopenErr) {
+            console.warn('AUTO_REOPEN_FAILED', { requestId, error: reopenErr?.message });
+            warnings.push({ type: 'AUTO_REOPEN_FAILED', message: reopenErr?.message });
+        }
+
+        const response = { success: true, comment, attachments };
+        if (warnings.length > 0) response.warnings = warnings;
+        return Response.json(response);
 
     } catch (error) {
         const msg = error?.message || '';
