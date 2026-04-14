@@ -84,23 +84,37 @@ export default function LocationSelect({ value, onValueChange, className }) {
             <span className="text-gray-400">No location</span>
           </SelectItem>
           
-          {parentLocations.map(parent => {
-            const children = locations.filter(l => l.parent_id === parent.id && l.active !== false);
+          {parentLocations
+            .sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''))
+            .map(parent => {
+            const children = locations
+              .filter(l => l.parent_id === parent.id && l.active !== false)
+              .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
             return (
               <React.Fragment key={parent.id}>
                 <SelectItem value={parent.id}>
-                  <span style={{ color: parent.color }}>{parent.location_area}</span>
+                  <span style={{ color: parent.color || '#8B5CF6' }}>{parent.bin_description || parent.location_area}</span>
                 </SelectItem>
                 {children.map(child => (
                   <SelectItem key={child.id} value={child.id}>
-                    <span className="ml-4" style={{ color: child.color }}>
-                      → {child.location_area}
+                    <span className="pl-4" style={{ color: child.color || '#8B5CF6' }}>
+                      ↳ {child.bin_description || child.location_area}
                     </span>
                   </SelectItem>
                 ))}
               </React.Fragment>
             );
           })}
+          
+          {/* Orphan locations (parent missing) */}
+          {locations
+            .filter(l => l.parent_id && !parentLocations.find(p => p.id === l.parent_id) && l.active !== false)
+            .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''))
+            .map(loc => (
+              <SelectItem key={loc.id} value={loc.id}>
+                <span style={{ color: loc.color || '#8B5CF6' }}>{loc.bin_description || loc.location_area}</span>
+              </SelectItem>
+            ))}
 
           <div className="border-t border-gray-700 mt-1 pt-1">
             <SelectItem value="__create_new__">

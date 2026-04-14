@@ -29,6 +29,7 @@ import PartPricingFields from "./PartPricingFields";
 import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
 import PartVendorSourcesSection from "./PartVendorSourcesSection";
+import LocationSelect from "@/components/common/LocationSelect";
 import AddInventoryModal from "../inventory/AddInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
@@ -568,10 +569,6 @@ export default function PartModal({ part, partId, onClose }) {
         mutation = base44.entities.Vendor.create;
         queryKey = 'referenceData';
         break;
-      case 'Location':
-        mutation = base44.entities.Location.create;
-        queryKey = 'locations';
-        break;
       case 'CarMake':
         mutation = base44.entities.CarMake.create;
         queryKey = 'carMakes';
@@ -600,7 +597,6 @@ export default function PartModal({ part, partId, onClose }) {
       
       if (entityType === 'PartCategory') setFormData(f => ({ ...f, part_category_id: newItem.id }));
       else if (entityType === 'Vendor') setFormData(f => ({ ...f, default_vendor_id: newItem.id }));
-      else if (entityType === 'Location') setFormData(f => ({ ...f, location_id: newItem.id }));
       else if (entityType === 'CarMake') setFormData(f => ({ ...f, car_make_id: newItem.id }));
       else if (entityType === 'CarModel') setFormData(f => ({ ...f, car_model_id: newItem.id }));
       else if (entityType === 'CarYear') setFormData(f => ({ ...f, car_year_id: newItem.id }));
@@ -1179,55 +1175,12 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
 
         <div>
-          <Label className="text-gray-400 text-xs flex items-center justify-between">
-            Location
-            <button type="button" onClick={() => setShowCreateModal('Location')} className="text-xs text-blue-400 hover:text-blue-300">
-              + New
-            </button>
-          </Label>
-          <Select
-            value={formData.location_id || 'none'}
-            onValueChange={(value) => setFormData({ ...formData, location_id: value === 'none' ? '' : value })}
-          >
-            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {(() => {
-                const parentLocations = activeLocations
-                  .filter(l => !l.parent_id)
-                  .sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''));
-                const parentIds = new Set(parentLocations.map(l => l.id));
-                const orphanLocations = activeLocations.filter(l => l.parent_id && !parentIds.has(l.parent_id))
-                  .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
-                return (
-                  <>
-                    {parentLocations.map(parent => {
-                      const children = activeLocations
-                        .filter(l => l.parent_id === parent.id)
-                        .sort((a, b) => (a.bin_description || a.location_area || '').localeCompare(b.bin_description || b.location_area || ''));
-                      return [
-                        <SelectItem key={parent.id} value={parent.id}>
-                          <span style={{ color: parent.color || '#8B5CF6' }}>{parent.bin_description || parent.location_area}</span>
-                        </SelectItem>,
-                        ...children.map(child => (
-                          <SelectItem key={child.id} value={child.id}>
-                            <span className="pl-4" style={{ color: child.color || '#8B5CF6' }}>↳ {child.bin_description || child.location_area}</span>
-                          </SelectItem>
-                        ))
-                      ];
-                    })}
-                    {orphanLocations.map(l => (
-                      <SelectItem key={l.id} value={l.id}>
-                        <span style={{ color: l.color || '#8B5CF6' }}>{l.bin_description || l.location_area}</span>
-                      </SelectItem>
-                    ))}
-                  </>
-                );
-              })()}
-            </SelectContent>
-          </Select>
+          <Label className="text-gray-400 text-xs">Location</Label>
+          <LocationSelect
+            value={formData.location_id || ''}
+            onValueChange={(value) => setFormData({ ...formData, location_id: value })}
+            className="bg-gray-800 border-gray-700 text-white"
+          />
         </div>
       </div>
 

@@ -1,18 +1,10 @@
 import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Package, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const LOCATION_NONE = "__none__";
+import LocationSelect from "@/components/common/LocationSelect";
 
 /**
  * Memoized table row for a single open PO line.
@@ -22,7 +14,6 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
   line,
   input,
   isSelected,
-  locations,
   onToggle,
   onUpdateInput,
   onOpenPart,
@@ -86,20 +77,11 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
         />
       </TableCell>
       <TableCell>
-        <Select
-          value={input.location_id || LOCATION_NONE}
+        <LocationSelect
+          value={input.location_id || ''}
           onValueChange={(v) => onUpdateInput(line.line_item_id, 'location_id', v)}
-        >
-          <SelectTrigger className="h-8 bg-gray-800 border-gray-600">
-            <SelectValue placeholder="Location" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={LOCATION_NONE}>No location</SelectItem>
-            {locations?.map(loc => (
-              <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          className="h-8 bg-gray-800 border-gray-600"
+        />
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-1">
