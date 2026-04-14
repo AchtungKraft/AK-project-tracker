@@ -9,6 +9,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import PurchaseOrders from './pages/PurchaseOrders';
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -62,6 +63,11 @@ const AuthenticatedApp = () => {
         />
       ))}
 
+      <Route path="/PurchaseOrders" element={
+        <LayoutWrapper currentPageName="PurchaseOrders">
+          <PurchaseOrders />
+        </LayoutWrapper>
+      } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

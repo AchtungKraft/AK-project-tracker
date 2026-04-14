@@ -140,6 +140,7 @@ Deno.serve(async (req) => {
         lines,
         freight_cost: order.freight_cost || 0,
         tariff_cost: order.tariff_cost || 0,
+        billing_status: order.billing_status || 'Not Invoiced',
         pdf_attachments: order.pdf_attachments || [],
       };
     });

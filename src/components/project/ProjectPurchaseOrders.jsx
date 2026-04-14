@@ -6,7 +6,6 @@ import { createPageUrl } from "@/utils";
 import { orderKeys } from "@/components/financial/queryKeyFactories";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,16 +16,12 @@ import {
 } from "@/components/ui/select";
 import {
   Package,
-  Truck,
   Search,
   RefreshCw,
-  CheckCircle2,
   ArrowDownWideNarrow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import POReceivingCard from "@/components/receiving/POReceivingCard";
-
-// ── Reuse identical sort/group logic from POReceivingList ──
+import POStatusGroup from "@/components/purchasing/POStatusGroup";
 
 const SORT_OPTIONS = [
   { value: "most_remaining", label: "Most Items to Receive" },
@@ -74,51 +69,11 @@ function groupOrders(orders) {
   return { ready, partial, full };
 }
 
-// ── Collapsible group section (same pattern as POReceivingList) ──
-
-function OrderGroup({ title, colorClass, borderClass, orders, onNavigate, defaultCollapsed = false }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  if (orders.length === 0) return null;
-
-  return (
-    <div>
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 mb-3 group"
-      >
-        <h2 className={cn("text-xs font-semibold uppercase tracking-wider", colorClass)}>
-          {title}
-        </h2>
-        <Badge variant="outline" className="text-[10px] text-gray-400 border-gray-600">
-          {orders.length}
-        </Badge>
-        <span className="text-gray-600 text-xs group-hover:text-gray-400 transition-colors">
-          {collapsed ? "Show" : "Hide"}
-        </span>
-      </button>
-      {!collapsed && (
-        <div className="space-y-3">
-          {orders.map((po) => (
-            <POReceivingCard
-              key={po.order_id}
-              po={po}
-              borderClass={borderClass}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * ProjectPurchaseOrders - Project-level PO tab
  * 
- * Reuses the same sort/group/card system as POReceivingList,
- * but scoped to a single project's purchase orders.
- * Receive button navigates to canonical POReceiving detail page.
+ * Uses shared POStatusGroup table component for consistent display.
+ * Scoped to a single project's purchase orders.
  */
 export default function ProjectPurchaseOrders({ projectId }) {
   const navigate = useNavigate();
@@ -274,7 +229,7 @@ export default function ProjectPurchaseOrders({ projectId }) {
         </Button>
       </div>
 
-      {/* Grouped Order Cards */}
+      {/* Grouped Tables */}
       {filteredOrders.length === 0 ? (
         <Card className="bg-gray-900/50 border-gray-700 p-8 text-center">
           {enrichedOrders.length === 0 ? (
@@ -291,25 +246,22 @@ export default function ProjectPurchaseOrders({ projectId }) {
           )}
         </Card>
       ) : (
-        <div className="space-y-6">
-          <OrderGroup
+        <div className="space-y-4">
+          <POStatusGroup
             title="Ready to Receive"
             colorClass="text-blue-400"
-            borderClass="border-l-blue-500"
             orders={ready}
             onNavigate={handleNavigate}
           />
-          <OrderGroup
+          <POStatusGroup
             title="Partially Received"
             colorClass="text-amber-400"
-            borderClass="border-l-amber-500"
             orders={partial}
             onNavigate={handleNavigate}
           />
-          <OrderGroup
+          <POStatusGroup
             title="Fully Received"
             colorClass="text-green-400"
-            borderClass="border-l-green-500"
             orders={full}
             onNavigate={handleNavigate}
             defaultCollapsed
