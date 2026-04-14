@@ -4,8 +4,28 @@
  * - Gap = required_total - reserved_from_stock - covered_from_po (CANONICAL)
  * - qty_to_order no longer read for eligibility
  * - commitment_id REQUIRED for new PO lines
+ *
+ * PO INTEGRITY GUARDS (P0):
+ * - Every line item MUST have unit_cost > 0 — hard block, not warning
+ * Guards are inlined (no local imports in Deno deploy).
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── PO INTEGRITY GUARD (canonical — inlined from poValidationGuards.js) ──
+function guardPOLineItemCosts(lineItems) {
+  const errors = [];
+  for (const item of lineItems) {
+    const cost = Number(item.unit_cost);
+    const id = item.commitment_id || item.commitment?.id || item.id || 'unknown';
+    const name = item.part_name || item.part?.part_name || '';
+    if (cost === null || cost === undefined || !Number.isFinite(cost)) {
+      errors.push({ commitment_id: id, reason_code: 'MISSING_COST', part_name: name, message: `Missing cost for ${name || id}` });
+    } else if (cost <= 0) {
+      errors.push({ commitment_id: id, reason_code: 'ZERO_COST', part_name: name, message: `$0 cost for ${name || id} — cannot create PO line with zero cost` });
+    }
+  }
+  return errors;
+}
 
 Deno.serve(async (req) => {
   try {
@@ -17,9 +37,6 @@ Deno.serve(async (req) => {
     const { project_id, commitment_ids=[], mode='BULK', override_vendor_id=null, eta_date=null, notes=null, dry_run=false, vendor_order_data={}, qty_overrides={}, manual_lines=[] } = payload;
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
     if (!commitment_ids?.length) return Response.json({ error: 'commitment_ids required' }, { status: 400 });
-
-    // Check strict mode setting
-    const strictMode = user?.pricing_strict_mode === true;
 
     const warnings = [];
     const [commitments, project, poSequences] = await Promise.all([
@@ -105,33 +122,32 @@ Deno.serve(async (req) => {
         cost_src = (resolvedSource?.unit_cost > 0) ? `vendor_source:${resolvedSourceId}` : (c.unit_cost_snapshot > 0) ? 'commitment_snapshot' : (part?.cost > 0) ? 'part_cost' : (part?.default_cost > 0) ? 'default_estimate' : 'missing';
         if (unit_cost <= 0) cost_review = true;
       }
-      if (unit_cost <= 0) {
-        console.warn(`[PO_CREATE] PO line with zero cost – check part pricing. commitment=${c.id} part=${part?.id} (${part?.part_name})`);
-        if (strictMode) {
-          blocked.push({ commitment_id: c.id, reason_code: 'ZERO_COST_STRICT', part_name: part?.part_name, message: 'Strict mode: $0 cost blocked' });
-          continue;
-        }
-        try {
-          await base44.asServiceRole.entities.CommitmentAuditLog.create({
-            commitment_id: c.id,
-            action_type: 'create',
-            trigger_source: 'manual',
-            triggered_by: user.email,
-            actor_email: user.email,
-            notes: `ZERO_COST_PO_LINE: PO line created with $0 cost. Part: ${part?.part_name}. Cost source: ${cost_src}`,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (_e) { /* audit is best-effort */ }
-      }
+      // Note: $0 cost is now hard-blocked by guardPOLineItemCosts() batch guard above.
+      // Lines reaching here with cost <= 0 will be caught before any writes occur.
       // Use qty_override if provided (allows user to order more than gap)
       const qtyOverride = qty_overrides[c.id];
       const finalQty = (qtyOverride != null && qtyOverride > 0) ? qtyOverride : gap;
       eligible.push({ commitment: c, part, vendor_id: vid, vendor_name: vendorMap.get(vid)?.vendor_name || 'Unknown', qty_to_order: finalQty, canonical_gap: gap, unit_cost, cost_src, cost_review, source_id: resolvedSourceId, price_ordered: unit_cost });
     }
 
+    // ── P0 GUARD: Hard-block $0 / missing cost lines (replaces old strictMode-only check) ──
+    const costErrors = guardPOLineItemCosts(eligible);
+    if (costErrors.length > 0 && !dry_run) {
+      console.error(`[PO_CREATE_COST_GUARD] Blocked: ${costErrors.length} line(s) with invalid cost`, costErrors);
+      return Response.json({
+        ok: false,
+        error: 'PO_COST_VALIDATION_FAILED',
+        error_code: 'ZERO_COST_BLOCKED',
+        message: `${costErrors.length} line item(s) have missing or $0 cost. All lines must have cost > $0.`,
+        cost_errors: costErrors,
+        blocked,
+        summary: { eligible_count: eligible.length, blocked_count: blocked.length, order_count: 0 },
+      });
+    }
+
     if (dry_run) {
       const vg = {}; for (const e of eligible) { if (!vg[e.vendor_id]) vg[e.vendor_id] = []; vg[e.vendor_id].push(e); }
-      return Response.json({ ok: true, dry_run: true, preview: { vendor_groups: Object.entries(vg).map(([v, items]) => ({ vendor_id: v, vendor_name: items[0]?.vendor_name, commitment_count: items.length, total_qty: items.reduce((s, i) => s + i.qty_to_order, 0), estimated_cost: items.reduce((s, i) => s + i.qty_to_order * i.unit_cost, 0), items: items.map(i => ({ commitment_id: i.commitment.id, part_name: i.part?.part_name, qty: i.qty_to_order, unit_cost: i.unit_cost, cost_src: i.cost_src, project_name: null })) })), total_orders_to_create: Object.keys(vg).length, total_line_items: eligible.length }, blocked, phase1_warnings: warnings.length ? warnings : undefined, summary: { eligible_count: eligible.length, blocked_count: blocked.length, order_count: Object.keys(vg).length } });
+      return Response.json({ ok: true, dry_run: true, cost_errors: costErrors.length > 0 ? costErrors : undefined, preview: { vendor_groups: Object.entries(vg).map(([v, items]) => ({ vendor_id: v, vendor_name: items[0]?.vendor_name, commitment_count: items.length, total_qty: items.reduce((s, i) => s + i.qty_to_order, 0), estimated_cost: items.reduce((s, i) => s + i.qty_to_order * i.unit_cost, 0), items: items.map(i => ({ commitment_id: i.commitment.id, part_name: i.part?.part_name, qty: i.qty_to_order, unit_cost: i.unit_cost, cost_src: i.cost_src, project_name: null })) })), total_orders_to_create: Object.keys(vg).length, total_line_items: eligible.length }, blocked, phase1_warnings: warnings.length ? warnings : undefined, summary: { eligible_count: eligible.length, blocked_count: blocked.length, order_count: Object.keys(vg).length } });
     }
 
     if (!eligible.length && !manual_lines.length) return Response.json({ ok: false, error: 'No eligible commitments', created_orders: [], blocked, updated_commitments: [], summary: { eligible_count: 0, blocked_count: blocked.length, order_count: 0 } });

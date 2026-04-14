@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * executeSupplyAction - Unified Supply Dispatcher
@@ -6,7 +6,37 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
  * - All logic uses canonical: required_total, reserved_from_stock, covered_from_po, qty_installed
  * - Deprecated fields written for compat ONLY, marked DEPRECATED_COMPAT
  * - Mismatch warnings logged
+ *
+ * PO INTEGRITY GUARDS (P0):
+ * - PO creation: every line item MUST have unit_cost > 0
+ * - PO deletion/cancellation: billing_status MUST be 'Not Invoiced'
+ * Guards are inlined (no local imports in Deno deploy).
  */
+
+// ── PO INTEGRITY GUARDS (canonical — inlined from poValidationGuards.js) ──
+
+function guardPOLineItemCosts(lineItems) {
+  const errors = [];
+  for (const item of lineItems) {
+    const cost = Number(item.unit_cost);
+    const id = item.commitment_id || item.commitment?.id || item.id || 'unknown';
+    const name = item.part_name || item.part?.part_name || '';
+    if (cost === null || cost === undefined || !Number.isFinite(cost)) {
+      errors.push({ commitment_id: id, reason_code: 'MISSING_COST', part_name: name, message: `Missing cost for ${name || id}` });
+    } else if (cost <= 0) {
+      errors.push({ commitment_id: id, reason_code: 'ZERO_COST', part_name: name, message: `$0 cost for ${name || id} — cannot create PO line with zero cost` });
+    }
+  }
+  return errors;
+}
+
+function guardPODeletion(order) {
+  const bs = order.billing_status;
+  if (bs && bs !== 'Not Invoiced') {
+    return { reason_code: 'PO_INVOICED', message: `Cannot delete/cancel PO — billing status is "${bs}". Remove invoice first.`, billing_status: bs };
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
@@ -349,6 +379,14 @@ async function createPO(ctx, commitment_ids, payload) {
   const sourceOverrideCount = Object.keys(source_override_map).length;
   if (overrideCount > 0 || sourceOverrideCount > 0) {
     console.log(`[CREATE_PO_OVERRIDES] vendor_overrides=${overrideCount} source_overrides=${sourceOverrideCount}`);
+  }
+
+  // ── P0 GUARD: Block $0 / missing cost lines ──
+  const allGroupedItems = Array.from(vg.values()).flat();
+  const costErrors = guardPOLineItemCosts(allGroupedItems);
+  if (costErrors.length > 0) {
+    console.error(`[CREATE_PO_COST_GUARD] Blocked: ${costErrors.length} line(s) with invalid cost`, costErrors);
+    return { ok: false, error: 'PO_COST_VALIDATION_FAILED', error_code: 'ZERO_COST_BLOCKED', message: `${costErrors.length} line item(s) have missing or $0 cost. All lines must have cost > $0.`, cost_errors: costErrors, blocked };
   }
 
   // SINGLE-VENDOR ENFORCEMENT: if allow_multi_vendor=false and overrides result in multiple vendors, block
@@ -747,6 +785,13 @@ async function deletePO(ctx, payload) {
   if (!order_id) throw new Error('order_id required');
   const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
   if (!order) throw new Error('Order not found');
+
+  // ── P0 GUARD: Block deletion of invoiced POs ──
+  const deleteGuard = guardPODeletion(order);
+  if (deleteGuard) {
+    console.error(`[DELETE_PO_GUARD] Blocked: ${deleteGuard.message}`, { order_id, billing_status: order.billing_status });
+    return { success: false, error: deleteGuard.message, error_code: deleteGuard.reason_code, billing_status: order.billing_status };
+  }
 
   // Fetch all line items for this PO
   const lineItems = await ctx.base44.entities.PartPurchaseLineItem.filter({ order_id });
