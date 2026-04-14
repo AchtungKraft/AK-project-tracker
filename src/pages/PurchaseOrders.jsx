@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import POStatusGroup from "@/components/purchasing/POStatusGroup";
+import POPrimaryGroup from "@/components/purchasing/POPrimaryGroup";
 
 // ── Status Classification ──
 // Strictly uses Order.status as the canonical field.
@@ -141,6 +142,7 @@ export default function PurchaseOrders() {
   const [vendorFilter, setVendorFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [groupBy, setGroupBy] = useState("status");
+  const [thenBy, setThenBy] = useState("none");
   const [sortKey, setSortKey] = useState("newest");
   const [visibleStatuses, setVisibleStatuses] = useState(
     () => new Set(["Draft", "Ordered", "Partial", "Received", "Cancelled"])
@@ -186,14 +188,32 @@ export default function PurchaseOrders() {
   // Sort
   const sortedOrders = useMemo(() => sortOrders(visibleOrders, sortKey), [visibleOrders, sortKey]);
 
-  // Group
-  const groups = useMemo(() => {
-    switch (groupBy) {
-      case "vendor":  return buildVendorGroups(sortedOrders);
-      case "project": return buildProjectGroups(sortedOrders);
-      default:        return buildStatusGroups(sortedOrders);
+  // Build sub-groups for a set of orders using a given dimension
+  const buildSubGroups = useCallback((ordersList, dimension) => {
+    switch (dimension) {
+      case "status":  return buildStatusGroups(ordersList);
+      case "vendor":  return buildVendorGroups(ordersList);
+      case "project": return buildProjectGroups(ordersList);
+      default:        return null;
     }
-  }, [sortedOrders, groupBy]);
+  }, []);
+
+  // Group (primary + optional secondary)
+  const groups = useMemo(() => {
+    let primary;
+    switch (groupBy) {
+      case "vendor":  primary = buildVendorGroups(sortedOrders); break;
+      case "project": primary = buildProjectGroups(sortedOrders); break;
+      default:        primary = buildStatusGroups(sortedOrders); break;
+    }
+    if (thenBy === "none" || thenBy === groupBy) return primary;
+
+    // Attach sub-groups to each primary group
+    return primary.map(g => ({
+      ...g,
+      subGroups: buildSubGroups(g.orders, thenBy),
+    }));
+  }, [sortedOrders, groupBy, thenBy, buildSubGroups]);
 
   const handleNavigate = (orderId) => {
     navigate(createPageUrl("POReceiving") + `?order_id=${orderId}`);
@@ -318,7 +338,7 @@ export default function PurchaseOrders() {
         {/* Group By */}
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-gray-500 uppercase tracking-wide">Group</span>
-          <Select value={groupBy} onValueChange={setGroupBy}>
+          <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (thenBy === v) setThenBy("none"); }}>
             <SelectTrigger className="w-32 h-8 text-xs bg-gray-900 border-gray-700">
               <SelectValue />
             </SelectTrigger>
@@ -326,6 +346,22 @@ export default function PurchaseOrders() {
               <SelectItem value="status">Status</SelectItem>
               <SelectItem value="vendor">Vendor</SelectItem>
               <SelectItem value="project">Project</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Then By */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500 uppercase tracking-wide">Then</span>
+          <Select value={thenBy} onValueChange={setThenBy}>
+            <SelectTrigger className="w-32 h-8 text-xs bg-gray-900 border-gray-700">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {groupBy !== "status"  && <SelectItem value="status">Status</SelectItem>}
+              {groupBy !== "vendor"  && <SelectItem value="vendor">Vendor</SelectItem>}
+              {groupBy !== "project" && <SelectItem value="project">Project</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -397,13 +433,14 @@ export default function PurchaseOrders() {
       ) : (
         <div className="space-y-4">
           {groups.map(g => (
-            <POStatusGroup
+            <POPrimaryGroup
               key={g.key}
               title={g.title}
               colorClass={g.colorClass}
               orders={g.orders}
+              subGroups={g.subGroups}
               onNavigate={handleNavigate}
-              showProject={groupBy !== "project"}
+              showProject={groupBy !== "project" && thenBy !== "project"}
               defaultCollapsed={g.defaultCollapsed}
               forceCollapsed={globalCollapse !== null ? globalCollapse : undefined}
               onToggle={globalCollapse !== null ? handleGroupToggle : undefined}
