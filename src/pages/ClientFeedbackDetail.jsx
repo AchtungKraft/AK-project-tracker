@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload } from "lucide-react";
+import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
 // Note: Send, Paperclip, LinkIcon removed — now in FeedbackCommentComposer
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -65,18 +66,35 @@ export default function ClientFeedbackDetail() {
   });
 
   // Single consolidated API call for all feedback detail data
-  const { data: feedbackDetail, isLoading: isLoadingDetail, isFetching } = useQuery({
+  const { data: feedbackDetail, isLoading: isLoadingDetail, isFetching, error: fetchError, refetch } = useQuery({
     queryKey: ['internalFeedbackDetail', requestId, projectId],
     queryFn: async () => {
       const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
-      return response.data;
+      const result = response.data;
+      // Normalize backend error responses into thrown errors for react-query
+      if (result && result.success === false && result.error) {
+        const err = new Error(result.error.message || 'API error');
+        err.errorType = result.error.type;
+        throw err;
+      }
+      return result;
     },
     enabled: !!requestId,
-    staleTime: 60_000, // 60 seconds - longer stale time
+    staleTime: 60_000,
     gcTime: 300_000,
-    refetchOnMount: false, // Don't refetch if data exists
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      // Auto-retry rate limit errors up to 2 times
+      if (error?.errorType === 'RATE_LIMIT' && failureCount < 2) return true;
+      // Don't retry NOT_FOUND or other errors
+      return false;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
+
+  // Derive error type for UI
+  const apiErrorType = fetchError?.errorType || null;
 
   // Non-blocking view tracking - fire and forget, debounced per session
   useEffect(() => {
@@ -328,22 +346,20 @@ export default function ClientFeedbackDetail() {
   // PROGRESSIVE RENDERING: Show header skeleton while loading, then render progressively
   const isInitialLoad = isLoadingDetail && !feedbackDetail;
   
-  // Handle request not found after load completes
-  if (!isLoadingDetail && !request) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-6 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400">Request not found</p>
-          <Button 
-            variant="outline" 
-            className="mt-4 border-gray-700 text-white"
-            onClick={() => navigate(createPageUrl("ClientPortalHub"))}
-          >
-            Go Back
-          </Button>
-        </div>
-      </div>
-    );
+  // Handle errors after load completes — separate NOT_FOUND from transient failures
+  if (!isLoadingDetail && (fetchError || !request)) {
+    if (apiErrorType === 'NOT_FOUND' || (!fetchError && !request)) {
+      return <NotFoundState onBack={handleBack} />;
+    }
+    if (apiErrorType === 'RATE_LIMIT') {
+      return <RateLimitState onRetry={() => refetch()} isRetrying={isFetching} />;
+    }
+    return <UnknownErrorState 
+      message={fetchError?.message} 
+      onRetry={() => refetch()} 
+      isRetrying={isFetching}
+      onBack={handleBack} 
+    />;
   }
 
   return (

@@ -1,4 +1,25 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err?.message || '';
+    const isRetryable =
+      err?.status === 429 ||
+      msg.includes('429') ||
+      msg.includes('Too Many Requests') ||
+      err?.name === 'FetchError' ||
+      msg.includes('ECONNRESET');
+
+    if (retries > 0 && isRetryable) {
+      await new Promise(r => setTimeout(r, delay));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
 
 // ── Server-side comment normalizer (authoritative) ──────────────────
 function normalizeComment(comment, attachments) {
@@ -139,7 +160,7 @@ Deno.serve(async (req) => {
             });
         }
 
-        // STEP A: Fetch ONLY request-scoped entities in parallel
+        // STEP A: Fetch ONLY request-scoped entities in parallel (with retry on transient failures)
         const [
             requests,
             commentsRaw,
@@ -149,18 +170,22 @@ Deno.serve(async (req) => {
             linkedTasks,
             taskGroupsRaw,
         ] = await Promise.all([
-            base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }),
-            base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId }),
-            base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId }).catch(() => []),
-            base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId }),
-            base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId }).catch(() => []),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).catch(() => []),
         ]);
 
         const request = requests[0];
         if (!request) {
-            return Response.json({ error: 'Request not found' }, { 
+            return Response.json({ 
+                success: false,
+                data: null,
+                error: { type: 'NOT_FOUND', message: 'Request not found' }
+            }, { 
                 status: 404,
                 headers: { 'Access-Control-Allow-Origin': '*' }
             });
@@ -199,7 +224,7 @@ Deno.serve(async (req) => {
             if (link.task_id) taskIds.add(link.task_id);
         });
 
-        // STEP C: Fetch project data + referenced people in parallel
+        // STEP C: Fetch project data + referenced people in parallel (with retry)
         const [
             projects,
             projectClientAccesses,
@@ -208,10 +233,10 @@ Deno.serve(async (req) => {
             tasks,
         ] = await Promise.all([
             projectIdForAccess 
-                ? base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess })
+                ? fetchWithRetry(() => base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess }))
                 : Promise.resolve([]),
             projectIdForAccess
-                ? base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess })
+                ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess }))
                 : Promise.resolve([]),
             fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
             fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
@@ -222,7 +247,7 @@ Deno.serve(async (req) => {
         const accessContactIds = activeAccesses.map(pa => pa.client_contact_id).filter(id => !clientContactIds.has(id));
         
         const additionalContacts = accessContactIds.length > 0 
-            ? await fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, accessContactIds)
+            ? await fetchWithRetry(() => fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, accessContactIds))
             : [];
         
         const allClientContacts = [...clientContacts, ...additionalContacts];
@@ -315,12 +340,12 @@ Deno.serve(async (req) => {
 
         let assignableUsers = [];
         if (projectIdForAccess) {
-            const teamMembers = await base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true });
+            const teamMembers = await fetchWithRetry(() => base44.asServiceRole.entities.TeamMember.filter({ is_achtung_kraft_member: true }));
             const akUserIds = teamMembers.filter(tm => tm.user_id).map(tm => tm.user_id);
             const neededAkUserIds = akUserIds.filter(id => !userMap.has(id));
             
             if (neededAkUserIds.length > 0) {
-                const akUsers = await fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds);
+                const akUsers = await fetchWithRetry(() => fetchByIdsBatched(base44.asServiceRole.entities.User, neededAkUserIds));
                 akUsers.forEach(u => userMap.set(u.id, { id: u.id, full_name: u.full_name, email: u.email }));
             }
             
@@ -360,9 +385,18 @@ Deno.serve(async (req) => {
         });
 
     } catch (error) {
-        console.error("Error in getInternalFeedbackDetail:", error);
-        return Response.json({ error: error.message }, { 
-            status: 500,
+        const msg = error?.message || '';
+        const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+        const errorType = isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN';
+
+        console.error("Feedback API Error:", { type: errorType, message: msg, id: requestId });
+
+        return Response.json({ 
+            success: false,
+            data: null,
+            error: { type: errorType, message: isRateLimit ? 'Rate limit exceeded after retries' : msg }
+        }, { 
+            status: isRateLimit ? 429 : 500,
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
     }
@@ -375,7 +409,7 @@ async function fetchByIdsBatched(entity, ids) {
     const uniqueIds = [...new Set(ids)].filter(id => OBJECT_ID_RE.test(id));
     if (uniqueIds.length === 0) return [];
     try {
-        return await entity.filter({ id: { $in: uniqueIds } });
+        return await fetchWithRetry(() => entity.filter({ id: { $in: uniqueIds } }));
     } catch (error) {
         console.error('fetchByIdsBatched error:', error);
         return [];

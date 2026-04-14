@@ -1,6 +1,27 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // Phase 5: Already writes content_html, content_fallback, links[], photos[], files[]
 // with backward compatibility for body-only payloads
+
+// ── Retry wrapper for transient failures (429, network) ──────────────
+async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err?.message || '';
+    const isRetryable =
+      err?.status === 429 ||
+      msg.includes('429') ||
+      msg.includes('Too Many Requests') ||
+      err?.name === 'FetchError' ||
+      msg.includes('ECONNRESET');
+
+    if (retries > 0 && isRetryable) {
+      await new Promise(r => setTimeout(r, delay));
+      return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
+    }
+    throw err;
+  }
+}
 
 Deno.serve(async (req) => {
     try {
@@ -66,14 +87,14 @@ Deno.serve(async (req) => {
             commentData.files = files;
         }
 
-        const comment = await base44.asServiceRole.entities.ClientFeedbackComment.create(commentData);
+        const comment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.create(commentData));
 
         // Also create ClientFeedbackAttachment records for backward compat with thread rendering
         const attachments = [];
 
         if (photos && photos.length > 0) {
             for (const photoUrl of photos) {
-                const attachment = await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: comment.id,
                     attachment_type: 'image',
@@ -81,14 +102,14 @@ Deno.serve(async (req) => {
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
                     posted_at: currentTimestamp
-                });
+                }));
                 attachments.push(attachment);
             }
         }
 
         if (files && files.length > 0) {
             for (const file of files) {
-                const attachment = await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                     request_id: requestId,
                     comment_id: comment.id,
                     attachment_type: 'file',
@@ -97,7 +118,7 @@ Deno.serve(async (req) => {
                     created_by_type: 'internal_user',
                     created_by_id: user.id,
                     posted_at: currentTimestamp
-                });
+                }));
                 attachments.push(attachment);
             }
         }
@@ -106,7 +127,7 @@ Deno.serve(async (req) => {
         if (links && Array.isArray(links) && links.length > 0) {
             for (const link of links) {
                 if (link && link.url && link.url.trim()) {
-                    const attachment = await base44.asServiceRole.entities.ClientFeedbackAttachment.create({
+                    const attachment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.create({
                         request_id: requestId,
                         comment_id: comment.id,
                         attachment_type: 'link',
@@ -115,20 +136,20 @@ Deno.serve(async (req) => {
                         created_by_type: 'internal_user',
                         created_by_id: user.id,
                         posted_at: currentTimestamp
-                    });
+                    }));
                     attachments.push(attachment);
                 }
             }
         }
 
         // AUTO-REOPEN IF ARCHIVED
-        const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
+        const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
         const request = requests[0];
         if (request && request.status === 'archived') {
-            await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
+            await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
                 status: 'posted',
                 archived_at: null
-            });
+            }));
         }
 
         return Response.json({
@@ -138,7 +159,15 @@ Deno.serve(async (req) => {
         });
 
     } catch (error) {
-        console.error("Error in addInternalComment:", error);
-        return Response.json({ error: error.message }, { status: 500 });
+        const msg = error?.message || '';
+        const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
+        const errorType = isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN';
+
+        console.error("Feedback API Error:", { type: errorType, message: msg, fn: 'addInternalComment' });
+
+        return Response.json({ 
+            success: false,
+            error: { type: errorType, message: isRateLimit ? 'Rate limit exceeded after retries' : msg }
+        }, { status: isRateLimit ? 429 : 500 });
     }
 });
