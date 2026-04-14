@@ -234,7 +234,7 @@ export default function FeedbackCommentComposer({
             className="bg-blue-600 hover:bg-blue-700 text-white ml-auto"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
-            Send
+            Save
           </Button>
         </div>
       </CardContent>
