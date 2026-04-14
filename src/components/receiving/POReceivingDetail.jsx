@@ -41,6 +41,8 @@ import { cn } from "@/lib/utils";
 import POReceivingLineRow from "./POReceivingLineRow";
 import POReceivingCompletedLines from "./POReceivingCompletedLines";
 import DeletePOConfirmModal from "./DeletePOConfirmModal";
+import EditOrderModal from "@/components/parts/EditOrderModal";
+import POStatusBadge from "@/components/supply/POStatusBadge";
 
 const LOCATION_NONE = "__none__";
 
@@ -65,6 +67,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   const [showCompleted, setShowCompleted] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   // Optimistic PO overlay — applied on top of server PO data for instant UI
   const [optimisticDeltas, setOptimisticDeltas] = useState(null);
   const initializedForRef = useRef(null);
@@ -365,15 +368,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-white font-mono">{effectivePO.po_number}</h1>
-              <Badge variant="outline" className={cn(
-                effectivePO.status === 'Ordered' && "bg-blue-500/20 text-blue-400 border-blue-500/30",
-                effectivePO.status === 'Partial' && "bg-amber-500/20 text-amber-400 border-amber-500/30",
-                effectivePO.status === 'Received' && "bg-green-500/20 text-green-400 border-green-500/30",
-                effectivePO.status === 'Draft' && "bg-gray-500/20 text-gray-400 border-gray-500/30",
-                effectivePO.status === 'Cancelled' && "bg-red-500/20 text-red-400 border-red-500/30"
-              )}>
-                {effectivePO.status}
-              </Badge>
+              <POStatusBadge status={effectivePO.status} size="lg" />
               {optimisticDeltas && (
                 <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs animate-pulse">
                   Syncing...
@@ -387,6 +382,17 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {effectivePO.status !== 'Cancelled' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowEditModal(true)}
+              className="border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/30 hover:text-yellow-300"
+            >
+              <FileText className="w-4 h-4 mr-1" />
+              Edit PO
+            </Button>
+          )}
           {effectivePO.order_url && (
             <Button variant="outline" size="sm" asChild>
               <a href={effectivePO.order_url} target="_blank" rel="noopener noreferrer">
@@ -405,15 +411,19 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
               {effectivePO.pdf_attachments.length} Doc{effectivePO.pdf_attachments.length > 1 ? 's' : ''}
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDeleteModal(true)}
-            className="border-red-700/50 text-red-400 hover:bg-red-900/30 hover:text-red-300"
-          >
-            <Trash2 className="w-4 h-4 mr-1" />
-            Delete PO
-          </Button>
+          {effectivePO.status !== 'Cancelled' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteModal(true)}
+              className="border-red-700/50 text-red-400 hover:bg-red-900/30 hover:text-red-300"
+              disabled={effectivePO.billing_status && effectivePO.billing_status !== 'Not Invoiced'}
+              title={effectivePO.billing_status && effectivePO.billing_status !== 'Not Invoiced' ? 'Cannot delete invoiced PO' : 'Delete PO'}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete PO
+            </Button>
+          )}
         </div>
       </div>
 
@@ -585,6 +595,32 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Edit PO Modal */}
+      {showEditModal && (
+        <EditOrderModal
+          order={{
+            id: effectivePO.order_id,
+            po_number: effectivePO.po_number,
+            order_number: effectivePO.order_number,
+            order_url: effectivePO.order_url,
+            order_date: effectivePO.order_date,
+            eta_date: effectivePO.eta_date,
+            notes: effectivePO.notes,
+            vendor_id: effectivePO.vendor_id,
+            status: effectivePO.status,
+            billing_status: effectivePO.billing_status,
+            invoice_number: effectivePO.invoice_number,
+            invoice_date: effectivePO.invoice_date,
+            invoice_notes: effectivePO.invoice_notes,
+          }}
+          onClose={() => {
+            setShowEditModal(false);
+            initializedForRef.current = null;
+            refetch();
+          }}
+        />
       )}
 
       {/* Delete PO Modal */}

@@ -707,6 +707,7 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
   const activeVendors = vendors.filter(v => v.active !== false);
   const hasUnassignedVendor = Object.keys(vendorGroups).includes('unassigned');
   const groupCount = Object.keys(vendorGroups).length;
+  const hasZeroCostItems = totals.zerosCostCount > 0;
   
   // Phase 6.2: Single-vendor enforcement
   // Each PO group must have only one vendor - this is already enforced by grouping
@@ -1013,6 +1014,12 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
                 ⚠ Assign vendors to all items before creating orders
               </p>
             )}
+            {hasZeroCostItems && !hasUnassignedVendor && (
+              <p className="text-xs text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Fix $0 cost items before creating orders
+              </p>
+            )}
             <div className="flex gap-2 ml-auto">
               <Button variant="outline" onClick={onClose} className="border-gray-700">
                 Cancel
@@ -1020,7 +1027,7 @@ export default function CreateBatchOrderModal({ selectedItems, selectedVendorCon
               <Button
                 onClick={handleCreateOrders}
                 className="bg-red-600 hover:bg-red-700"
-                disabled={supplyAction.isPending || hasUnassignedVendor}
+                disabled={supplyAction.isPending || hasUnassignedVendor || hasZeroCostItems}
               >
                 {supplyAction.isPending ? (
                   <>

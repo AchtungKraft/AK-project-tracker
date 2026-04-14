@@ -1,8 +1,8 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import POStatusBadge from "@/components/supply/POStatusBadge";
 
 const MAX_VISIBLE_PARTS = 2;
 
@@ -64,14 +64,10 @@ export default function POReceivingCard({ po, borderClass, onNavigate }) {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
             <span className="font-mono text-gray-400">{po.po_number}</span>
-            <Badge variant="outline" className={cn(
-              "text-[10px] py-0",
-              po.status === 'Ordered' && "bg-blue-500/20 text-blue-400 border-blue-500/30",
-              po.status === 'Partial' && "bg-amber-500/20 text-amber-400 border-amber-500/30",
-              po.status === 'Draft' && "bg-gray-500/20 text-gray-400 border-gray-500/30"
-            )}>
-              {po.status}
-            </Badge>
+            <POStatusBadge status={po.status} size="sm" />
+            {po.total_cost > 0 && (
+              <span className="font-mono text-emerald-400">${po.total_cost.toFixed(2)}</span>
+            )}
             {po.order_number && (
               <span className="text-gray-600">Ref: {po.order_number}</span>
             )}

@@ -23,6 +23,7 @@ export default function DeletePOConfirmModal({ po, onConfirm, onClose, isDeletin
   const totalQtyOrdered = po?.total_qty_ordered ?? 0;
   const totalQtyReceived = po?.total_qty_received ?? 0;
   const hasReceived = totalQtyReceived > 0;
+  const isInvoiced = po?.billing_status && po.billing_status !== 'Not Invoiced';
 
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
@@ -55,7 +56,14 @@ export default function DeletePOConfirmModal({ po, onConfirm, onClose, isDeletin
               )}
             </div>
 
-            {hasReceived && (
+            {isInvoiced && (
+              <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-xs text-red-300">
+                <strong>Blocked:</strong> This PO has been invoiced ({po.billing_status}).
+                Invoiced POs cannot be deleted. Remove the invoice first.
+              </div>
+            )}
+
+            {hasReceived && !isInvoiced && (
               <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-3 text-xs text-amber-300">
                 <strong>Warning:</strong> Some items have already been received.
                 Deleting will reduce covered_from_po but will NOT remove received inventory.
@@ -81,11 +89,11 @@ export default function DeletePOConfirmModal({ po, onConfirm, onClose, isDeletin
           <Button
             variant="destructive"
             onClick={() => onConfirm(reason)}
-            disabled={isDeleting}
+            disabled={isDeleting || isInvoiced}
             className="gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            {isDeleting ? "Deleting..." : "Delete PO"}
+            {isInvoiced ? "Cannot Delete (Invoiced)" : isDeleting ? "Deleting..." : "Delete PO"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
