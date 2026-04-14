@@ -80,17 +80,17 @@ export default function ClientFeedbackDetail() {
       return result;
     },
     enabled: !!requestId,
-    staleTime: 60_000,
+    staleTime: 30_000,
     gcTime: 300_000,
-    refetchOnMount: false,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
-      // Auto-retry rate limit errors up to 2 times
-      if (error?.errorType === 'RATE_LIMIT' && failureCount < 2) return true;
+      // Auto-retry rate limit errors up to 3 times
+      if (error?.errorType === 'RATE_LIMIT' && failureCount < 3) return true;
       // Don't retry NOT_FOUND or other errors
       return false;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    retryDelay: (attemptIndex) => Math.min(2000 * 2 ** attemptIndex, 10000),
   });
 
   // Derive error type for UI

@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ── Retry wrapper for transient failures (429, network) ──────────────
-async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
+async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   try {
     return await fn();
   } catch (err) {
@@ -14,7 +14,8 @@ async function fetchWithRetry(fn, { retries = 2, delay = 500 } = {}) {
       msg.includes('ECONNRESET');
 
     if (retries > 0 && isRetryable) {
-      await new Promise(r => setTimeout(r, delay));
+      const jitter = Math.random() * 400;
+      await new Promise(r => setTimeout(r, delay + jitter));
       return fetchWithRetry(fn, { retries: retries - 1, delay: delay * 2 });
     }
     throw err;
@@ -160,19 +161,25 @@ Deno.serve(async (req) => {
             });
         }
 
-        // STEP A: Fetch ONLY request-scoped entities in parallel (with retry on transient failures)
+        // STEP A: Fetch request-scoped entities in two small batches to avoid rate limiting
+        // Batch 1: Core data (request + comments + decisions)
         const [
             requests,
             commentsRaw,
             decisionsRaw,
+        ] = await Promise.all([
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
+            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
+        ]);
+
+        // Batch 2: Secondary data (attachments, tasks, links)
+        const [
             attachmentsRaw,
             todoTasksRaw,
             linkedTasks,
             taskGroupsRaw,
         ] = await Promise.all([
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })),
-            fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })),
             fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: requestId })),
             fetchWithRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).catch(() => []),
             fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackTaskLink.filter({ feedback_request_id: requestId })),
@@ -224,20 +231,19 @@ Deno.serve(async (req) => {
             if (link.task_id) taskIds.add(link.task_id);
         });
 
-        // STEP C: Fetch project data + referenced people in parallel (with retry)
-        const [
-            projects,
-            projectClientAccesses,
-            users,
-            clientContacts,
-            tasks,
-        ] = await Promise.all([
+        // STEP C: Fetch project data + referenced people in smaller batches
+        // Batch C1: Project + access
+        const [projects, projectClientAccesses] = await Promise.all([
             projectIdForAccess 
                 ? fetchWithRetry(() => base44.asServiceRole.entities.Project.filter({ id: projectIdForAccess }))
                 : Promise.resolve([]),
             projectIdForAccess
                 ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: projectIdForAccess }))
                 : Promise.resolve([]),
+        ]);
+
+        // Batch C2: People + tasks
+        const [users, clientContacts, tasks] = await Promise.all([
             fetchByIdsBatched(base44.asServiceRole.entities.User, [...internalUserIds]),
             fetchByIdsBatched(base44.asServiceRole.entities.ClientContact, [...clientContactIds]),
             fetchByIdsBatched(base44.asServiceRole.entities.Task, [...taskIds]),
@@ -389,7 +395,7 @@ Deno.serve(async (req) => {
         const isRateLimit = error?.status === 429 || msg.includes('429') || msg.includes('Too Many Requests');
         const errorType = isRateLimit ? 'RATE_LIMIT' : 'UNKNOWN';
 
-        console.error("Feedback API Error:", { type: errorType, message: msg, id: requestId });
+        console.error("Feedback API Error:", { type: errorType, message: msg });
 
         return Response.json({ 
             success: false,
