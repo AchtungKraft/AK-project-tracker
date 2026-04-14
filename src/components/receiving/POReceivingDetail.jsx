@@ -118,13 +118,12 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     const initial = {};
     poData.lines.forEach(line => {
       initial[line.line_item_id] = {
-        receive_qty: line.qty_remaining,
+        receive_qty: 0,
         location_id: LOCATION_NONE,
       };
     });
     setLineInputs(initial);
-    const freshOpen = poData.lines.filter(l => l.qty_remaining > 0 && !l.is_line_cancelled);
-    setSelectedLines(new Set(freshOpen.map(l => l.line_item_id)));
+    setSelectedLines(new Set());
     initializedForRef.current = poData.order_id;
   }, []);
 
