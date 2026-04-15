@@ -69,18 +69,8 @@ function CommentContentBlock({ comment }) {
         </div>
       }
 
-      {/* Inline photos (from normalized comment, not from attachments entity) */}
-      {c.photos.length > 0 &&
-      <div className="pl-0 md:pl-10 mb-3">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {c.photos.map((url, idx) =>
-          <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
-                <img src={url} alt="" loading="lazy" className="w-full h-auto object-contain max-h-48" />
-              </div>
-          )}
-          </div>
-        </div>
-      }
+      {/* Photos removed: comment.photos[] duplicates event.attachments which renders
+         the same images with full interactivity (gallery, checkboxes, review badges) */}
 
       {/* Inline files */}
       {c.files.length > 0 &&
