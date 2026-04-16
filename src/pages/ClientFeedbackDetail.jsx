@@ -596,7 +596,7 @@ export default function ClientFeedbackDetail() {
                   )}
                   {['posted', 'changes_requested', 'approved'].includes(request.status) && (
                     <>
-                      <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 hover:text-purple-950 px-3 text-xs font-medium rounded-md h-8">
+                      <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:text-white px-3 text-xs font-medium rounded-md h-8">
                         <RotateCw className="w-4 h-4 mr-1" />
                         Resend
                       </Button>
