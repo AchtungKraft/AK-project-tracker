@@ -17,9 +17,11 @@ import { JournalProseStyles } from "@/components/journal/JournalContentRenderer"
 import { getLinkTypeIcon } from "@/components/journal/JournalLinksEditor";
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 import HtmlContent from "@/components/shared/HtmlContent";
+import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
+import { extractLinks } from "@/utils/extractLinks";
 
 // ── CommentContentBlock: unified rendering with proper priority chain ──
-function CommentContentBlock({ comment }) {
+function CommentContentBlock({ comment, attachmentUrls = [] }) {
   if (!comment) return null;
   const c = normalizeFeedbackComment(comment);
   if (!c) return null;
@@ -27,6 +29,9 @@ function CommentContentBlock({ comment }) {
   const hasHtml = !!c.content_html;
   const hasFallback = !!c.content_fallback?.trim();
   const hasBody = !!c.body?.trim();
+
+  // Extract links from comment content, deduplicated against attachments
+  const commentLinks = extractLinks(c.content_html, c.body || c.content_fallback, attachmentUrls);
 
   return (
     <>
@@ -89,6 +94,13 @@ function CommentContentBlock({ comment }) {
         )}
         </div>
       }
+
+      {/* Link preview grid */}
+      {commentLinks.length > 0 && (
+        <div className="pl-0 md:pl-10 mb-3">
+          <LinkPreviewGrid links={commentLinks} />
+        </div>
+      )}
     </>);
 
 }
@@ -242,7 +254,10 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         </div>
 
         {/* Render comment content — priority: content_html → content_fallback → body */}
-        <CommentContentBlock comment={event.comment} />
+        <CommentContentBlock
+          comment={event.comment}
+          attachmentUrls={(event.attachments || []).map(a => a.file_url || a.link_url).filter(Boolean)}
+        />
         {event.decision?.note &&
         <div className="mb-3 pl-0 md:pl-10 text-sm md:text-base">
             <HtmlContent

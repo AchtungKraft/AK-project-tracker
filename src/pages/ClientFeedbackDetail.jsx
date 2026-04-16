@@ -31,6 +31,8 @@ import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../co
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
 import HtmlContent from "@/components/shared/HtmlContent";
+import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
+import { extractLinks } from "@/utils/extractLinks";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -290,6 +292,15 @@ export default function ClientFeedbackDetail() {
     queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
   };
 
+
+  // Extract links from request body for preview grid (deduplicated against attachments)
+  const requestLinks = useMemo(() => {
+    if (!request) return [];
+    const attachmentUrls = attachments
+      .filter(a => a.file_url || a.link_url)
+      .map(a => a.file_url || a.link_url);
+    return extractLinks(request.content_html, request.body, attachmentUrls);
+  }, [request?.content_html, request?.body, attachments]);
 
   // Memoize expensive calculations to prevent re-computation on every render
   const requestState = useMemo(() => {
@@ -629,6 +640,9 @@ export default function ClientFeedbackDetail() {
                     fallback={request.body}
                     className={isMobile ? "text-sm" : ""}
                   />
+                  {requestLinks.length > 0 && (
+                    <LinkPreviewGrid links={requestLinks} />
+                  )}
                 </div>
               )}
 
