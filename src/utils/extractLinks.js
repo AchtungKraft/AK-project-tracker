@@ -120,7 +120,10 @@ export function convertStructuredLinks(links) {
       return {
         url: l.url,
         title: l.name || l.url,
-        description: l.description && l.description.trim() ? l.description : null,
+        description:
+          typeof l.description === 'string'
+            ? (l.description.trim().length > 0 ? l.description.trim() : null)
+            : null,
         previewImage: getPreviewImage(l.url, type),
         type,
       };
@@ -153,18 +156,22 @@ export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [],
   for (const link of [...htmlLinks, ...textLinks]) {
     const norm = normalizeUrl(link.url);
     if (!seen.has(norm)) {
-      // Check if a structured link had a description for this URL
+      // Safe merge: preserve description from structured link
       const structuredMatch = converted.find(s => normalizeUrl(s.url) === norm);
-      if (structuredMatch?.description && !link.description) {
-        link.description = structuredMatch.description;
-      }
+      link.description =
+        (structuredMatch?.description?.trim()) ||
+        (link.description?.trim()) ||
+        null;
       seen.add(norm);
       merged.push(link);
     } else {
-      // URL already in merged — backfill description if the existing entry is missing one
+      // URL already in merged — safe backfill description
       const existing = merged.find(m => normalizeUrl(m.url) === norm);
-      if (existing && !existing.description && link.description) {
-        existing.description = link.description;
+      if (existing) {
+        existing.description =
+          (existing.description?.trim()) ||
+          (link.description?.trim()) ||
+          null;
       }
     }
   }

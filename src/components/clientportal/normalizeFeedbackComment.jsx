@@ -27,14 +27,17 @@ export function normalizeFeedbackComment(raw) {
     links = raw.links.map((link, idx) => {
       if (typeof link === 'string') {
         // Legacy: plain URL string
-        return { id: `legacy-${idx}`, name: link, url: link, description: '', type: 'external' };
+        return { id: `legacy-${idx}`, name: link, url: link, description: null, type: 'external' };
       }
       // Modern structured link
       return {
         id: link.id || `link-${idx}`,
         name: link.name || link.url || '',
         url: link.url || '',
-        description: link.description || '',
+        description:
+          typeof link.description === 'string'
+            ? link.description
+            : null,
         type: link.type || 'external',
       };
     });
