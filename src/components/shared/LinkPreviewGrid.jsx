@@ -7,6 +7,10 @@ const TypeIcon = ({ type }) => {
   return <LinkIcon className="w-4 h-4" />;
 };
 
+function safeHostname(url) {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
 function LinkPreviewCard({ link }) {
   const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
 
@@ -15,7 +19,7 @@ function LinkPreviewCard({ link }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block bg-gray-800/60 border border-gray-700 rounded-lg overflow-hidden hover:border-gray-500 hover:bg-gray-800 transition-all"
+      className="group block rounded-xl border border-gray-700 hover:border-gray-500 overflow-hidden transition-all bg-gray-800/60 hover:bg-gray-800"
     >
       {/* 16:9 preview area */}
       {link.previewImage ? (
@@ -35,13 +39,16 @@ function LinkPreviewCard({ link }) {
           )}
         </div>
       ) : (
-        <div className="w-full aspect-video bg-gray-900/50 flex items-center justify-center">
-          <TypeIcon type={link.type} />
+        <div className="w-full aspect-video bg-gray-900/50 flex flex-col items-center justify-center gap-2">
+          <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+            <TypeIcon type={link.type} />
+          </div>
+          <span className="text-xs text-gray-500">Link Preview</span>
         </div>
       )}
 
       {/* Title bar */}
-      <div className="p-3 flex items-start gap-2">
+      <div className="p-3 flex items-start gap-2 border-t border-gray-700/50">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-blue-400 group-hover:text-blue-300 truncate">
             {link.title}
@@ -50,7 +57,7 @@ function LinkPreviewCard({ link }) {
             <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{link.description}</p>
           )}
           <p className="text-[10px] text-gray-500 mt-1 truncate">
-            {new URL(href).hostname}
+            {safeHostname(href)}
           </p>
         </div>
         <ExternalLink className="w-3.5 h-3.5 text-gray-500 group-hover:text-gray-300 shrink-0 mt-0.5" />

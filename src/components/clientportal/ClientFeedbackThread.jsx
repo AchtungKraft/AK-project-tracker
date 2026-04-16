@@ -12,9 +12,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { isStructuredReview } from "./reviewBehavior";
-import { sanitizeJournalHtml } from "@/components/journal/journalSanitizer";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
-import { getLinkTypeIcon } from "@/components/journal/JournalLinksEditor";
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
@@ -30,8 +28,8 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
   const hasFallback = !!c.content_fallback?.trim();
   const hasBody = !!c.body?.trim();
 
-  // Extract links from comment content, deduplicated against attachments
-  const commentLinks = extractLinks(c.content_html, c.body || c.content_fallback, attachmentUrls);
+  // Extract links from comment content + structured links, deduplicated against attachments
+  const commentLinks = extractLinks(c.content_html, c.body || c.content_fallback, attachmentUrls, c.links);
 
   return (
     <>
@@ -48,34 +46,6 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
       hasBody ?
       <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p> :
       null}
-
-      {/* Structured links */}
-      {c.links.length > 0 &&
-      <div className="pl-0 md:pl-10 mb-3 space-y-1.5">
-          {c.links.map((link, idx) => {
-          const Icon = getLinkTypeIcon(link.type);
-          const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
-          return (
-            <a
-              key={link.id || idx}
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start gap-2 px-3 py-2 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors group">
-              
-                <Icon className="text-[#72cef8] mt-0.5 lucide lucide-external-link w-4 h-4 flex-shrink-0 group-hover:text-red-300" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[#00bbfa] text-sm group-hover:text-red-300 truncate">{link.name || link.url}</div>
-                  {link.description && <div className="text-slate-50 text-xs truncate">{link.description}</div>}
-                </div>
-              </a>);
-
-        })}
-        </div>
-      }
-
-      {/* Photos removed: comment.photos[] duplicates event.attachments which renders
-         the same images with full interactivity (gallery, checkboxes, review badges) */}
 
       {/* Inline files */}
       {c.files.length > 0 &&
@@ -95,7 +65,7 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
         </div>
       }
 
-      {/* Link preview grid */}
+      {/* Unified link preview grid — replaces old structured links + extracted links */}
       {commentLinks.length > 0 && (
         <div className="pl-0 md:pl-10 mb-3">
           <LinkPreviewGrid links={commentLinks} />

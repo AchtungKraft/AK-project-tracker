@@ -293,14 +293,14 @@ export default function ClientFeedbackDetail() {
   };
 
 
-  // Extract links from request body for preview grid (deduplicated against attachments)
+  // Extract links from request body + structured links for preview grid (deduplicated against attachments)
   const requestLinks = useMemo(() => {
     if (!request) return [];
     const attachmentUrls = attachments
       .filter(a => a.file_url || a.link_url)
       .map(a => a.file_url || a.link_url);
-    return extractLinks(request.content_html, request.body, attachmentUrls);
-  }, [request?.content_html, request?.body, attachments]);
+    return extractLinks(request.content_html, request.body, attachmentUrls, request.links);
+  }, [request?.content_html, request?.body, request?.links, attachments]);
 
   // Memoize expensive calculations to prevent re-computation on every render
   const requestState = useMemo(() => {

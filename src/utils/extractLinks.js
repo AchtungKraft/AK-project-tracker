@@ -94,17 +94,74 @@ export function extractLinksFromText(text) {
 }
 
 /**
- * Combined extraction: tries HTML first, falls back to text.
- * Deduplicates against a set of existing attachment URLs.
+ * Normalize a URL for deduplication (strip query params and trailing slash).
  */
-export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = []) {
+export function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    u.search = "";
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return (url || '').toLowerCase().replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Convert structured link objects (from comment.links[]) into preview format.
+ * These have { name, url, description, type } shape.
+ */
+export function convertStructuredLinks(links) {
+  if (!links || !Array.isArray(links) || links.length === 0) return [];
+  
+  return links
+    .filter(l => l?.url)
+    .map(l => {
+      const type = classifyLink(l.url);
+      return {
+        url: l.url,
+        title: l.name || l.url,
+        description: l.description || null,
+        previewImage: getPreviewImage(l.url, type),
+        type,
+      };
+    });
+}
+
+/**
+ * Combined extraction: tries HTML first, falls back to text.
+ * Merges with structured links. Deduplicates against existing attachment URLs.
+ */
+export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [], structuredLinks = []) {
   const htmlLinks = extractLinksFromHtml(contentHtml);
   const textLinks = bodyText && htmlLinks.length === 0 ? extractLinksFromText(bodyText) : [];
+  const converted = convertStructuredLinks(structuredLinks);
 
-  const allLinks = [...htmlLinks, ...textLinks];
+  // Merge all sources, deduplicate by normalized URL
+  const seen = new Set();
+  const merged = [];
   
-  // Deduplicate against existing attachments
-  const attachmentSet = new Set(existingAttachmentUrls.map(u => u?.toLowerCase()).filter(Boolean));
+  // Structured links first (they have better titles/descriptions)
+  for (const link of converted) {
+    const norm = normalizeUrl(link.url);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      merged.push(link);
+    }
+  }
   
-  return allLinks.filter(link => !attachmentSet.has(link.url?.toLowerCase()));
+  // Then HTML/text extracted links
+  for (const link of [...htmlLinks, ...textLinks]) {
+    const norm = normalizeUrl(link.url);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      merged.push(link);
+    }
+  }
+  
+  // Filter out URLs that match existing attachments
+  const attachmentSet = new Set(
+    existingAttachmentUrls.map(u => normalizeUrl(u || '')).filter(Boolean)
+  );
+  
+  return merged.filter(link => !attachmentSet.has(normalizeUrl(link.url)));
 }
