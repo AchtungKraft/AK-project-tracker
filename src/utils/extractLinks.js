@@ -3,7 +3,7 @@
  * with YouTube thumbnail detection and image URL detection.
  */
 
-const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 const IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
 function getYoutubeThumbnail(url) {
@@ -120,7 +120,7 @@ export function convertStructuredLinks(links) {
       return {
         url: l.url,
         title: l.name || l.url,
-        description: l.description || null,
+        description: l.description && l.description.trim() ? l.description : null,
         previewImage: getPreviewImage(l.url, type),
         type,
       };
