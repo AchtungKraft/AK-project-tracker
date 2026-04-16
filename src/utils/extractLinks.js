@@ -164,10 +164,20 @@ export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [],
     if (!seen.has(norm)) {
       // Safe merge: preserve description from structured link
       const structuredMatch = converted.find(s => normalizeUrl(s.url) === norm);
+      const structuredDesc =
+        typeof structuredMatch?.description === "string"
+          ? structuredMatch.description.trim()
+          : null;
+      const extractedDesc =
+        typeof link.description === "string"
+          ? link.description.trim()
+          : null;
       link.description =
-        (structuredMatch?.description?.trim()) ||
-        (link.description?.trim()) ||
-        null;
+        structuredDesc && structuredDesc.length > 0
+          ? structuredDesc
+          : extractedDesc && extractedDesc.length > 0
+          ? extractedDesc
+          : null;
       seen.add(norm);
       merged.push({
         ...link,
