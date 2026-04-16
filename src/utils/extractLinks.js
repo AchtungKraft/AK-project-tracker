@@ -148,7 +148,13 @@ export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [],
     const norm = normalizeUrl(link.url);
     if (!seen.has(norm)) {
       seen.add(norm);
-      merged.push(link);
+      merged.push({
+        ...link,
+        description:
+          typeof link.description === "string" && link.description.trim().length > 0
+            ? link.description.trim()
+            : null,
+      });
     }
   }
   
@@ -163,15 +169,22 @@ export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [],
         (link.description?.trim()) ||
         null;
       seen.add(norm);
-      merged.push(link);
+      merged.push({
+        ...link,
+        description:
+          typeof link.description === "string" && link.description.trim().length > 0
+            ? link.description.trim()
+            : null,
+      });
     } else {
-      // URL already in merged — safe backfill description
+      // URL already in merged — safe backfill (no overwrite)
       const existing = merged.find(m => normalizeUrl(m.url) === norm);
       if (existing) {
-        existing.description =
-          (existing.description?.trim()) ||
-          (link.description?.trim()) ||
-          null;
+        if (!existing.description || existing.description.trim().length === 0) {
+          if (link.description && link.description.trim().length > 0) {
+            existing.description = link.description.trim();
+          }
+        }
       }
     }
   }
