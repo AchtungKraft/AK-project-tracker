@@ -56,13 +56,16 @@ function normalizeComment(comment, attachments) {
     if (Array.isArray(comment.links) && comment.links.length > 0) {
         links = comment.links.map((link, idx) => {
             if (typeof link === 'string') {
-                return { id: `legacy-${idx}`, name: link, url: link, description: '', type: 'external' };
+                return { id: `legacy-${idx}`, name: link, url: link, description: null, type: 'external' };
             }
             return {
                 id: link.id || `link-${idx}`,
                 name: link.name || link.url || '',
                 url: link.url || '',
-                description: link.description || '',
+                description:
+                    typeof link.description === 'string' && link.description.trim().length > 0
+                        ? link.description.trim()
+                        : null,
                 type: link.type || 'external',
             };
         });
@@ -73,7 +76,7 @@ function normalizeComment(comment, attachments) {
                 id: a.id || `att-link-${idx}`,
                 name: a.label || a.link_url || '',
                 url: a.link_url || '',
-                description: '',
+                description: null,
                 type: 'external',
             }));
     }
