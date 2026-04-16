@@ -43,7 +43,7 @@ function LinkPreviewCard({ link }) {
           <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
             <TypeIcon type={link.type} />
           </div>
-          <span className="text-xs text-gray-500">Link Preview</span>
+          <span className="text-xs text-gray-500">External Link</span>
         </div>
       )}
 
@@ -70,7 +70,7 @@ export default function LinkPreviewGrid({ links }) {
   if (!links || links.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
       {links.map((link, idx) => (
         <LinkPreviewCard key={link.url + idx} link={link} />
       ))}

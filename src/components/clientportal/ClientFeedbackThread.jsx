@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, AlertCircle, Link as LinkIcon, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -16,7 +16,7 @@ import { JournalProseStyles } from "@/components/journal/JournalContentRenderer"
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
-import { extractLinks } from "@/utils/extractLinks";
+import { extractLinks, convertStructuredLinks } from "@/utils/extractLinks";
 
 // ── CommentContentBlock: unified rendering with proper priority chain ──
 function CommentContentBlock({ comment, attachmentUrls = [] }) {
@@ -296,20 +296,31 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
               </div>
           }
 
+            {/* Link attachments as preview cards */}
+            {(() => {
+              const linkAtts = event.referenceAttachments.filter((a) => a.attachment_type === 'link');
+              if (linkAtts.length === 0) return null;
+              const previewLinks = convertStructuredLinks(linkAtts.map(a => ({ url: a.link_url, name: a.label })));
+              return <LinkPreviewGrid links={previewLinks} />;
+            })()}
+
+            {/* File attachments as chips */}
+            {event.referenceAttachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {event.referenceAttachments.filter((a) => a.attachment_type !== 'image').map((att) =>
+              {event.referenceAttachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').map((att) =>
             <a
               key={att.id}
-              href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+              href={att.file_url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400">
               
-                  {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                  {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                  <FileText className="w-4 h-4" />
+                  {att.label || 'Attached File'}
                 </a>
             )}
             </div>
+            )}
           </div>
         }
 
@@ -371,20 +382,31 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
               </div>
           }
 
+            {/* Link attachments as preview cards */}
+            {(() => {
+              const linkAtts = event.attachments.filter((a) => a.attachment_type === 'link');
+              if (linkAtts.length === 0) return null;
+              const previewLinks = convertStructuredLinks(linkAtts.map(a => ({ url: a.link_url, name: a.label })));
+              return <LinkPreviewGrid links={previewLinks} />;
+            })()}
+
+            {/* File attachments as chips */}
+            {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {event.attachments.filter((a) => a.attachment_type !== 'image').map((att) =>
+              {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').map((att) =>
             <a
               key={att.id}
-              href={att.attachment_type === 'link' ? att.link_url : att.file_url}
+              href={att.file_url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400">
               
-                  {att.attachment_type === 'link' ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                  {att.label || (att.attachment_type === 'link' ? att.link_url : 'Attached File')}
+                  <FileText className="w-4 h-4" />
+                  {att.label || 'Attached File'}
                 </a>
             )}
             </div>
+            )}
           </div>
         }
       </CardContent>
