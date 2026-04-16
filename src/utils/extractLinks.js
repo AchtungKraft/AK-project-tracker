@@ -149,12 +149,23 @@ export function extractLinks(contentHtml, bodyText, existingAttachmentUrls = [],
     }
   }
   
-  // Then HTML/text extracted links
+  // Then HTML/text extracted links — merge description from structured if available
   for (const link of [...htmlLinks, ...textLinks]) {
     const norm = normalizeUrl(link.url);
     if (!seen.has(norm)) {
+      // Check if a structured link had a description for this URL
+      const structuredMatch = converted.find(s => normalizeUrl(s.url) === norm);
+      if (structuredMatch?.description && !link.description) {
+        link.description = structuredMatch.description;
+      }
       seen.add(norm);
       merged.push(link);
+    } else {
+      // URL already in merged — backfill description if the existing entry is missing one
+      const existing = merged.find(m => normalizeUrl(m.url) === norm);
+      if (existing && !existing.description && link.description) {
+        existing.description = link.description;
+      }
     }
   }
   

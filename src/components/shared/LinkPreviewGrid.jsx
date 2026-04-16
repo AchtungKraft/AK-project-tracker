@@ -51,25 +51,35 @@ function MediaCard({ link }) {
 // ── Compact row for non-media links ──
 function CompactLinkRow({ link }) {
   const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
+  const domain = getDomain(href);
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700 hover:border-gray-500 bg-gray-800/60 hover:bg-gray-800 transition-all"
+      className="group flex items-center gap-3 px-3 py-3 hover:bg-gray-800/80 transition-colors"
     >
-      <div className="w-8 h-8 rounded-lg bg-gray-700/60 flex items-center justify-center shrink-0 group-hover:bg-gray-700">
-        <LinkIcon className="w-4 h-4 text-gray-400 group-hover:text-gray-300" />
+      <div className="w-8 h-8 rounded-lg bg-gray-700/40 flex items-center justify-center shrink-0 overflow-hidden">
+        <img
+          src={faviconUrl}
+          alt=""
+          className="w-4 h-4"
+          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+        />
+        <div className="w-4 h-4 items-center justify-center hidden">
+          <LinkIcon className="w-4 h-4 text-gray-400" />
+        </div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-blue-400 group-hover:text-blue-300 truncate">
           {link.title}
         </p>
         {link.description && (
-          <p className="text-xs text-gray-500 truncate">{link.description}</p>
+          <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{link.description}</p>
         )}
-        <p className="text-[10px] text-gray-500 truncate">{getDomain(href)}</p>
+        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{domain}</p>
       </div>
       <ExternalLink className="w-3.5 h-3.5 text-gray-500 group-hover:text-gray-300 shrink-0" />
     </a>
@@ -93,9 +103,9 @@ export default function LinkPreviewGrid({ links }) {
         </div>
       )}
 
-      {/* Non-media links as compact rows */}
+      {/* Non-media links as compact rows with dividers */}
       {compactLinks.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="flex flex-col divide-y divide-gray-700/50 rounded-lg border border-gray-700 bg-gray-800/40 overflow-hidden">
           {compactLinks.map((link, idx) => (
             <CompactLinkRow key={link.url + idx} link={link} />
           ))}
