@@ -48,28 +48,31 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
       <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p> :
       null}
 
-      {/* Inline files */}
-      {c.files.length > 0 &&
-      <div className="pl-0 md:pl-10 mb-3 flex flex-wrap gap-2">
-          {c.files.map((file, idx) =>
-        <a
-          key={idx}
-          href={file.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400">
-          
-              <FileText className="w-4 h-4" />
-              {file.name}
-            </a>
-        )}
-        </div>
-      }
+      {/* Attachments divider + sections */}
+      {(c.files.length > 0 || commentLinks.length > 0) && (
+        <div className="pl-0 md:pl-10 mb-3 border-t border-gray-700/50 mt-4 pt-4 space-y-3">
+          {/* Inline files */}
+          {c.files.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {c.files.map((file, idx) => (
+                <a
+                  key={idx}
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                >
+                  <FileText className="w-4 h-4" />
+                  {file.name}
+                </a>
+              ))}
+            </div>
+          )}
 
-      {/* Unified link preview grid — replaces old structured links + extracted links */}
-      {commentLinks.length > 0 && (
-        <div className="pl-0 md:pl-10 mb-3">
-          <LinkPreviewGrid links={commentLinks} showHeader />
+          {/* Unified link preview grid */}
+          {commentLinks.length > 0 && (
+            <LinkPreviewGrid links={commentLinks} showHeader />
+          )}
         </div>
       )}
     </>);
@@ -239,8 +242,9 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         }
 
         {event.type === 'decision' && event.selectedImages?.length > 0 &&
-        <div className="pl-0 md:pl-10 space-y-3 mb-3">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Reviewed Images ({event.selectedImages.length})</p>
+        <div className="pl-0 md:pl-10 mb-3 border-t border-gray-700/50 mt-4 pt-4">
+            <div className="rounded-lg border border-gray-700/60 bg-gray-900/20 p-3 space-y-3">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500">Reviewed Images ({event.selectedImages.length})</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {event.selectedImages.map((att, idx) => {
               const decision = att.decision || 'approved';
@@ -273,14 +277,16 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
 
             })}
             </div>
+            </div>
           </div>
         }
 
         {event.type === 'decision' && event.referenceAttachments?.length > 0 &&
-        <div className="pl-0 md:pl-10 space-y-3">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Uploaded Images</p>
+        <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
             {event.referenceAttachments.filter((a) => a.attachment_type === 'image').length > 0 &&
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-gray-700/60 bg-gray-900/20 p-3 space-y-3">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500">Uploaded Images</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {event.referenceAttachments.filter((a) => a.attachment_type === 'image').map((att, idx) => {
               const allImages = event.referenceAttachments.filter((a) => a.attachment_type === 'image').map((a) => a.file_url);
               return (
@@ -295,6 +301,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
 
             })}
               </div>
+            </div>
           }
 
             {/* Link attachments as preview cards */}
@@ -326,14 +333,16 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         }
 
         {event.type !== 'decision' && event.attachments?.length > 0 &&
-        <div className="pl-0 md:pl-10 space-y-3">
+        <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
             {canReview && isStructuredReview(requestType) && event.attachments.filter((a) => a.attachment_type === 'image').length > 0 &&
           <p className="text-sm text-purple-400 font-medium">
                 SELECT CHECKBOX on IMAGE(s) above to APPROVE or REQUEST CHANGES
               </p>
           }
             {event.attachments.filter((a) => a.attachment_type === 'image').length > 0 &&
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-gray-700/60 bg-gray-900/20 p-3 space-y-3">
+              <p className="text-[10px] uppercase tracking-widest text-gray-500">Images</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {event.attachments.filter((a) => a.attachment_type === 'image').map((att, idx) => {
               const isSelected = selectedImageIds.includes(att.id);
               const imageDecisions = decisions.filter((d) => d.target_attachment_id === att.id);
@@ -381,6 +390,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
 
             })}
               </div>
+            </div>
           }
 
             {/* Link attachments: skip for comment events (CommentContentBlock already renders links with descriptions) */}

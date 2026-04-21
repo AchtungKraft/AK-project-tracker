@@ -60,7 +60,7 @@ function CompactLinkRow({ link }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 px-3 py-3 hover:bg-gray-800/80 transition-colors"
+      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-gray-800/80 transition-colors"
     >
       {hasThumb ? (
         <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden bg-gray-700/40">
@@ -127,7 +127,7 @@ export default function LinkPreviewGrid({ links, showHeader = false }) {
 
   if (showHeader) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-3">
+      <div className="rounded-lg border border-gray-700/60 bg-gray-900/20 p-3">
         {content}
       </div>
     );
