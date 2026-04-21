@@ -425,8 +425,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-
   // Get comments, decisions, and attachments from props (passed from parent)
   const comments = request?.comments || [];
   const decisions = request?.decisions || [];
