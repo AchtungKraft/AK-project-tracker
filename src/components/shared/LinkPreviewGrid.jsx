@@ -14,7 +14,7 @@ function MediaCard({ link }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block rounded-xl border border-gray-700 hover:border-gray-500 overflow-hidden transition-all bg-gray-800/60 hover:bg-gray-800"
+      className="group block rounded-xl border border-gray-700 hover:border-gray-500 overflow-hidden transition-all bg-gray-800/40 hover:bg-gray-800"
     >
       <div className="relative w-full aspect-video bg-gray-900 overflow-hidden">
         <img
@@ -48,30 +48,37 @@ function MediaCard({ link }) {
   );
 }
 
-// ── Compact row for non-media links ──
+// ── Compact row for non-media links (with OG thumbnail support) ──
 function CompactLinkRow({ link }) {
   const href = link.url?.startsWith('http') ? link.url : `https://${link.url}`;
   const domain = getDomain(href);
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  const hasThumb = !!link.previewImage;
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 px-3 py-3 hover:bg-gray-800/80 transition-colors"
+      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-gray-800/80 transition-colors"
     >
-      <div className="w-8 h-8 rounded-lg bg-gray-700/40 flex items-center justify-center shrink-0 overflow-hidden">
-        <img
-          src={faviconUrl}
-          alt=""
-          className="w-4 h-4"
-          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-        />
-        <div className="w-4 h-4 items-center justify-center hidden">
-          <LinkIcon className="w-4 h-4 text-gray-400" />
+      {hasThumb ? (
+        <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden bg-gray-700/40">
+          <img src={link.previewImage} alt="" loading="lazy" className="w-full h-full object-cover" />
         </div>
-      </div>
+      ) : (
+        <div className="w-8 h-8 rounded-lg bg-gray-700/40 flex items-center justify-center shrink-0 overflow-hidden">
+          <img
+            src={faviconUrl}
+            alt=""
+            className="w-4 h-4"
+            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+          />
+          <div className="w-4 h-4 items-center justify-center hidden">
+            <LinkIcon className="w-4 h-4 text-gray-400" />
+          </div>
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-blue-400 group-hover:text-blue-300 truncate">
           {link.title}
@@ -93,10 +100,10 @@ export default function LinkPreviewGrid({ links }) {
   const compactLinks = links.filter(l => !l.previewImage);
 
   return (
-    <div className="mt-2 space-y-3">
+    <div className="space-y-2">
       {/* Media cards in a grid */}
       {mediaLinks.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {mediaLinks.map((link, idx) => (
             <MediaCard key={link.url + idx} link={link} />
           ))}
@@ -105,7 +112,7 @@ export default function LinkPreviewGrid({ links }) {
 
       {/* Non-media links as compact rows with dividers */}
       {compactLinks.length > 0 && (
-        <div className="flex flex-col divide-y divide-gray-700/50 rounded-lg border border-gray-700 bg-gray-800/40 overflow-hidden">
+        <div className="flex flex-col divide-y divide-gray-700/50 rounded-xl border border-gray-700 bg-gray-800/40 overflow-hidden">
           {compactLinks.map((link, idx) => (
             <CompactLinkRow key={link.url + idx} link={link} />
           ))}
