@@ -28,8 +28,9 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
   const hasFallback = !!c.content_fallback?.trim();
   const hasBody = !!c.body?.trim();
 
-  // Extract links from comment content + structured links, deduplicated against attachments
-  const commentLinks = extractLinks(c.content_html, c.body || c.content_fallback, attachmentUrls, c.links);
+  // Extract links from comment content + structured links — do NOT filter against attachments
+  // so structured link descriptions are preserved (attachments don't store descriptions)
+  const commentLinks = extractLinks(c.content_html, c.body || c.content_fallback, [], c.links);
 
   return (
     <>
@@ -382,8 +383,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
               </div>
           }
 
-            {/* Link attachments as preview cards */}
-            {(() => {
+            {/* Link attachments: skip for comment events (CommentContentBlock already renders links with descriptions) */}
+            {event.type !== 'comment' && (() => {
               const linkAtts = event.attachments.filter((a) => a.attachment_type === 'link');
               if (linkAtts.length === 0) return null;
               const previewLinks = convertStructuredLinks(linkAtts.map(a => ({ url: a.link_url, name: a.label })));
