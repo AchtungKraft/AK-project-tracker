@@ -2,6 +2,57 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // Phase 5: Already writes content_html, content_fallback, links[], photos[], files[]
 // with backward compatibility for body-only payloads
 
+// ── Link metadata enrichment ─────────────────────────────────────────
+// Fetches OG/meta tags from a URL to populate title + description.
+// Non-fatal: returns partial data on failure so links always save.
+async function enrichLinkMeta(url) {
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LinkBot/1.0)' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return {};
+    const html = await resp.text();
+    // Only parse the first 50KB to keep it fast
+    const head = html.slice(0, 50000);
+
+    const og = (prop) => {
+      const m = head.match(new RegExp(`<meta[^>]+property=["']og:${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+             || head.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${prop}["']`, 'i'));
+      return m?.[1]?.trim() || null;
+    };
+    const meta = (name) => {
+      const m = head.match(new RegExp(`<meta[^>]+name=["']${name}["'][^>]+content=["']([^"']+)["']`, 'i'))
+             || head.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${name}["']`, 'i'));
+      return m?.[1]?.trim() || null;
+    };
+    const titleMatch = head.match(/<title[^>]*>([^<]+)<\/title>/i);
+
+    return {
+      title: og('title') || meta('title') || titleMatch?.[1]?.trim() || null,
+      description: og('description') || meta('description') || null,
+      image: og('image') || null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function enrichLinks(links) {
+  if (!links || links.length === 0) return links;
+  return Promise.all(links.map(async (link) => {
+    // Skip enrichment if link already has a non-empty description
+    if (link.description && link.description.trim()) return link;
+    const meta = await enrichLinkMeta(link.url);
+    return {
+      ...link,
+      name: link.name || meta.title || link.url,
+      description: meta.description || link.description || null,
+    };
+  }));
+}
+
 // ── Retry wrapper for transient failures (429, network) ──────────────
 async function fetchWithRetry(fn, { retries = 2, delay = 600 } = {}) {
   try {
@@ -91,9 +142,10 @@ Deno.serve(async (req) => {
             commentData.content_fallback = body;
         }
 
-        // Structured links stored directly on comment
+        // Structured links stored directly on comment — enrich missing descriptions
         if (links && Array.isArray(links) && links.length > 0) {
-            commentData.links = links.filter(l => l && l.url && l.url.trim());
+            const validLinks = links.filter(l => l && l.url && l.url.trim());
+            commentData.links = await enrichLinks(validLinks);
         }
 
         // Photos and files stored directly on comment
