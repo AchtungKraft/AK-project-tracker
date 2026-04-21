@@ -68,9 +68,8 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
 
       {/* Unified link preview grid — replaces old structured links + extracted links */}
       {commentLinks.length > 0 && (
-        <div className="pl-0 md:pl-10 mb-3 space-y-1.5">
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 font-medium">References</p>
-          <LinkPreviewGrid links={commentLinks} />
+        <div className="pl-0 md:pl-10 mb-3">
+          <LinkPreviewGrid links={commentLinks} showHeader />
         </div>
       )}
     </>);

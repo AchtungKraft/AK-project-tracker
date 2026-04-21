@@ -60,7 +60,7 @@ function CompactLinkRow({ link }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-gray-800/80 transition-colors"
+      className="group flex items-center gap-3 px-3 py-3 hover:bg-gray-800/80 transition-colors"
     >
       {hasThumb ? (
         <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden bg-gray-700/40">
@@ -93,15 +93,19 @@ function CompactLinkRow({ link }) {
   );
 }
 
-export default function LinkPreviewGrid({ links }) {
+export default function LinkPreviewGrid({ links, showHeader = false }) {
   if (!links || links.length === 0) return null;
 
   const mediaLinks = links.filter(l => !!l.previewImage);
   const compactLinks = links.filter(l => !l.previewImage);
 
-  return (
-    <div className="space-y-2">
-      {/* Media cards in a grid */}
+  const content = (
+    <div className="space-y-3">
+      {showHeader && (
+        <p className="text-[10px] uppercase tracking-widest text-gray-500">References</p>
+      )}
+
+      {/* Media cards */}
       {mediaLinks.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {mediaLinks.map((link, idx) => (
@@ -110,9 +114,9 @@ export default function LinkPreviewGrid({ links }) {
         </div>
       )}
 
-      {/* Non-media links as compact rows with dividers */}
+      {/* Compact link rows */}
       {compactLinks.length > 0 && (
-        <div className="flex flex-col divide-y divide-gray-700/50 rounded-xl border border-gray-700 bg-gray-800/40 overflow-hidden">
+        <div className="flex flex-col divide-y divide-gray-700/50 overflow-hidden">
           {compactLinks.map((link, idx) => (
             <CompactLinkRow key={link.url + idx} link={link} />
           ))}
@@ -120,4 +124,14 @@ export default function LinkPreviewGrid({ links }) {
       )}
     </div>
   );
+
+  if (showHeader) {
+    return (
+      <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-3">
+        {content}
+      </div>
+    );
+  }
+
+  return content;
 }
