@@ -654,11 +654,11 @@ export default function Layout({ children, currentPageName }) {
       
       <div className="min-h-screen flex w-full bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Sidebar className="border-r border-red-900/30 bg-black/40 backdrop-blur-xl">
-          <SidebarHeader className="border-b border-red-900/30 p-4">
+          <SidebarHeader className="border-b border-red-900/30 p-3">
             <img 
               src="https://achtungkraft.com/cdn/shop/files/AchtungLogoSticker_39633eb9-a276-4e81-8376-b8fef51b08d6.png"
               alt="Ächtung Kraft"
-              className="h-8"
+              className="h-7 w-auto object-contain"
             />
           </SidebarHeader>
           
