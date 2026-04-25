@@ -218,7 +218,7 @@ export default function ProjectSupplyManager() {
     return supplyItems.filter(item => item.part_name === 'Unknown Part');
   }, [supplyItems]);
 
-  // Metrics from read model summary (FORWARD MODEL - invoice-based)
+  // Metrics from read model summary — CANONICAL totals from resolver
   const metrics = useMemo(() => {
     const s = supplySummary;
     return {
@@ -235,6 +235,11 @@ export default function ProjectSupplyManager() {
       installPct: s.install_percent || 0,
       totalCommitments: supplyItems.length,
       supplyCoverage: s.supply_coverage_summary || { full: 0, partial: 0, none: 0, over: 0 },
+      // CANONICAL: Sub-breakdowns from resolver
+      servicesCost: s.services_planned_cost || 0,
+      servicesRetail: s.services_planned_retail || 0,
+      creditTotal: s.credit_total || 0,
+      reconciliation: s.reconciliation || null,
     };
   }, [supplySummary, supplyItems.length]);
 

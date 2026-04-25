@@ -16,11 +16,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  */
 export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary }) {
   const financial = useMemo(() => {
-    // ASSERTION: enrichedCommitments MUST only contain type="part" items.
-    // Services are passed separately via servicesSummary to prevent double counting.
-    const partsCostExposure = enrichedCommitments.reduce(
-      (sum, c) => sum + (c.planned_cost_total ?? 0), 0
-    );
+    // CANONICAL: Capital breakdown from enrichedCommitments (qty * unit_cost for stock/order split)
     const totalStockCost = enrichedCommitments.reduce(
       (sum, c) => sum + ((c.reserved_from_stock ?? 0) * (c.unit_cost ?? 0)), 0
     );
@@ -28,21 +24,21 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
       (sum, c) => sum + ((c.to_order ?? 0) * (c.unit_cost ?? 0)), 0
     );
     
-    // Services financial data (from canonical getServicesView read model)
-    const serviceCost = servicesSummary?.total_cost ?? 0;
-    const serviceBillable = servicesSummary?.total_billable ?? 0;
-    const serviceCount = servicesSummary?.total ?? 0;
-    
-    // Combined totals
+    // CANONICAL: All financial totals come from backend summary (metrics)
+    // Parts cost and services cost are pre-computed by the resolver
+    const partsCostExposure = metrics.totalPlannedCost ?? 0;
+    const serviceCost = metrics.servicesCost ?? servicesSummary?.total_cost ?? 0;
+    const serviceBillable = metrics.servicesRetail ?? servicesSummary?.total_billable ?? 0;
     const totalCostExposure = partsCostExposure + serviceCost;
     
     return { 
       totalCostExposure, totalStockCost, totalOrderCost,
-      partsCostExposure, serviceCost, serviceBillable, serviceCount,
+      partsCostExposure, serviceCost, serviceBillable,
     };
-  }, [enrichedCommitments, servicesSummary]);
+  }, [enrichedCommitments, metrics, servicesSummary]);
 
-  const retailValue = metrics.totalPlannedRetail + financial.serviceBillable;
+  // CANONICAL: All totals from backend resolver via metrics — no local recomputation
+  const retailValue = metrics.totalPlannedRetail;
   const totalInvoiced = metrics.totalInvoiced;
   const totalPaid = metrics.totalPaid;
   const outstanding = metrics.invoiceOutstanding;

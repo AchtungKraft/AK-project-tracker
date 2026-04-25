@@ -143,12 +143,11 @@ export default function ProjectInvoices() {
   const canonicalTotals = billingData?.totals || {};
   const canonicalCreditSummary = billingData?.credit_summary || {};
   
-  const totalCreditAvailable = canonicalCreditSummary.total_credit_available ?? 
-    Object.values(creditBalances).reduce((sum, v) => sum + (v || 0), 0);
-  const totalCreditApplied = canonicalCreditSummary.total_credit_applied ?? 
-    Object.values(creditApplied).reduce((sum, v) => sum + (v || 0), 0);
-  const grossExposure = canonicalTotals.gross_exposure ?? (summary.total_balance_due || 0);
-  const netExposure = canonicalTotals.net_exposure ?? Math.max(0, grossExposure - totalCreditApplied);
+  // CANONICAL: Use billing data when available, no fallback math
+  const totalCreditAvailable = canonicalCreditSummary.total_credit_available ?? 0;
+  const totalCreditApplied = canonicalCreditSummary.total_credit_applied ?? 0;
+  const grossExposure = canonicalTotals.gross_exposure ?? 0;
+  const netExposure = canonicalTotals.net_exposure ?? 0;
 
   // Filter invoices by tab, search, and project
   const filteredInvoices = useMemo(() => {

@@ -191,11 +191,12 @@ Deno.serve(async (req) => {
     const orderMap = new Map(orders.map(o => [o.id, o]));
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
-    // FORWARD MODEL: Invoice-based billing metrics
-    const paidInvoices = projectInvoices.filter(inv => inv.status === 'paid');
-    const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalPaid = paidInvoices.reduce((sum, inv) => sum + (inv.paid_amount || inv.total || 0), 0);
-    const invoiceOutstanding = totalInvoiced - totalPaid;
+    // CANONICAL: Resolve financial totals from commitment snapshots
+    // Import inline since Deno backend functions cannot use local imports
+    const financialTotals = await resolveCanonicalFinancials(base44, project_id, commitments, projectInvoices);
+    const totalInvoiced = financialTotals.invoiced_total;
+    const totalPaid = financialTotals.invoice_entity_paid;
+    const invoiceOutstanding = financialTotals.invoice_entity_balance_due;
 
     // ============================================================================
     // PREPAY GATING: Build commitment-level invoice & payment maps
@@ -267,9 +268,9 @@ Deno.serve(async (req) => {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
       
-      const reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
-      const covered = c.covered_from_po ?? c.qty_ordered ?? 0;
-      const required = c.required_total ?? c.qty_committed ?? 0;
+      const reserved = c.reserved_from_stock ?? 0;
+      const covered = c.covered_from_po ?? 0;
+      const required = c.required_total ?? 0;
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
@@ -317,8 +318,8 @@ Deno.serve(async (req) => {
         const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
         const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
-        const required_total = c.required_total ?? c.qty_committed ?? 0;
-        let reserved_from_stock = c.reserved_from_stock ?? c.qty_reserved ?? 0;
+        const required_total = c.required_total ?? 0;
+        let reserved_from_stock = c.reserved_from_stock ?? 0;
         const covered_from_po = c.covered_from_po ?? c.qty_ordered ?? 0;
         const qty_installed = c.qty_installed ?? 0;
 
@@ -358,10 +359,10 @@ Deno.serve(async (req) => {
         else coverage_status = 'NONE';
         const coverage_percent = required_total > 0 ? Math.round((total_covered / required_total) * 100) : 0;
 
-        const unit_cost = c.unit_cost_snapshot ?? part?.cost ?? 0;
-        const unit_retail = c.unit_retail_snapshot ?? part?.retail_matrix_price ?? part?.retail_override ?? 0;
-        const planned_cost_total = c.planned_cost_total ?? (unit_cost * required_total);
-        const planned_retail_total = c.planned_retail_total ?? (unit_retail * required_total);
+        const unit_cost = c.unit_cost_snapshot ?? 0;
+        const unit_retail = c.unit_retail_snapshot ?? 0;
+        const planned_cost_total = unit_cost * required_total;
+        const planned_retail_total = unit_retail * required_total;
         const covered_retail_total = c.covered_retail_total ?? 0;
         const exposure_gap = c.exposure_gap ?? Math.max(0, planned_retail_total - covered_retail_total);
 
@@ -472,6 +473,9 @@ Deno.serve(async (req) => {
           has_multi_source: (sourcesByPart.get(c.part_id) || []).length > 1,
 
           unit_cost,
+          unit_retail,
+          planned_cost_total,
+          planned_retail_total,
           covered_retail_total,
           exposure_gap,
           billing_status: c.billing_status || 'billable',
@@ -530,9 +534,7 @@ Deno.serve(async (req) => {
       invoice: projectInvoices.filter(inv => inv.status !== 'void').length,
     };
 
-    // Summary statistics
-    const totalPlannedRetail = viewModels.reduce((sum, vm) => sum + vm.planned_retail_total, 0);
-    const totalPlannedCost = viewModels.reduce((sum, vm) => sum + vm.planned_cost_total, 0);
+    // Summary statistics — CANONICAL totals from resolver, quantity aggregation local
     const totalInstalledQty = viewModels.reduce((sum, vm) => sum + vm.qty_installed, 0);
     const totalRequiredQty = viewModels.reduce((sum, vm) => sum + vm.required_total, 0);
     
@@ -543,12 +545,21 @@ Deno.serve(async (req) => {
       total_covered: viewModels.reduce((sum, vm) => sum + vm.covered_from_po, 0),
       total_to_order: viewModels.reduce((sum, vm) => sum + vm.to_order, 0),
       total_installed: totalInstalledQty,
-      total_planned_retail: totalPlannedRetail,
-      total_planned_cost: totalPlannedCost,
-      total_invoiced: totalInvoiced,
-      total_paid: totalPaid,
-      invoice_outstanding: invoiceOutstanding,
-      unbilled_retail: Math.max(0, totalPlannedRetail - totalInvoiced),
+      // CANONICAL: Financial totals from resolver (not local reduce)
+      total_planned_retail: financialTotals.planned_retail,
+      total_planned_cost: financialTotals.planned_cost,
+      total_invoiced: financialTotals.invoiced_total,
+      total_paid: financialTotals.invoice_entity_paid,
+      invoice_outstanding: financialTotals.invoice_entity_balance_due,
+      unbilled_retail: financialTotals.remaining_total,
+      // Sub-breakdowns
+      parts_planned_retail: financialTotals.parts_planned_retail,
+      parts_planned_cost: financialTotals.parts_planned_cost,
+      services_planned_retail: financialTotals.services_planned_retail,
+      services_planned_cost: financialTotals.services_planned_cost,
+      credit_total: financialTotals.credit_total,
+      // Reconciliation
+      reconciliation: financialTotals.reconciliation,
       supply_coverage_summary: {
         full: viewModels.filter(vm => vm.coverage_status === 'FULL').length,
         partial: viewModels.filter(vm => vm.coverage_status === 'PARTIAL').length,
@@ -629,6 +640,89 @@ function mapSourceType(legacyType) {
     'TAKE_OFF': 'TAKE_OFF',
   };
   return mapping[legacyType] || 'SHOP_PURCHASED';
+}
+
+/**
+ * resolveCanonicalFinancials — inline canonical financial resolver
+ * Computes from commitment snapshots only. No fallback to part.default_retail/cost.
+ */
+async function resolveCanonicalFinancials(base44, project_id, commitments, projectInvoices) {
+  // Fetch services + credit allocations in parallel
+  const [serviceCommitments, creditAllocations] = await Promise.all([
+    base44.entities.ServiceCommitment.filter({ project_id }).catch(() => []),
+    base44.entities.CreditAllocation.filter({ project_id, is_reversed: false }).catch(() => []),
+  ]);
+
+  // Fetch invoice lines scoped to project invoices
+  const invoiceIds = projectInvoices.map(i => i.id);
+  const invoiceLines = invoiceIds.length > 0
+    ? await base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }).catch(() => [])
+    : [];
+
+  const activeCommitments = commitments.filter(c =>
+    !c.cancelled_at && c.is_archived !== true && c.commitment_status !== 'cancelled'
+  );
+
+  let parts_planned_retail = 0, parts_planned_cost = 0, parts_invoiced_amount = 0;
+  let parts_missing_snapshot_count = 0;
+
+  for (const c of activeCommitments) {
+    const unitRetail = c.unit_retail_snapshot ?? 0;
+    const unitCost = c.unit_cost_snapshot ?? 0;
+    const qty = c.required_total ?? 0;
+    if (unitRetail === 0 && unitCost === 0) parts_missing_snapshot_count++;
+    parts_planned_retail += unitRetail * qty;
+    parts_planned_cost += unitCost * qty;
+    parts_invoiced_amount += c.invoiced_amount ?? 0;
+  }
+
+  let services_planned_retail = 0, services_planned_cost = 0, services_invoiced_amount = 0;
+  for (const sc of serviceCommitments) {
+    services_planned_retail += sc.total_billable ?? 0;
+    const cost = sc.total_cost > 0 ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
+    services_planned_cost += cost;
+    if (sc.is_billed === true || sc.status === 'billed') services_invoiced_amount += sc.total_billable ?? 0;
+  }
+
+  let credit_total = 0;
+  for (const alloc of creditAllocations) credit_total += alloc.amount_applied ?? 0;
+
+  const activeInvoices = projectInvoices.filter(inv => inv.status !== 'cancelled' && inv.status !== 'void');
+  let invoice_entity_total = 0, invoice_entity_paid = 0, invoice_entity_balance_due = 0;
+  for (const inv of activeInvoices) {
+    invoice_entity_total += inv.total ?? inv.subtotal ?? 0;
+    invoice_entity_paid += inv.paid_amount ?? 0;
+    invoice_entity_balance_due += inv.balance_due ?? 0;
+  }
+
+  let invoice_lines_total = 0;
+  for (const line of invoiceLines) {
+    invoice_lines_total += line.line_total ?? ((line.qty || 0) * (line.unit_price || 0));
+  }
+
+  const r2 = n => Math.round((n || 0) * 100) / 100;
+  const planned_retail = r2(parts_planned_retail + services_planned_retail);
+  const planned_cost = r2(parts_planned_cost + services_planned_cost);
+  const invoiced_total = r2(parts_invoiced_amount + services_invoiced_amount);
+  const remaining_total = r2(Math.max(0, planned_retail - invoiced_total - credit_total));
+
+  return {
+    planned_retail, planned_cost, invoiced_total,
+    credit_total: r2(credit_total), remaining_total,
+    parts_planned_retail: r2(parts_planned_retail),
+    parts_planned_cost: r2(parts_planned_cost),
+    services_planned_retail: r2(services_planned_retail),
+    services_planned_cost: r2(services_planned_cost),
+    invoice_entity_total: r2(invoice_entity_total),
+    invoice_entity_paid: r2(invoice_entity_paid),
+    invoice_entity_balance_due: r2(invoice_entity_balance_due),
+    parts_missing_snapshot_count,
+    reconciliation: {
+      drift_detected: Math.abs(r2(invoice_entity_total - invoiced_total)) > 0.01 || Math.abs(r2(invoice_lines_total - parts_invoiced_amount)) > 0.01,
+      invoice_vs_commitment_delta: r2(invoice_entity_total - invoiced_total),
+      line_vs_commitment_delta: r2(invoice_lines_total - parts_invoiced_amount),
+    },
+  };
 }
 
 function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}, prepayContext = {}) {

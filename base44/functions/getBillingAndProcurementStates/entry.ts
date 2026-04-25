@@ -450,10 +450,10 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     const installedRecords = installedByCommitment[commitment.id] || [];
     const installedQty = installedRecords.reduce((sum, ip) => sum + (ip.qty_consumed || 0), 0);
 
-    // Get pricing
-    const unitRetail = commitment.unit_retail_snapshot || part.default_retail || 0;
-    const unitCost = commitment.unit_cost_snapshot || part.default_cost || 0;
-    const assignedQty = commitment.qty_committed || commitment.required_total || 1;
+    // Get pricing — CANONICAL: commitment snapshots only, no deprecated fallbacks
+    const unitRetail = commitment.unit_retail_snapshot ?? 0;
+    const unitCost = commitment.unit_cost_snapshot ?? 0;
+    const assignedQty = commitment.required_total ?? 0;
 
     // PHASE 3: Calculate gross and net exposure with credit
     const grossLineTotal = assignedQty * unitRetail;
