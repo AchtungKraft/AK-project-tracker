@@ -84,7 +84,9 @@ Deno.serve(async (req) => {
       // PHASE 1: Canonical eligibility
       if (c.commitment_status === 'cancelled') { blocked.push({ commitment_id: c.id, reason_code: 'CANCELLED', part_name: part?.part_name, message: 'Commitment cancelled' }); continue; }
       if (c.commitment_status === 'closed') { blocked.push({ commitment_id: c.id, reason_code: 'CLOSED', part_name: part?.part_name, message: 'Commitment closed' }); continue; }
-      const gap = Math.max(0, (c.required_total ?? 0) - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0) - (c.qty_installed ?? 0));
+      // CANONICAL: effective_required = required_total - qty_removed
+      const effective_required = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
+      const gap = Math.max(0, effective_required - (c.reserved_from_stock ?? 0) - (c.covered_from_po ?? 0) - (c.qty_installed ?? 0));
       if (gap <= 0) { blocked.push({ commitment_id: c.id, reason_code: 'NOTHING_TO_ORDER', part_name: part?.part_name, message: 'Fully covered, nothing to order' }); continue; }
 
       // Drift detection

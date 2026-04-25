@@ -66,7 +66,8 @@ export async function resolveFinancials(base44, project_id) {
   for (const c of activeCommitments) {
     const unitRetail = c.unit_retail_snapshot ?? 0;
     const unitCost = c.unit_cost_snapshot ?? 0;
-    const qty = c.required_total ?? 0;
+    // CANONICAL: effective qty = required_total - qty_removed
+    const qty = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
 
     if (unitRetail === 0 && unitCost === 0) {
       parts_missing_snapshot_count++;

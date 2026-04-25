@@ -101,14 +101,17 @@ function checkSupplyInvariant(commitmentId, required, reserved, covered, ctx, so
 }
 
 function readCanonical(c, ctx) {
-  const cn = { required_total: c.required_total ?? 0, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
+  const qty_removed = c.qty_removed ?? 0;
+  const cn = { required_total: c.required_total ?? 0, qty_removed, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
+  // CANONICAL: effective_required = required_total - qty_removed
+  cn.effective_required = Math.max(0, cn.required_total - qty_removed);
   if (ctx && c.qty_committed !== undefined && c.qty_committed !== cn.required_total)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_committed(${c.qty_committed})!=required_total(${cn.required_total})` });
   if (ctx && c.qty_reserved !== undefined && c.qty_reserved !== cn.reserved_from_stock)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})` });
-  // Check invariant on read (includes installed)
-  checkSupplyInvariant(c.id, cn.required_total, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical', cn.qty_installed);
-  cn.gap = Math.max(0, cn.required_total - cn.reserved_from_stock - cn.covered_from_po - cn.qty_installed);
+  // Check invariant on read using effective_required (includes installed)
+  checkSupplyInvariant(c.id, cn.effective_required, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical', cn.qty_installed);
+  cn.gap = Math.max(0, cn.effective_required - cn.reserved_from_stock - cn.covered_from_po - cn.qty_installed);
   cn.coverage = cn.reserved_from_stock + cn.covered_from_po + cn.qty_installed;
   return cn;
 }
@@ -132,7 +135,7 @@ async function inlineRebalance(ctx, part_id, isDry) {
   let rem = phys; const ups = [];
   for (const c of open) {
     const cn = readCanonical(c, ctx);
-    const remReq = Math.max(0, cn.required_total - cn.qty_installed);
+    const remReq = Math.max(0, cn.effective_required - cn.qty_installed);
     const need = Math.max(0, remReq - cn.covered_from_po);
     let newRes = Math.min(rem, need);
     // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po + installed <= required_total
@@ -144,7 +147,7 @@ async function inlineRebalance(ctx, part_id, isDry) {
     const newTO = Math.max(0, remReq - newRes - cn.covered_from_po);
     rem = Math.max(0, rem - newRes);
     if (newRes !== cn.reserved_from_stock || newTO !== (c.qty_to_order ?? 0))
-      ups.push({ commitment_id:c.id, project_id:c.project_id, required_total:cn.required_total, qty_installed:cn.qty_installed, covered_from_po:cn.covered_from_po, old_reserved:cn.reserved_from_stock, new_reserved:newRes, old_to_order:c.qty_to_order??0, new_to_order:newTO, delta_reserved:newRes-cn.reserved_from_stock });
+      ups.push({ commitment_id:c.id, project_id:c.project_id, required_total:cn.required_total, effective_required:cn.effective_required, qty_removed:cn.qty_removed, qty_installed:cn.qty_installed, covered_from_po:cn.covered_from_po, old_reserved:cn.reserved_from_stock, new_reserved:newRes, old_to_order:c.qty_to_order??0, new_to_order:newTO, delta_reserved:newRes-cn.reserved_from_stock });
     const sum = newRes + cn.covered_from_po + newTO;
     if (Math.abs(sum - remReq) > 0.001) {
       console.error(`[REBALANCE_INVARIANT] c=${c.id} sum=${sum} exp=${remReq} reserved=${newRes} covered=${cn.covered_from_po} installed=${cn.qty_installed} to_order=${newTO}`);
@@ -567,6 +570,8 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
       const oldQtyReceived = c.qty_received ?? 0;
       const installed = c.qty_installed ?? 0;
       const required = c.required_total ?? 0;
+      const qty_removed_c = c.qty_removed ?? 0;
+      const effective_required = Math.max(0, required - qty_removed_c);
       if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
       // Convert: move received qty from PO coverage to stock reservation
       const convertQty = Math.min(qty_received, oldCoveredPO);
@@ -575,25 +580,25 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
       // MANDATORY COVERAGE PATH: If covered_from_po was 0 (historical gap), 
       // receiving MUST still create reserved_from_stock up to the coverage gap
       if (convertQty === 0 && qty_received > 0) {
-        const coverageGap = Math.max(0, required - oldReserved - oldCoveredPO - installed);
+        const coverageGap = Math.max(0, effective_required - oldReserved - oldCoveredPO - installed);
         const directAlloc = Math.min(qty_received, coverageGap);
         newReserved = oldReserved + directAlloc;
         if (directAlloc > 0) {
           console.log(`[RECEIVE_DIRECT_ALLOC] commitment=${c.id} no covered_from_po to convert, direct allocating ${directAlloc} from received stock`);
         }
         if (directAlloc === 0 && qty_received > 0) {
-          console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, required, reserved: oldReserved, covered: oldCoveredPO, installed });
+          console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, effective_required, reserved: oldReserved, covered: oldCoveredPO, installed, qty_removed: qty_removed_c });
         }
       }
-      // Enforce invariant: reserved + covered + installed <= required_total
-      const clampedReserved = Math.min(newReserved, Math.max(0, required - newCoveredPO - installed));
-      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      // Enforce invariant: reserved + covered + installed <= effective_required
+      const clampedReserved = Math.min(newReserved, Math.max(0, effective_required - newCoveredPO - installed));
+      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} effective_required=${effective_required} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
         covered_from_po: newCoveredPO,
         reserved_from_stock: clampedReserved,
         qty_reserved: clampedReserved,
         qty_received: oldQtyReceived + qty_received,
-        commitment_status: (clampedReserved + newCoveredPO + installed) >= required && required > 0 ? 'allocated' : c.commitment_status,
+        commitment_status: (clampedReserved + newCoveredPO + installed) >= effective_required && effective_required > 0 ? 'allocated' : c.commitment_status,
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -642,6 +647,8 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
       const oldQtyReceived = c.qty_received ?? 0;
       const installed = c.qty_installed ?? 0;
       const required = c.required_total ?? 0;
+      const qty_removed_c = c.qty_removed ?? 0;
+      const effective_required = Math.max(0, required - qty_removed_c);
       if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
       // Convert: move received qty from PO coverage to stock reservation
       const convertQty = Math.min(qty_received, oldCoveredPO);
@@ -650,25 +657,25 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
       // MANDATORY COVERAGE PATH: If covered_from_po was 0 (historical gap),
       // receiving MUST still create reserved_from_stock up to the coverage gap
       if (convertQty === 0 && qty_received > 0) {
-        const coverageGap = Math.max(0, required - oldReserved - oldCoveredPO - installed);
+        const coverageGap = Math.max(0, effective_required - oldReserved - oldCoveredPO - installed);
         const directAlloc = Math.min(qty_received, coverageGap);
         newReserved = oldReserved + directAlloc;
         if (directAlloc > 0) {
           console.log(`[RECEIVE_DIRECT_ALLOC] commitment=${c.id} no covered_from_po to convert, direct allocating ${directAlloc} from received stock`);
         }
         if (directAlloc === 0 && qty_received > 0) {
-          console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, required, reserved: oldReserved, covered: oldCoveredPO, installed });
+          console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, effective_required, reserved: oldReserved, covered: oldCoveredPO, installed, qty_removed: qty_removed_c });
         }
       }
-      // Enforce invariant: reserved + covered + installed <= required_total
-      const clampedReserved = Math.min(newReserved, Math.max(0, required - newCoveredPO - installed));
-      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      // Enforce invariant: reserved + covered + installed <= effective_required
+      const clampedReserved = Math.min(newReserved, Math.max(0, effective_required - newCoveredPO - installed));
+      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} effective_required=${effective_required} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
         covered_from_po: newCoveredPO,
         reserved_from_stock: clampedReserved,
         qty_reserved: clampedReserved,
         qty_received: oldQtyReceived + qty_received,
-        commitment_status: (clampedReserved + newCoveredPO + installed) >= required && required > 0 ? 'allocated' : c.commitment_status,
+        commitment_status: (clampedReserved + newCoveredPO + installed) >= effective_required && effective_required > 0 ? 'allocated' : c.commitment_status,
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -699,14 +706,16 @@ async function install(ctx,commitment_ids,payload) {
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
   const cn=readCanonical(c,ctx);
-  const installable=Math.max(0,cn.reserved_from_stock-cn.qty_installed);
+  // CANONICAL: installable uses effective_required (excludes qty_removed)
+  const maxInstallable = Math.max(0, cn.effective_required - cn.qty_installed);
+  const installable=Math.min(maxInstallable, cn.reserved_from_stock);
   const st=c.supply_source_type??'VENDOR', affStock=st!=='CLIENT_SUPPLIED';
-  if(qty_to_install>installable&&affStock) throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable`);
+  if(qty_to_install>installable&&affStock) throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable (effective_required=${cn.effective_required}, qty_removed=${cn.qty_removed})`);
   if(affStock&&(part.physical_stock??0)<qty_to_install) throw new Error(`NEGATIVE_STOCK: ${qty_to_install}>${part.physical_stock??0}`);
-  if(ctx.dry_run) return {preview:{commitment_id:cid,qty_installing:qty_to_install,installable,affects_stock:affStock}};
+  if(ctx.dry_run) return {preview:{commitment_id:cid,qty_installing:qty_to_install,installable,effective_required:cn.effective_required,qty_removed:cn.qty_removed,affects_stock:affStock}};
 
   const newInst=cn.qty_installed+qty_to_install, newRes=Math.max(0,cn.reserved_from_stock-qty_to_install);
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInst>=cn.required_total?'installed':c.commitment_status,commitment_version:(c.commitment_version??0)+1});
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInst>=cn.effective_required?'installed':c.commitment_status,commitment_version:(c.commitment_version??0)+1});
 
   if(affStock){
     const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id}); let rem=qty_to_install;

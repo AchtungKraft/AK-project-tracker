@@ -352,8 +352,9 @@ async function _recalculateCommitment(txn, commitment_id) {
     // Optimistic lock check
     const currentVersion = commitment.commitment_version || 1;
 
-    // Calculate planned retail total
-    const plannedRetail = (commitment.qty_committed || 0) * (commitment.unit_retail_snapshot || 0);
+    // CANONICAL: effective qty = qty_committed - qty_removed
+    const effectiveQty = Math.max(0, (commitment.qty_committed || 0) - (commitment.qty_removed || 0));
+    const plannedRetail = effectiveQty * (commitment.unit_retail_snapshot || 0);
 
     // Get all active allocations for this commitment
     const allocations = await txn.base44.asServiceRole.entities.PoolAllocation.filter({
@@ -476,9 +477,10 @@ async function validateInvariants(txn) {
         }
       }
 
-      // Invariant: qty_installed <= qty_committed
-      if ((commitment.qty_installed || 0) > (commitment.qty_committed || 0)) {
-        errors.push(`Commitment ${commitment.id} qty_installed (${commitment.qty_installed}) > qty_committed (${commitment.qty_committed})`);
+      // Invariant: qty_installed <= effective_qty (qty_committed - qty_removed)
+      const effQty = Math.max(0, (commitment.qty_committed || 0) - (commitment.qty_removed || 0));
+      if ((commitment.qty_installed || 0) > effQty) {
+        errors.push(`Commitment ${commitment.id} qty_installed (${commitment.qty_installed}) > effective_qty (${effQty}) [qty_committed=${commitment.qty_committed}, qty_removed=${commitment.qty_removed || 0}]`);
       }
     }
   }

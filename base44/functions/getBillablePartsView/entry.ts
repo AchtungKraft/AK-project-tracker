@@ -61,10 +61,12 @@ Deno.serve(async (req) => {
       const part = partMap[c.part_id];
       if (!part) continue;
 
-      // Calculate remaining to bill
+      // CANONICAL: effective_required = required_total - qty_removed
       const unitRetail = c.unit_retail_snapshot || 0;
       const requiredTotal = c.required_total || 0;
-      const plannedRetailTotal = unitRetail * requiredTotal;
+      const qtyRemoved = c.qty_removed || 0;
+      const effectiveRequired = Math.max(0, requiredTotal - qtyRemoved);
+      const plannedRetailTotal = unitRetail * effectiveRequired;
       const invoicedAmount = c.invoiced_amount || 0;
       const remainingToBill = plannedRetailTotal - invoicedAmount;
 
@@ -89,6 +91,8 @@ Deno.serve(async (req) => {
         category_id: part.part_category_id,
         category_name: category?.name || 'Uncategorized',
         required_total: requiredTotal,
+        qty_removed: qtyRemoved,
+        effective_required: effectiveRequired,
         unit_price: unitRetail,
         invoiced_qty: c.invoiced_qty || 0,
         invoiced_amount: invoicedAmount,

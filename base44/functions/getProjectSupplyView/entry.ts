@@ -319,14 +319,16 @@ Deno.serve(async (req) => {
         const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
         const required_total = c.required_total ?? 0;
+        const qty_removed = c.qty_removed ?? 0;
+        const effective_required = Math.max(0, required_total - qty_removed);
         let reserved_from_stock = c.reserved_from_stock ?? 0;
         const covered_from_po = c.covered_from_po ?? c.qty_ordered ?? 0;
         const qty_installed = c.qty_installed ?? 0;
 
-        // AUTO-ALLOCATION
+        // AUTO-ALLOCATION — uses effective_required (excludes qty_removed)
         const partInvForAlloc = partInventoryMap.get(c.part_id);
         const alreadyCovered = reserved_from_stock + covered_from_po + qty_installed;
-        const gap = Math.max(0, required_total - alreadyCovered);
+        const gap = Math.max(0, effective_required - alreadyCovered);
         if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
           const autoReserve = Math.min(gap, partInvForAlloc.available);
           reserved_from_stock += autoReserve;
@@ -334,8 +336,8 @@ Deno.serve(async (req) => {
           partInvForAlloc.reserved_global += autoReserve;
         }
 
-        const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
-        const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
+        const to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
+        const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
         const partInv = partInventoryMap.get(c.part_id) || {
           physical_stock: 0, reserved_global: 0, on_order_global: 0, to_order_global: 0, available: 0,
@@ -398,7 +400,7 @@ Deno.serve(async (req) => {
           available: partInv.available,
           on_order_total: partInv.on_order_global,
           to_order_total: partInv.to_order_global,
-          needed: Math.max(0, required_total - qty_installed),
+          needed: Math.max(0, effective_required - qty_installed),
         };
 
         const firstOrderId = commitmentLineItems.length > 0
@@ -425,6 +427,8 @@ Deno.serve(async (req) => {
           category_color: category?.color || '#6b7280',
 
           required_total,
+          qty_removed,
+          effective_required,
           reserved_from_stock,
           covered_from_po,
           qty_installed,
@@ -670,7 +674,8 @@ async function resolveCanonicalFinancials(base44, project_id, commitments, proje
   for (const c of activeCommitments) {
     const unitRetail = c.unit_retail_snapshot ?? 0;
     const unitCost = c.unit_cost_snapshot ?? 0;
-    const qty = c.required_total ?? 0;
+    // CANONICAL: effective qty = required_total - qty_removed
+    const qty = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
     if (unitRetail === 0 && unitCost === 0) parts_missing_snapshot_count++;
     parts_planned_retail += unitRetail * qty;
     parts_planned_cost += unitCost * qty;
