@@ -58,18 +58,13 @@ export default function SupplyIntegrityBanner({
     return false; // This project is NOT affected by any violations
   }, [projectId, gateResult?.gates]);
 
-  // Notify parent of gate status changes
-  // PHASE 2: If project-scoped and not affected, allow actions even if global gate fails
+  // INFORMATIONAL ONLY: This banner never controls action blocking.
+  // Action blocking is driven by per-commitment integrity.blocking (quantity violations only).
   React.useEffect(() => {
-    if (gateResult && onGateStatusChange) {
-      if (projectId && !isProjectAffected) {
-        // This project is clean - enable actions
-        onGateStatusChange(true);
-      } else {
-        onGateStatusChange(gateResult.execution_surface_ready);
-      }
+    if (onGateStatusChange) {
+      onGateStatusChange(true); // Always enabled — banner is informational
     }
-  }, [gateResult?.execution_surface_ready, onGateStatusChange, projectId, isProjectAffected]);
+  }, [gateResult, onGateStatusChange]);
 
   const handleDryRun = async () => {
     setIsRunningNormalization(true);
@@ -117,13 +112,13 @@ export default function SupplyIntegrityBanner({
   // Gate failed - show warning banner
   return (
     <div className="space-y-3">
-      <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
+      <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-red-400 font-medium">Supply Integrity Failing — actions disabled</p>
+            <p className="text-amber-400 font-medium">Supply data normalization recommended</p>
             <p className="text-sm text-gray-400 mt-1">
-              Supply integrity issues detected. Run normalization to repair data before continuing.
+              Structural checks detected issues that may affect reporting accuracy. Actions remain enabled.
             </p>
             
             {/* Failed gates list */}
@@ -135,7 +130,7 @@ export default function SupplyIntegrityBanner({
                   <Badge 
                     key={key} 
                     variant="outline" 
-                    className="border-red-600 text-red-400 text-xs"
+                    className="border-amber-600 text-amber-400 text-xs"
                   >
                     <XCircle className="w-3 h-3 mr-1" />
                     {key}: {gate.violations_count} issues

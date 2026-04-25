@@ -151,7 +151,10 @@ export default function ProjectSupplyManager() {
   const [receiveModal, setReceiveModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
   const [removeCreditModal, setRemoveCreditModal] = useState(null);
+  // CANONICAL: Actions are ONLY disabled by true quantity violations (integrity.blocking)
+  // Financial conditions (cost_at_risk, invoiced < planned) NEVER block actions
   const [actionsEnabled, setActionsEnabled] = useState(true);
+  const [hasBlockingViolations, setHasBlockingViolations] = useState(false);
   const [qtyManagerDrawer, setQtyManagerDrawer] = useState(null);
   
   // Unified PO creation states
@@ -220,6 +223,16 @@ export default function ProjectSupplyManager() {
   const orphanCommitments = useMemo(() => {
     return supplyItems.filter(item => item.part_name === 'Unknown Part');
   }, [supplyItems]);
+
+  // PHASE 3: Derive actionsEnabled from QUANTITY violations only
+  // Financial conditions (cost_at_risk, invoiced<planned) are warnings, NOT blockers
+  React.useEffect(() => {
+    const blocking = enrichedCommitments.some(c => c.integrity?.blocking === true);
+    setHasBlockingViolations(blocking);
+    // Only disable if there are true quantity corruption violations
+    // The SupplyIntegrityBanner (production gate) is informational only — never blocks
+    setActionsEnabled(!blocking);
+  }, [enrichedCommitments]);
 
   // Metrics from read model summary — CANONICAL totals from resolver
   const metrics = useMemo(() => {
@@ -668,7 +681,7 @@ export default function ProjectSupplyManager() {
       audit.trackError('single_po_create', error);
       toast.error('Failed to create PO: ' + error.message);
     } finally {
-      setActionsEnabled(true);
+      setActionsEnabled(!hasBlockingViolations);
       setVendorPickerCommitment(null);
     }
   };
@@ -878,10 +891,9 @@ export default function ProjectSupplyManager() {
           {/* PHASE 8: Effective quantity violation summary */}
           <IntegrityViolationSummary items={enrichedCommitments} />
 
-          {/* Integrity Banner - Project-scoped gate check */}
+          {/* Integrity Banner - informational only, NEVER blocks actions */}
           <SupplyIntegrityBanner 
             projectId={projectId}
-            onGateStatusChange={setActionsEnabled}
             showFixControls={true}
             compact={false}
           />
