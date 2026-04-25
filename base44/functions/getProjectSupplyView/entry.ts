@@ -363,8 +363,9 @@ Deno.serve(async (req) => {
         const unit_retail = c.unit_retail_snapshot ?? 0;
         const planned_cost_total = unit_cost * required_total;
         const planned_retail_total = unit_retail * required_total;
-        const covered_retail_total = c.covered_retail_total ?? 0;
-        const exposure_gap = c.exposure_gap ?? Math.max(0, planned_retail_total - covered_retail_total);
+        // DEPRECATED: covered_retail_total and exposure_gap removed.
+        // Use cost-based: max(0, planned_cost_total - invoiced_amount)
+        const cost_at_risk = Math.max(0, planned_cost_total - (c.invoiced_amount ?? 0));
 
         const source_type = mapSourceType(c.supply_source_type);
 
@@ -476,8 +477,8 @@ Deno.serve(async (req) => {
           unit_retail,
           planned_cost_total,
           planned_retail_total,
-          covered_retail_total,
-          exposure_gap,
+          // CANONICAL: cost-based exposure only
+          cost_at_risk,
           billing_status: c.billing_status || 'billable',
           
           billing_state: normalizeBillingState(c.billing_status),

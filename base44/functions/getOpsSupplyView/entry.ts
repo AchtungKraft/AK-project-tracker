@@ -312,8 +312,9 @@ Deno.serve(async (req) => {
       const unit_retail = c.unit_retail_snapshot ?? part?.retail_matrix_price ?? part?.retail_override ?? 0;
       const resolved_cost_total = resolved_unit_cost * to_order;
       const planned_retail_total = c.planned_retail_total ?? (unit_retail * required_total);
-      const covered_retail_total = c.covered_retail_total ?? 0;
-      const resolved_exposure = invalid_cost ? 0 : Math.max(0, (unit_retail - resolved_unit_cost) * to_order);
+      // CANONICAL: cost-based exposure = max(0, planned_cost - invoiced_amount)
+      const planned_cost_for_commitment = resolved_unit_cost * required_total;
+      const cost_at_risk = Math.max(0, planned_cost_for_commitment - (c.invoiced_amount ?? 0));
 
       const source_type = mapSourceType(c.supply_source_type);
 
@@ -436,12 +437,11 @@ Deno.serve(async (req) => {
         invalid_cost,
         unit_retail,
         estimated_cost: resolved_cost_total,
-        planned_cost_total: resolved_unit_cost * required_total,
+        planned_cost_total: planned_cost_for_commitment,
         planned_retail_total,
-        covered_retail_total,
-        resolved_exposure,
-        exposure_gap: resolved_exposure,
-        pool_balance: 0,
+        // CANONICAL: cost-based exposure only
+        cost_at_risk,
+        resolved_exposure: cost_at_risk,
         billing_status: c.billing_status || 'billable',
 
         is_orderable,
@@ -552,7 +552,7 @@ Deno.serve(async (req) => {
     const summary = {
       total_items: filtered.length,
       total_qty_to_order: filtered.reduce((sum, vm) => sum + vm.to_order, 0),
-      total_exposure: filtered.reduce((sum, vm) => sum + (vm.resolved_exposure ?? 0), 0),
+      total_exposure: filtered.reduce((sum, vm) => sum + (vm.cost_at_risk ?? 0), 0),
       total_estimated_cost: filtered.reduce((sum, vm) => sum + vm.estimated_cost, 0),
       orderable_count: filtered.filter(vm => vm.is_orderable).length,
       blocked_count: filtered.filter(vm => !vm.is_orderable && vm.to_order > 0).length,

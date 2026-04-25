@@ -380,13 +380,14 @@ export default function ProjectSupplyManager() {
         unit_retail: item.unit_retail,
         planned_cost_total: item.planned_cost_total,
         planned_retail_total: item.planned_retail_total,
-        // REMOVED: covered_retail_total and exposure_gap — stale retail-based fields
-        // Use resolved_exposure (cost-based) and resolved_margin instead
         billing_status: item.billing_status,
         
-        // CORRECTED: Cost-based exposure = max(0, cost - invoiced_amount)
-        resolved_exposure: Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
-        // NEW: Margin = retail - cost
+        // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
+        // Use backend value if available, else compute locally
+        cost_at_risk: item.cost_at_risk ?? Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
+        // ALIAS: resolved_exposure kept for downstream consumers during transition
+        resolved_exposure: item.cost_at_risk ?? Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
+        // Margin = retail - cost
         resolved_margin: (item.planned_retail_total ?? 0) - (item.planned_cost_total ?? 0),
         // Keep cost total accessible under canonical name
         resolved_cost_total: item.planned_cost_total ?? 0,

@@ -69,7 +69,7 @@ const GROUP_COLORS = {
 
 // Sort options
 const SORT_OPTIONS = [
-  { value: 'exposure_desc', label: 'Cost at Risk (High → Low)' },
+  { value: 'cost_at_risk_desc', label: 'Cost at Risk (High → Low)' },
   { value: 'margin_desc', label: 'Margin (High → Low)' },
   { value: 'retail_desc', label: 'Revenue (High → Low)' },
   { value: 'required_desc', label: 'Qty Required (High → Low)' },
@@ -77,12 +77,12 @@ const SORT_OPTIONS = [
   { value: 'to_order_desc', label: 'To Order (High → Low)' },
 ];
 
-// Apply sorting to items — CORRECTED: exposure_desc uses cost-based exposure
+// Apply sorting to items — CANONICAL: cost_at_risk is the single exposure definition
 function applySorting(items, sortMode) {
   const sorted = [...items];
   switch (sortMode) {
-    case 'exposure_desc':
-      return sorted.sort((a, b) => (b.resolved_exposure ?? 0) - (a.resolved_exposure ?? 0));
+    case 'cost_at_risk_desc':
+      return sorted.sort((a, b) => (b.cost_at_risk ?? b.resolved_exposure ?? 0) - (a.cost_at_risk ?? a.resolved_exposure ?? 0));
     case 'margin_desc':
       return sorted.sort((a, b) => (b.resolved_margin ?? 0) - (a.resolved_margin ?? 0));
     case 'retail_desc':
@@ -105,8 +105,8 @@ export function PSMSummaryStrip({ items, tab }) {
   const isOrderingContext = tab === 'buy';
   const stats = useMemo(() => {
     const totalItems = items.length;
-    // CORRECTED: Cost-based exposure
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
+    // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
     const installReadyCount = items.filter(i => 
@@ -288,10 +288,10 @@ export function PSMItemRow({
 
   // Resolve names
 
-  // CORRECTED: Cost-based exposure = max(0, cost - invoiced_amount)
-  const costExposure = commitment.resolved_exposure ?? Math.max(0, (commitment.planned_cost_total ?? 0) - (commitment.invoiced_amount ?? 0));
-  // NEW: Margin = retail - cost
-  const lineMargin = commitment.resolved_margin ?? ((commitment.planned_retail_total ?? 0) - (commitment.planned_cost_total ?? 0));
+  // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
+  const costExposure = commitment.cost_at_risk ?? commitment.resolved_exposure ?? 0;
+  // CANONICAL: Margin = retail - cost
+  const lineMargin = commitment.resolved_margin ?? 0;
 
   // CANONICAL: Resolve vendor display using source-first resolution
   const canonicalVendor = resolveDefaultVendor(commitment, null, {});
@@ -685,7 +685,7 @@ export function PSMGroupCard({
     const totalQty = items.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
     const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
     const totalMargin = totalRetail - totalCost;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
@@ -1035,7 +1035,7 @@ export default function PSMGroupedView({
   const [expandedGroups, setExpandedGroups] = useState(new Set(['__ALL_EXPANDED__']));
   const [expandedSubgroups, setExpandedSubgroups] = useState(new Set(['__ALL_EXPANDED__']));
   const [subgroupMode, setSubgroupMode] = useState('none');
-  const [sortMode, setSortMode] = useState('exposure_desc');
+  const [sortMode, setSortMode] = useState('cost_at_risk_desc');
   // CANONICAL: Billing status filter using 3-state model - default all selected
   const [billingFilters, setBillingFilters] = useState(new Set(['NOT_INVOICED', 'INVOICED', 'PAID']));
 
@@ -1419,7 +1419,7 @@ function PSMGroupCardWithSubgroups({
     const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
     const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
     const totalMargin = totalRetail - totalCost;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
