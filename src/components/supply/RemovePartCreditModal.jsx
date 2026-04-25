@@ -12,22 +12,25 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   AlertTriangle, Package, DollarSign, Trash2, RotateCcw, Loader2,
-  CheckCircle2, Wrench, Info,
+  CheckCircle2, Wrench, ArrowDown, ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { cn } from "@/lib/utils";
+import RemovalSuccessView from "./RemovalSuccessView";
+import RemovalImpactPreview from "./RemovalImpactPreview";
 
 /**
- * RemovePartCreditModal — Quantity-aware Part Removal / Credit
+ * RemovePartCreditModal — Hardened Part Removal with Line-Level Credit
  *
- * PHASES 1-11:
- * - Quantity selector with live credit preview
- * - Proportional credit: (invoiced / required) × qty_removed
- * - Install warning when qty_installed > 0
- * - Disposition selection (return to inventory / no change)
- * - Success summary after action
+ * PHASES 1-9:
+ * - Line-level credit accuracy (backend handles mixed pricing)
+ * - qty_removed lock — removed quantities cannot be reused
+ * - Inventory safety: min(qty_remove, allocated - installed)
+ * - Financial impact preview before confirmation
+ * - Audit-grade traceability
+ * - Pre/post drift validation
  */
 export default function RemovePartCreditModal({
   commitment,
@@ -42,15 +45,21 @@ export default function RemovePartCreditModal({
   const [successResult, setSuccessResult] = useState(null);
 
   const requiredTotal = commitment.required_total ?? 0;
-  const [qtyToRemove, setQtyToRemove] = useState(requiredTotal);
+  const existingRemoved = commitment.qty_removed ?? 0;
+  const maxRemovable = requiredTotal - existingRemoved;
+  const [qtyToRemove, setQtyToRemove] = useState(maxRemovable);
 
   const invoicedAmount = commitment.invoiced_amount ?? 0;
   const isInvoiced = invoicedAmount > 0;
   const installedQty = commitment.qty_installed ?? 0;
   const reservedFromStock = commitment.reserved_from_stock ?? 0;
-  const isFullRemoval = qtyToRemove >= requiredTotal;
+  const coveredFromPO = commitment.covered_from_po ?? 0;
+  const unitCost = commitment._raw?.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
+  const unitRetail = commitment._raw?.unit_retail_snapshot ?? commitment.unit_retail ?? 0;
 
-  // PHASE 1: Live proportional credit preview
+  const isFullRemoval = (existingRemoved + qtyToRemove) >= requiredTotal;
+
+  // Credit preview (approximate — backend does line-level precision)
   const creditPreview = useMemo(() => {
     if (!isInvoiced || qtyToRemove <= 0) return 0;
     const unitInvoiced = invoicedAmount / requiredTotal;
@@ -60,14 +69,17 @@ export default function RemovePartCreditModal({
     );
   }, [isInvoiced, invoicedAmount, requiredTotal, qtyToRemove]);
 
-  // PHASE 3: Inventory return safety calculation
+  // Inventory return safety
   const safeReturnQty = useMemo(() => {
-    const maxFromReservation = Math.min(qtyToRemove, reservedFromStock);
-    return Math.max(0, maxFromReservation - installedQty);
+    return Math.max(0, Math.min(qtyToRemove, reservedFromStock - installedQty));
   }, [qtyToRemove, reservedFromStock, installedQty]);
 
+  // Financial impact
+  const costReduction = useMemo(() => Math.round(unitCost * qtyToRemove * 100) / 100, [unitCost, qtyToRemove]);
+  const retailReduction = useMemo(() => Math.round(unitRetail * qtyToRemove * 100) / 100, [unitRetail, qtyToRemove]);
+
   const hasInstallWarning = installedQty > 0;
-  const isValidQty = qtyToRemove > 0 && qtyToRemove <= requiredTotal;
+  const isValidQty = qtyToRemove > 0 && qtyToRemove <= maxRemovable;
 
   const removeMutation = useMutation({
     mutationFn: async () => {
@@ -86,13 +98,11 @@ export default function RemovePartCreditModal({
     },
     onSuccess: async (data) => {
       setSuccessResult(data);
-
       await forceAppRefresh(queryClient, {
         partIds: commitment.part_id ? [commitment.part_id] : [],
         projectIds: commitment.project_id ? [commitment.project_id] : [],
         commitmentIds: [commitment.id],
       });
-
       onSuccess?.();
     },
     onError: (error) => {
@@ -104,87 +114,12 @@ export default function RemovePartCreditModal({
     },
   });
 
-  // ── PHASE 8: Success Summary View ──
+  // ── Success Summary View ──
   if (successResult) {
     return (
       <Dialog open onOpenChange={onClose}>
         <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-400">
-              <CheckCircle2 className="w-5 h-5" />
-              Part Removed Successfully
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="bg-gray-800/50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Quantity removed</span>
-                <span className="text-white font-mono font-bold">{successResult.qty_removed}</span>
-              </div>
-              {successResult.qty_remaining > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Remaining on commitment</span>
-                  <span className="text-white font-mono">{successResult.qty_remaining}</span>
-                </div>
-              )}
-              {successResult.credit_created && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Credit created</span>
-                  <span className="text-amber-400 font-mono font-bold">
-                    {formatCurrencyUSD(successResult.credit_amount)}
-                  </span>
-                </div>
-              )}
-              {!successResult.credit_created && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Credit</span>
-                  <span className="text-gray-500">None (not invoiced)</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Inventory</span>
-                <span className={successResult.inventory_returned ? "text-blue-400" : "text-gray-500"}>
-                  {successResult.inventory_returned
-                    ? `${successResult.inventory_return_qty} returned to stock`
-                    : "No change"}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Type</span>
-                <Badge variant="outline" className={cn(
-                  "text-[10px]",
-                  successResult.is_full_removal
-                    ? "border-red-600 text-red-400"
-                    : "border-purple-600 text-purple-400"
-                )}>
-                  {successResult.is_full_removal ? "Full Removal" : "Partial Removal"}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Drift Warning */}
-            {(successResult.post_resolver?.drift_detected || successResult.post_drift?.projects_with_drift > 0) && (
-              <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg flex items-start gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="text-red-400 font-medium">Financial drift detected</p>
-                  <p className="text-gray-400">Check Financial Exceptions dashboard.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Financials Post-State */}
-            <div className="text-[10px] font-mono text-gray-500 px-1">
-              Post: remaining={formatCurrencyUSD(successResult.post_resolver?.remaining_total ?? 0)}
-              {' '}credits={formatCurrencyUSD(successResult.post_resolver?.credit_total ?? 0)}
-              {' '}invoiced={formatCurrencyUSD(successResult.post_resolver?.invoiced_total ?? 0)}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={onClose} className="bg-gray-700 hover:bg-gray-600">
-              Close
-            </Button>
-          </DialogFooter>
+          <RemovalSuccessView result={successResult} onClose={onClose} />
         </DialogContent>
       </Dialog>
     );
@@ -193,7 +128,7 @@ export default function RemovePartCreditModal({
   // ── Main Form View ──
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-lg">
+      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Trash2 className="w-5 h-5 text-red-400" />
@@ -216,14 +151,10 @@ export default function RemovePartCreditModal({
           </div>
 
           {/* Current State Grid */}
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
             <div className="bg-gray-800/50 rounded p-2">
               <p className="text-[10px] text-gray-400">Required</p>
               <p className="text-lg font-bold text-white">{requiredTotal}</p>
-            </div>
-            <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Reserved</p>
-              <p className="text-lg font-bold text-cyan-400">{reservedFromStock}</p>
             </div>
             <div className="bg-gray-800/50 rounded p-2">
               <p className="text-[10px] text-gray-400">Installed</p>
@@ -232,80 +163,70 @@ export default function RemovePartCreditModal({
               </p>
             </div>
             <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Invoiced</p>
-              <p className={cn("text-lg font-bold font-mono", isInvoiced ? "text-amber-400" : "text-gray-500")}>
-                {formatCurrencyUSD(invoicedAmount)}
+              <p className="text-[10px] text-gray-400">Already Removed</p>
+              <p className={cn("text-lg font-bold", existingRemoved > 0 ? "text-red-400" : "text-gray-500")}>
+                {existingRemoved}
               </p>
+            </div>
+            <div className="bg-gray-800/50 rounded p-2">
+              <p className="text-[10px] text-gray-400">Removable</p>
+              <p className="text-lg font-bold text-amber-400">{maxRemovable}</p>
             </div>
           </div>
 
-          {/* PHASE 7: Quantity Selector */}
+          {/* Quantity Selector */}
           <div className="space-y-2">
             <Label className="text-gray-300">Quantity to Remove</Label>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 min={1}
-                max={requiredTotal}
+                max={maxRemovable}
                 value={qtyToRemove}
                 onChange={(e) => {
                   const v = parseInt(e.target.value) || 0;
-                  setQtyToRemove(Math.max(0, Math.min(v, requiredTotal)));
+                  setQtyToRemove(Math.max(0, Math.min(v, maxRemovable)));
                 }}
                 className="bg-gray-800 border-gray-600 text-white w-24 font-mono text-center"
               />
-              <span className="text-sm text-gray-400">of {requiredTotal}</span>
-              {!isFullRemoval && qtyToRemove > 0 && (
-                <Badge variant="outline" className="border-purple-600 text-purple-400 text-[10px]">
-                  Partial
-                </Badge>
-              )}
+              <span className="text-sm text-gray-400">of {maxRemovable} removable</span>
               {isFullRemoval && (
                 <Badge variant="outline" className="border-red-600 text-red-400 text-[10px]">
                   Full Removal
                 </Badge>
               )}
+              {!isFullRemoval && qtyToRemove > 0 && (
+                <Badge variant="outline" className="border-purple-600 text-purple-400 text-[10px]">
+                  Partial
+                </Badge>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setQtyToRemove(requiredTotal)}
+                onClick={() => setQtyToRemove(maxRemovable)}
                 className="text-xs text-gray-400 hover:text-white h-7"
               >
                 All
               </Button>
             </div>
             {!isValidQty && qtyToRemove !== 0 && (
-              <p className="text-xs text-red-400">Quantity must be between 1 and {requiredTotal}</p>
+              <p className="text-xs text-red-400">Quantity must be between 1 and {maxRemovable}</p>
             )}
           </div>
 
-          {/* PHASE 7: Dynamic Credit Preview */}
-          {isInvoiced && (
-            <div className="p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg space-y-2">
-              <div className="flex items-start gap-2">
-                <DollarSign className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="text-amber-400 font-medium">This part has been invoiced</p>
-                  <p className="text-gray-400">
-                    A proportional credit will be created. Invoice history is preserved.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-2 py-1.5 bg-amber-900/40 rounded">
-                <span className="text-sm text-amber-300">Credit amount:</span>
-                <span className="text-lg font-bold text-amber-400 font-mono">
-                  {formatCurrencyUSD(creditPreview)}
-                </span>
-              </div>
-              {!isFullRemoval && (
-                <p className="text-[10px] text-gray-500 px-2">
-                  = ({formatCurrencyUSD(invoicedAmount)} ÷ {requiredTotal}) × {qtyToRemove}
-                </p>
-              )}
-            </div>
-          )}
+          {/* PHASE 7: Financial Impact Preview */}
+          <RemovalImpactPreview
+            qtyToRemove={qtyToRemove}
+            costReduction={costReduction}
+            retailReduction={retailReduction}
+            creditPreview={creditPreview}
+            isInvoiced={isInvoiced}
+            invoicedAmount={invoicedAmount}
+            requiredTotal={requiredTotal}
+            isFullRemoval={isFullRemoval}
+          />
 
-          {/* PHASE 3: Install Warning */}
+          {/* Install Warning */}
           {hasInstallWarning && (
             <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg">
               <div className="flex items-start gap-2">
@@ -340,7 +261,7 @@ export default function RemovePartCreditModal({
                   </div>
                   <p className="text-xs text-gray-500 ml-6">
                     {safeReturnQty > 0
-                      ? `Will return ${safeReturnQty} to physical stock`
+                      ? `Will return ${safeReturnQty} unit${safeReturnQty > 1 ? 's' : ''} to physical stock`
                       : "No units available to return (all installed or none reserved)"}
                   </p>
                 </div>
@@ -376,23 +297,30 @@ export default function RemovePartCreditModal({
             <Badge variant="outline" className="border-purple-600 text-purple-400">
               {commitment.commitment_status || "active"}
             </Badge>
-            <span className="text-gray-500">→</span>
+            <ArrowRight className="w-3 h-3 text-gray-500" />
             {isFullRemoval ? (
               <Badge variant="outline" className="border-red-600 text-red-400">cancelled</Badge>
             ) : (
               <Badge variant="outline" className="border-purple-600 text-purple-400">
-                qty: {requiredTotal} → {requiredTotal - qtyToRemove}
+                removed: {existingRemoved} → {existingRemoved + qtyToRemove}
               </Badge>
             )}
             {creditPreview > 0 && (
               <>
                 <span className="text-gray-500">+</span>
                 <Badge variant="outline" className="border-amber-600 text-amber-400">
-                  credit {formatCurrencyUSD(creditPreview)}
+                  credit ~{formatCurrencyUSD(creditPreview)}
                 </Badge>
               </>
             )}
           </div>
+
+          {/* Approximate credit note */}
+          {isInvoiced && (
+            <p className="text-[10px] text-gray-500 italic">
+              Credit preview is approximate. Final amount calculated from actual invoice line items.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
@@ -410,7 +338,7 @@ export default function RemovePartCreditModal({
                 Processing...
               </>
             ) : isInvoiced ? (
-              `Remove ${qtyToRemove} & Credit ${formatCurrencyUSD(creditPreview)}`
+              `Remove ${qtyToRemove} & Credit ~${formatCurrencyUSD(creditPreview)}`
             ) : (
               `Remove ${qtyToRemove} Unit${qtyToRemove > 1 ? 's' : ''}`
             )}

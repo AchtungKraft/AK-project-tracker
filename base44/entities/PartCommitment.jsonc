@@ -38,6 +38,11 @@
       "default": 0,
       "description": "CANONICAL: Quantity installed/consumed"
     },
+    "qty_removed": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Cumulative quantity removed via part removal workflow. Locked \u2014 cannot be invoiced, installed, or allocated. available_qty = required_total - qty_removed - qty_installed"
+    },
     "supply_source_type": {
       "type": "string",
       "enum": [
