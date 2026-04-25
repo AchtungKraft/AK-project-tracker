@@ -37,6 +37,7 @@ import InstallPartModal from "@/components/project/InstallPartModal";
 import ReverseInstallationModal from "@/components/project/ReverseInstallationModal";
 import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
 import CancelCommitmentModal from "@/components/parts/CancelCommitmentModal";
+import RemovePartCreditModal from "@/components/supply/RemovePartCreditModal";
 import SupplyIntegrityBanner from "@/components/supply/SupplyIntegrityBanner";
 import BlockedActionResolutionModal from "@/components/supply/BlockedActionResolutionModal";
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
@@ -148,6 +149,7 @@ export default function ProjectSupplyManager() {
   const [reverseInstallModal, setReverseInstallModal] = useState(null);
   const [receiveModal, setReceiveModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
+  const [removeCreditModal, setRemoveCreditModal] = useState(null);
   const [actionsEnabled, setActionsEnabled] = useState(true);
   const [qtyManagerDrawer, setQtyManagerDrawer] = useState(null);
   
@@ -978,6 +980,7 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onRemoveCredit={setRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1043,6 +1046,7 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onRemoveCredit={setRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1094,6 +1098,7 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onRemoveCredit={setRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1145,6 +1150,7 @@ export default function ProjectSupplyManager() {
                 onDeltaOrder={setDeltaOrderCommitment}
                 onManageQty={setQtyManagerDrawer}
                 onCancel={setCancelModal}
+                onRemoveCredit={setRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1367,6 +1373,30 @@ export default function ProjectSupplyManager() {
             }}
           />
         </SafeRenderBoundary>
+      )}
+
+      {removeCreditModal && (
+        <RemovePartCreditModal
+          commitment={{
+            id: removeCreditModal.id,
+            commitment_status: removeCreditModal.commitment_status,
+            required_total: removeCreditModal.required_total,
+            reserved_from_stock: removeCreditModal.reserved_from_stock,
+            covered_from_po: removeCreditModal.covered_from_po,
+            qty_installed: removeCreditModal.qty_installed,
+            invoiced_amount: removeCreditModal.invoiced_amount,
+            invoiced_qty: removeCreditModal.invoiced_qty,
+            part_id: removeCreditModal.part_id,
+            project_id: removeCreditModal.project_id || projectId,
+          }}
+          part={removeCreditModal.part}
+          project={project}
+          onClose={() => setRemoveCreditModal(null)}
+          onSuccess={() => {
+            invalidateSupply();
+            setRemoveCreditModal(null);
+          }}
+        />
       )}
 
       {cancelModal && (

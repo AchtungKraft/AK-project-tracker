@@ -255,6 +255,7 @@ export function PSMItemRow({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onRemoveCredit,
   onEditPricing,
   onSyncCost,
   actionsEnabled = true,
@@ -616,9 +617,9 @@ export function PSMItemRow({
             {allowed?.canCancel && (
               <>
                 <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem onClick={() => onCancel?.(commitment)} className="text-red-400">
+                <DropdownMenuItem onClick={() => onRemoveCredit?.(commitment)} className="text-red-400">
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Remove
+                  Remove / Credit Part
                 </DropdownMenuItem>
               </>
             )}
@@ -904,6 +905,7 @@ function PSMSubGroupCard({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onRemoveCredit,
   onEditPricing,
   onSyncCost,
   actionsEnabled,
@@ -972,6 +974,7 @@ function PSMSubGroupCard({
               onDeltaOrder={onDeltaOrder}
               onManageQty={onManageQty}
               onCancel={onCancel}
+              onRemoveCredit={onRemoveCredit}
               onEditPricing={onEditPricing}
               onSyncCost={onSyncCost}
               actionsEnabled={actionsEnabled}
@@ -1013,6 +1016,7 @@ export default function PSMGroupedView({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onRemoveCredit,
   onEditPricing,
   onSyncCost,
   onBatchPO,
@@ -1347,6 +1351,7 @@ export default function PSMGroupedView({
         onDeltaOrder={onDeltaOrder}
         onManageQty={onManageQty}
         onCancel={onCancel}
+        onRemoveCredit={onRemoveCredit}
         onEditPricing={onEditPricing}
         onSyncCost={onSyncCost}
         onGroupOrder={handleGroupOrder}
@@ -1383,6 +1388,7 @@ function PSMGroupCardWithSubgroups({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onRemoveCredit,
   onEditPricing,
   onSyncCost,
   onGroupOrder,
@@ -1540,6 +1546,7 @@ function PSMGroupCardWithSubgroups({
                   onDeltaOrder={onDeltaOrder}
                   onManageQty={onManageQty}
                   onCancel={onCancel}
+                  onRemoveCredit={onRemoveCredit}
                   onEditPricing={onEditPricing}
                   onSyncCost={onSyncCost}
                   actionsEnabled={actionsEnabled}
@@ -1565,6 +1572,7 @@ function PSMGroupCardWithSubgroups({
                 onDeltaOrder={onDeltaOrder}
                 onManageQty={onManageQty}
                 onCancel={onCancel}
+                onRemoveCredit={onRemoveCredit}
                 onEditPricing={onEditPricing}
                 onSyncCost={onSyncCost}
                 actionsEnabled={actionsEnabled}
