@@ -43,7 +43,11 @@ export function resolveNextAction(commitment) {
   const rfs = commitment.reserved_from_stock ?? 0;
   const cfp = commitment.covered_from_po ?? 0;
   const qi = commitment.qty_installed ?? 0;
-  const gap = Math.max(0, rt - rfs - cfp);
+  const qr = commitment.qty_removed ?? 0;
+  const effReq = Math.max(0, rt - qr);
+  const totalCov = rfs + cfp + qi;
+  const isFulfilled = totalCov >= effReq && effReq > 0;
+  const gap = Math.max(0, effReq - rfs - cfp - qi);
   const installable = Math.max(0, rfs - qi);
 
   // INSTALL_READY: Has installable stock — only offer when installable > 0
@@ -51,8 +55,8 @@ export function resolveNextAction(commitment) {
     return { action: 'INSTALL', reason: `${installable} ready to install`, qty: installable };
   }
 
-  // COVERED: Has PO coverage but nothing received/reserved yet — wait for receiving
-  if (cfp > 0 && rfs === 0) return { action: 'RECEIVE', reason: `${cfp} on order, awaiting delivery`, qty: cfp };
+  // COVERED but not fulfilled: Has PO coverage but commitment still needs more
+  if (cfp > 0 && !isFulfilled) return { action: 'RECEIVE', reason: `${cfp} on order, awaiting delivery`, qty: cfp };
 
   // NEEDS_ORDER: Has gap — needs ordering or stock allocation
   if (gap > 0) {
@@ -62,10 +66,7 @@ export function resolveNextAction(commitment) {
     return { action: 'CREATE_PO', reason: `${gap} units need ordering`, qty: gap };
   }
 
-  // Fully covered but not installed
-  if (rfs > 0 || cfp > 0) return { action: 'RECEIVE', reason: 'Awaiting delivery' };
-
-  return { action: 'COMPLETE', reason: 'No action needed' };
+  return { action: 'COMPLETE', reason: isFulfilled ? 'Commitment fulfilled' : 'No action needed' };
 }
 
 /** Badge-only display */

@@ -534,7 +534,12 @@ Deno.serve(async (req) => {
         filtered = viewModels.filter(vm => vm.to_order > 0 && vm.source_type === 'SHOP_PURCHASED');
         break;
       case 'RECEIVING':
-        filtered = viewModels.filter(vm => vm.on_order_qty > 0);
+        // CANONICAL: Show only commitments where coverage < effective_required
+        // Fulfilled commitments with excess PO qty belong in Purchase Orders, not Receive Queue
+        filtered = viewModels.filter(vm => {
+          const totalCov = (vm.reserved_from_stock ?? 0) + (vm.covered_from_po ?? 0) + (vm.qty_installed ?? 0);
+          return (vm.covered_from_po ?? 0) > 0 && totalCov < vm.effective_required;
+        });
         break;
       case 'INSTALL':
         filtered = viewModels.filter(vm => vm.available_to_install > 0);

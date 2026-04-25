@@ -690,7 +690,12 @@ export function PSMGroupCard({
     const totalMargin = totalRetail - totalCost;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
-      if (tab === 'receive') return i.on_order_qty > 0 && i.allowed?.canReceive;
+      if (tab === 'receive') {
+        // CANONICAL: readyCount for receive = commitment coverage < effective_required
+        const effReq = i.effective_required ?? (i.required_total ?? 0) - (i.qty_removed ?? 0);
+        const totalCov = (i.reserved_from_stock ?? 0) + (i.covered_from_po ?? 0) + (i.qty_installed ?? 0);
+        return totalCov < effReq && (i.covered_from_po ?? 0) > 0;
+      }
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
       return true;
     }).length;

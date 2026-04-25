@@ -43,7 +43,11 @@ export default function ProjectSupplySummaryBar({ items = [], activeFilter, onFi
       const rfs = item.reserved_from_stock ?? 0;
       const cfp = item.covered_from_po ?? 0;
       const qi = item.qty_installed ?? 0;
-      const gap = Math.max(0, rt - rfs - cfp);
+      const qr = item.qty_removed ?? 0;
+      const effReq = Math.max(0, rt - qr);
+      const totalCov = rfs + cfp + qi;
+      const isFulfilled = totalCov >= effReq && effReq > 0;
+      const gap = Math.max(0, effReq - rfs - cfp - qi);
       const installable = Math.max(0, rfs - qi);
 
       totalRequired += rt;
@@ -52,9 +56,9 @@ export default function ProjectSupplySummaryBar({ items = [], activeFilter, onFi
       totalInstalled += qi;
       totalGap += gap;
 
-      if (qi >= rt && rt > 0) complete++;
+      if (qi >= effReq && effReq > 0) complete++;
       else if (installable > 0) readyInstall++;
-      else if (cfp > 0 && rfs === 0) waitingPO++;
+      else if (cfp > 0 && !isFulfilled) waitingPO++;
       else if (gap > 0) needsAction++;
 
       const bs = getBlockerStatus(item);
@@ -147,14 +151,18 @@ export function filterByActionCategory(items, filterKey) {
     const rfs = item.reserved_from_stock ?? 0;
     const cfp = item.covered_from_po ?? 0;
     const qi = item.qty_installed ?? 0;
-    const gap = Math.max(0, rt - rfs - cfp);
+    const qr = item.qty_removed ?? 0;
+    const effReq = Math.max(0, rt - qr);
+    const totalCov = rfs + cfp + qi;
+    const isFulfilled = totalCov >= effReq && effReq > 0;
+    const gap = Math.max(0, effReq - rfs - cfp - qi);
     const installable = Math.max(0, rfs - qi);
 
     switch (filterKey) {
-      case 'needs_action': return gap > 0 && !(qi >= rt && rt > 0);
-      case 'waiting_po': return cfp > 0 && rfs === 0 && !(qi >= rt && rt > 0);
-      case 'ready_install': return installable > 0 && !(qi >= rt && rt > 0);
-      case 'complete': return qi >= rt && rt > 0;
+      case 'needs_action': return gap > 0 && !isFulfilled;
+      case 'waiting_po': return cfp > 0 && !isFulfilled;
+      case 'ready_install': return installable > 0 && !isFulfilled;
+      case 'complete': return qi >= effReq && effReq > 0;
       case 'blocked': {
         const bs = getBlockerStatus(item);
         return bs.isBlocked;

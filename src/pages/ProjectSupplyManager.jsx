@@ -478,9 +478,14 @@ export default function ProjectSupplyManager() {
         });
         break;
       case 'receive':
-        // CANONICAL: Items with covered_from_po > 0 (expecting delivery)
-        // Lifecycle string does NOT gate - use quantity only
-        filtered = filtered.filter(c => (c.covered_from_po ?? c.on_order_qty ?? 0) > 0);
+        // CANONICAL: Items where commitment coverage < effective_required
+        // A fulfilled commitment (reserved + covered + installed >= effective_required) does NOT appear here,
+        // even if its PO lines still have unreceived excess — those belong in Purchase Orders only
+        filtered = filtered.filter(c => {
+          const effReq = c.effective_required ?? (c.required_total ?? 0) - (c.qty_removed ?? 0);
+          const totalCov = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.qty_installed ?? 0);
+          return (c.covered_from_po ?? 0) > 0 && totalCov < effReq;
+        });
         break;
       case 'install':
         // PHASE 7: Items with in-stock parts that can be installed
