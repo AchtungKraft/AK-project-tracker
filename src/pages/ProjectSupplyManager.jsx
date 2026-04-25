@@ -380,8 +380,8 @@ export default function ProjectSupplyManager() {
         unit_retail: item.unit_retail,
         planned_cost_total: item.planned_cost_total,
         planned_retail_total: item.planned_retail_total,
-        covered_retail_total: item.covered_retail_total,
-        exposure_gap: item.exposure_gap,
+        // REMOVED: covered_retail_total and exposure_gap — stale retail-based fields
+        // Use resolved_exposure (cost-based) and resolved_margin instead
         billing_status: item.billing_status,
         
         // CORRECTED: Cost-based exposure = max(0, cost - invoiced_amount)
