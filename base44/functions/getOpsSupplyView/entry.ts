@@ -350,10 +350,24 @@ Deno.serve(async (req) => {
       // PHASE 4: Retail stays fixed (quoted price) — NEVER fallback to part retail
       const unit_retail = c.unit_retail_snapshot ?? 0;
       const resolved_cost_total = resolved_unit_cost * to_order;
+
+      // ══════════════════════════════════════════════════════════════
+      // PLANNED vs ACTUAL PRICING (Financial Storytelling)
+      // ══════════════════════════════════════════════════════════════
+      const planned_unit_cost = c.unit_cost_snapshot ?? 0;
+      const planned_unit_retail = c.unit_retail_snapshot ?? 0;
+      const planned_cost_total_val = planned_unit_cost * effective_required;
       const planned_retail_total = c.planned_retail_total ?? (unit_retail * required_total);
-      const resolved_margin = (unit_retail - resolved_unit_cost) * required_total;
-      // CANONICAL: cost-based exposure = max(0, planned_cost - invoiced_amount)
-      const planned_cost_for_commitment = resolved_unit_cost * required_total;
+      const planned_margin = planned_retail_total - planned_cost_total_val;
+
+      const actual_unit_cost = resolved_unit_cost;
+      const actual_cost_total = actual_unit_cost * effective_required;
+      const actual_margin = planned_retail_total - actual_cost_total;
+      const margin_delta = actual_margin - planned_margin;
+
+      const resolved_margin = actual_margin;
+      // CANONICAL: cost-based exposure = max(0, actual_cost - invoiced_amount)
+      const planned_cost_for_commitment = actual_cost_total;
       const cost_at_risk = Math.max(0, planned_cost_for_commitment - (c.invoiced_amount ?? 0));
 
       const source_type = mapSourceType(c.supply_source_type);
@@ -482,8 +496,18 @@ Deno.serve(async (req) => {
         unit_retail,
         estimated_cost: resolved_cost_total,
         resolved_margin,
-        planned_cost_total: planned_cost_for_commitment,
+        planned_cost_total: planned_cost_total_val,
         planned_retail_total,
+
+        // PLANNED vs ACTUAL PRICING
+        planned_unit_cost,
+        planned_unit_retail,
+        actual_unit_cost,
+        actual_cost_total,
+        planned_margin,
+        actual_margin,
+        margin_delta,
+
         // CANONICAL: cost-based exposure only
         cost_at_risk,
         resolved_exposure: cost_at_risk,

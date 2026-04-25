@@ -82,25 +82,45 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
           {inventoryLocation || '—'}
         </span>
       </div>
-      {/* Cost Authority */}
-      <div className="flex justify-between gap-4">
-        <span>Cost Source:</span>
-        <span className={item.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>
-          {item.cost_source === 'po' ? 'PO (Actual)' : 'Planned (Est.)'}
-        </span>
+      {/* ── PLANNED vs ACTUAL AUDIT ── */}
+      <div className="mt-1 pt-1 border-t border-gray-700/50 space-y-0.5">
+        <div className="text-[9px] text-gray-500 uppercase tracking-wide">Planned</div>
+        <div className="flex justify-between gap-4">
+          <span>Planned Cost:</span>
+          <span className="text-gray-400">${(item.planned_unit_cost ?? 0).toFixed(2)} × {item.effective_required ?? 0} = ${((item.planned_unit_cost ?? 0) * (item.effective_required ?? 0)).toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Planned Retail:</span>
+          <span className="text-gray-400">${(item.planned_unit_retail ?? item.unit_retail ?? 0).toFixed(2)} × {item.effective_required ?? 0} = ${(item.planned_retail_total ?? 0).toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Planned Margin:</span>
+          <span className="text-gray-300">${(item.planned_margin ?? 0).toFixed(2)}</span>
+        </div>
       </div>
-      <div className="flex justify-between gap-4">
-        <span>Unit Cost:</span>
-        <span className={item.invalid_cost ? "text-red-400" : "text-gray-300"}>
-          ${(item.unit_cost ?? 0).toFixed(2)}
-        </span>
-      </div>
-      <div className="flex justify-between gap-4">
-        <span>Unit Retail:</span>
-        <span className="text-gray-300">${(item.unit_retail ?? 0).toFixed(2)}</span>
+      <div className="mt-1 pt-1 border-t border-gray-700/50 space-y-0.5">
+        <div className="text-[9px] text-gray-500 uppercase tracking-wide">Actual</div>
+        <div className="flex justify-between gap-4">
+          <span>Actual Cost ({item.cost_source === 'po' ? 'PO' : 'Est.'}):</span>
+          <span className={item.cost_source === 'po' ? "text-emerald-400" : "text-gray-300"}>
+            ${(item.actual_unit_cost ?? item.unit_cost ?? 0).toFixed(2)} × {item.effective_required ?? 0} = ${(item.actual_cost_total ?? 0).toFixed(2)}
+          </span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Actual Margin:</span>
+          <span className={(item.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
+            ${(item.actual_margin ?? 0).toFixed(2)}
+          </span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Margin Delta:</span>
+          <span className={(item.margin_delta ?? 0) < -0.01 ? "text-red-400" : (item.margin_delta ?? 0) > 0.01 ? "text-emerald-400" : "text-gray-500"}>
+            {(item.margin_delta ?? 0) < 0 ? '' : '+'}{(item.margin_delta ?? 0).toFixed(2)}
+          </span>
+        </div>
       </div>
       {item.cost_locked && (
-        <div className="flex justify-between gap-4">
+        <div className="flex justify-between gap-4 mt-0.5">
           <span>Cost Lock:</span>
           <span className="text-blue-400">LOCKED</span>
         </div>

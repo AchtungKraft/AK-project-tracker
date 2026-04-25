@@ -30,14 +30,26 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
       (sum, c) => sum + ((c.qty_installed ?? 0) * (c.unit_cost ?? 0)), 0
     );
 
+    // PLANNED vs ACTUAL aggregation
+    const totalPlannedMargin = enrichedCommitments.reduce(
+      (sum, c) => sum + (c.planned_margin ?? 0), 0
+    );
+    const totalActualMargin = enrichedCommitments.reduce(
+      (sum, c) => sum + (c.actual_margin ?? c.resolved_margin ?? 0), 0
+    );
+    const totalActualCost = enrichedCommitments.reduce(
+      (sum, c) => sum + (c.actual_cost_total ?? c.resolved_cost_total ?? c.planned_cost_total ?? 0), 0
+    );
+
     const partsCost = metrics.totalPlannedCost ?? 0;
     const serviceCost = metrics.servicesCost ?? servicesSummary?.total_cost ?? 0;
     const serviceBillable = metrics.servicesRetail ?? servicesSummary?.total_billable ?? 0;
-    const totalCommittedCost = partsCost + serviceCost;
+    const totalCommittedCost = totalActualCost + serviceCost;
 
     return {
       totalCommittedCost, totalStockCost, totalOrderCost, totalInstalledCost,
       partsCost, serviceCost, serviceBillable,
+      totalPlannedMargin, totalActualMargin, totalActualCost,
     };
   }, [enrichedCommitments, metrics, servicesSummary]);
 
@@ -48,14 +60,13 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
   const totalPaid = metrics.totalPaid;
   const outstanding = metrics.invoiceOutstanding;
 
-  // Margins and risk
-  const projectedMargin = plannedRevenue - plannedCost;
+  // PLANNED vs ACTUAL margins
+  const plannedMargin = financial.totalPlannedMargin + (financial.serviceBillable - financial.serviceCost);
+  const actualMargin = financial.totalActualMargin + (financial.serviceBillable - financial.serviceCost);
+  const marginDelta = actualMargin - plannedMargin;
   // CORRECTED: cost-based exposure = max(0, committed_cost - invoiced)
   const committedCostRisk = Math.max(0, plannedCost - totalInvoiced);
   const revenueRemaining = Math.max(0, plannedRevenue - totalInvoiced);
-  // Actual margin only if invoicing exists
-  const hasInvoicing = totalInvoiced > 0;
-  const actualMargin = hasInvoicing ? (totalInvoiced - plannedCost) : null;
 
   // Edge case: no planned items but invoiced exists
   const noPlannedScope = enrichedCommitments.length === 0 && totalInvoiced > 0;
@@ -78,18 +89,16 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
             <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Project Plan</p>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500">Planned Revenue</span>
+                <span className="text-[10px] text-gray-500">Revenue</span>
                 <span className="text-sm font-bold text-white font-mono">{formatCurrencyUSD(plannedRevenue)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-gray-500">Planned Cost</span>
-                <span className="text-xs text-red-400 font-mono">{formatCurrencyUSD(plannedCost)}</span>
+                <span className="text-xs text-gray-400 font-mono">{formatCurrencyUSD(metrics.totalPlannedCost + financial.serviceCost)}</span>
               </div>
-              <div className="flex items-center justify-between border-t border-gray-800 pt-1">
-                <span className="text-[10px] text-gray-500">Projected Margin</span>
-                <span className={cn("text-xs font-bold font-mono", projectedMargin >= 0 ? "text-emerald-400" : "text-red-400")}>
-                  {formatCurrencyUSD(projectedMargin)}
-                </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">Actual Cost</span>
+                <span className="text-xs text-red-400 font-mono">{formatCurrencyUSD(plannedCost)}</span>
               </div>
             </div>
           </CardContent>
@@ -164,25 +173,29 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           </CardContent>
         </Card>
 
-        {/* 5. PROFIT SNAPSHOT */}
-        <Card className={cn("bg-black/40", projectedMargin >= 0 ? "border-emerald-900/40" : "border-red-900/40")}>
+        {/* 5. PROFIT SNAPSHOT — Planned vs Actual */}
+        <Card className={cn("bg-black/40", actualMargin >= 0 ? "border-emerald-900/40" : "border-red-900/40")}>
           <CardContent className="p-4">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Profit Snapshot</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Margin Analysis</p>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500">Projected Margin</span>
-                <span className={cn("text-sm font-bold font-mono", projectedMargin >= 0 ? "text-emerald-400" : "text-red-400")}>
-                  {formatCurrencyUSD(projectedMargin)}
+                <span className="text-[10px] text-gray-500">Planned Margin</span>
+                <span className={cn("text-xs font-mono", plannedMargin >= 0 ? "text-gray-300" : "text-red-400")}>
+                  {formatCurrencyUSD(plannedMargin)}
                 </span>
               </div>
-              {hasInvoicing && actualMargin !== null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-gray-500">Actual Margin</span>
-                  <span className={cn("text-xs font-mono", actualMargin >= 0 ? "text-emerald-400" : "text-red-400")}>
-                    {formatCurrencyUSD(actualMargin)}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">Actual Margin</span>
+                <span className={cn("text-sm font-bold font-mono", actualMargin >= 0 ? "text-emerald-400" : "text-red-400")}>
+                  {formatCurrencyUSD(actualMargin)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-gray-800 pt-1">
+                <span className="text-[10px] text-gray-500">Margin Delta</span>
+                <span className={cn("text-xs font-bold font-mono", marginDelta < -0.01 ? "text-red-400" : marginDelta > 0.01 ? "text-emerald-400" : "text-gray-500")}>
+                  {marginDelta < 0 ? '' : '+'}{formatCurrencyUSD(marginDelta)}
+                </span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-gray-500">Revenue Remaining</span>
                 <span className="text-xs text-white font-mono">{formatCurrencyUSD(revenueRemaining)}</span>

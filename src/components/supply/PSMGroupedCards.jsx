@@ -289,10 +289,12 @@ export function PSMItemRow({
 
   // Resolve names
 
-  // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
+  // CANONICAL: cost_at_risk = max(0, actual_cost - invoiced_amount)
   const costExposure = commitment.cost_at_risk ?? commitment.resolved_exposure ?? 0;
-  // CANONICAL: Margin = retail - cost (from resolved_margin which uses PO cost when available)
-  const lineMargin = commitment.resolved_margin ?? ((commitment.unit_retail ?? 0) - (commitment.unit_cost ?? 0)) * (commitment.required_total ?? 0);
+  // PLANNED vs ACTUAL
+  const actualMargin = commitment.actual_margin ?? commitment.resolved_margin ?? 0;
+  const plannedMargin = commitment.planned_margin ?? 0;
+  const marginDelta = commitment.margin_delta ?? (actualMargin - plannedMargin);
 
   // CANONICAL: Resolve vendor display using source-first resolution
   const canonicalVendor = resolveDefaultVendor(commitment, null, {});
@@ -499,23 +501,33 @@ export function PSMItemRow({
           )}
         </div>
 
-        {/* Inline Financial — COST | RETAIL | MARGIN | EXPOSURE */}
+        {/* Inline Financial — COST | RETAIL | MARGIN | DELTA */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
           <div className="text-center">
-            <span className="text-gray-500 block">{commitment.cost_source === 'po' ? 'COST ✓' : 'EST COST'}</span>
+            <span className="text-gray-500 block">{commitment.cost_source === 'po' ? 'COST (ACTUAL)' : 'PLANNED COST'}</span>
             <span className={commitment.invalid_cost ? "text-red-500" : commitment.cost_source === 'po' ? "text-emerald-400" : "text-red-400"}>
-              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.resolved_cost_total ?? commitment.planned_cost_total ?? 0)}
+              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.actual_cost_total ?? commitment.resolved_cost_total ?? 0)}
             </span>
+            {commitment.cost_source === 'po' && (commitment.planned_unit_cost ?? 0) > 0 && Math.abs((commitment.actual_unit_cost ?? 0) - (commitment.planned_unit_cost ?? 0)) > 0.01 && (
+              <span className="text-gray-600 block text-[8px]">
+                Plan: {formatCurrencyUSD((commitment.planned_unit_cost ?? 0) * (commitment.effective_required ?? 0))}
+              </span>
+            )}
           </div>
           <div className="text-center">
             <span className="text-gray-500 block">RETAIL</span>
             <span className="text-white">{formatCurrencyUSD(commitment.planned_retail_total ?? 0)}</span>
           </div>
-          <div className="text-center">
-            <span className="text-gray-500 block">MARGIN</span>
-            <span className={lineMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
-              {formatCurrencyUSD(lineMargin)}
+          <div className="text-center" title="Actual margin = quoted retail − actual purchase cost">
+            <span className="text-gray-500 block">ACTUAL MARGIN</span>
+            <span className={actualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
+              {formatCurrencyUSD(actualMargin)}
             </span>
+            {Math.abs(marginDelta) > 0.01 && plannedMargin !== 0 && (
+              <span className={cn("block text-[8px]", marginDelta < 0 ? "text-red-500" : "text-emerald-500")}>
+                {marginDelta < 0 ? '↓' : '↑'} {formatCurrencyUSD(Math.abs(marginDelta))} from plan
+              </span>
+            )}
           </div>
           {costExposure > 0 && !commitment.invalid_cost && (
             <div className="text-center">
@@ -663,13 +675,13 @@ export function PSMItemRow({
         </DropdownMenu>
       </div>
 
-      {/* PHASE 6: Debug supply truth strip — always visible */}
+      {/* Debug supply truth strip — always visible */}
       <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600 flex-wrap">
         <span>needs_order: <span className={commitment.needs_order ? "text-red-400" : "text-emerald-400"}>{String(!!commitment.needs_order)}</span></span>
         <span>to_order: <span className={((commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? commitment.to_order ?? 0}</span></span>
-        <span>coverage: <span className="text-gray-400">{commitment.coverage_qty ?? '?'} / {commitment.effective_required ?? '?'}</span></span>
-        <span>cost: <span className={commitment.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>${(commitment.unit_cost ?? 0).toFixed(2)} ({commitment.cost_source || '?'})</span></span>
-        <span>retail: <span className="text-gray-400">${(commitment.unit_retail ?? 0).toFixed(2)}</span></span>
+        <span>plan_cost: <span className="text-gray-400">${(commitment.planned_unit_cost ?? 0).toFixed(2)}</span></span>
+        <span>actual_cost: <span className={commitment.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>${(commitment.actual_unit_cost ?? commitment.unit_cost ?? 0).toFixed(2)} ({commitment.cost_source || '?'})</span></span>
+        <span>Δmargin: <span className={(commitment.margin_delta ?? 0) < -0.01 ? "text-red-400" : (commitment.margin_delta ?? 0) > 0.01 ? "text-emerald-400" : "text-gray-500"}>${(commitment.margin_delta ?? 0).toFixed(2)}</span></span>
         <span>locked: <span className={commitment.cost_locked ? "text-blue-400" : "text-gray-500"}>{String(!!commitment.cost_locked)}</span></span>
       </div>
 
@@ -722,18 +734,20 @@ export function PSMGroupCard({
     return applySorting(group.items || [], sortMode);
   }, [group.items, sortMode]);
 
-  // Calculate group stats — CORRECTED: cost-based exposure + margin
+  // Calculate group stats — PLANNED vs ACTUAL margin
   const groupStats = useMemo(() => {
     const items = sortedItems;
     const totalQty = items.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
-    const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalActualCost = items.reduce((sum, i) => sum + (i.actual_cost_total ?? i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalPlannedCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
     const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
-    const totalMargin = totalRetail - totalCost;
+    const totalActualMargin = items.reduce((sum, i) => sum + (i.actual_margin ?? i.resolved_margin ?? 0), 0);
+    const totalPlannedMargin = items.reduce((sum, i) => sum + (i.planned_margin ?? 0), 0);
+    const totalMarginDelta = totalActualMargin - totalPlannedMargin;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
       if (tab === 'receive') {
-        // CANONICAL: readyCount for receive = commitment coverage < effective_required
         const effReq = i.effective_required ?? (i.required_total ?? 0) - (i.qty_removed ?? 0);
         const totalCov = (i.reserved_from_stock ?? 0) + (i.covered_from_po ?? 0) + (i.qty_installed ?? 0);
         return totalCov < effReq && (i.covered_from_po ?? 0) > 0;
@@ -743,7 +757,7 @@ export function PSMGroupCard({
     }).length;
     const isOrderingContext = tab === 'buy';
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
-    return { totalQty, totalExposure, totalCost, totalRetail, totalMargin, readyCount, ...inventoryCounts };
+    return { totalQty, totalExposure, totalActualCost, totalPlannedCost, totalRetail, totalActualMargin, totalPlannedMargin, totalMarginDelta, readyCount, ...inventoryCounts };
   }, [sortedItems, tab]);
 
   // Get group color
@@ -811,11 +825,16 @@ export function PSMGroupCard({
           )}
         </div>
 
-        {/* Group Financial Labels — Cost | Retail | Margin */}
+        {/* Group Financial Labels — Actual Margin with delta from plan */}
         <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalCost)}</span></span>
+          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalActualCost)}</span></span>
           <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
-          <span className="text-gray-400">Margin <span className={groupStats.totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalMargin)}</span></span>
+          <span className="text-gray-400">Margin <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalActualMargin)}</span></span>
+          {Math.abs(groupStats.totalMarginDelta) > 0.01 && (
+            <span className={groupStats.totalMarginDelta < 0 ? "text-red-500" : "text-emerald-500"}>
+              Δ {groupStats.totalMarginDelta < 0 ? '' : '+'}{formatCurrencyUSD(groupStats.totalMarginDelta)}
+            </span>
+          )}
         </div>
 
         {/* Cost at Risk Badge */}
@@ -1497,13 +1516,16 @@ function PSMGroupCardWithSubgroups({
   // Sort items for flat view (when no subgrouping)
   const sortedItems = useMemo(() => applySorting(items, sortMode), [items, sortMode]);
 
-  // Calculate group stats — CORRECTED: cost-based exposure + margin
+  // Calculate group stats — PLANNED vs ACTUAL margin
   const groupStats = useMemo(() => {
     const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
-    const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalActualCost = items.reduce((sum, i) => sum + (i.actual_cost_total ?? i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalPlannedCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
     const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
-    const totalMargin = totalRetail - totalCost;
+    const totalActualMargin = items.reduce((sum, i) => sum + (i.actual_margin ?? i.resolved_margin ?? 0), 0);
+    const totalPlannedMargin = items.reduce((sum, i) => sum + (i.planned_margin ?? 0), 0);
+    const totalMarginDelta = totalActualMargin - totalPlannedMargin;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
@@ -1511,7 +1533,7 @@ function PSMGroupCardWithSubgroups({
     }).length;
     const isOrderingContext = tab === 'buy';
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
-    return { totalQty, totalExposure, totalCost, totalRetail, totalMargin, readyCount, ...inventoryCounts };
+    return { totalQty, totalExposure, totalActualCost, totalPlannedCost, totalRetail, totalActualMargin, totalPlannedMargin, totalMarginDelta, readyCount, ...inventoryCounts };
   }, [items, tab]);
 
   // Get group color
@@ -1579,11 +1601,16 @@ function PSMGroupCardWithSubgroups({
           )}
         </div>
 
-        {/* Group Financial Labels — Cost | Retail | Margin */}
+        {/* Group Financial Labels — Actual Margin with delta from plan */}
         <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalCost)}</span></span>
+          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalActualCost)}</span></span>
           <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
-          <span className="text-gray-400">Margin <span className={groupStats.totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalMargin)}</span></span>
+          <span className="text-gray-400">Margin <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalActualMargin)}</span></span>
+          {Math.abs(groupStats.totalMarginDelta) > 0.01 && (
+            <span className={groupStats.totalMarginDelta < 0 ? "text-red-500" : "text-emerald-500"}>
+              Δ {groupStats.totalMarginDelta < 0 ? '' : '+'}{formatCurrencyUSD(groupStats.totalMarginDelta)}
+            </span>
+          )}
         </div>
 
         {/* Cost at Risk Badge */}

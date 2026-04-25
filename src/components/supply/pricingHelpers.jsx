@@ -107,6 +107,20 @@ export function getCommitmentCostLabel(commitment) {
 }
 
 /**
+ * getMarginDeltaDisplay - Get display info for planned vs actual margin delta
+ * 
+ * @param {Object} commitment - View model with planned_margin, actual_margin, margin_delta
+ * @returns {{ delta: number, direction: 'up'|'down'|'flat', color: string }}
+ */
+export function getMarginDeltaDisplay(commitment) {
+  if (!commitment) return { delta: 0, direction: 'flat', color: 'text-gray-500' };
+  const delta = commitment.margin_delta ?? 0;
+  if (delta < -0.01) return { delta, direction: 'down', color: 'text-red-400' };
+  if (delta > 0.01) return { delta, direction: 'up', color: 'text-emerald-400' };
+  return { delta: 0, direction: 'flat', color: 'text-gray-500' };
+}
+
+/**
  * getCommitmentMarginPct - Compute margin percentage
  * 
  * @param {Object} commitment - PartCommitment entity

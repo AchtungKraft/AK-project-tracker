@@ -423,13 +423,28 @@ Deno.serve(async (req) => {
 
         // PHASE 4: Retail stays fixed (quoted price) — NEVER recompute from PO cost
         const unit_retail = c.unit_retail_snapshot ?? 0;
-        const planned_cost_total = unit_cost * required_total;
-        const planned_retail_total = unit_retail * required_total;
-        // CANONICAL: Margin = retail - cost (reality, not theory)
-        const resolved_margin = (unit_retail - unit_cost) * required_total;
+
+        // ══════════════════════════════════════════════════════════════
+        // PLANNED vs ACTUAL PRICING (Financial Storytelling)
+        // planned = snapshot at commitment time (what we thought)
+        // actual = PO cost if available, else same as planned (what happened)
+        // ══════════════════════════════════════════════════════════════
+        const planned_unit_cost = c.unit_cost_snapshot ?? 0;
+        const planned_unit_retail = c.unit_retail_snapshot ?? 0;
+        const planned_cost_total = planned_unit_cost * effective_required;
+        const planned_retail_total = planned_unit_retail * effective_required;
+        const planned_margin = planned_retail_total - planned_cost_total;
+
+        const actual_unit_cost = unit_cost; // resolved (PO-first)
+        const actual_cost_total = actual_unit_cost * effective_required;
+        const actual_margin = planned_retail_total - actual_cost_total;
+        const margin_delta = actual_margin - planned_margin;
+
+        // Legacy compat
+        const resolved_margin = actual_margin;
         // DEPRECATED: covered_retail_total and exposure_gap removed.
-        // Use cost-based: max(0, planned_cost_total - invoiced_amount)
-        const cost_at_risk = Math.max(0, planned_cost_total - (c.invoiced_amount ?? 0));
+        // Use cost-based: max(0, actual_cost_total - invoiced_amount)
+        const cost_at_risk = Math.max(0, actual_cost_total - (c.invoiced_amount ?? 0));
 
         const source_type = mapSourceType(c.supply_source_type);
 
@@ -552,6 +567,16 @@ Deno.serve(async (req) => {
           resolved_margin,
           planned_cost_total,
           planned_retail_total,
+
+          // PLANNED vs ACTUAL PRICING
+          planned_unit_cost,
+          planned_unit_retail,
+          actual_unit_cost,
+          actual_cost_total,
+          planned_margin,
+          actual_margin,
+          margin_delta,
+
           // CANONICAL: cost-based exposure only
           cost_at_risk,
           billing_status: c.billing_status || 'billable',
