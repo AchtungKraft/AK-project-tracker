@@ -294,14 +294,18 @@ export default function ProjectSupplyManager() {
       // Phase 7: invoiced_qty from read model for invoice eligibility
       const allowed = getAllowedCommitmentActions({
         required_total: item.required_total,
+        qty_removed: item.qty_removed ?? 0,
+        effective_required: item.effective_required,
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
-        to_order: item.to_order,
+        to_order: item.to_order_qty ?? item.to_order,
+        needs_order: item.needs_order,
+        commitment_fulfilled: item.commitment_fulfilled,
         commitment_status: item._raw?.commitment_status || 'planned',
         billing_status: item.billing_status || 'billable',
         received_qty: item.received_qty || 0,
-        invoiced_qty: item.invoiced_qty ?? 0, // Phase 7: for invoice eligibility
+        invoiced_qty: item.invoiced_qty ?? 0,
         unit_retail_snapshot: item.unit_retail,
       });
 
@@ -309,13 +313,18 @@ export default function ProjectSupplyManager() {
       const coverage = {
         // Canonical fields from read model
         required_total: item.required_total,
+        effective_required: item.effective_required,
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
-        to_order: item.to_order,
+        coverage_qty: item.coverage_qty,
+        to_order_qty: item.to_order_qty,
+        to_order: item.to_order_qty ?? item.to_order,
+        needs_order: item.needs_order,
+        commitment_fulfilled: item.commitment_fulfilled,
         // Derived from read model
-        coverage_total: item.reserved_from_stock + item.covered_from_po,
-        gap_qty: item.to_order,
+        coverage_total: item.coverage_qty ?? (item.reserved_from_stock + item.covered_from_po + item.qty_installed),
+        gap_qty: item.to_order_qty ?? item.to_order,
         coverage_status: item.coverage_status,
         coverage_percent: item.coverage_percent,
         // Availability for install
@@ -358,10 +367,18 @@ export default function ProjectSupplyManager() {
         
         // Canonical quantities - directly from read model
         required_total: item.required_total,
+        qty_removed: item.qty_removed ?? 0,
+        effective_required: item.effective_required,
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
-        to_order: item.to_order,
+        // CANONICAL derived supply fields from backend
+        coverage_qty: item.coverage_qty,
+        to_order_qty: item.to_order_qty,
+        to_order: item.to_order_qty ?? item.to_order,
+        needs_order: item.needs_order,
+        commitment_fulfilled: item.commitment_fulfilled,
+        
         on_order_qty: item.on_order_qty,
         received_qty: item.received_qty,
         available_to_install: item.available_to_install,
@@ -469,22 +486,14 @@ export default function ProjectSupplyManager() {
         filtered = filtered.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
         break;
       case 'buy':
-        // PHASE 3: Buy filter uses coverage.gap_qty > 0 OR coverage_status === 'PARTIAL'
-        // NEVER show items where coverage_status === 'FULL'
-        filtered = filtered.filter(c => {
-          if (c.coverage_status === 'FULL') return false;
-          const gapQty = c.coverage?.gap_qty ?? c.gap_qty ?? c.to_order ?? 0;
-          return gapQty > 0 || c.coverage_status === 'PARTIAL';
-        });
+        // CANONICAL: Buy tab shows ONLY items where backend needs_order === true
+        filtered = filtered.filter(c => c.needs_order === true);
         break;
       case 'receive':
-        // CANONICAL: Items where commitment coverage < effective_required
-        // A fulfilled commitment (reserved + covered + installed >= effective_required) does NOT appear here,
-        // even if its PO lines still have unreceived excess — those belong in Purchase Orders only
+        // CANONICAL: Uses backend needs_receive flag — commitment has PO but isn't fulfilled
         filtered = filtered.filter(c => {
-          const effReq = c.effective_required ?? (c.required_total ?? 0) - (c.qty_removed ?? 0);
-          const totalCov = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.qty_installed ?? 0);
-          return (c.covered_from_po ?? 0) > 0 && totalCov < effReq;
+          if (c.commitment_fulfilled === true) return false;
+          return (c.covered_from_po ?? 0) > 0 && c.needs_order !== true;
         });
         break;
       case 'install':

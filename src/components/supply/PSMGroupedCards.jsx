@@ -309,6 +309,34 @@ export function PSMItemRow({
 
   // Dev: detect conflicting UI state and coverage drift
   if (import.meta.env.DEV) {
+    // PHASE 8: Debug output for every Needs Order row
+    if (commitment.needs_order === true || toOrder > 0) {
+      console.log('[NEEDS_ORDER DEBUG]', {
+        name: part?.part_name,
+        required_total: commitment.required_total,
+        qty_removed: commitment.qty_removed ?? 0,
+        effective_required: commitment.effective_required,
+        reserved_from_stock: commitment.reserved_from_stock,
+        covered_from_po: commitment.covered_from_po,
+        qty_installed: commitment.qty_installed,
+        coverage_qty: commitment.coverage_qty,
+        to_order_qty: commitment.to_order_qty,
+        needs_order: commitment.needs_order,
+        commitment_fulfilled: commitment.commitment_fulfilled,
+        next_action: commitment.next_action,
+      });
+    }
+    // PHASE 8: ASSERTION — if item appears in Needs Order context but needs_order=false, flag it
+    if (isOrderingContext && commitment.needs_order !== true) {
+      console.error('[NEEDS_ORDER VIOLATION] Item in buy tab but needs_order !== true:', {
+        name: part?.part_name,
+        needs_order: commitment.needs_order,
+        commitment_fulfilled: commitment.commitment_fulfilled,
+        to_order: toOrder,
+        coverage_qty: commitment.coverage_qty,
+        effective_required: commitment.effective_required,
+      });
+    }
     // Coverage drift detection
     if (commitment._coverage_debug?.drift) {
       console.error('[COVERAGE DRIFT]', {
@@ -333,8 +361,8 @@ export function PSMItemRow({
   // ORDERING CONTEXT: Suppress install actions when to_order > 0
   const hideInstallActions = isOrderingContext && toOrder > 0;
 
-  // PHASE 6: Disable ordering when gap_qty === 0
-  const canOrder = allowed?.canCreatePO && toOrder > 0;
+  // CANONICAL: canOrder uses backend needs_order flag
+  const canOrder = allowed?.canCreatePO && (commitment.needs_order === true || toOrder > 0);
   
   // CANONICAL: Invoice eligibility - use canCreateInvoice from getAllowedCommitmentActions
   const canInvoice = allowed?.canCreateInvoice ?? false;
@@ -863,21 +891,23 @@ function getGroupInfo(item, mode, categoriesMap, vendorsMap) {
         inventoryState: null,
       };
     } else if (mode === 'inventory') {
-      // CANONICAL: Use coverage-driven grouping to avoid stock vs ordering conflicts
-      const toOrder = item.to_order ?? 0;
-      const ordered = item.covered_from_po ?? 0;
-      const reserved = item.reserved_from_stock ?? 0;
-      
-      // Primary: coverage/ordering state (prevents "In Stock" + "Needs Order" conflict)
-      if (toOrder > 0) {
-        return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
-      } else if (ordered > 0) {
-        return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
-      } else if (reserved > 0) {
-        return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
-      } else {
+      // CANONICAL: Use backend needs_order / commitment_fulfilled as sole grouping signal
+      if (item.needs_order === true) {
         return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
       }
+      if (item.commitment_fulfilled === true) {
+        return { key: 'IN_STOCK', name: '✓ Fulfilled', inventoryState: 'IN_STOCK' };
+      }
+      // Not fulfilled but doesn't need order — PO coverage pending receive
+      const ordered = item.covered_from_po ?? 0;
+      if (ordered > 0) {
+        return { key: 'ORDERED', name: '📦 Ordered', inventoryState: 'ORDERED' };
+      }
+      const reserved = item.reserved_from_stock ?? 0;
+      if (reserved > 0) {
+        return { key: 'IN_STOCK', name: '✓ In Stock', inventoryState: 'IN_STOCK' };
+      }
+      return { key: 'NEEDS_ORDER', name: '! Needs Order', inventoryState: 'NEEDS_ORDER' };
     } else {
       // category (default)
       const catId = item.categoryId || null;

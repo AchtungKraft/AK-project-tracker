@@ -51,28 +51,55 @@ const STATE_CONFIG = {
 };
 
 /**
- * Determine ordering state from canonical coverage fields ONLY.
+ * Determine ordering state from backend canonical flags.
  * Used in ordering context (tab === 'buy' or GlobalNeedToOrder).
- * MUST NOT reference stock/available/reserved for primary status.
  */
 function determineOrderingState(commitment) {
-  const toOrder = commitment.to_order ?? 0;
+  // CANONICAL: Backend needs_order is the single truth
+  if (commitment.needs_order === true) return 'NEEDS_ORDER';
+  if (commitment.commitment_fulfilled === true) return 'COVERED';
+  const toOrder = commitment.to_order_qty ?? commitment.to_order ?? 0;
   if (toOrder > 0) return 'NEEDS_ORDER';
   const coverage = commitment.coverage_status;
   if (coverage === 'FULL') return 'COVERED';
   if (coverage === 'PARTIAL') return 'PARTIAL';
-  return 'NEEDS_ORDER';
+  return 'COVERED';
 }
 
 /**
- * Determine inventory state from commitment data — RESOLVER-FIRST.
- * Uses resolveLifecycleState for INSTALL_READY/INSTALLED/COVERED detection,
- * then falls back to procurement status for display differentiation.
+ * Determine inventory state from commitment data — BACKEND CANONICAL FIELDS FIRST.
+ * Uses backend needs_order / commitment_fulfilled when available.
+ * Falls back to local resolver only when backend fields are missing.
  * 
- * CANONICAL: A commitment is NOT "Needs Order" if coverage_qty >= effective_required
- * where coverage_qty = reserved_from_stock + covered_from_po + qty_installed
+ * CANONICAL: A commitment is NOT "Needs Order" if commitment_fulfilled === true
+ * (i.e. coverage_qty >= effective_required)
  */
 function determineInventoryState(commitment) {
+  // PHASE 5: Prefer backend canonical flags over local resolution
+  const backendFulfilled = commitment.commitment_fulfilled;
+  const backendNeedsOrder = commitment.needs_order;
+  
+  // If backend flags are present, use them as single source of truth
+  if (backendFulfilled === true) {
+    const qi = commitment.qty_installed ?? 0;
+    const effReq = commitment.effective_required ?? (commitment.required_total ?? 0) - (commitment.qty_removed ?? 0);
+    if (qi >= effReq && effReq > 0) return 'INSTALL_READY'; // Installed
+    const rfs = commitment.reserved_from_stock ?? 0;
+    if (rfs >= effReq && effReq > 0) return 'INSTALL_READY';
+    return 'ORDERED'; // Covered by PO or stock, not yet installed
+  }
+  
+  if (backendNeedsOrder === true) return 'NEEDS_ORDER';
+  if (backendNeedsOrder === false && backendFulfilled === false) {
+    // Not fulfilled but doesn't need order — has PO coverage pending receive
+    const ordered = commitment.covered_from_po ?? 0;
+    if (ordered > 0) return 'ORDERED';
+    const reserved = commitment.reserved_from_stock ?? 0;
+    if (reserved > 0) return 'IN_STOCK';
+    return 'NEEDS_ORDER';
+  }
+
+  // Fallback: backend fields not present, use local resolver
   const lifecycle = resolveLifecycleState(commitment);
   if (lifecycle === 'INSTALLED') return 'INSTALL_READY';
   if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';
@@ -148,9 +175,7 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
 
 /**
  * Get inventory state counts for summary strip.
- * Returns { inStock, ordered, needsOrder } matching the 3-state model.
- * Also returns legacy aliases { partialStock, outOfStock } so existing
- * consumers (PSMSummaryStrip, PSMGroupCard) continue to compile.
+ * CANONICAL: Uses backend needs_order flag as the single truth for "Needs Order" count.
  */
 export function getInventoryStateCounts(items, isOrderingContext = false) {
   let installReady = 0;
@@ -161,23 +186,28 @@ export function getInventoryStateCounts(items, isOrderingContext = false) {
   let partial = 0;
   
   items.forEach(item => {
+    // CANONICAL: For "Needs Order" count, use backend flag exclusively
+    if (item.needs_order === true) {
+      needsOrder++;
+      return;
+    }
+    
     const state = determineContextAwareState(item, isOrderingContext);
     if (state === 'INSTALL_READY') installReady++;
     else if (state === 'IN_STOCK') inStock++;
     else if (state === 'ORDERED') ordered++;
-    else if (state === 'NEEDS_ORDER') needsOrder++;
+    else if (state === 'NEEDS_ORDER') needsOrder++; // Fallback for items without backend flag
     else if (state === 'COVERED') covered++;
     else if (state === 'PARTIAL') partial++;
   });
   
   return {
     installReady,
-    inStock: inStock + covered, // Merge covered into inStock for summary counts
-    ordered: ordered + partial, // Merge partial into ordered for summary counts
+    inStock: inStock + covered,
+    ordered: ordered + partial,
     needsOrder,
     covered,
     partial,
-    // Legacy aliases for PSMGroupedCards consumers
     partialStock: ordered + partial,
     outOfStock: needsOrder,
   };

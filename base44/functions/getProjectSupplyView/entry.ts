@@ -351,7 +351,12 @@ Deno.serve(async (req) => {
           partInvForAlloc.reserved_global += autoReserve;
         }
 
-        const to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
+        // CANONICAL derived fields — single truth for all UI consumers
+        const coverage_qty = reserved_from_stock + covered_from_po + qty_installed;
+        const to_order_qty = Math.max(0, effective_required - coverage_qty);
+        const to_order = to_order_qty; // Alias for backward compat
+        const commitment_fulfilled = coverage_qty >= effective_required && effective_required > 0;
+        const needs_order = to_order_qty > 0;
         const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
         const partInv = partInventoryMap.get(c.part_id) || {
@@ -392,14 +397,8 @@ Deno.serve(async (req) => {
         };
         
         const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
-          { required_total, reserved_from_stock, covered_from_po, qty_installed },
+          { required_total, reserved_from_stock, covered_from_po, qty_installed, qty_removed, effective_required, coverage_qty, to_order_qty, commitment_fulfilled, needs_order },
           has_vendor,
-          {
-            physical_stock: partInv.physical_stock,
-            reserved_total: partInv.reserved_global,
-            available: partInv.available,
-          },
-          c,
           prepayContext
         );
 
@@ -448,12 +447,18 @@ Deno.serve(async (req) => {
           covered_from_po,
           qty_installed,
 
-          to_order,
+          // CANONICAL derived supply fields
+          coverage_qty,
+          to_order_qty,
+          to_order: to_order_qty,
+          needs_order,
+          commitment_fulfilled,
+          
           on_order_qty,
           received_qty,
           available_to_install,
 
-          coverage_total: reserved_from_stock + covered_from_po + qty_installed,
+          coverage_total: coverage_qty,
           coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed),
           coverage_actual: reserved_from_stock + covered_from_po + qty_installed + to_order,
           coverage_expected: required_total,
@@ -481,12 +486,8 @@ Deno.serve(async (req) => {
           block_reason_code,
           block_reason_message: block_reason_code ? BLOCK_MESSAGES[block_reason_code] : null,
           
-          // CANONICAL: needs_order = commitment coverage < effective_required
-          needs_order: to_order > 0,
-          // CANONICAL: needs_receive = commitment has PO coverage but total coverage < effective_required
-          needs_receive: covered_from_po > 0 && (reserved_from_stock + covered_from_po + qty_installed) < effective_required,
-          // CANONICAL: commitment_fulfilled = total coverage >= effective_required
-          commitment_fulfilled: (reserved_from_stock + covered_from_po + qty_installed) >= effective_required && effective_required > 0,
+          // CANONICAL: needs_receive = commitment has PO coverage but not yet fulfilled
+          needs_receive: covered_from_po > 0 && !commitment_fulfilled,
 
           source_type,
 
@@ -566,16 +567,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Compute tab counts — CANONICAL: "receive" tab uses commitment-level coverage, not PO line status
-    // Items only show in receive tab when their commitment coverage < effective_required AND they have PO coverage
+    // Compute tab counts — CANONICAL: uses needs_order/commitment_fulfilled from canonical fields
     const tabCounts = {
       all: viewModels.length,
       plan: viewModels.length,
-      buy: viewModels.filter(vm => vm.to_order > 0 || vm.next_action === 'CREATE_PO').length,
-      receive: viewModels.filter(vm => {
-        const totalCov = vm.reserved_from_stock + vm.covered_from_po + vm.qty_installed;
-        return (vm.covered_from_po > 0 || vm.on_order_qty > 0) && totalCov < vm.effective_required;
-      }).length,
+      buy: viewModels.filter(vm => vm.needs_order === true).length,
+      receive: viewModels.filter(vm => vm.needs_receive === true).length,
       install: viewModels.filter(vm => vm.available_to_install > 0 || vm.next_action === 'INSTALL').length,
       invoice: projectInvoices.filter(inv => inv.status !== 'void').length,
     };
@@ -772,61 +769,62 @@ async function resolveCanonicalFinancials(base44, project_id, commitments, proje
   };
 }
 
-function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCommitment = {}, prepayContext = {}) {
+function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
   const {
-    required_total = 0,
+    effective_required = 0,
     reserved_from_stock = 0,
     covered_from_po = 0,
     qty_installed = 0,
+    coverage_qty = 0,
+    to_order_qty = 0,
+    commitment_fulfilled = false,
+    needs_order = false,
+    requires_prepay = false,
   } = commitment;
 
-  // CANONICAL: use effective_required for all ceiling calculations
-  const qty_removed = rawCommitment.qty_removed ?? 0;
-  const effective_required = Math.max(0, required_total - qty_removed);
-  const to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
   const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
-  const requires_prepay = !!rawCommitment.requires_prepay;
-  
   let prepay_diagnostics = null;
   if (requires_prepay) {
     const invoicedRetail = prepayContext.invoicedRetail ?? 0;
     const paidRetail = prepayContext.paidRetail ?? 0;
     const prepaySatisfied = invoicedRetail > 0 && paidRetail >= (invoicedRetail - 0.01);
-    
-    prepay_diagnostics = {
-      prepay_invoiced_retail: invoicedRetail,
-      prepay_paid_retail: paidRetail,
-      prepay_satisfied: prepaySatisfied,
-    };
-    
-    if (!prepaySatisfied) {
+    prepay_diagnostics = { prepay_invoiced_retail: invoicedRetail, prepay_paid_retail: paidRetail, prepay_satisfied: prepaySatisfied };
+    if (!prepaySatisfied && needs_order) {
       return { next_action: 'BLOCKED_PREPAY', block_reason_code: 'REQUIRES_PREPAY', prepay_diagnostics };
     }
   }
 
-  if (to_order > 0 && !partHasVendor) {
-    return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR', prepay_diagnostics };
+  // CANONICAL: commitment_fulfilled means coverage_qty >= effective_required
+  // Fulfilled commitments NEVER return NEEDS_ORDER / CREATE_PO
+  if (commitment_fulfilled) {
+    if (qty_installed >= effective_required && effective_required > 0) {
+      return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
+    }
+    if (available_to_install > 0) {
+      return { next_action: 'INSTALL', block_reason_code: null, prepay_diagnostics };
+    }
+    // Fulfilled but not yet installed and nothing to install locally
+    if (covered_from_po > 0 && coverage_qty < effective_required) {
+      return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
+    }
+    return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
   }
 
-  if (to_order > 0) {
+  // Not fulfilled — needs_order is true
+  if (needs_order && !partHasVendor) {
+    return { next_action: 'FIX_VENDOR', block_reason_code: 'NO_VENDOR', prepay_diagnostics };
+  }
+  if (needs_order) {
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
-  
-  // CANONICAL: "needs receive" = commitment has PO coverage but total coverage < effective_required
-  // This means items that are fully covered (reserved + covered + installed >= effective_required)
-  // will NOT show as needing receive, even if PO lines still have unreceived qty
-  const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
-  if (covered_from_po > 0 && totalCoverage < effective_required) {
+
+  // Edge: not fulfilled but to_order_qty is 0 — covered_from_po exists but hasn't been received
+  if (covered_from_po > 0 && coverage_qty < effective_required) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }
-  
   if (available_to_install > 0 && qty_installed < effective_required) {
     return { next_action: 'INSTALL', block_reason_code: null, prepay_diagnostics };
-  }
-  
-  if (qty_installed >= effective_required && effective_required > 0) {
-    return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
   }
 
   return { next_action: null, block_reason_code: null, prepay_diagnostics };

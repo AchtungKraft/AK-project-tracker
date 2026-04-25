@@ -495,8 +495,10 @@ Deno.serve(async (req) => {
         categoryId: category?.id || null,
         categoryObj: category ? { id: category.id, name: category.name } : null,
         categoryName: category?.name || null,
-        // CANONICAL: effective_required and needs_order for UI consumption
+        // CANONICAL derived supply fields
         effective_required,
+        coverage_qty: totalCoverage,
+        to_order_qty: to_order,
         needs_order: to_order > 0,
         commitment_fulfilled: totalCoverage >= effective_required && effective_required > 0,
         allowed: {
@@ -533,19 +535,17 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Filter by mode
+    // Filter by mode — CANONICAL: uses needs_order / commitment_fulfilled flags
     let filtered = viewModels;
     switch (mode) {
       case 'ORDERING':
-        filtered = viewModels.filter(vm => vm.to_order > 0 && vm.source_type === 'SHOP_PURCHASED');
+        filtered = viewModels.filter(vm => vm.needs_order === true && vm.source_type === 'SHOP_PURCHASED');
         break;
       case 'RECEIVING':
-        // CANONICAL: Show only commitments where coverage < effective_required
-        // Fulfilled commitments with excess PO qty belong in Purchase Orders, not Receive Queue
-        filtered = viewModels.filter(vm => {
-          const totalCov = (vm.reserved_from_stock ?? 0) + (vm.covered_from_po ?? 0) + (vm.qty_installed ?? 0);
-          return (vm.covered_from_po ?? 0) > 0 && totalCov < vm.effective_required;
-        });
+        // CANONICAL: Items with PO coverage that are NOT fulfilled
+        filtered = viewModels.filter(vm => 
+          vm.commitment_fulfilled !== true && (vm.covered_from_po ?? 0) > 0 && vm.needs_order !== true
+        );
         break;
       case 'INSTALL':
         filtered = viewModels.filter(vm => vm.available_to_install > 0);

@@ -121,27 +121,24 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canReduceQty = qty_installed === 0 || effectiveRequired > qty_installed;
   }
 
-  // CANONICAL: CREATE PO - depends ONLY on to_order > 0
-  // Lifecycle string does NOT block (except cancelled/closed)
-  // A commitment with existing orders but remaining gap can still create POs
-  // PHASE 3 FIX: If reserved_from_stock can cover the remaining need, don't suggest PO
-  const needsFromStock = Math.max(0, effectiveRequired - qty_installed - effectiveOnOrder);
-  const stockCanCover = effectiveReserved >= needsFromStock;
+  // CANONICAL: Use backend needs_order / commitment_fulfilled flags when available
+  const backendNeedsOrder = commitment.needs_order;
+  const backendFulfilled = commitment.commitment_fulfilled;
+  const isFulfilled = backendFulfilled === true || (effectiveReserved + effectiveOnOrder + qty_installed >= effectiveRequired && effectiveRequired > 0);
+  const actuallyNeedsOrder = backendNeedsOrder === true || (!isFulfilled && unorderedQty > 0);
   
-  if (unorderedQty > 0 && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED' && !stockCanCover) {
+  // CREATE PO — ONLY when needs_order is true (coverage_qty < effective_required)
+  if (actuallyNeedsOrder && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED') {
     actions.canCreatePO = true;
   }
 
-  // CANONICAL: DELTA ORDER - has existing orders AND still has gap
-  if (effectiveOnOrder > 0 && unorderedQty > 0 && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED') {
+  // DELTA ORDER - has existing orders AND still needs ordering
+  if (effectiveOnOrder > 0 && actuallyNeedsOrder && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED') {
     actions.canCreateDeltaOrder = true;
   }
 
-  // RECEIVE - only if has items on order AND commitment still needs coverage
-  // CANONICAL: Use effectiveRequired (already accounts for qty_removed) to check if commitment is satisfied
-  const totalCoverage = effectiveReserved + effectiveOnOrder + qty_installed;
-  const commitmentSatisfied = totalCoverage >= effectiveRequired && effectiveRequired > 0;
-  if (unreceived > 0 && !commitmentSatisfied) {
+  // RECEIVE - only if has items on order AND commitment is NOT fulfilled
+  if (unreceived > 0 && !isFulfilled) {
     actions.canReceive = true;
   }
 
