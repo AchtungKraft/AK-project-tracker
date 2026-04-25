@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Clock,
   FileText,
+  Shield,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils";
 import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import InvoiceWorkbench from "@/components/financial/InvoiceWorkbench";
+import DriftReconciliationPanel from "@/components/financial/DriftReconciliationPanel";
 import { projectKeys } from "@/components/financial/queryKeyFactories";
 
 // ============================================
@@ -281,7 +283,7 @@ function ExceptionTable({ exceptions, type, onRowClick }) {
 // ============================================
 
 export default function FinancialExceptionDashboard() {
-  const [viewMode, setViewMode] = useState('exceptions'); // 'exceptions' | 'workbench'
+  const [viewMode, setViewMode] = useState('exceptions'); // 'exceptions' | 'workbench' | 'drift'
   const [activeTab, setActiveTab] = useState(EXCEPTION_TYPES.INSTALLED_NOT_BILLED);
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -378,14 +380,18 @@ export default function FinancialExceptionDashboard() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             {viewMode === 'exceptions' ? (
               <AlertTriangle className="w-7 h-7 text-yellow-400" />
+            ) : viewMode === 'drift' ? (
+              <Shield className="w-7 h-7 text-blue-400" />
             ) : (
               <FileText className="w-7 h-7 text-green-400" />
             )}
-            {viewMode === 'exceptions' ? 'Financial Exceptions' : 'Invoice Workbench'}
+            {viewMode === 'exceptions' ? 'Financial Exceptions' : viewMode === 'drift' ? 'Drift Reconciliation' : 'Invoice Workbench'}
           </h1>
           <p className="text-gray-400 mt-1">
             {viewMode === 'exceptions' 
               ? 'Identify revenue leakage, cash flow risks, and incomplete margin chains'
+              : viewMode === 'drift'
+              ? 'Detect and repair mismatches between invoice lines and commitment amounts'
               : 'Select items, create invoice batches, and export to QuickBooks'}
           </p>
         </div>
@@ -416,8 +422,20 @@ export default function FinancialExceptionDashboard() {
               <FileText className="w-4 h-4" />
               Invoice Workbench
             </button>
+            <button
+              onClick={() => setViewMode('drift')}
+              className={cn(
+                "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+                viewMode === 'drift' 
+                  ? "bg-blue-600 text-white" 
+                  : "text-gray-400 hover:text-white"
+              )}
+            >
+              <Shield className="w-4 h-4" />
+              Drift Repair
+            </button>
           </div>
-          {viewMode === 'exceptions' && (
+          {(viewMode === 'exceptions') && (
             <Button 
               onClick={() => refetch()} 
               variant="outline" 
@@ -430,6 +448,11 @@ export default function FinancialExceptionDashboard() {
           )}
         </div>
       </div>
+
+      {/* Drift Reconciliation Mode */}
+      {viewMode === 'drift' && (
+        <DriftReconciliationPanel />
+      )}
 
       {/* Invoice Workbench Mode */}
       {viewMode === 'workbench' && (

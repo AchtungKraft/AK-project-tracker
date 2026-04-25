@@ -136,6 +136,13 @@ export async function resolveFinancials(base44, project_id) {
     }
   }
 
+  // Include invoiced_amount from ALL commitments (including cancelled) for reconciliation
+  // because invoice lines linked to cancelled commitments still represent real invoices
+  let all_commitments_invoiced = 0;
+  for (const c of commitments) {
+    all_commitments_invoiced += c.invoiced_amount ?? 0;
+  }
+
   // ══════════════════════════════════════════════
   // CANONICAL TOTALS
   // ══════════════════════════════════════════════
@@ -147,8 +154,10 @@ export async function resolveFinancials(base44, project_id) {
   // ══════════════════════════════════════════════
   // RECONCILIATION (detect-only, no auto-fix)
   // ══════════════════════════════════════════════
+  // Use all_commitments_invoiced (incl cancelled) for line-level reconciliation
+  // because invoice lines may reference cancelled commitments
   const invoice_vs_commitment_delta = round2(invoice_entity_total - invoiced_total);
-  const line_vs_commitment_delta = round2(invoice_lines_total - parts_invoiced_amount);
+  const line_vs_commitment_delta = round2(invoice_lines_total - all_commitments_invoiced);
 
   const drift_detected =
     Math.abs(invoice_vs_commitment_delta) > 0.01 ||
