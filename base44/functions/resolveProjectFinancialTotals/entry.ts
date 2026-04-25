@@ -154,10 +154,11 @@ export async function resolveFinancials(base44, project_id) {
   // ══════════════════════════════════════════════
   // RECONCILIATION (detect-only, no auto-fix)
   // ══════════════════════════════════════════════
-  // Use all_commitments_invoiced (incl cancelled) for line-level reconciliation
-  // because invoice lines may reference cancelled commitments
-  const invoice_vs_commitment_delta = round2(invoice_entity_total - invoiced_total);
-  const line_vs_commitment_delta = round2(invoice_lines_total - all_commitments_invoiced);
+  // Use all_commitments_invoiced (incl cancelled) for both checks
+  // because invoice lines/headers may reference cancelled commitments
+  const all_invoiced = round2(all_commitments_invoiced);
+  const invoice_vs_commitment_delta = round2(invoice_entity_total - all_invoiced);
+  const line_vs_commitment_delta = round2(invoice_lines_total - all_invoiced);
 
   const drift_detected =
     Math.abs(invoice_vs_commitment_delta) > 0.01 ||
