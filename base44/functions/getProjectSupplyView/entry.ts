@@ -480,6 +480,11 @@ Deno.serve(async (req) => {
           next_action,
           block_reason_code,
           block_reason_message: block_reason_code ? BLOCK_MESSAGES[block_reason_code] : null,
+          
+          // CANONICAL: needs_receive = commitment has PO coverage but total coverage < effective_required
+          needs_receive: covered_from_po > 0 && (reserved_from_stock + covered_from_po + qty_installed) < effective_required,
+          // CANONICAL: commitment_fulfilled = total coverage >= effective_required
+          commitment_fulfilled: (reserved_from_stock + covered_from_po + qty_installed) >= effective_required && effective_required > 0,
 
           source_type,
 
@@ -559,12 +564,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Compute tab counts
+    // Compute tab counts — CANONICAL: "receive" tab uses commitment-level coverage, not PO line status
+    // Items only show in receive tab when their commitment coverage < effective_required AND they have PO coverage
     const tabCounts = {
       all: viewModels.length,
       plan: viewModels.length,
       buy: viewModels.filter(vm => vm.to_order > 0 || vm.next_action === 'CREATE_PO').length,
-      receive: viewModels.filter(vm => vm.on_order_qty > 0 || vm.next_action === 'RECEIVE').length,
+      receive: viewModels.filter(vm => {
+        const totalCov = vm.reserved_from_stock + vm.covered_from_po + vm.qty_installed;
+        return (vm.covered_from_po > 0 || vm.on_order_qty > 0) && totalCov < vm.effective_required;
+      }).length,
       install: viewModels.filter(vm => vm.available_to_install > 0 || vm.next_action === 'INSTALL').length,
       invoice: projectInvoices.filter(inv => inv.status !== 'void').length,
     };
@@ -802,7 +811,11 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
   
-  if (covered_from_po > 0 && available_to_install < (effective_required - qty_installed)) {
+  // CANONICAL: "needs receive" = commitment has PO coverage but total coverage < effective_required
+  // This means items that are fully covered (reserved + covered + installed >= effective_required)
+  // will NOT show as needing receive, even if PO lines still have unreceived qty
+  const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
+  if (covered_from_po > 0 && totalCoverage < effective_required) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }
   

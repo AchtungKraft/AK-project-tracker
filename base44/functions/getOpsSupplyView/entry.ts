@@ -681,7 +681,9 @@ function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
   if (to_order > 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
-  if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
+  // CANONICAL: "needs receive" uses effective_required, not raw required_total
+  const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
+  if (covered_from_po > 0 && totalCoverage < required_total) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }
   if (available_to_install > 0 && qty_installed < required_total) {

@@ -89,13 +89,15 @@ Deno.serve(async (req) => {
 // - covered_from_po (incoming supply)
 // - qty_installed (consumed supply)
 // - remaining gap becomes to_order
-function checkSupplyInvariant(commitmentId, required, reserved, covered, ctx, source, installed = 0) {
+// CANONICAL: Supply invariant uses effective_required (required_total - qty_removed)
+// This prevents over-allocation when parts have been removed
+function checkSupplyInvariant(commitmentId, effective_required, reserved, covered, ctx, source, installed = 0) {
   const total = reserved + covered + installed;
-  if (total > required + 0.001) {
-    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${commitmentId} reserved(${reserved})+covered_po(${covered})+installed(${installed})=${total} > required(${required})`;
+  if (total > effective_required + 0.001) {
+    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${commitmentId} reserved(${reserved})+covered_po(${covered})+installed(${installed})=${total} > effective_required(${effective_required})`;
     console.error(msg);
     if (ctx) ctx.warnings.push({ type: 'INVARIANT_VIOLATION', id: commitmentId, msg, source });
-    return { violated: true, overallocation: total - required, corrected_reserved: Math.max(0, required - covered - installed) };
+    return { violated: true, overallocation: total - effective_required, corrected_reserved: Math.max(0, effective_required - covered - installed) };
   }
   return { violated: false };
 }
@@ -155,8 +157,8 @@ async function inlineRebalance(ctx, part_id, isDry) {
     const remReq = Math.max(0, cn.effective_required - cn.qty_installed);
     const need = Math.max(0, remReq - cn.covered_from_po);
     let newRes = Math.min(rem, need);
-    // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po + installed <= required_total
-    const invCheck = checkSupplyInvariant(c.id, cn.required_total, newRes, cn.covered_from_po, ctx, 'inlineRebalance', cn.qty_installed);
+    // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po + installed <= effective_required
+    const invCheck = checkSupplyInvariant(c.id, cn.effective_required, newRes, cn.covered_from_po, ctx, 'inlineRebalance', cn.qty_installed);
     if (invCheck.violated) {
       newRes = invCheck.corrected_reserved;
       console.warn(`[REBALANCE_INVARIANT_CORRECTED] c=${c.id}: reserved corrected from ${Math.min(rem, need)} to ${newRes}`);
@@ -582,8 +584,7 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
   const newLR=(li.qty_received??0)+qty_received;
   await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:newLR>=(li.qty_ordered??0)?'Received':'Partial'});
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
-  // PHASE 18: Convert covered_from_po → reserved_from_stock on receiving
-  // MANDATORY COVERAGE: Receiving MUST always produce coverage on the linked commitment
+  // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
     const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
     if(c){
@@ -594,12 +595,16 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
       const required = c.required_total ?? 0;
       const qty_removed_c = c.qty_removed ?? 0;
       const effective_required = Math.max(0, required - qty_removed_c);
+
+      // DEBUG LOG (Phase 7)
+      console.log('[RECEIVE_DEBUG]', { commitment_id: c.id, required_total: required, qty_removed: qty_removed_c, effective_required, oldCoveredPO, oldReserved, installed, received_now: qty_received });
+
       if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
       // Convert: move received qty from PO coverage to stock reservation
       const convertQty = Math.min(qty_received, oldCoveredPO);
       const newCoveredPO = Math.max(0, oldCoveredPO - convertQty);
       let newReserved = oldReserved + convertQty;
-      // MANDATORY COVERAGE PATH: If covered_from_po was 0 (historical gap), 
+      // MANDATORY COVERAGE PATH: If covered_from_po was 0 (historical gap),
       // receiving MUST still create reserved_from_stock up to the coverage gap
       if (convertQty === 0 && qty_received > 0) {
         const coverageGap = Math.max(0, effective_required - oldReserved - oldCoveredPO - installed);
@@ -612,15 +617,27 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
           console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, effective_required, reserved: oldReserved, covered: oldCoveredPO, installed, qty_removed: qty_removed_c });
         }
       }
-      // Enforce invariant: reserved + covered + installed <= effective_required
+      // PHASE 5 SAFETY CLAMP: Enforce reserved + covered + installed <= effective_required
       const clampedReserved = Math.min(newReserved, Math.max(0, effective_required - newCoveredPO - installed));
-      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} effective_required=${effective_required} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      const finalCoveredPO = Math.min(newCoveredPO, Math.max(0, effective_required - clampedReserved - installed));
+      const totalCoverage = clampedReserved + finalCoveredPO + installed;
+      const isFulfilled = totalCoverage >= effective_required && effective_required > 0;
+      
+      console.log(`[RECEIVE_COVERAGE_RESULT] commitment=${c.id} effective_required=${effective_required} reserved=${clampedReserved} covered_po=${finalCoveredPO} installed=${installed} total_coverage=${totalCoverage} fulfilled=${isFulfilled}`);
+
+      // Determine commitment_status based on fulfillment
+      let newStatus = c.commitment_status;
+      if (isFulfilled) {
+        newStatus = installed >= effective_required ? 'installed' : 'allocated';
+      }
+
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
-        covered_from_po: newCoveredPO,
+        covered_from_po: finalCoveredPO,
         reserved_from_stock: clampedReserved,
         qty_reserved: clampedReserved,
         qty_received: oldQtyReceived + qty_received,
-        commitment_status: (clampedReserved + newCoveredPO + installed) >= effective_required && effective_required > 0 ? 'allocated' : c.commitment_status,
+        commitment_status: newStatus,
+        coverage_status: isFulfilled ? 'FULLY_COVERED' : (totalCoverage > 0 ? 'PARTIALLY_COVERED' : 'NOT_COVERED'),
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -631,7 +648,7 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
         triggered_by: ctx.user.email,
         actor_email: ctx.user.email,
         old_values: JSON.stringify({ covered_from_po: oldCoveredPO, reserved_from_stock: oldReserved }),
-        new_values: JSON.stringify({ covered_from_po: newCoveredPO, reserved_from_stock: clampedReserved, qty_received }),
+        new_values: JSON.stringify({ covered_from_po: finalCoveredPO, reserved_from_stock: clampedReserved, qty_received, fulfilled: isFulfilled }),
         part_id: part.id,
         project_id: c.project_id,
         event_date: ctx.timestamp,
@@ -659,8 +676,7 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
   await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:ls});
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
   const rr=await inlineRecompute(ctx,part.id,false);
-  // PHASE 18: Convert covered_from_po → reserved_from_stock on receiving
-  // MANDATORY COVERAGE: Receiving MUST always produce coverage on the linked commitment
+  // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
     const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
     if(c){
@@ -671,6 +687,10 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
       const required = c.required_total ?? 0;
       const qty_removed_c = c.qty_removed ?? 0;
       const effective_required = Math.max(0, required - qty_removed_c);
+
+      // DEBUG LOG (Phase 7)
+      console.log('[RECEIVE_DEBUG]', { commitment_id: c.id, required_total: required, qty_removed: qty_removed_c, effective_required, oldCoveredPO, oldReserved, installed, received_now: qty_received });
+
       if(oldCoveredPO < 0) ctx.warnings.push({type:'NEG_COVERED',id:c.id,msg:`covered_from_po=${oldCoveredPO}`});
       // Convert: move received qty from PO coverage to stock reservation
       const convertQty = Math.min(qty_received, oldCoveredPO);
@@ -689,15 +709,27 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
           console.warn('[RECEIVE_NOT_ALLOCATED]', { commitment_id: c.id, received_qty: qty_received, gap: coverageGap, effective_required, reserved: oldReserved, covered: oldCoveredPO, installed, qty_removed: qty_removed_c });
         }
       }
-      // Enforce invariant: reserved + covered + installed <= effective_required
+      // PHASE 5 SAFETY CLAMP: Enforce reserved + covered + installed <= effective_required
       const clampedReserved = Math.min(newReserved, Math.max(0, effective_required - newCoveredPO - installed));
-      console.log(`[RECEIVE_CONVERT] commitment=${c.id} qty_received=${qty_received} effective_required=${effective_required} covered_from_po: ${oldCoveredPO} → ${newCoveredPO}, reserved_from_stock: ${oldReserved} → ${clampedReserved}`);
+      const finalCoveredPO = Math.min(newCoveredPO, Math.max(0, effective_required - clampedReserved - installed));
+      const totalCoverage = clampedReserved + finalCoveredPO + installed;
+      const isFulfilled = totalCoverage >= effective_required && effective_required > 0;
+
+      console.log(`[RECEIVE_COVERAGE_RESULT] commitment=${c.id} effective_required=${effective_required} reserved=${clampedReserved} covered_po=${finalCoveredPO} installed=${installed} total_coverage=${totalCoverage} fulfilled=${isFulfilled}`);
+
+      // Determine commitment_status based on fulfillment
+      let newStatus = c.commitment_status;
+      if (isFulfilled) {
+        newStatus = installed >= effective_required ? 'installed' : 'allocated';
+      }
+
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
-        covered_from_po: newCoveredPO,
+        covered_from_po: finalCoveredPO,
         reserved_from_stock: clampedReserved,
         qty_reserved: clampedReserved,
         qty_received: oldQtyReceived + qty_received,
-        commitment_status: (clampedReserved + newCoveredPO + installed) >= effective_required && effective_required > 0 ? 'allocated' : c.commitment_status,
+        commitment_status: newStatus,
+        coverage_status: isFulfilled ? 'FULLY_COVERED' : (totalCoverage > 0 ? 'PARTIALLY_COVERED' : 'NOT_COVERED'),
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -709,7 +741,7 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
         triggered_by: ctx.user.email,
         actor_email: ctx.user.email,
         old_values: JSON.stringify({ covered_from_po: oldCoveredPO, reserved_from_stock: oldReserved }),
-        new_values: JSON.stringify({ covered_from_po: newCoveredPO, reserved_from_stock: clampedReserved, qty_received }),
+        new_values: JSON.stringify({ covered_from_po: finalCoveredPO, reserved_from_stock: clampedReserved, qty_received, fulfilled: isFulfilled }),
         part_id: part.id,
         project_id: c.project_id,
         event_date: ctx.timestamp,

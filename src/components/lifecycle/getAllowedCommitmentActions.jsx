@@ -136,8 +136,13 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canCreateDeltaOrder = true;
   }
 
-  // RECEIVE - only if has items on order (covered_from_po > 0)
-  if (unreceived > 0) {
+  // RECEIVE - only if has items on order AND commitment still needs coverage
+  // CANONICAL: Use effective_required to check if commitment is satisfied
+  const qty_removed = commitment.qty_removed ?? 0;
+  const effectiveRequiredForReceive = Math.max(0, required_total - qty_removed);
+  const totalCoverage = effectiveReserved + effectiveOnOrder + qty_installed;
+  const commitmentSatisfied = totalCoverage >= effectiveRequiredForReceive && effectiveRequiredForReceive > 0;
+  if (unreceived > 0 && !commitmentSatisfied) {
     actions.canReceive = true;
   }
 
