@@ -99,7 +99,11 @@ function determineInventoryState(commitment) {
     return 'NEEDS_ORDER';
   }
 
-  // Fallback: backend fields not present, use local resolver
+  // Fallback: backend fields not present — should not happen with canonical backend
+  // Use local resolver for DISPLAY ONLY, never for filtering/grouping
+  if (import.meta.env.DEV) {
+    console.warn('[determineInventoryState] Missing backend canonical flags for', commitment.id || commitment.commitment_id);
+  }
   const lifecycle = resolveLifecycleState(commitment);
   if (lifecycle === 'INSTALLED') return 'INSTALL_READY';
   if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';

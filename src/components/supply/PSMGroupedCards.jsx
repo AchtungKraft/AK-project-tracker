@@ -361,8 +361,9 @@ export function PSMItemRow({
   // ORDERING CONTEXT: Suppress install actions when to_order > 0
   const hideInstallActions = isOrderingContext && toOrder > 0;
 
-  // CANONICAL: canOrder uses backend needs_order flag
-  const canOrder = allowed?.canCreatePO && (commitment.needs_order === true || toOrder > 0);
+  // PHASE 5: canOrder is STRICTLY gated by backend needs_order flag
+  // If needs_order !== true, Create PO is hidden regardless of local state
+  const canOrder = allowed?.canCreatePO && commitment.needs_order === true;
   
   // CANONICAL: Invoice eligibility - use canCreateInvoice from getAllowedCommitmentActions
   const canInvoice = allowed?.canCreateInvoice ?? false;
@@ -532,9 +533,12 @@ export function PSMItemRow({
         </div>
 
         {/* PHASE 1: Inventory State Badge — context-aware */}
-        <div className="flex-shrink-0 hidden md:block">
-          <InventoryStateBadgeSimple commitment={commitment} tab={tab} />
-        </div>
+        {/* PHASE 5: Hide Needs Order badge when item doesn't actually need order */}
+        {!(isOrderingContext && !commitment.needs_order) && (
+          <div className="flex-shrink-0 hidden md:block">
+            <InventoryStateBadgeSimple commitment={commitment} tab={tab} />
+          </div>
+        )}
 
         {/* PHASE 4: Next Action Badge — HIDDEN in ordering context (prevents install badge leaking) */}
         {!isOrderingContext && (
@@ -657,6 +661,14 @@ export function PSMItemRow({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      {/* PHASE 6: Debug supply truth strip — always visible */}
+      <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600">
+        <span>needs_order: <span className={commitment.needs_order ? "text-red-400" : "text-emerald-400"}>{String(!!commitment.needs_order)}</span></span>
+        <span>to_order_qty: <span className={((commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? commitment.to_order ?? 0}</span></span>
+        <span>coverage: <span className="text-gray-400">{commitment.coverage_qty ?? '?'} / {commitment.effective_required ?? '?'}</span></span>
+        <span>fulfilled: <span className={commitment.commitment_fulfilled ? "text-emerald-400" : "text-amber-400"}>{String(!!commitment.commitment_fulfilled)}</span></span>
       </div>
 
       {/* PHASE 4: Collapsible Execution Detail */}
@@ -1089,16 +1101,47 @@ export default function PSMGroupedView({
     });
   };
 
+  // ═══════════════════════════════════════════════════════════════════
+  // PHASE 1: HARD FILTER — Buy tab renders ONLY needs_order === true
+  // This is the FINAL render-layer gate. Upstream filters may have
+  // already done this, but this guarantees 100% compliance.
+  // ═══════════════════════════════════════════════════════════════════
+  const visibleItems = useMemo(() => {
+    if (tab === 'buy') {
+      const filtered = items.filter(i => i.needs_order === true);
+      // PHASE 3: ASSERTION — log any items that were stripped
+      if (import.meta.env.DEV || localStorage.getItem('ak_debug_coverage') === 'true') {
+        const stripped = items.length - filtered.length;
+        if (stripped > 0) {
+          console.error(`[NEEDS_ORDER RENDER GATE] Stripped ${stripped} items from Buy tab that had needs_order !== true`);
+          items.filter(i => i.needs_order !== true).forEach(i => {
+            console.error('[NEEDS_ORDER RENDER GATE] Rejected item:', {
+              id: i.id || i.commitment_id,
+              part: i.part?.part_name,
+              needs_order: i.needs_order,
+              commitment_fulfilled: i.commitment_fulfilled,
+              to_order: i.to_order_qty ?? i.to_order,
+              coverage_qty: i.coverage_qty,
+              effective_required: i.effective_required,
+            });
+          });
+        }
+      }
+      return filtered;
+    }
+    return items;
+  }, [items, tab]);
+
   // CANONICAL: Filter items by billing_state (3-state model from backend)
   const filteredItems = useMemo(() => {
-    if (billingFilters.size === 3) return items; // All selected, no filter
+    if (billingFilters.size === 3) return visibleItems; // All selected, no filter
     
-    return items.filter(item => {
+    return visibleItems.filter(item => {
       // Use canonical billing_state from backend, fallback to NOT_INVOICED
       const billingState = item.billing_state || 'NOT_INVOICED';
       return billingFilters.has(billingState);
     });
-  }, [items, billingFilters]);
+  }, [visibleItems, billingFilters]);
 
   // Get available subgroup options (exclude current primary group)
   const availableSubgroupOptions = useMemo(() => {
@@ -1283,7 +1326,9 @@ export default function PSMGroupedView({
           ))}
         </div>
         <div className="text-center py-12 text-gray-500">
-          {items.length === 0 ? 'No items in this tab' : 'No items match billing filters'}
+          {visibleItems.length === 0 
+            ? (tab === 'buy' ? 'No items need ordering' : 'No items in this tab')
+            : 'No items match billing filters'}
         </div>
       </div>
     );

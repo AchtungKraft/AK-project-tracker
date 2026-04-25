@@ -121,11 +121,18 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canReduceQty = qty_installed === 0 || effectiveRequired > qty_installed;
   }
 
-  // CANONICAL: Use backend needs_order / commitment_fulfilled flags when available
+  // CANONICAL: Use backend needs_order / commitment_fulfilled as SOLE TRUTH
+  // When backend flags are present, local derivation is suppressed.
   const backendNeedsOrder = commitment.needs_order;
   const backendFulfilled = commitment.commitment_fulfilled;
-  const isFulfilled = backendFulfilled === true || (effectiveReserved + effectiveOnOrder + qty_installed >= effectiveRequired && effectiveRequired > 0);
-  const actuallyNeedsOrder = backendNeedsOrder === true || (!isFulfilled && unorderedQty > 0);
+  
+  // STRICT: If backend says needs_order=false, canCreatePO is false. Period.
+  const actuallyNeedsOrder = backendNeedsOrder !== undefined
+    ? backendNeedsOrder === true
+    : (!(effectiveReserved + effectiveOnOrder + qty_installed >= effectiveRequired && effectiveRequired > 0) && unorderedQty > 0);
+  const isFulfilled = backendFulfilled !== undefined
+    ? backendFulfilled === true
+    : (effectiveReserved + effectiveOnOrder + qty_installed >= effectiveRequired && effectiveRequired > 0);
   
   // CREATE PO — ONLY when needs_order is true (coverage_qty < effective_required)
   if (actuallyNeedsOrder && lifecycle !== 'CANCELLED' && lifecycle !== 'CLOSED') {
@@ -137,8 +144,8 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canCreateDeltaOrder = true;
   }
 
-  // RECEIVE - only if has items on order AND commitment is NOT fulfilled
-  if (unreceived > 0 && !isFulfilled) {
+  // RECEIVE - only if has items on order AND commitment is NOT fulfilled AND doesn't need order
+  if (unreceived > 0 && !isFulfilled && !actuallyNeedsOrder) {
     actions.canReceive = true;
   }
 
