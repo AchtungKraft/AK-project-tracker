@@ -66,13 +66,17 @@ function determineOrderingState(commitment) {
 
 /**
  * Determine inventory state from commitment data — RESOLVER-FIRST.
- * Uses resolveLifecycleState for INSTALL_READY/INSTALLED detection,
+ * Uses resolveLifecycleState for INSTALL_READY/INSTALLED/COVERED detection,
  * then falls back to procurement status for display differentiation.
+ * 
+ * CANONICAL: A commitment is NOT "Needs Order" if coverage_qty >= effective_required
+ * where coverage_qty = reserved_from_stock + covered_from_po + qty_installed
  */
 function determineInventoryState(commitment) {
   const lifecycle = resolveLifecycleState(commitment);
   if (lifecycle === 'INSTALLED') return 'INSTALL_READY';
   if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';
+  if (lifecycle === 'COVERED') return 'ORDERED';
   
   const reserved = commitment.reserved_from_stock ?? 0;
   const ordered = commitment.covered_from_po ?? 0;

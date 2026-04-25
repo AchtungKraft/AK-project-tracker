@@ -26,16 +26,18 @@ export function resolveLifecycleState(commitment) {
   if (rawStatus === 'closed') return 'CLOSED';
 
   const rt = commitment.required_total ?? 0;
+  const qr = commitment.qty_removed ?? 0;
+  const effReq = Math.max(0, rt - qr);
   const rfs = commitment.reserved_from_stock ?? 0;
   const cfp = commitment.covered_from_po ?? 0;
   const qi = commitment.qty_installed ?? 0;
-  const ct = rfs + cfp;
-  const gap = Math.max(0, rt - ct);
+  // CANONICAL: coverage_qty = reserved + covered + installed
+  const totalCov = rfs + cfp + qi;
 
-  if (qi >= rt && rt > 0) return 'INSTALLED';
-  if (rfs >= rt && rt > 0) return 'INSTALL_READY';
-  if (ct >= rt && rt > 0) return 'COVERED';
-  if (gap > 0) return 'NEEDS_ORDER';
+  if (qi >= effReq && effReq > 0) return 'INSTALLED';
+  if (rfs >= effReq && effReq > 0) return 'INSTALL_READY';
+  if (totalCov >= effReq && effReq > 0) return 'COVERED';
+  if (effReq > totalCov) return 'NEEDS_ORDER';
   return 'PLANNED';
 }
 

@@ -481,6 +481,8 @@ Deno.serve(async (req) => {
           block_reason_code,
           block_reason_message: block_reason_code ? BLOCK_MESSAGES[block_reason_code] : null,
           
+          // CANONICAL: needs_order = commitment coverage < effective_required
+          needs_order: to_order > 0,
           // CANONICAL: needs_receive = commitment has PO coverage but total coverage < effective_required
           needs_receive: covered_from_po > 0 && (reserved_from_stock + covered_from_po + qty_installed) < effective_required,
           // CANONICAL: commitment_fulfilled = total coverage >= effective_required

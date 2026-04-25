@@ -77,8 +77,9 @@ export function getAllowedCommitmentActions(commitment) {
     invoiced_qty = 0, // For invoice eligibility check
   } = commitment;
 
-  // All values come directly from read model - NO recomputation
-  const effectiveRequired = required_total;
+  // CANONICAL: effective_required accounts for qty_removed
+  const qty_removed = commitment.qty_removed ?? 0;
+  const effectiveRequired = Math.max(0, required_total - qty_removed);
   const effectiveReserved = reserved_from_stock;
   const effectiveOnOrder = covered_from_po;
   const effectiveGap = to_order;
@@ -137,11 +138,9 @@ export function getAllowedCommitmentActions(commitment) {
   }
 
   // RECEIVE - only if has items on order AND commitment still needs coverage
-  // CANONICAL: Use effective_required to check if commitment is satisfied
-  const qty_removed = commitment.qty_removed ?? 0;
-  const effectiveRequiredForReceive = Math.max(0, required_total - qty_removed);
+  // CANONICAL: Use effectiveRequired (already accounts for qty_removed) to check if commitment is satisfied
   const totalCoverage = effectiveReserved + effectiveOnOrder + qty_installed;
-  const commitmentSatisfied = totalCoverage >= effectiveRequiredForReceive && effectiveRequiredForReceive > 0;
+  const commitmentSatisfied = totalCoverage >= effectiveRequired && effectiveRequired > 0;
   if (unreceived > 0 && !commitmentSatisfied) {
     actions.canReceive = true;
   }
