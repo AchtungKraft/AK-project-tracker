@@ -69,19 +69,22 @@ const GROUP_COLORS = {
 
 // Sort options
 const SORT_OPTIONS = [
-  { value: 'exposure_desc', label: 'Exposure (High → Low)' },
-  { value: 'retail_desc', label: 'Retail (High → Low)' },
+  { value: 'exposure_desc', label: 'Cost at Risk (High → Low)' },
+  { value: 'margin_desc', label: 'Margin (High → Low)' },
+  { value: 'retail_desc', label: 'Revenue (High → Low)' },
   { value: 'required_desc', label: 'Qty Required (High → Low)' },
   { value: 'alphabetical', label: 'Alphabetical' },
   { value: 'to_order_desc', label: 'To Order (High → Low)' },
 ];
 
-// Apply sorting to items
+// Apply sorting to items — CORRECTED: exposure_desc uses cost-based exposure
 function applySorting(items, sortMode) {
   const sorted = [...items];
   switch (sortMode) {
     case 'exposure_desc':
       return sorted.sort((a, b) => (b.resolved_exposure ?? 0) - (a.resolved_exposure ?? 0));
+    case 'margin_desc':
+      return sorted.sort((a, b) => (b.resolved_margin ?? 0) - (a.resolved_margin ?? 0));
     case 'retail_desc':
       return sorted.sort((a, b) => (b.planned_retail_total ?? 0) - (a.planned_retail_total ?? 0));
     case 'required_desc':
@@ -102,7 +105,8 @@ export function PSMSummaryStrip({ items, tab }) {
   const isOrderingContext = tab === 'buy';
   const stats = useMemo(() => {
     const totalItems = items.length;
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
+    // CORRECTED: Cost-based exposure
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
     const installReadyCount = items.filter(i => 
@@ -165,7 +169,7 @@ export function PSMSummaryStrip({ items, tab }) {
         </Card>
         <Card className="bg-black/40 border-amber-900/50">
           <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Exposure</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cost at Risk</p>
             <p className={cn(
               "text-lg font-bold font-mono",
               stats.totalExposure > 0 ? "text-amber-400" : "text-gray-500"
@@ -227,7 +231,7 @@ export function PSMSummaryStrip({ items, tab }) {
       </Card>
       <Card className="bg-black/40 border-amber-900/50">
         <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Exposure</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cost at Risk</p>
           <p className={cn(
             "text-lg font-bold font-mono",
             stats.totalExposure > 0 ? "text-amber-400" : "text-gray-500"
@@ -283,8 +287,11 @@ export function PSMItemRow({
   const available = inv.available_global_active ?? inv.available ?? 0;
 
   // Resolve names
-  // CANONICAL: Use resolved_exposure from backend (no local derivation)
-  const resolvedExposure = commitment.resolved_exposure ?? commitment.exposure_gap ?? 0;
+
+  // CORRECTED: Cost-based exposure = max(0, cost - invoiced_amount)
+  const costExposure = commitment.resolved_exposure ?? Math.max(0, (commitment.planned_cost_total ?? 0) - (commitment.invoiced_amount ?? 0));
+  // NEW: Margin = retail - cost
+  const lineMargin = commitment.resolved_margin ?? ((commitment.planned_retail_total ?? 0) - (commitment.planned_cost_total ?? 0));
 
   // CANONICAL: Resolve vendor display using source-first resolution
   const canonicalVendor = resolveDefaultVendor(commitment, null, {});
@@ -462,18 +469,8 @@ export function PSMItemRow({
           )}
         </div>
 
-        {/* PHASE 3: Inline Financial — CANONICAL: uses resolved_unit_cost from PartVendorSource */}
+        {/* Inline Financial — COST | RETAIL | MARGIN | EXPOSURE */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
-          <div className="text-center">
-            <span className="text-gray-500 block">U/COST</span>
-            <span className={commitment.invalid_cost ? "text-red-500" : "text-gray-400"}>
-              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.resolved_unit_cost ?? commitment.unit_cost ?? 0)}
-            </span>
-          </div>
-          <div className="text-center">
-            <span className="text-gray-500 block">U/RETAIL</span>
-            <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail ?? 0)}</span>
-          </div>
           <div className="text-center">
             <span className="text-gray-500 block">COST</span>
             <span className={commitment.invalid_cost ? "text-red-500" : "text-red-400"}>
@@ -484,15 +481,21 @@ export function PSMItemRow({
             <span className="text-gray-500 block">RETAIL</span>
             <span className="text-white">{formatCurrencyUSD(commitment.planned_retail_total ?? 0)}</span>
           </div>
-          {resolvedExposure > 0 && !commitment.invalid_cost && (
+          <div className="text-center">
+            <span className="text-gray-500 block">MARGIN</span>
+            <span className={lineMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
+              {formatCurrencyUSD(lineMargin)}
+            </span>
+          </div>
+          {costExposure > 0 && !commitment.invalid_cost && (
             <div className="text-center">
-              <span className="text-gray-500 block">EXPO</span>
-              <span className="text-amber-400">{formatCurrencyUSD(resolvedExposure)}</span>
+              <span className="text-gray-500 block">EXPOSURE</span>
+              <span className="text-amber-400">{formatCurrencyUSD(costExposure)}</span>
             </div>
           )}
           {commitment.invalid_cost && toOrder > 0 && (
             <div className="text-center">
-              <span className="text-gray-500 block">EXPO</span>
+              <span className="text-gray-500 block">EXPOSURE</span>
               <span className="text-red-500 text-[9px]">NO COST</span>
             </div>
           )}
@@ -676,12 +679,14 @@ export function PSMGroupCard({
     return applySorting(group.items || [], sortMode);
   }, [group.items, sortMode]);
 
-  // Calculate group stats from canonical fields
+  // Calculate group stats — CORRECTED: cost-based exposure + margin
   const groupStats = useMemo(() => {
     const items = sortedItems;
     const totalQty = items.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
     const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
+    const totalMargin = totalRetail - totalCost;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
       if (tab === 'receive') return i.on_order_qty > 0 && i.allowed?.canReceive;
@@ -690,7 +695,7 @@ export function PSMGroupCard({
     }).length;
     const isOrderingContext = tab === 'buy';
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
-    return { totalQty, totalExposure, totalCost, readyCount, ...inventoryCounts };
+    return { totalQty, totalExposure, totalCost, totalRetail, totalMargin, readyCount, ...inventoryCounts };
   }, [sortedItems, tab]);
 
   // Get group color
@@ -758,13 +763,14 @@ export function PSMGroupCard({
           )}
         </div>
 
-        {/* Category Exposure Labels — Retail first, then Cost */}
+        {/* Group Financial Labels — Cost | Retail | Margin */}
         <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Retail <span className="text-white">{formatCurrencyUSD(sortedItems.reduce((s, i) => s + (i.planned_retail_total ?? 0), 0))}</span></span>
           <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalCost)}</span></span>
+          <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
+          <span className="text-gray-400">Margin <span className={groupStats.totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalMargin)}</span></span>
         </div>
 
-        {/* Exposure Badge — only if unbilled gap > 0 */}
+        {/* Cost at Risk Badge */}
         {groupStats.totalExposure > 0 && (
           <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
             <AlertTriangle className="w-3 h-3 mr-1" />
@@ -1408,11 +1414,13 @@ function PSMGroupCardWithSubgroups({
   // Sort items for flat view (when no subgrouping)
   const sortedItems = useMemo(() => applySorting(items, sortMode), [items, sortMode]);
 
-  // Calculate group stats
+  // Calculate group stats — CORRECTED: cost-based exposure + margin
   const groupStats = useMemo(() => {
     const totalQty = items.reduce((sum, i) => sum + (i.required_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? 0), 0);
     const totalCost = items.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
+    const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.resolved_exposure ?? Math.max(0, (i.planned_cost_total ?? 0) - (i.invoiced_amount ?? 0))), 0);
+    const totalMargin = totalRetail - totalCost;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
@@ -1420,7 +1428,7 @@ function PSMGroupCardWithSubgroups({
     }).length;
     const isOrderingContext = tab === 'buy';
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
-    return { totalQty, totalExposure, totalCost, readyCount, ...inventoryCounts };
+    return { totalQty, totalExposure, totalCost, totalRetail, totalMargin, readyCount, ...inventoryCounts };
   }, [items, tab]);
 
   // Get group color
@@ -1488,13 +1496,14 @@ function PSMGroupCardWithSubgroups({
           )}
         </div>
 
-        {/* Category Exposure Labels — Retail first, then Cost */}
+        {/* Group Financial Labels — Cost | Retail | Margin */}
         <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Retail <span className="text-white">{formatCurrencyUSD(items.reduce((s, i) => s + (i.planned_retail_total ?? 0), 0))}</span></span>
           <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalCost)}</span></span>
+          <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
+          <span className="text-gray-400">Margin <span className={groupStats.totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalMargin)}</span></span>
         </div>
 
-        {/* Exposure Badge */}
+        {/* Cost at Risk Badge */}
         {groupStats.totalExposure > 0 && (
           <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
             <AlertTriangle className="w-3 h-3 mr-1" />

@@ -384,6 +384,13 @@ export default function ProjectSupplyManager() {
         exposure_gap: item.exposure_gap,
         billing_status: item.billing_status,
         
+        // CORRECTED: Cost-based exposure = max(0, cost - invoiced_amount)
+        resolved_exposure: Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
+        // NEW: Margin = retail - cost
+        resolved_margin: (item.planned_retail_total ?? 0) - (item.planned_cost_total ?? 0),
+        // Keep cost total accessible under canonical name
+        resolved_cost_total: item.planned_cost_total ?? 0,
+        
         // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
         billing_state: item.billing_state || 'NOT_INVOICED',
         
@@ -1207,8 +1214,8 @@ export default function ProjectSupplyManager() {
                         <p className="text-xl font-bold text-white">{metrics.totalCommitments}</p>
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
-                        <p className="text-xs text-gray-500">Planned Retail</p>
-                        <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
+                       <p className="text-xs text-gray-500">Planned Revenue</p>
+                       <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
                       </div>
                       <div className="bg-gray-800/50 p-3 rounded">
                         <p className="text-xs text-gray-500">Invoiced</p>
