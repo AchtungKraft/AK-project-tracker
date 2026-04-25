@@ -288,11 +288,11 @@ Deno.serve(async (req) => {
       // Coverage status
       const total_covered = reserved_from_stock + covered_from_po;
       let coverage_status;
-      if (total_covered >= required_total && required_total > 0) coverage_status = 'FULL';
-      else if (total_covered > required_total) coverage_status = 'OVER';
+      if (total_covered >= effective_required && effective_required > 0) coverage_status = 'FULL';
+      else if (total_covered > effective_required) coverage_status = 'OVER';
       else if (total_covered > 0) coverage_status = 'PARTIAL';
       else coverage_status = 'NONE';
-      const coverage_percent = required_total > 0 ? Math.round((total_covered / required_total) * 100) : 0;
+      const coverage_percent = effective_required > 0 ? Math.round((total_covered / effective_required) * 100) : 0;
 
       // Financial — CANONICAL COST RESOLUTION via PartVendorSource
       const partSources = sourcesByPart.get(c.part_id) || [];
@@ -508,6 +508,18 @@ Deno.serve(async (req) => {
         _raw: {
           commitment_status: c.commitment_status,
         },
+
+        // Per-commitment integrity state for UI
+        integrity: (() => {
+          if (qty_removed <= 0) return { valid: true, violations: [], blocking: false };
+          const TOL = 0.001;
+          const vs = [];
+          if (qty_installed > effective_required + TOL) vs.push({ field: 'qty_installed', value: qty_installed, limit: effective_required });
+          if (reserved_from_stock > effective_required + TOL) vs.push({ field: 'reserved_from_stock', value: reserved_from_stock, limit: effective_required });
+          const comb = reserved_from_stock + covered_from_po + qty_installed;
+          if (comb > effective_required + TOL) vs.push({ field: '_combined', value: comb, limit: effective_required });
+          return { valid: vs.length === 0, violations: vs, blocking: vs.length > 0 };
+        })(),
 
         ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
       };

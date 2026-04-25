@@ -36,6 +36,7 @@ import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lif
 import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
 import ExecutionDataBlock from "./ExecutionDataBlock";
 import CoverageDebugPanel from "./CoverageDebugPanel";
+import EffectiveQtyBadge, { IntegrityViolationBadge } from "./EffectiveQtyBadge";
 
 /**
  * PSMGroupedCards - Build Management Optimized UI
@@ -422,12 +423,12 @@ export function PSMItemRow({
           </div>
         </button>
 
-        {/* PHASE 3: Inline Metrics — context-aware */}
+        {/* Integrity violation inline badge */}
+        <IntegrityViolationBadge commitment={commitment} />
+
+        {/* PHASE 7: Inline Metrics — context-aware, effective qty display */}
         <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono flex-shrink-0">
-          <div className="text-center">
-            <span className="text-gray-500 block">REQ</span>
-            <span className="text-white">{commitment.required_total ?? 0}</span>
-          </div>
+          <EffectiveQtyBadge commitment={commitment} compact />
           {isOrderingContext ? (
             /* ORDERING: Show TO ORDER prominently, stock demoted */
             <>

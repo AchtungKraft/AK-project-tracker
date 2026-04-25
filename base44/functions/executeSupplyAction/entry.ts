@@ -100,19 +100,36 @@ function checkSupplyInvariant(commitmentId, required, reserved, covered, ctx, so
   return { violated: false };
 }
 
+// ── INLINED EFFECTIVE QUANTITY VALIDATOR ──
+// Standard result: { valid, violations[], blocking }
+function validateEffectiveQuantities(c) {
+  const required_total = c.required_total ?? 0;
+  const qty_removed = c.qty_removed ?? 0;
+  const eff = Math.max(0, required_total - qty_removed);
+  const TOL = 0.001;
+  const violations = [];
+  if ((c.qty_installed ?? 0) > eff + TOL) violations.push({ field: 'qty_installed', value: c.qty_installed, limit: eff, message: `qty_installed(${c.qty_installed}) exceeds effective_required(${eff})` });
+  if ((c.reserved_from_stock ?? 0) > eff + TOL) violations.push({ field: 'reserved_from_stock', value: c.reserved_from_stock, limit: eff, message: `reserved(${c.reserved_from_stock}) exceeds effective_required(${eff})` });
+  if ((c.covered_from_po ?? 0) > eff + TOL) violations.push({ field: 'covered_from_po', value: c.covered_from_po, limit: eff, message: `covered(${c.covered_from_po}) exceeds effective_required(${eff})` });
+  if ((c.invoiced_qty ?? 0) > eff + TOL) violations.push({ field: 'invoiced_qty', value: c.invoiced_qty, limit: eff, message: `invoiced(${c.invoiced_qty}) exceeds effective_required(${eff})` });
+  const total = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.qty_installed ?? 0);
+  if (total > eff + TOL) violations.push({ field: '_combined', value: total, limit: eff, message: `combined coverage(${total}) exceeds effective_required(${eff})` });
+  return { valid: violations.length === 0, violations, blocking: violations.length > 0, effective_required: eff, commitment_id: c.id };
+}
+
 function readCanonical(c, ctx) {
   const qty_removed = c.qty_removed ?? 0;
   const cn = { required_total: c.required_total ?? 0, qty_removed, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
-  // CANONICAL: effective_required = required_total - qty_removed
   cn.effective_required = Math.max(0, cn.required_total - qty_removed);
   if (ctx && c.qty_committed !== undefined && c.qty_committed !== cn.required_total)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_committed(${c.qty_committed})!=required_total(${cn.required_total})` });
   if (ctx && c.qty_reserved !== undefined && c.qty_reserved !== cn.reserved_from_stock)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})` });
-  // Check invariant on read using effective_required (includes installed)
   checkSupplyInvariant(c.id, cn.effective_required, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical', cn.qty_installed);
   cn.gap = Math.max(0, cn.effective_required - cn.reserved_from_stock - cn.covered_from_po - cn.qty_installed);
   cn.coverage = cn.reserved_from_stock + cn.covered_from_po + cn.qty_installed;
+  // PHASE 2: Hard validation — attach result for callers that need blocking check
+  cn._validation = validateEffectiveQuantities(c);
   return cn;
 }
 
@@ -338,6 +355,11 @@ async function createPO(ctx, commitment_ids, payload) {
     
     if(!ev) throw new Error(`PO_VENDOR_REQUIRED: ${c.id} (${p.part_name})`);
     const cn=readCanonical(c,ctx);
+    // PHASE 2: HARD BLOCK — refuse PO creation if effective qty violations exist
+    if (cn._validation?.blocking) {
+      blocked.push({commitment_id:c.id,reason_code:'EFF_QTY_VIOLATION',message:cn._validation.violations.map(v=>v.message).join('; ')});
+      continue;
+    }
     if(cn.gap<=0){blocked.push({commitment_id:c.id,reason_code:'NO_GAP',gap:0});continue;}
     if(!vg.has(ev)) vg.set(ev,[]);
     const resolvedCost = finalCost;
@@ -434,7 +456,7 @@ async function createPO(ctx, commitment_ids, payload) {
 
       const curCov=item.commitment.covered_from_po??0, newCov=curCov+rq;
       const cn=readCanonical(item.commitment,ctx);
-      const newTO=Math.max(0,cn.required_total-cn.reserved_from_stock-newCov-cn.qty_installed);
+      const newTO=Math.max(0,cn.effective_required-cn.reserved_from_stock-newCov-cn.qty_installed);
 
       // Sync cost from PO line to commitment (inline for speed)
       const costSync = {};
@@ -706,6 +728,10 @@ async function install(ctx,commitment_ids,payload) {
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
   const cn=readCanonical(c,ctx);
+  // PHASE 2: HARD BLOCK — refuse install if effective qty violations exist
+  if (cn._validation?.blocking) {
+    throw new Error(`EFFECTIVE_QTY_VIOLATION: Cannot install — ${cn._validation.violations.map(v => v.message).join('; ')}`);
+  }
   // CANONICAL: installable uses effective_required (excludes qty_removed)
   const maxInstallable = Math.max(0, cn.effective_required - cn.qty_installed);
   const installable=Math.min(maxInstallable, cn.reserved_from_stock);
@@ -831,7 +857,7 @@ async function deletePO(ctx, payload) {
         const oldCovered = c.covered_from_po ?? 0;
         const newCovered = Math.max(0, oldCovered - unreceived);
         const cn = readCanonical(c, ctx);
-        const newTO = Math.max(0, cn.required_total - cn.reserved_from_stock - newCovered - cn.qty_installed);
+        const newTO = Math.max(0, cn.effective_required - cn.reserved_from_stock - newCovered - cn.qty_installed);
 
         // Remove this line item from order_line_item_ids
         const existingIds = (c.order_line_item_ids || []).filter(id => id !== li.id);

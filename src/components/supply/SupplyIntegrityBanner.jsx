@@ -123,8 +123,7 @@ export default function SupplyIntegrityBanner({
           <div className="flex-1">
             <p className="text-red-400 font-medium">Supply Integrity Failing — actions disabled</p>
             <p className="text-sm text-gray-400 mt-1">
-              {gateResult?.blocking_gates?.length || 0} blocking gates failed. 
-              Run normalization to repair data before continuing.
+              Supply integrity issues detected. Run normalization to repair data before continuing.
             </p>
             
             {/* Failed gates list */}

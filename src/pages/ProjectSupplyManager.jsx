@@ -69,6 +69,7 @@ import BulkSyncResultModal from "@/components/supply/BulkSyncResultModal";
 import { cn } from "@/lib/utils";
 import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
 import ReceivingGapDiagnosticsPanel from "@/components/supply/ReceivingGapDiagnosticsPanel";
+import IntegrityViolationSummary from "@/components/supply/IntegrityViolationSummary";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -394,6 +395,9 @@ export default function ProjectSupplyManager() {
         
         // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
         billing_state: item.billing_state || 'NOT_INVOICED',
+        
+        // PHASE 3: Per-commitment integrity state from read model
+        integrity: item.integrity || { valid: true, violations: [], blocking: false },
         
         // Phase 7: Invoice tracking fields from read model
         invoiced_qty: item.invoiced_qty ?? 0,
@@ -870,6 +874,9 @@ export default function ProjectSupplyManager() {
               </div>
             </div>
           )}
+
+          {/* PHASE 8: Effective quantity violation summary */}
+          <IntegrityViolationSummary items={enrichedCommitments} />
 
           {/* Integrity Banner - Project-scoped gate check */}
           <SupplyIntegrityBanner 

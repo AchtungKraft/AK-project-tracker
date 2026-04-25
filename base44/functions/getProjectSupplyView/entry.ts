@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
     }
 
     // ============================================================================
-    // INTEGRITY ASSERTION
+    // INTEGRITY ASSERTION — includes effective quantity validation
     // ============================================================================
     const integrityWarnings = [];
     for (const c of commitments) {
@@ -298,6 +298,21 @@ Deno.serve(async (req) => {
             message: `Commitment has invoiced_qty=${invoiced} but required_total=${required} (v${c.commitment_version})`,
             severity: 'warning'
           });
+        }
+      }
+      // Effective quantity violation detection
+      const qr = c.qty_removed ?? 0;
+      if (qr > 0) {
+        const eff = Math.max(0, (c.required_total ?? 0) - qr);
+        const TOL = 0.001;
+        const violations = [];
+        if ((c.qty_installed ?? 0) > eff + TOL) violations.push(`qty_installed(${c.qty_installed}) > effective(${eff})`);
+        if ((c.reserved_from_stock ?? 0) > eff + TOL) violations.push(`reserved(${c.reserved_from_stock}) > effective(${eff})`);
+        if ((c.invoiced_qty ?? 0) > eff + TOL) violations.push(`invoiced(${c.invoiced_qty}) > effective(${eff})`);
+        const total = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.qty_installed ?? 0);
+        if (total > eff + TOL) violations.push(`combined(${total}) > effective(${eff})`);
+        for (const v of violations) {
+          integrityWarnings.push({ commitment_id: c.id, part_id: c.part_id, warning_type: 'EFF_QTY_VIOLATION', message: v, severity: 'error' });
         }
       }
     }
@@ -355,11 +370,11 @@ Deno.serve(async (req) => {
 
         const total_covered = reserved_from_stock + covered_from_po;
         let coverage_status;
-        if (total_covered >= required_total && required_total > 0) coverage_status = 'FULL';
-        else if (total_covered > required_total) coverage_status = 'OVER';
+        if (total_covered >= effective_required && effective_required > 0) coverage_status = 'FULL';
+        else if (total_covered > effective_required) coverage_status = 'OVER';
         else if (total_covered > 0) coverage_status = 'PARTIAL';
         else coverage_status = 'NONE';
-        const coverage_percent = required_total > 0 ? Math.round((total_covered / required_total) * 100) : 0;
+        const coverage_percent = effective_required > 0 ? Math.round((total_covered / effective_required) * 100) : 0;
 
         const unit_cost = c.unit_cost_snapshot ?? 0;
         const unit_retail = c.unit_retail_snapshot ?? 0;
@@ -501,6 +516,18 @@ Deno.serve(async (req) => {
             prepay_satisfied_at: c.prepay_satisfied_at,
             order_line_item_ids: c.order_line_item_ids,
           },
+
+          // PHASE 3: Per-commitment integrity state for UI
+          integrity: (() => {
+            if (qty_removed <= 0) return { valid: true, violations: [], blocking: false };
+            const TOL = 0.001;
+            const vs = [];
+            if (qty_installed > effective_required + TOL) vs.push({ field: 'qty_installed', value: qty_installed, limit: effective_required });
+            if (reserved_from_stock > effective_required + TOL) vs.push({ field: 'reserved_from_stock', value: reserved_from_stock, limit: effective_required });
+            const comb = reserved_from_stock + covered_from_po + qty_installed;
+            if (comb > effective_required + TOL) vs.push({ field: '_combined', value: comb, limit: effective_required });
+            return { valid: vs.length === 0, violations: vs, blocking: vs.length > 0 };
+          })(),
 
           ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
         };
@@ -739,8 +766,11 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
     qty_installed = 0,
   } = commitment;
 
-  const to_order = Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed);
-  const available_to_install = Math.max(0, reserved_from_stock + covered_from_po - qty_installed);
+  // CANONICAL: use effective_required for all ceiling calculations
+  const qty_removed = rawCommitment.qty_removed ?? 0;
+  const effective_required = Math.max(0, required_total - qty_removed);
+  const to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
+  const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
   const requires_prepay = !!rawCommitment.requires_prepay;
   
@@ -769,15 +799,15 @@ function computeNextAction(commitment, partHasVendor, partInventory = {}, rawCom
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
   
-  if (covered_from_po > 0 && available_to_install < (required_total - qty_installed)) {
+  if (covered_from_po > 0 && available_to_install < (effective_required - qty_installed)) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }
   
-  if (available_to_install > 0 && qty_installed < required_total) {
+  if (available_to_install > 0 && qty_installed < effective_required) {
     return { next_action: 'INSTALL', block_reason_code: null, prepay_diagnostics };
   }
   
-  if (qty_installed >= required_total && required_total > 0) {
+  if (qty_installed >= effective_required && effective_required > 0) {
     return { next_action: 'COMPLETE', block_reason_code: null, prepay_diagnostics };
   }
 
