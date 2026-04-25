@@ -224,16 +224,6 @@ export default function ProjectSupplyManager() {
     return supplyItems.filter(item => item.part_name === 'Unknown Part');
   }, [supplyItems]);
 
-  // PHASE 3: Derive actionsEnabled from QUANTITY violations only
-  // Financial conditions (cost_at_risk, invoiced<planned) are warnings, NOT blockers
-  React.useEffect(() => {
-    const blocking = enrichedCommitments.some(c => c.integrity?.blocking === true);
-    setHasBlockingViolations(blocking);
-    // Only disable if there are true quantity corruption violations
-    // The SupplyIntegrityBanner (production gate) is informational only — never blocks
-    setActionsEnabled(!blocking);
-  }, [enrichedCommitments]);
-
   // Metrics from read model summary — CANONICAL totals from resolver
   const metrics = useMemo(() => {
     const s = supplySummary;
@@ -440,6 +430,14 @@ export default function ProjectSupplyManager() {
       };
     });
   }, [supplyItems, categoriesMap]);
+
+  // PHASE 3: Derive actionsEnabled from QUANTITY violations only
+  // Financial conditions (cost_at_risk, invoiced<planned) are warnings, NOT blockers
+  React.useEffect(() => {
+    const blocking = enrichedCommitments.some(c => c.integrity?.blocking === true);
+    setHasBlockingViolations(blocking);
+    setActionsEnabled(!blocking);
+  }, [enrichedCommitments]);
 
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
