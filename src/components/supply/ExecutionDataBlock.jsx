@@ -82,6 +82,29 @@ export default function ExecutionDataBlock({ item, showCoveredBadge = false }) {
           {inventoryLocation || '—'}
         </span>
       </div>
+      {/* Cost Authority */}
+      <div className="flex justify-between gap-4">
+        <span>Cost Source:</span>
+        <span className={item.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>
+          {item.cost_source === 'po' ? 'PO (Actual)' : 'Planned (Est.)'}
+        </span>
+      </div>
+      <div className="flex justify-between gap-4">
+        <span>Unit Cost:</span>
+        <span className={item.invalid_cost ? "text-red-400" : "text-gray-300"}>
+          ${(item.unit_cost ?? 0).toFixed(2)}
+        </span>
+      </div>
+      <div className="flex justify-between gap-4">
+        <span>Unit Retail:</span>
+        <span className="text-gray-300">${(item.unit_retail ?? 0).toFixed(2)}</span>
+      </div>
+      {item.cost_locked && (
+        <div className="flex justify-between gap-4">
+          <span>Cost Lock:</span>
+          <span className="text-blue-400">LOCKED</span>
+        </div>
+      )}
       {/* Lifecycle Status (shown in detail view) */}
       {item.commitment_status && (
         <div className="flex justify-between gap-4">

@@ -160,35 +160,29 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
       costChanged = true;
     }
 
-    // Retail sync — respect retail_override flag
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 4: RETAIL STAYS FIXED (quoted price)
+    // When PO cost changes, retail NEVER recalculates.
+    // Retail = what you sold. Cost = what you actually paid. Margin = reality.
+    // Only exception: retail is $0 (missing) — then we compute from matrix.
+    // ══════════════════════════════════════════════════════════════
     const currentRetail = commitment.unit_retail_snapshot ?? 0;
     let retailUpdated = false;
     
-    if (!skipRetailUpdate && costChanged && matrixTiers && matrixTiers.length > 0) {
-      // RETAIL ENFORCEMENT: Only update retail if NOT manually overridden
-      if (commitment.retail_override === true) {
-        // Manual retail — never overwrite, just recalc margin
-        if (currentRetail > 0) {
-          updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
-        }
-      } else {
-        // Matrix retail — always recompute when cost changes
-        const shouldUpdateRetail = currentRetail <= 0 || 
-          commitment.pricing_integrity_status === 'estimated_cost' ||
-          commitment.pricing_integrity_status === 'missing_cost' ||
-          commitment.pricing_integrity_status === 'missing_retail' ||
-          commitment.pricing_integrity_status === 'ok'; // Recompute even if 'ok' since cost changed
-
-        if (shouldUpdateRetail) {
-          const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
-          if (retailResult) {
-            updates.unit_retail_snapshot = retailResult.retail;
-            updates.planned_retail_total = retailResult.retail * (commitment.required_total || 0);
-            updates.margin_pct = retailResult.retail > 0
-              ? Math.round(((retailResult.retail - weightedAvgCost) / retailResult.retail) * 10000) / 100
-              : 0;
-            retailUpdated = true;
-          }
+    if (costChanged) {
+      if (currentRetail > 0) {
+        // Retail exists and is frozen — only recalculate margin
+        updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
+      } else if (!skipRetailUpdate && matrixTiers && matrixTiers.length > 0) {
+        // Retail is $0 (missing) — compute initial retail from matrix
+        const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
+        if (retailResult) {
+          updates.unit_retail_snapshot = retailResult.retail;
+          updates.planned_retail_total = retailResult.retail * (commitment.required_total || 0);
+          updates.margin_pct = retailResult.retail > 0
+            ? Math.round(((retailResult.retail - weightedAvgCost) / retailResult.retail) * 10000) / 100
+            : 0;
+          retailUpdated = true;
         }
       }
     }

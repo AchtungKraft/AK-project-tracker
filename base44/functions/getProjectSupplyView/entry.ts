@@ -381,10 +381,52 @@ Deno.serve(async (req) => {
         else coverage_status = 'NONE';
         const coverage_percent = effective_required > 0 ? Math.round((total_covered / effective_required) * 100) : 0;
 
-        const unit_cost = c.unit_cost_snapshot ?? 0;
+        // ══════════════════════════════════════════════════════════════
+        // COST AUTHORITY LIFECYCLE (Phases 1-3)
+        // PO cost is ACTUAL truth. Part cost is PLANNED only.
+        // Once a PO exists, cost is locked and never reverts to part cost.
+        // ══════════════════════════════════════════════════════════════
+        const hasPOLines = commitmentLineItems.length > 0;
+        const hasReceived = commitmentLineItems.some(li => (li.qty_received || 0) > 0);
+        const hasInstalled = qty_installed > 0;
+        const hasInvoiced = (c.invoiced_qty ?? 0) > 0;
+        const cost_locked = hasPOLines || hasReceived || hasInstalled || hasInvoiced;
+
+        // PHASE 1: PO cost = actual truth, part cost = planning only
+        let unit_cost = c.unit_cost_snapshot ?? 0;
+        let cost_source = 'planned'; // default: planning estimate
+        if (hasPOLines) {
+          // Weighted average from PO lines = actual cost
+          let poTotalCost = 0, poTotalQty = 0;
+          for (const li of commitmentLineItems) {
+            if (li.status !== 'Cancelled') {
+              poTotalCost += (li.qty_ordered || 0) * (li.unit_cost || 0);
+              poTotalQty += (li.qty_ordered || 0);
+            }
+          }
+          const poWeightedCost = poTotalQty > 0 ? Math.round((poTotalCost / poTotalQty) * 100) / 100 : 0;
+          if (poWeightedCost > 0) {
+            unit_cost = poWeightedCost;
+            cost_source = 'po';
+          } else if (unit_cost > 0) {
+            cost_source = 'planned'; // PO exists but cost is 0 — keep snapshot
+          }
+        } else if (unit_cost > 0) {
+          cost_source = 'planned'; // No PO, using snapshot (from part cost at commitment time)
+        }
+        // If snapshot is 0 and no PO, try part cost as fallback for display
+        if (unit_cost <= 0 && part?.cost > 0 && !cost_locked) {
+          unit_cost = part.cost;
+          cost_source = 'planned';
+        }
+        const invalid_cost = unit_cost <= 0;
+
+        // PHASE 4: Retail stays fixed (quoted price) — NEVER recompute from PO cost
         const unit_retail = c.unit_retail_snapshot ?? 0;
         const planned_cost_total = unit_cost * required_total;
         const planned_retail_total = unit_retail * required_total;
+        // CANONICAL: Margin = retail - cost (reality, not theory)
+        const resolved_margin = (unit_retail - unit_cost) * required_total;
         // DEPRECATED: covered_retail_total and exposure_gap removed.
         // Use cost-based: max(0, planned_cost_total - invoiced_amount)
         const cost_at_risk = Math.max(0, planned_cost_total - (c.invoiced_amount ?? 0));
@@ -502,6 +544,12 @@ Deno.serve(async (req) => {
 
           unit_cost,
           unit_retail,
+          cost_source,
+          cost_locked,
+          invalid_cost,
+          resolved_unit_cost: unit_cost,
+          resolved_cost_total: unit_cost * required_total,
+          resolved_margin,
           planned_cost_total,
           planned_retail_total,
           // CANONICAL: cost-based exposure only

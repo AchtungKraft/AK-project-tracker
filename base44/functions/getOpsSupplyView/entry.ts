@@ -295,26 +295,63 @@ Deno.serve(async (req) => {
       else coverage_status = 'NONE';
       const coverage_percent = effective_required > 0 ? Math.round((total_covered / effective_required) * 100) : 0;
 
-      // Financial — CANONICAL COST RESOLUTION via PartVendorSource
+      // ══════════════════════════════════════════════════════════════
+      // COST AUTHORITY LIFECYCLE — PO cost is ACTUAL truth
+      // ══════════════════════════════════════════════════════════════
+      const hasPOLines = commitmentLineItems.length > 0;
+      const hasReceived = commitmentLineItems.some(li => (li.qty_received || 0) > 0);
+      const hasInstalled = qty_installed > 0;
+      const hasInvoiced = (c.invoiced_qty ?? 0) > 0;
+      const cost_locked = hasPOLines || hasReceived || hasInstalled || hasInvoiced;
+      
       const partSources = sourcesByPart.get(c.part_id) || [];
       const preferredSource = partSources.find(s => s.is_preferred) || partSources[0] || null;
+
       let resolved_unit_cost = 0;
       let cost_source_tag = 'missing';
-      if (preferredSource?.unit_cost > 0) {
-        resolved_unit_cost = preferredSource.unit_cost;
-        cost_source_tag = `vendor_source:${preferredSource.id}`;
-      } else if ((c.unit_cost_snapshot ?? 0) > 0) {
-        resolved_unit_cost = c.unit_cost_snapshot;
-        cost_source_tag = 'commitment_snapshot';
-      } else if ((part?.cost ?? 0) > 0) {
-        resolved_unit_cost = part.cost;
-        cost_source_tag = 'part_cost_fallback';
+      let cost_source = 'planned';
+
+      if (hasPOLines) {
+        // PO cost = actual truth — weighted average from active PO lines
+        let poTotalCost = 0, poTotalQty = 0;
+        for (const li of commitmentLineItems) {
+          if (li.status !== 'Cancelled') {
+            poTotalCost += (li.qty_ordered || 0) * (li.unit_cost || 0);
+            poTotalQty += (li.qty_ordered || 0);
+          }
+        }
+        const poWeightedCost = poTotalQty > 0 ? Math.round((poTotalCost / poTotalQty) * 100) / 100 : 0;
+        if (poWeightedCost > 0) {
+          resolved_unit_cost = poWeightedCost;
+          cost_source_tag = 'po_weighted_avg';
+          cost_source = 'po';
+        } else if ((c.unit_cost_snapshot ?? 0) > 0) {
+          resolved_unit_cost = c.unit_cost_snapshot;
+          cost_source_tag = 'commitment_snapshot';
+          cost_source = 'planned';
+        }
+      } else {
+        // No PO — fallback chain: vendor source → snapshot → part cost
+        if (preferredSource?.unit_cost > 0) {
+          resolved_unit_cost = preferredSource.unit_cost;
+          cost_source_tag = `vendor_source:${preferredSource.id}`;
+        } else if ((c.unit_cost_snapshot ?? 0) > 0) {
+          resolved_unit_cost = c.unit_cost_snapshot;
+          cost_source_tag = 'commitment_snapshot';
+        } else if ((part?.cost ?? 0) > 0) {
+          resolved_unit_cost = part.cost;
+          cost_source_tag = 'part_cost_fallback';
+        }
+        cost_source = 'planned';
       }
+      
       const invalid_cost = resolved_unit_cost <= 0;
       const unit_cost = resolved_unit_cost;
-      const unit_retail = c.unit_retail_snapshot ?? part?.retail_matrix_price ?? part?.retail_override ?? 0;
+      // PHASE 4: Retail stays fixed (quoted price) — NEVER fallback to part retail
+      const unit_retail = c.unit_retail_snapshot ?? 0;
       const resolved_cost_total = resolved_unit_cost * to_order;
       const planned_retail_total = c.planned_retail_total ?? (unit_retail * required_total);
+      const resolved_margin = (unit_retail - resolved_unit_cost) * required_total;
       // CANONICAL: cost-based exposure = max(0, planned_cost - invoiced_amount)
       const planned_cost_for_commitment = resolved_unit_cost * required_total;
       const cost_at_risk = Math.max(0, planned_cost_for_commitment - (c.invoiced_amount ?? 0));
@@ -439,9 +476,12 @@ Deno.serve(async (req) => {
         resolved_unit_cost,
         resolved_cost_total,
         cost_source_tag,
+        cost_source,
+        cost_locked,
         invalid_cost,
         unit_retail,
         estimated_cost: resolved_cost_total,
+        resolved_margin,
         planned_cost_total: planned_cost_for_commitment,
         planned_retail_total,
         // CANONICAL: cost-based exposure only

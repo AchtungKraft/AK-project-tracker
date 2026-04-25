@@ -77,15 +77,33 @@ export function getCommitmentRetail(commitment) {
 /**
  * getCommitmentCost - Canonical cost for a Commitment
  * 
- * @param {Object} commitment - PartCommitment entity
- * @returns {number} Frozen cost
+ * COST AUTHORITY LIFECYCLE:
+ * - If cost_source === 'po' → PO cost (actual)
+ * - Else → snapshot (planned estimate)
+ * - NEVER falls back to part.default_cost in render path
+ * 
+ * @param {Object} commitment - PartCommitment entity or view model
+ * @returns {number} Resolved cost
  */
 export function getCommitmentCost(commitment) {
   if (!commitment) {
     throw new Error('PRICING_ERROR: Commitment is null');
   }
 
-  return commitment.unit_cost_snapshot ?? 0;
+  // Use resolved_unit_cost from view model if available (already PO-first resolved)
+  return commitment.resolved_unit_cost ?? commitment.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
+}
+
+/**
+ * getCommitmentCostLabel - Get human-readable cost source label
+ * 
+ * @param {Object} commitment - View model with cost_source field
+ * @returns {{ label: string, isActual: boolean }}
+ */
+export function getCommitmentCostLabel(commitment) {
+  if (!commitment) return { label: 'Unknown', isActual: false };
+  if (commitment.cost_source === 'po') return { label: 'Cost (Actual)', isActual: true };
+  return { label: 'Cost (Planned)', isActual: false };
 }
 
 /**

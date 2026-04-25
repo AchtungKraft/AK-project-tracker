@@ -291,8 +291,8 @@ export function PSMItemRow({
 
   // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
   const costExposure = commitment.cost_at_risk ?? commitment.resolved_exposure ?? 0;
-  // CANONICAL: Margin = retail - cost
-  const lineMargin = commitment.resolved_margin ?? 0;
+  // CANONICAL: Margin = retail - cost (from resolved_margin which uses PO cost when available)
+  const lineMargin = commitment.resolved_margin ?? ((commitment.unit_retail ?? 0) - (commitment.unit_cost ?? 0)) * (commitment.required_total ?? 0);
 
   // CANONICAL: Resolve vendor display using source-first resolution
   const canonicalVendor = resolveDefaultVendor(commitment, null, {});
@@ -502,8 +502,8 @@ export function PSMItemRow({
         {/* Inline Financial — COST | RETAIL | MARGIN | EXPOSURE */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
           <div className="text-center">
-            <span className="text-gray-500 block">COST</span>
-            <span className={commitment.invalid_cost ? "text-red-500" : "text-red-400"}>
+            <span className="text-gray-500 block">{commitment.cost_source === 'po' ? 'COST ✓' : 'EST COST'}</span>
+            <span className={commitment.invalid_cost ? "text-red-500" : commitment.cost_source === 'po' ? "text-emerald-400" : "text-red-400"}>
               {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.resolved_cost_total ?? commitment.planned_cost_total ?? 0)}
             </span>
           </div>
@@ -664,11 +664,13 @@ export function PSMItemRow({
       </div>
 
       {/* PHASE 6: Debug supply truth strip — always visible */}
-      <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600">
+      <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600 flex-wrap">
         <span>needs_order: <span className={commitment.needs_order ? "text-red-400" : "text-emerald-400"}>{String(!!commitment.needs_order)}</span></span>
-        <span>to_order_qty: <span className={((commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? commitment.to_order ?? 0}</span></span>
+        <span>to_order: <span className={((commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? commitment.to_order ?? 0}</span></span>
         <span>coverage: <span className="text-gray-400">{commitment.coverage_qty ?? '?'} / {commitment.effective_required ?? '?'}</span></span>
-        <span>fulfilled: <span className={commitment.commitment_fulfilled ? "text-emerald-400" : "text-amber-400"}>{String(!!commitment.commitment_fulfilled)}</span></span>
+        <span>cost: <span className={commitment.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>${(commitment.unit_cost ?? 0).toFixed(2)} ({commitment.cost_source || '?'})</span></span>
+        <span>retail: <span className="text-gray-400">${(commitment.unit_retail ?? 0).toFixed(2)}</span></span>
+        <span>locked: <span className={commitment.cost_locked ? "text-blue-400" : "text-gray-500"}>{String(!!commitment.cost_locked)}</span></span>
       </div>
 
       {/* PHASE 4: Collapsible Execution Detail */}
