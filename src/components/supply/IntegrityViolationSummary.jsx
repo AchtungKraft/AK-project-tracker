@@ -2,13 +2,18 @@ import React from "react";
 import { AlertTriangle } from "lucide-react";
 
 /**
- * IntegrityViolationSummary — PHASE 8: Global violation summary banner
+ * IntegrityViolationSummary — Quantity violation summary banner (RED)
  * 
- * Shows "N items have quantity inconsistencies" at top of PSM
- * Only appears when blocking_violations.length > 0
+ * CONTRACT:
+ * - RED banner = quantity violations ONLY → blocks actions
+ * - Only appears when items have integrity.quantity_violation === true
+ * - Financial conditions (cost_at_risk, invoiced<planned) NEVER appear here
+ * - Structural recommendations (normalization) NEVER appear here
  */
 export default function IntegrityViolationSummary({ items, onFilterViolations }) {
-  const violationItems = items.filter(item => item.integrity?.blocking);
+  const violationItems = items.filter(item => 
+    item.integrity?.quantity_violation === true || item.integrity?.blocking === true
+  );
   
   if (violationItems.length === 0) return null;
 
@@ -17,10 +22,10 @@ export default function IntegrityViolationSummary({ items, onFilterViolations })
       <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
       <div className="flex-1">
         <p className="text-sm text-red-400 font-medium">
-          {violationItems.length} item{violationItems.length !== 1 ? 's' : ''} have quantity inconsistencies
+          Quantity integrity issue detected — {violationItems.length} item{violationItems.length !== 1 ? 's' : ''} affected
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
-          Some quantities exceed allowed limits after removals. Resolve before continuing.
+          Some items exceed allowed limits after removals. Actions are disabled until resolved.
         </p>
       </div>
       {onFilterViolations && (

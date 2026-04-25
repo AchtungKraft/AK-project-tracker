@@ -399,8 +399,9 @@ export default function ProjectSupplyManager() {
         // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
         billing_state: item.billing_state || 'NOT_INVOICED',
         
-        // PHASE 3: Per-commitment integrity state from read model
-        integrity: item.integrity || { valid: true, violations: [], blocking: false },
+        // CANONICAL: Per-commitment quantity integrity state from read model
+        // Only quantity violations — financial/structural conditions excluded
+        integrity: item.integrity || { quantity_valid: true, violations: [], quantity_violation: false, blocking: false, valid: true },
         
         // Phase 7: Invoice tracking fields from read model
         invoiced_qty: item.invoiced_qty ?? 0,
@@ -431,13 +432,31 @@ export default function ProjectSupplyManager() {
     });
   }, [supplyItems, categoriesMap]);
 
-  // PHASE 3: Derive actionsEnabled from QUANTITY violations only
-  // Financial conditions (cost_at_risk, invoiced<planned) are warnings, NOT blockers
-  React.useEffect(() => {
-    const blocking = enrichedCommitments.some(c => c.integrity?.blocking === true);
-    setHasBlockingViolations(blocking);
-    setActionsEnabled(!blocking);
+  // ═══════════════════════════════════════════════════════════════════
+  // CANONICAL ACTION GATE — Single source of truth for actionsEnabled
+  // ONLY quantity violations (integrity.quantity_violation) can disable actions
+  // Financial conditions (cost_at_risk, invoiced < planned) NEVER block
+  // Structural recommendations (supplyProductionGateV2) NEVER block
+  // ═══════════════════════════════════════════════════════════════════
+  const quantityViolationItems = useMemo(() => {
+    return enrichedCommitments.filter(c => c.integrity?.quantity_violation === true || c.integrity?.blocking === true);
   }, [enrichedCommitments]);
+
+  const hasQuantityViolations = quantityViolationItems.length > 0;
+  const actionsDisabledByIntegrity = hasQuantityViolations;
+
+  React.useEffect(() => {
+    setHasBlockingViolations(hasQuantityViolations);
+    setActionsEnabled(!actionsDisabledByIntegrity);
+
+    // PHASE 5: Dev assertion — impossible state detector
+    if (import.meta.env.DEV && !actionsEnabled && quantityViolationItems.length === 0) {
+      console.error(
+        '[INTEGRITY GUARDRAIL] Invalid state: actions disabled without quantity violation. ' +
+        'This means a financial or structural condition is incorrectly blocking actions.'
+      );
+    }
+  }, [hasQuantityViolations, actionsDisabledByIntegrity]);
 
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
@@ -886,10 +905,14 @@ export default function ProjectSupplyManager() {
             </div>
           )}
 
-          {/* PHASE 8: Effective quantity violation summary */}
+          {/* ═══ BANNER CONTRACT ═══
+              RED:   IntegrityViolationSummary — quantity violations ONLY → BLOCKS actions
+              AMBER: SupplyIntegrityBanner    — structural recommendations → NEVER blocks
+              Financial conditions (cost_at_risk, invoiced<planned) are shown in PSMFinancialSummary, never here
+          ═══════════════════════ */}
           <IntegrityViolationSummary items={enrichedCommitments} />
 
-          {/* Integrity Banner - informational only, NEVER blocks actions */}
+          {/* Structural recommendations only — NEVER blocks actions */}
           <SupplyIntegrityBanner 
             projectId={projectId}
             showFixControls={true}

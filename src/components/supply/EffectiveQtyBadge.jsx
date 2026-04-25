@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
  * EffectiveQtyBadge — Displays Required/Removed/Active quantity state
  * 
  * Shows compact "Active: 6 / 10 (4 removed)" when qty_removed > 0
- * Shows blocking violation indicator when integrity.blocking is true
+ * Shows quantity violation indicator when integrity.quantity_violation is true
  */
 export default function EffectiveQtyBadge({ commitment, compact = false }) {
   const required = commitment.required_total ?? 0;
@@ -14,7 +14,7 @@ export default function EffectiveQtyBadge({ commitment, compact = false }) {
   const effective = commitment.effective_required ?? Math.max(0, required - removed);
   const integrity = commitment.integrity;
   const hasRemoval = removed > 0;
-  const isBlocking = integrity?.blocking === true;
+  const isBlocking = integrity?.quantity_violation === true || integrity?.blocking === true;
 
   if (!hasRemoval && !isBlocking) {
     // Simple display — just required
@@ -53,17 +53,18 @@ export default function EffectiveQtyBadge({ commitment, compact = false }) {
 }
 
 /**
- * IntegrityViolationBadge — Inline indicator for blocking violations
- * Shows "⚠ Qty mismatch" when integrity.blocking is true
+ * IntegrityViolationBadge — Inline indicator for quantity violations
+ * Shows "⚠ Qty violation" when integrity.quantity_violation is true
+ * NEVER triggered by financial or structural conditions
  */
 export function IntegrityViolationBadge({ commitment }) {
   const integrity = commitment.integrity;
-  if (!integrity?.blocking) return null;
+  if (!integrity?.quantity_violation && !integrity?.blocking) return null;
 
   return (
     <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-700/50 whitespace-nowrap">
       <AlertTriangle className="w-3 h-3" />
-      Qty mismatch
+      Qty violation
     </span>
   );
 }

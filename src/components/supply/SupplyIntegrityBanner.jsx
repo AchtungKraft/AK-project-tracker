@@ -12,11 +12,19 @@ import { toast } from "sonner";
  * Displays when supplyProductionGateV2 fails
  * Provides admin-only normalization controls
  */
+/**
+ * INFORMATIONAL ONLY — This banner NEVER disables actions.
+ * Action blocking is driven solely by per-commitment quantity violations
+ * (integrity.quantity_violation) in the ProjectSupplyManager action gate.
+ * 
+ * This banner shows structural normalization recommendations (amber).
+ * The onGateStatusChange prop is accepted but always receives `true`.
+ */
 export default function SupplyIntegrityBanner({ 
   onGateStatusChange,
   showFixControls = true,
   compact = false,
-  projectId = null, // PHASE 2: Project-scoped gate check
+  projectId = null,
 }) {
   const [isRunningNormalization, setIsRunningNormalization] = useState(false);
   const [normalizationReport, setNormalizationReport] = useState(null);

@@ -517,16 +517,19 @@ Deno.serve(async (req) => {
             order_line_item_ids: c.order_line_item_ids,
           },
 
-          // PHASE 3: Per-commitment integrity state for UI
+          // CANONICAL: Per-commitment quantity integrity state
+          // ONLY quantity violations (installed/reserved/combined exceeding effective_required)
+          // Financial conditions (cost_at_risk, invoiced < planned) NEVER appear here
           integrity: (() => {
-            if (qty_removed <= 0) return { valid: true, violations: [], blocking: false };
+            if (qty_removed <= 0) return { quantity_valid: true, violations: [], quantity_violation: false, blocking: false, valid: true };
             const TOL = 0.001;
             const vs = [];
             if (qty_installed > effective_required + TOL) vs.push({ field: 'qty_installed', value: qty_installed, limit: effective_required });
             if (reserved_from_stock > effective_required + TOL) vs.push({ field: 'reserved_from_stock', value: reserved_from_stock, limit: effective_required });
             const comb = reserved_from_stock + covered_from_po + qty_installed;
             if (comb > effective_required + TOL) vs.push({ field: '_combined', value: comb, limit: effective_required });
-            return { valid: vs.length === 0, violations: vs, blocking: vs.length > 0 };
+            const hasViolation = vs.length > 0;
+            return { quantity_valid: !hasViolation, violations: vs, quantity_violation: hasViolation, blocking: hasViolation, valid: !hasViolation };
           })(),
 
           ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
