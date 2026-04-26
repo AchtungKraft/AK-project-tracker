@@ -16,6 +16,7 @@ import RetailMarkupMatrixConfig from "../components/admin/RetailMarkupMatrixConf
 import PricingStrictModeConfig from "../components/supply/PricingStrictModeConfig";
 import VendorGroupsConfig from "../components/admin/VendorGroupsConfig";
 import ServiceCatalogConfig from "../components/admin/ServiceCatalogConfig";
+import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
 
 export default function AdminConfig() {
   return (
@@ -46,6 +47,7 @@ export default function AdminConfig() {
             <TabsTrigger value="pricing-guardrails">Pricing Guardrails</TabsTrigger>
             <TabsTrigger value="vendor-groups">Vendor Groups</TabsTrigger>
             <TabsTrigger value="service-catalog">Services (by Group)</TabsTrigger>
+            <TabsTrigger value="service-vendors">Service Vendors</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
@@ -110,6 +112,10 @@ export default function AdminConfig() {
 
           <TabsContent value="service-catalog" className="mt-6">
             <ServiceCatalogConfig />
+          </TabsContent>
+
+          <TabsContent value="service-vendors" className="mt-6">
+            <ServiceVendorsConfig />
           </TabsContent>
         </Tabs>
       </div>

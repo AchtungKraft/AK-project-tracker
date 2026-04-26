@@ -93,7 +93,8 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     ? new Map([[selectedGroupId, vendorsByGroup.get(selectedGroupId) || []]])
     : new Map();
 
-  const isBilled = commitment.status === "billed";
+  // CANONICAL: Use billing_locked from read model (is_billed || invoice_id)
+  const isBilled = commitment.billing_locked === true || commitment.is_billed === true || commitment.invoice_id != null;
 
   const executeSave = async (confirmedReassign = false) => {
     setSaving(true);

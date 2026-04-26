@@ -73,7 +73,8 @@ export default function ServiceCommitmentCard({
   const totalCost = commitment.total_cost || 0;
   const totalBillable = commitment.total_billable || 0;
   const margin = commitment.margin_pct ?? (totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : null);
-  const billingLocked = commitment.billing_locked || status === 'billed';
+  // CANONICAL: Use billing_locked from read model (is_billed || invoice_id)
+  const billingLocked = commitment.billing_locked === true || commitment.is_billed === true || commitment.invoice_id != null;
   const marginWarning = commitment.margin_warning === true;
 
   return (
@@ -173,10 +174,10 @@ export default function ServiceCommitmentCard({
                 Edit Service
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-gray-700" />
-              {status === "billed" ? (
+              {billingLocked ? (
                 <DropdownMenuItem disabled className="text-gray-500">
                   <Trash2 className="w-3.5 h-3.5 mr-2" />
-                  Delete (Billed)
+                  Delete (Locked)
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-400">

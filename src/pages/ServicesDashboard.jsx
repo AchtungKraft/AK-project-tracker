@@ -100,7 +100,8 @@ export default function ServicesDashboard() {
       return;
     }
     const target = commitments.find(c => c.id === commitmentId);
-    if (target?.status === "billed") {
+    // CANONICAL: Use billing_locked from read model (is_billed || invoice_id)
+    if (target?.billing_locked || target?.is_billed || target?.invoice_id) {
       toast.error("Billed services cannot be deleted");
       return;
     }
