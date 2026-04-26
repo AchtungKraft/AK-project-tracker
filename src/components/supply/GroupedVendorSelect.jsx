@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { buildGroupPath, buildGroupsById } from "@/components/supply/vendorGroupHierarchy";
 
 /**
  * GroupedVendorSelect — Renders ALL vendors grouped by VendorGroup.
@@ -35,6 +36,9 @@ export default function GroupedVendorSelect({
   className = "bg-gray-800 border-gray-600 text-white mt-1",
   showNone = true,
 }) {
+  // Build a lookup for hierarchy path labels
+  const groupsById = React.useMemo(() => buildGroupsById(vendorGroups), [vendorGroups]);
+
   // Sort groups by priority
   const sortedGroups = [...vendorGroups].sort((a, b) =>
     (a.sort_priority || 0) - (b.sort_priority || 0)
@@ -77,7 +81,9 @@ export default function GroupedVendorSelect({
         {groupedEntries.map(({ group, vendors: gv }) => (
           <React.Fragment key={group.id}>
             <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-700/50 mt-1 first:mt-0 first:border-t-0 flex items-center gap-1.5">
-              {group.parent_group_id ? `↳ ${group.name}` : group.name}
+              {group.parent_group_id
+                ? `↳ ${buildGroupPath(group.id, groupsById)}`
+                : group.name}
               {selectedGroupId === group.id && (
                 <Badge variant="outline" className="text-[8px] px-1 py-0 border-green-600 text-green-400 ml-auto">
                   Match

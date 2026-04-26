@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { formatVendorGroupLabel, buildGroupsById } from "@/components/supply/vendorGroupHierarchy";
+import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 
 /**
  * CreateServiceVendorModal — Full vendor creation with locked group context
@@ -23,6 +25,10 @@ import { toast } from "sonner";
  */
 export default function CreateServiceVendorModal({ open, onClose, onCreated, serviceGroupId, serviceGroupName }) {
   const queryClient = useQueryClient();
+  const { groupsMap } = useServiceVendorGroups();
+  const displayGroupName = serviceGroupId
+    ? (formatVendorGroupLabel(serviceGroupId, groupsMap) || serviceGroupName || "Service Group")
+    : (serviceGroupName || "Service Group");
   const [name, setName] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -87,7 +93,7 @@ export default function CreateServiceVendorModal({ open, onClose, onCreated, ser
             <Lock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <span className="text-xs text-gray-400">Vendor Group:</span>
             <Badge variant="outline" className="text-xs border-purple-600/50 text-purple-400">
-              {serviceGroupName || "Service Group"}
+              {displayGroupName}
             </Badge>
           </div>
 

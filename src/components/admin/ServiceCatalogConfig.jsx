@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers, ChevronDown, ChevronRight, AlertTriangle, ArrowUp } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getRootGroupId, buildGroupPath, buildGroupsById } from "@/components/supply/vendorGroupHierarchy";
 
 export default function ServiceCatalogConfig() {
   const queryClient = useQueryClient();
@@ -26,20 +27,34 @@ export default function ServiceCatalogConfig() {
     },
   });
 
+  const groupsById = useMemo(() => buildGroupsById(vendorGroups), [vendorGroups]);
+
+  // Root groups only — services should be assigned to root groups
+  const rootGroups = useMemo(() => vendorGroups.filter(g => !g.parent_group_id), [vendorGroups]);
+
   const servicesByGroup = useMemo(() => {
     const map = {};
-    for (const g of vendorGroups) map[g.id] = [];
+    for (const g of rootGroups) map[g.id] = [];
     const orphans = [];
+    const childGroupServices = []; // services wrongly on child groups
     for (const svc of services) {
       const gid = svc.preferred_vendor_group_id;
-      if (gid && map[gid]) {
-        map[gid].push(svc);
-      } else {
+      if (!gid || !groupsById.has(gid)) {
         orphans.push(svc);
+      } else {
+        const group = groupsById.get(gid);
+        if (!group.parent_group_id) {
+          // Correctly on root group
+          if (map[gid]) map[gid].push(svc);
+          else orphans.push(svc);
+        } else {
+          // On a child group — flag it
+          childGroupServices.push(svc);
+        }
       }
     }
-    return { grouped: map, orphans };
-  }, [services, vendorGroups]);
+    return { grouped: map, orphans, childGroupServices };
+  }, [services, rootGroups, groupsById]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["services-catalog-admin"] });
@@ -71,7 +86,7 @@ export default function ServiceCatalogConfig() {
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : (
           <div className="space-y-3">
-            {vendorGroups.map(group => (
+            {rootGroups.map(group => (
               <GroupSection
                 key={group.id}
                 group={group}
@@ -80,10 +95,19 @@ export default function ServiceCatalogConfig() {
               />
             ))}
 
+            {servicesByGroup.childGroupServices.length > 0 && (
+              <ChildGroupServicesSection
+                services={servicesByGroup.childGroupServices}
+                rootGroups={rootGroups}
+                groupsById={groupsById}
+                onInvalidate={invalidate}
+              />
+            )}
+
             {servicesByGroup.orphans.length > 0 && (
               <OrphanSection
                 services={servicesByGroup.orphans}
-                vendorGroups={vendorGroups}
+                vendorGroups={rootGroups}
                 onInvalidate={invalidate}
               />
             )}
@@ -289,10 +313,54 @@ function ServiceRow({ svc, onInvalidate }) {
   );
 }
 
+/** Services incorrectly assigned to child groups — offer move to root */
+function ChildGroupServicesSection({ services, rootGroups, groupsById, onInvalidate }) {
+  const moveToRoot = async (svcId, svc) => {
+    const currentGroupId = svc.preferred_vendor_group_id;
+    const rootId = getRootGroupId(currentGroupId, groupsById);
+    if (rootId === currentGroupId) return; // already root
+    await base44.entities.Service.update(svcId, { preferred_vendor_group_id: rootId });
+    toast.success("Moved to root group");
+    onInvalidate();
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-400" />
+        <span className="text-sm font-medium text-amber-300">Services on Child Groups ({services.length})</span>
+      </div>
+      <p className="text-xs text-gray-400">These services are assigned to sub-groups instead of root groups. Move them up for correct behavior.</p>
+      {services.map(svc => {
+        const groupPath = buildGroupPath(svc.preferred_vendor_group_id, groupsById);
+        const rootId = getRootGroupId(svc.preferred_vendor_group_id, groupsById);
+        const rootGroup = groupsById.get(rootId);
+        return (
+          <div key={svc.id} className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md">
+            <span className="text-sm text-white flex-1 truncate">{svc.name}</span>
+            <Badge variant="outline" className="text-[9px] border-amber-600/50 text-amber-400 shrink-0">{groupPath}</Badge>
+            {rootGroup && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 border-amber-600 text-amber-300"
+                onClick={() => moveToRoot(svc.id, svc)}
+              >
+                <ArrowUp className="w-3 h-3" />
+                Move to {rootGroup.name}
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function OrphanSection({ services, vendorGroups, onInvalidate }) {
   const reassign = async (svcId, groupId) => {
     await base44.entities.Service.update(svcId, { preferred_vendor_group_id: groupId });
-    toast.success("Reassigned");
+    toast.success("Reassigned to root group");
     onInvalidate();
   };
 
@@ -302,7 +370,7 @@ function OrphanSection({ services, vendorGroups, onInvalidate }) {
         <AlertTriangle className="w-4 h-4 text-red-400" />
         <span className="text-sm font-medium text-red-300">Ungrouped Services ({services.length})</span>
       </div>
-      <p className="text-xs text-gray-400">These services have no vendor group or their group was deleted. Reassign them.</p>
+      <p className="text-xs text-gray-400">These services have no vendor group or their group was deleted. Reassign them to a root group.</p>
       {services.map(svc => (
         <div key={svc.id} className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md">
           <span className="text-sm text-white flex-1 truncate">{svc.name}</span>

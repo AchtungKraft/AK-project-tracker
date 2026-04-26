@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
+import { getSubtreeIds, formatServiceLabel, formatVendorGroupLabel } from "@/components/supply/vendorGroupHierarchy";
 import {
   Dialog,
   DialogContent,
@@ -259,20 +259,17 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               <SelectContent>
                 {services
                   .filter(s => s.preferred_vendor_group_id && groupsMap.has(s.preferred_vendor_group_id))
-                  .map(s => {
-                    const g = groupsMap.get(s.preferred_vendor_group_id);
-                    return (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({g.name})
-                      </SelectItem>
-                    );
-                  })}
+                  .map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {formatServiceLabel(s, groupsMap)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
-            {selectedGroup && (
+            {selectedGroupId && (
               <div className="mt-1.5 flex items-center gap-2">
                 <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">
-                  Vendor Group: {selectedGroup.name}
+                  Vendor Group: {formatVendorGroupLabel(selectedGroupId, groupsMap) || selectedGroup?.name}
                 </Badge>
               </div>
             )}
@@ -362,7 +359,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               <Label className="text-gray-300 text-xs">Primary Vendor</Label>
               {selectedGroupId && (
                 <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
-                  + Add Vendor{selectedGroup ? ` to ${selectedGroup.name}` : ""}
+                  + Add Vendor{selectedGroupId ? ` to ${formatVendorGroupLabel(selectedGroupId, groupsMap) || selectedGroup?.name}` : ""}
                 </Button>
               )}
             </div>

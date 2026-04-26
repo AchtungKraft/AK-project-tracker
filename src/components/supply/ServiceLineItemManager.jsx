@@ -26,7 +26,7 @@ import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import MatrixPricingPreview from "@/components/supply/MatrixPricingPreview";
 import CreateServiceVendorModal from "@/components/supply/CreateServiceVendorModal";
-import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
+import { getSubtreeIds, formatVendorGroupLabel } from "@/components/supply/vendorGroupHierarchy";
 
 const TYPE_CONFIG = {
   vendor_cost: { label: "Vendor Cost", icon: Truck, color: "text-purple-400" },
@@ -241,9 +241,9 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
 
   const isLabor = type === "internal_labor";
 
-  // Resolve group name for the vendor creation modal
+  // Resolve group name for the vendor creation modal — show full hierarchy path
   const { groupsMap: allGroupsMap } = useServiceVendorGroups();
-  const serviceGroupName = serviceGroupId ? (allGroupsMap.get(serviceGroupId)?.name || "Service Group") : "";
+  const serviceGroupName = serviceGroupId ? (formatVendorGroupLabel(serviceGroupId, allGroupsMap) || allGroupsMap.get(serviceGroupId)?.name || "Service Group") : "";
 
   // When user manually edits billing_rate, switch to manual pricing source
   const handleBillingRateChange = (val) => {

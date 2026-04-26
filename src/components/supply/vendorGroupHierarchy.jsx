@@ -126,3 +126,45 @@ export function filterVendorsForServiceGroup(vendors, serviceGroupId, allGroups)
   const subtreeIds = getSubtreeIds(serviceGroupId, allGroups);
   return vendors.filter(v => v.vendor_group_id && subtreeIds.has(v.vendor_group_id));
 }
+
+/**
+ * Build the full path string for a group: "Finishing / Chrome Plating"
+ * Returns just the group name if it's a root group.
+ */
+export function buildGroupPath(groupId, groupsById) {
+  if (!groupId) return "";
+  const parts = [];
+  let current = groupId;
+  const visited = new Set();
+  while (current) {
+    if (visited.has(current)) break;
+    visited.add(current);
+    const group = groupsById instanceof Map ? groupsById.get(current) : groupsById[current];
+    if (!group) break;
+    parts.unshift(group.name);
+    current = group.parent_group_id || null;
+  }
+  return parts.join(" / ");
+}
+
+/**
+ * Format a service label showing the service name with its root group context.
+ * Example: "Chrome Plating (Finishing)"
+ */
+export function formatServiceLabel(service, groupsById) {
+  if (!service) return "";
+  const groupId = service.preferred_vendor_group_id;
+  if (!groupId) return service.name || "";
+  const rootId = getRootGroupId(groupId, groupsById);
+  const rootGroup = groupsById instanceof Map ? groupsById.get(rootId) : groupsById?.[rootId];
+  const rootName = rootGroup?.name || "";
+  return rootName ? `${service.name} (${rootName})` : service.name;
+}
+
+/**
+ * Format a vendor group label as its full hierarchy path.
+ * Example: "Finishing / Chrome Plating"
+ */
+export function formatVendorGroupLabel(groupId, groupsById) {
+  return buildGroupPath(groupId, groupsById);
+}

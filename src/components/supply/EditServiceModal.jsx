@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
-import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
+import { getSubtreeIds, formatServiceLabel, formatVendorGroupLabel } from "@/components/supply/vendorGroupHierarchy";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -225,20 +225,17 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
               <SelectContent>
                 {services
                   .filter(s => s.preferred_vendor_group_id && groupsMap.has(s.preferred_vendor_group_id))
-                  .map(s => {
-                    const g = groupsMap.get(s.preferred_vendor_group_id);
-                    return (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({g.name})
-                      </SelectItem>
-                    );
-                  })}
+                  .map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {formatServiceLabel(s, groupsMap)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
-            {selectedGroup && (
+            {selectedGroupId && (
               <div className="mt-1.5">
                 <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">
-                  Vendor Group: {selectedGroup.name}
+                  Vendor Group: {formatVendorGroupLabel(selectedGroupId, groupsMap) || selectedGroup?.name}
                 </Badge>
               </div>
             )}
