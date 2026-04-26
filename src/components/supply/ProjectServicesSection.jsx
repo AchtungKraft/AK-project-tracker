@@ -47,7 +47,7 @@ export default function ProjectServicesSection({ projectId, projectName }) {
       return;
     }
     const target = commitments.find(c => c.id === commitmentId);
-    if (target?.status === "billed") {
+    if (target?.billing_locked || target?.is_billed || target?.invoice_id) {
       toast.error("Billed services cannot be deleted");
       return;
     }

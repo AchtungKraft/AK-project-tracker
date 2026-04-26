@@ -14,7 +14,8 @@ import VendorFormFields from "./VendorFormFields";
 
 export default function VendorsConfig() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("PART");
+  // SERVICE vendors are managed exclusively in the "Service Vendors" tab
+  const activeTab = "PART";
   const [newVendor, setNewVendor] = useState({
     vendor_name: "",
     vendor_type: "PART",
@@ -56,7 +57,7 @@ export default function VendorsConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['referenceData', 'vendors'] });
       queryClient.invalidateQueries({ queryKey: ['vendorsGrouped'] });
-      setNewVendor(prev => ({ ...prev, vendor_name: "", vendor_group_id: "", website: "", contact_name: "", contact_email: "", contact_phone: "", cell_phone: "", address: "", notes: "", color: "#3B82F6", sort_order: 0 }));
+      setNewVendor(prev => ({ ...prev, vendor_name: "", vendor_group_id: "", website: "", contact_name: "", contact_email: "", contact_phone: "", cell_phone: "", address: "", notes: "", color: "#3B82F6", sort_order: 0, vendor_type: "PART" }));
       toast.success('Vendor created');
     },
   });
@@ -135,6 +136,7 @@ export default function VendorsConfig() {
   };
 
   // Filter vendors by current active tab type — strict type match only
+  // SERVICE vendors are managed in the dedicated "Service Vendors" tab
   const typeVendors = vendors.filter(v => v.vendor_type === activeTab);
 
   const renderVendor = (vendor, index) => {
@@ -265,17 +267,19 @@ export default function VendorsConfig() {
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
-        <CardTitle className="text-white text-base">Vendors & Suppliers</CardTitle>
-        <p className="text-sm text-gray-400 mt-1">Manage part and service vendors</p>
+        <CardTitle className="text-white text-base">Part Vendors & Suppliers</CardTitle>
+        <p className="text-sm text-gray-400 mt-1">Manage part vendors. Service vendors are in the dedicated "Service Vendors" tab.</p>
       </CardHeader>
       <CardContent className="p-4 space-y-6">
         {/* Type Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setNewVendor(prev => ({ ...prev, vendor_type: v, vendor_group_id: "" })); }}>
-          <TabsList className="bg-gray-900/50 border border-gray-700">
-            <TabsTrigger value="PART" className="gap-1.5"><Package className="w-3.5 h-3.5" />Part Vendors</TabsTrigger>
-            <TabsTrigger value="SERVICE" className="gap-1.5"><Truck className="w-3.5 h-3.5" />Service Vendors</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* SERVICE vendors are managed in the dedicated "Service Vendors" tab */}
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="text-xs border-blue-600/50 text-blue-400 gap-1.5 px-3 py-1.5">
+            <Package className="w-3.5 h-3.5" />
+            Part Vendors
+          </Badge>
+          <span className="text-xs text-gray-500">Service vendors → use the "Service Vendors" tab</span>
+        </div>
 
         {/* Create Form */}
         <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">

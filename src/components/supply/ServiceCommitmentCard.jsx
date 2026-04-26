@@ -195,6 +195,7 @@ export default function ServiceCommitmentCard({
         <div className="border-t border-gray-700/50 px-3 pb-3 pt-2 ml-9">
           <ServiceLineItemManager
             commitmentId={commitment.id}
+            serviceGroupId={commitment.service_group_id || null}
             onTotalsChanged={onTotalsChanged}
             billingLocked={billingLocked}
           />

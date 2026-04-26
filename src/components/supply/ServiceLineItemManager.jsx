@@ -39,7 +39,7 @@ const TEMPLATES = [
   { type: "misc", description: "Miscellaneous Cost", cost: 0, billing_rate: 0, quantity: 1 },
 ];
 
-export default function ServiceLineItemManager({ commitmentId, onTotalsChanged, billingLocked = false }) {
+export default function ServiceLineItemManager({ commitmentId, serviceGroupId, onTotalsChanged, billingLocked = false }) {
   const queryClient = useQueryClient();
   const [editModal, setEditModal] = useState(null); // null | "new" | lineItem object
   const [templateType, setTemplateType] = useState(null);
@@ -50,7 +50,14 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged, 
     enabled: !!commitmentId,
   });
 
-  const { vendors: serviceVendors, vendorGroups, vendorsByGroup } = useServiceVendorGroups();
+  const { vendors: serviceVendors, vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
+
+  // Lock vendor dropdown to ONLY the service's vendor group
+  const selectedGroup = serviceGroupId ? groupsMap.get(serviceGroupId) : null;
+  const lockedVendorGroups = selectedGroup ? [selectedGroup] : vendorGroups;
+  const lockedVendorsByGroup = serviceGroupId
+    ? new Map([[serviceGroupId, vendorsByGroup.get(serviceGroupId) || []]])
+    : vendorsByGroup;
 
   const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
 
@@ -181,8 +188,9 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged, 
           lineItem={editModal === "new" ? null : editModal}
           template={editModal === "new" ? templateType : null}
           commitmentId={commitmentId}
-          vendorGroups={vendorGroups}
-          vendorsByGroup={vendorsByGroup}
+          serviceGroupId={serviceGroupId}
+          vendorGroups={lockedVendorGroups}
+          vendorsByGroup={lockedVendorsByGroup}
           onClose={() => { setEditModal(null); setTemplateType(null); }}
           onSuccess={() => { invalidate(); setEditModal(null); setTemplateType(null); }}
         />
@@ -191,7 +199,7 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged, 
   );
 }
 
-function LineItemEditModal({ lineItem, template, commitmentId, vendorGroups, vendorsByGroup, onClose, onSuccess }) {
+function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, vendorGroups, vendorsByGroup, onClose, onSuccess }) {
   const isNew = !lineItem;
   const defaults = template || lineItem || {};
 
@@ -213,11 +221,13 @@ function LineItemEditModal({ lineItem, template, commitmentId, vendorGroups, ven
 
   const handleCreateVendor = async () => {
     if (!newVendorName.trim()) return;
+    if (!serviceGroupId) { toast.error("Cannot create vendor — service has no vendor group"); return; }
     setCreatingVendor(true);
     try {
       const res = await base44.functions.invoke("executeServiceAction", {
         action_type: "CREATE_SERVICE_VENDOR",
         name: newVendorName.trim(),
+        vendor_group_id: serviceGroupId,
       });
       setVendorId(res.data.vendor.id);
       toast.success("Vendor created");

@@ -37,6 +37,10 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.Project.list('-created_date', 500),
     ]);
 
+    // Also fetch vendor groups for group name resolution
+    const vendorGroupsList = await base44.asServiceRole.entities.VendorGroup.filter({ vendor_type: 'SERVICE' });
+    const vendorGroupMap = new Map(vendorGroupsList.map(g => [g.id, g]));
+
     const serviceMap = new Map(services.map(s => [s.id, s]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
@@ -115,7 +119,8 @@ Deno.serve(async (req) => {
 
         service_id: c.service_id,
         service_name: service?.name || 'Unknown Service',
-        service_category: service?.category || 'other',
+        service_group_id: service?.preferred_vendor_group_id || null,
+        service_group_name: service?.preferred_vendor_group_id ? (vendorGroupMap.get(service.preferred_vendor_group_id)?.name || null) : null,
 
         vendor_id: c.vendor_id || null,
         vendor_name: vendor?.name || null,
