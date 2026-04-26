@@ -8,26 +8,7 @@
     },
     "vendor_group_id": {
       "type": "string",
-      "description": "Reference to VendorGroup (vendor_type=SERVICE). REQUIRED. Primary grouping key."
-    },
-    "category": {
-      "type": "string",
-      "enum": [
-        "shipping",
-        "finishing",
-        "coating",
-        "plating",
-        "fabrication",
-        "upholstery",
-        "electrical",
-        "paint",
-        "machine_work",
-        "inspection",
-        "general",
-        "other"
-      ],
-      "default": "general",
-      "description": "LEGACY: Vendor specialty category. Use vendor_group_id for canonical grouping."
+      "description": "Reference to VendorGroup (vendor_type=SERVICE). REQUIRED. Primary grouping key. Determines which services this vendor is available for."
     },
     "contact_name": {
       "type": "string",
@@ -52,13 +33,6 @@
     "website": {
       "type": "string",
       "description": "Vendor website URL"
-    },
-    "associated_service_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "References to Service catalog entries this vendor provides"
     },
     "notes": {
       "type": "string",

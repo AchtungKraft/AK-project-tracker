@@ -330,7 +330,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
           {type !== "internal_labor" && (
             <div>
               <div className="flex items-center justify-between">
-                <Label className="text-gray-300">Service Vendor{type === "vendor_cost" ? " *" : ""}</Label>
+                <Label className="text-gray-300">Service Vendor{serviceGroupName ? ` (${serviceGroupName})` : ""}{type === "vendor_cost" ? " *" : ""}</Label>
                 {serviceGroupId && (
                   <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
                     + Add Vendor{serviceGroupName ? ` to ${serviceGroupName}` : ""}

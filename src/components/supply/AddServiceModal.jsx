@@ -248,14 +248,16 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
                 <SelectValue placeholder="Select a service..." />
               </SelectTrigger>
               <SelectContent>
-                {services.map(s => {
-                  const g = groupsMap.get(s.preferred_vendor_group_id);
-                  return (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name} {g ? `(${g.name})` : ""}
-                    </SelectItem>
-                  );
-                })}
+                {services
+                  .filter(s => s.preferred_vendor_group_id && groupsMap.has(s.preferred_vendor_group_id))
+                  .map(s => {
+                    const g = groupsMap.get(s.preferred_vendor_group_id);
+                    return (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({g.name})
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
             {selectedGroup && (

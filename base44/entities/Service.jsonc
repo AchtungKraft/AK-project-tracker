@@ -6,24 +6,6 @@
       "type": "string",
       "description": "Service name (e.g. UPS Shipping, Chrome Plating)"
     },
-    "category": {
-      "type": "string",
-      "enum": [
-        "shipping",
-        "finishing",
-        "coating",
-        "plating",
-        "fabrication",
-        "upholstery",
-        "electrical",
-        "paint",
-        "machine_work",
-        "inspection",
-        "other"
-      ],
-      "default": "other",
-      "description": "LEGACY: Service category. Use preferred_vendor_group_id for canonical grouping."
-    },
     "preferred_vendor_group_id": {
       "type": "string",
       "description": "Reference to VendorGroup (vendor_type=SERVICE). REQUIRED. Canonical link that determines which vendors are available for this service."
@@ -31,13 +13,6 @@
     "default_vendor_id": {
       "type": "string",
       "description": "Reference to preferred ServiceVendor"
-    },
-    "allowed_vendor_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "References to allowed ServiceVendor records (many-to-many)"
     },
     "description": {
       "type": "string",

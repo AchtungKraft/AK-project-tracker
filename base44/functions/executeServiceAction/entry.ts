@@ -3,7 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 /**
  * executeServiceAction - Service Commitment Mutation Engine
  * 
- * STABILIZED: Phases 1-9
+ * STABILIZED: Phases 1-10
  * - Line items are the ONLY source of truth for cost
  * - Planned vs actual cost tracking (planned_cost frozen at creation)
  * - Hard lock after billing on ALL line item mutations
@@ -11,6 +11,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - Internal vs external cost split in recompute
  * - Duplicate warning on create
  * - Legacy migration action
+ * - PHASE 10: Vendor ↔ Group validation on ALL mutations
  */
 
 Deno.serve(async (req) => {
@@ -56,6 +57,9 @@ Deno.serve(async (req) => {
       case 'CREATE_SERVICE_VENDOR':
         result = await createServiceVendor(base44, user, payload);
         break;
+      case 'AUDIT_GROUP_ALIGNMENT':
+        result = await auditGroupAlignment(base44, user);
+        break;
       case 'MIGRATE_LEGACY':
         result = await migrateLegacyCommitments(base44, user);
         break;
@@ -79,7 +83,6 @@ const VALID_TRANSITIONS = {
 
 // ══════════════════════════════════════════════════════════════
 // CANONICAL BILLING LOCK GUARD
-// is_billed || invoice_id — status is display-only
 // ══════════════════════════════════════════════════════════════
 function isBillingLocked(commitment) {
   return commitment.is_billed === true || commitment.invoice_id != null;
@@ -91,14 +94,35 @@ function assertNotBillingLocked(commitment) {
   }
 }
 
-// ── RECOMPUTE TOTALS (PHASE 7: internal/external split) ──
+// ══════════════════════════════════════════════════════════════
+// PHASE 10: VENDOR ↔ GROUP VALIDATION HELPER
+// Resolves service_group_id from a service record and validates
+// that the given vendor belongs to the same group.
+// ══════════════════════════════════════════════════════════════
+async function validateVendorGroupMatch(base44, vendorId, serviceId, context) {
+  if (!vendorId) return; // no vendor to validate
+  
+  const [service] = await base44.asServiceRole.entities.Service.filter({ id: serviceId });
+  if (!service) throw new Error(`${context}: Service not found`);
+  
+  const serviceGroupId = service.preferred_vendor_group_id;
+  if (!serviceGroupId) throw new Error(`${context}: Service "${service.name}" has no vendor group assigned in Admin`);
+  
+  const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: vendorId });
+  if (!vendor) throw new Error(`${context}: Vendor not found`);
+  if (!vendor.vendor_group_id) throw new Error(`${context}: Vendor "${vendor.name}" has no vendor group assigned`);
+  
+  if (vendor.vendor_group_id !== serviceGroupId) {
+    throw new Error(`${context}: Vendor "${vendor.name}" (group: ${vendor.vendor_group_id}) does not match service group (${serviceGroupId}). Vendor must belong to the same group as the service.`);
+  }
+}
+
+// ── RECOMPUTE TOTALS ──
 async function recomputeTotals(base44, commitmentId) {
   if (!commitmentId) throw new Error('commitment_id required');
 
-  // PHASE 3: Check billing lock before recompute
   const [commitment] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: commitmentId });
   if (commitment && isBillingLocked(commitment)) {
-    // Allow read-only recompute for diagnostics but don't write
     const lineItems = await base44.asServiceRole.entities.ServiceLineItem.filter({ service_commitment_id: commitmentId });
     let totalCost = 0, totalBillable = 0, externalCost = 0, internalCost = 0;
     for (const li of lineItems) {
@@ -120,7 +144,6 @@ async function recomputeTotals(base44, commitmentId) {
     const lineCost = (li.cost || 0) * qty;
     totalCost += lineCost;
     totalBillable += (li.billing_rate || 0) * qty;
-    // PHASE 7: Split by type
     if (li.type === 'internal_labor') internalCost += lineCost;
     else externalCost += lineCost;
   }
@@ -134,23 +157,27 @@ async function recomputeTotals(base44, commitmentId) {
   return { commitment_id: commitmentId, total_cost: r2(totalCost), total_billable: r2(totalBillable), external_cost: r2(externalCost), internal_cost: r2(internalCost), line_count: lineItems.length, action: 'TOTALS_RECOMPUTED' };
 }
 
-// ── CREATE (PHASE 2: planned snapshot + PHASE 9: duplicate warning) ──
+// ── CREATE ──
 async function createServiceCommitment(base44, user, payload) {
   const { project_id, service_id, description, vendor_id, quantity, notes, line_items } = payload;
   if (!project_id || !service_id || !description) throw new Error('project_id, service_id, and description required');
 
-  // ── Service must have a vendor group ──
   const [service] = await base44.asServiceRole.entities.Service.filter({ id: service_id });
   if (!service) throw new Error('Service not found');
   if (!service.preferred_vendor_group_id) throw new Error('Service must have a vendor group assigned in Admin');
 
-  // ── Vendor ↔ Group validation ──
+  // PHASE 10: Validate commitment-level vendor
   if (vendor_id) {
-    const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: vendor_id });
-    if (!vendor) throw new Error('Vendor not found');
-    if (!vendor.vendor_group_id) throw new Error(`Vendor "${vendor.name}" has no vendor group assigned`);
-    if (vendor.vendor_group_id !== service.preferred_vendor_group_id) {
-      throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group.`);
+    await validateVendorGroupMatch(base44, vendor_id, service_id, 'CREATE');
+  }
+
+  // PHASE 10: Validate line-item-level vendors
+  if (line_items && Array.isArray(line_items)) {
+    for (let i = 0; i < line_items.length; i++) {
+      const li = line_items[i];
+      if (li.vendor_id) {
+        await validateVendorGroupMatch(base44, li.vendor_id, service_id, `CREATE line_item[${i}]`);
+      }
     }
   }
 
@@ -166,7 +193,7 @@ async function createServiceCommitment(base44, user, payload) {
     }
   }
 
-  // PHASE 9: Duplicate detection (warn, don't block)
+  // Duplicate detection
   let duplicate_warning = null;
   const recent = await base44.asServiceRole.entities.ServiceCommitment.filter({ project_id, service_id });
   const similar = recent.find(c => c.description?.toLowerCase().trim() === description.toLowerCase().trim());
@@ -175,7 +202,6 @@ async function createServiceCommitment(base44, user, payload) {
     console.warn(`[CREATE DUPLICATE WARNING] ${duplicate_warning} by=${user.email}`);
   }
 
-  // PHASE 2: Compute planned cost/billable from initial line items
   let plannedCost = 0, plannedBillable = 0;
   for (const li of line_items) {
     const cost = li.cost || 0;
@@ -198,7 +224,6 @@ async function createServiceCommitment(base44, user, payload) {
       notes: notes || null,
       total_cost: 0,
       total_billable: 0,
-      // PHASE 2: Freeze planned snapshot
       planned_cost: r2(plannedCost),
       planned_billable: r2(plannedBillable),
     });
@@ -245,7 +270,7 @@ async function createServiceCommitment(base44, user, payload) {
   }
 }
 
-// ── UPDATE STATUS (PHASE 4: unified billing signal) ──
+// ── UPDATE STATUS ──
 async function updateStatus(base44, user, payload) {
   const { commitment_id, new_status } = payload;
   if (!commitment_id || !new_status) throw new Error('commitment_id and new_status required');
@@ -262,7 +287,6 @@ async function updateStatus(base44, user, payload) {
   const now = new Date().toISOString().slice(0, 10);
   if (new_status === 'ordered') updates.ordered_date = now;
   if (new_status === 'completed') updates.completed_date = now;
-  // PHASE 4: When status transitions to billed, also set is_billed = true
   if (new_status === 'billed') {
     updates.billed_date = now;
     updates.is_billed = true;
@@ -283,16 +307,14 @@ async function updateService(base44, user, payload) {
 
   const effectiveServiceId = service_id || c.service_id;
   const effectiveVendorId = vendor_id !== undefined ? vendor_id : c.vendor_id;
+
   const [svcRecord] = await base44.asServiceRole.entities.Service.filter({ id: effectiveServiceId });
   if (!svcRecord) throw new Error('Service not found');
   if (!svcRecord.preferred_vendor_group_id) throw new Error('Service must have a vendor group assigned in Admin');
+
+  // PHASE 10: Validate vendor ↔ group
   if (effectiveVendorId) {
-    const [vendor] = await base44.asServiceRole.entities.ServiceVendor.filter({ id: effectiveVendorId });
-    if (!vendor) throw new Error('Vendor not found');
-    if (!vendor.vendor_group_id) throw new Error(`Vendor "${vendor.name}" has no vendor group assigned`);
-    if (vendor.vendor_group_id !== svcRecord.preferred_vendor_group_id) {
-      throw new Error(`Vendor "${vendor.name}" does not belong to the service's vendor group.`);
-    }
+    await validateVendorGroupMatch(base44, effectiveVendorId, effectiveServiceId, 'UPDATE_SERVICE');
   }
 
   const updates = {};
@@ -338,15 +360,19 @@ async function deleteServiceCommitment(base44, user, payload) {
   return { commitment_id, action: 'DELETED' };
 }
 
-// ── ADD LINE ITEM (PHASE 3: billing lock) ──
+// ── ADD LINE ITEM (PHASE 10: vendor ↔ group validation) ──
 async function addLineItem(base44, user, payload) {
   const { service_commitment_id, type, description, vendor_id, cost, billing_rate, quantity, notes } = payload;
   if (!service_commitment_id || !type || !description) throw new Error('service_commitment_id, type, and description required');
 
-  // PHASE 3: Hard lock
   const [commitment] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: service_commitment_id });
   if (!commitment) throw new Error('ServiceCommitment not found');
   assertNotBillingLocked(commitment);
+
+  // PHASE 10: Validate line item vendor ↔ commitment service group
+  if (vendor_id) {
+    await validateVendorGroupMatch(base44, vendor_id, commitment.service_id, 'ADD_LINE_ITEM');
+  }
 
   const existing = await base44.asServiceRole.entities.ServiceLineItem.filter({ service_commitment_id });
   const maxOrder = existing.reduce((max, li) => Math.max(max, li.sort_order || 0), 0);
@@ -371,7 +397,7 @@ async function addLineItem(base44, user, payload) {
   return { line_item: lineItem, totals, action: 'LINE_ITEM_ADDED' };
 }
 
-// ── UPDATE LINE ITEM (PHASE 3: billing lock) ──
+// ── UPDATE LINE ITEM (PHASE 10: vendor ↔ group validation) ──
 async function updateLineItem(base44, user, payload) {
   const { line_item_id, ...updates } = payload;
   if (!line_item_id) throw new Error('line_item_id required');
@@ -379,9 +405,14 @@ async function updateLineItem(base44, user, payload) {
   const [li] = await base44.asServiceRole.entities.ServiceLineItem.filter({ id: line_item_id });
   if (!li) throw new Error('ServiceLineItem not found');
 
-  // PHASE 3: Hard lock
   const [commitment] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: li.service_commitment_id });
   if (commitment) assertNotBillingLocked(commitment);
+
+  // PHASE 10: Validate vendor ↔ group if vendor_id is being set
+  const newVendorId = updates.vendor_id !== undefined ? updates.vendor_id : li.vendor_id;
+  if (newVendorId && commitment) {
+    await validateVendorGroupMatch(base44, newVendorId, commitment.service_id, 'UPDATE_LINE_ITEM');
+  }
 
   const allowed = ['type', 'description', 'vendor_id', 'cost', 'billing_rate', 'quantity', 'sort_order', 'notes', 'pricing_source', 'matrix_reference_id', 'reference_id'];
   const safeUpdates = {};
@@ -395,7 +426,7 @@ async function updateLineItem(base44, user, payload) {
   return { line_item_id, updates: safeUpdates, totals, action: 'LINE_ITEM_UPDATED' };
 }
 
-// ── DELETE LINE ITEM (PHASE 3: billing lock) ──
+// ── DELETE LINE ITEM ──
 async function deleteLineItem(base44, user, payload) {
   const { line_item_id } = payload;
   if (!line_item_id) throw new Error('line_item_id required');
@@ -403,7 +434,6 @@ async function deleteLineItem(base44, user, payload) {
   const [li] = await base44.asServiceRole.entities.ServiceLineItem.filter({ id: line_item_id });
   if (!li) throw new Error('ServiceLineItem not found');
 
-  // PHASE 3: Hard lock
   const [commitment] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: li.service_commitment_id });
   if (commitment) assertNotBillingLocked(commitment);
 
@@ -443,7 +473,7 @@ async function reassignProject(base44, user, payload) {
 
 // ── CREATE SERVICE VENDOR ──
 async function createServiceVendor(base44, user, payload) {
-  const { name, vendor_group_id, contact_name, contact_email, contact_phone } = payload;
+  const { name, vendor_group_id, contact_name, contact_email, contact_phone, cell_phone, address, website, notes } = payload;
   if (!name) throw new Error('name required');
   if (!vendor_group_id) throw new Error('vendor_group_id required');
 
@@ -457,6 +487,10 @@ async function createServiceVendor(base44, user, payload) {
     contact_name: contact_name || null,
     contact_email: contact_email || null,
     contact_phone: contact_phone || null,
+    cell_phone: cell_phone || null,
+    address: address || null,
+    website: website || null,
+    notes: notes || null,
     is_active: true,
   });
 
@@ -464,8 +498,103 @@ async function createServiceVendor(base44, user, payload) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// PHASE 8: LEGACY DATA MIGRATION
-// For commitments with total_cost=0, no line items, but legacy fields set
+// PHASE 10: DATA AUDIT — Group Alignment Check
+// Reports mismatched vendor/service group assignments without
+// changing data. Admin-only.
+// ══════════════════════════════════════════════════════════════
+async function auditGroupAlignment(base44, user) {
+  if (user.role !== 'admin') throw new Error('Admin only');
+
+  const [allVendors, allServices, allCommitments, allLineItems, allGroups] = await Promise.all([
+    base44.asServiceRole.entities.ServiceVendor.list('-created_date', 500),
+    base44.asServiceRole.entities.Service.list(),
+    base44.asServiceRole.entities.ServiceCommitment.list('-created_date', 500),
+    base44.asServiceRole.entities.ServiceLineItem.list('-created_date', 5000),
+    base44.asServiceRole.entities.VendorGroup.filter({ vendor_type: 'SERVICE' }),
+  ]);
+
+  const serviceMap = new Map(allServices.map(s => [s.id, s]));
+  const vendorMap = new Map(allVendors.map(v => [v.id, v]));
+  const groupMap = new Map(allGroups.map(g => [g.id, g]));
+
+  const issues = [];
+
+  // 1. Vendors missing vendor_group_id
+  for (const v of allVendors) {
+    if (!v.vendor_group_id) {
+      issues.push({ type: 'VENDOR_MISSING_GROUP', entity: 'ServiceVendor', id: v.id, name: v.name, detail: 'No vendor_group_id assigned' });
+    }
+  }
+
+  // 2. Services missing preferred_vendor_group_id
+  for (const s of allServices) {
+    if (!s.preferred_vendor_group_id) {
+      issues.push({ type: 'SERVICE_MISSING_GROUP', entity: 'Service', id: s.id, name: s.name, detail: 'No preferred_vendor_group_id assigned' });
+    }
+  }
+
+  // 3. Commitments where vendor group ≠ service group
+  for (const c of allCommitments) {
+    if (!c.vendor_id) continue;
+    const service = serviceMap.get(c.service_id);
+    const vendor = vendorMap.get(c.vendor_id);
+    if (!service || !vendor) continue;
+    const serviceGroupId = service.preferred_vendor_group_id;
+    if (serviceGroupId && vendor.vendor_group_id && vendor.vendor_group_id !== serviceGroupId) {
+      const sg = groupMap.get(serviceGroupId);
+      const vg = groupMap.get(vendor.vendor_group_id);
+      issues.push({
+        type: 'COMMITMENT_VENDOR_MISMATCH',
+        entity: 'ServiceCommitment',
+        id: c.id,
+        description: c.description,
+        vendor_name: vendor.name,
+        vendor_group: vg?.name || vendor.vendor_group_id,
+        service_group: sg?.name || serviceGroupId,
+        detail: `Vendor "${vendor.name}" (${vg?.name}) does not match service group (${sg?.name})`,
+      });
+    }
+  }
+
+  // 4. Line items where vendor group ≠ parent commitment service group
+  const commitmentMap = new Map(allCommitments.map(c => [c.id, c]));
+  for (const li of allLineItems) {
+    if (!li.vendor_id) continue;
+    const commitment = commitmentMap.get(li.service_commitment_id);
+    if (!commitment) continue;
+    const service = serviceMap.get(commitment.service_id);
+    const vendor = vendorMap.get(li.vendor_id);
+    if (!service || !vendor) continue;
+    const serviceGroupId = service.preferred_vendor_group_id;
+    if (serviceGroupId && vendor.vendor_group_id && vendor.vendor_group_id !== serviceGroupId) {
+      issues.push({
+        type: 'LINE_ITEM_VENDOR_MISMATCH',
+        entity: 'ServiceLineItem',
+        id: li.id,
+        description: li.description,
+        vendor_name: vendor.name,
+        parent_commitment_id: commitment.id,
+        detail: `Line item vendor "${vendor.name}" does not match service group`,
+      });
+    }
+  }
+
+  console.log(`[AUDIT_GROUP_ALIGNMENT] Found ${issues.length} issues`);
+  return {
+    action: 'AUDIT_COMPLETE',
+    issue_count: issues.length,
+    issues,
+    summary: {
+      vendors_missing_group: issues.filter(i => i.type === 'VENDOR_MISSING_GROUP').length,
+      services_missing_group: issues.filter(i => i.type === 'SERVICE_MISSING_GROUP').length,
+      commitment_mismatches: issues.filter(i => i.type === 'COMMITMENT_VENDOR_MISMATCH').length,
+      line_item_mismatches: issues.filter(i => i.type === 'LINE_ITEM_VENDOR_MISMATCH').length,
+    },
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// LEGACY DATA MIGRATION
 // ══════════════════════════════════════════════════════════════
 async function migrateLegacyCommitments(base44, user) {
   if (user.role !== 'admin') throw new Error('Admin only');
@@ -494,7 +623,6 @@ async function migrateLegacyCommitments(base44, user) {
       continue;
     }
 
-    // Create a line item from legacy cost
     await base44.asServiceRole.entities.ServiceLineItem.create({
       service_commitment_id: c.id,
       type: 'vendor_cost',
@@ -506,7 +634,6 @@ async function migrateLegacyCommitments(base44, user) {
       notes: `Auto-migrated from estimated_cost=${c.estimated_cost ?? 0} actual_cost=${c.actual_cost ?? 0}`,
     });
 
-    // Recompute totals (skip if billed — just update the totals)
     const r2 = n => Math.round(n * 100) / 100;
     const totalCost = legacyCost * (c.quantity || 1);
     await base44.asServiceRole.entities.ServiceCommitment.update(c.id, {

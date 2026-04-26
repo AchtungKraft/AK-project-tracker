@@ -18,16 +18,8 @@ import { toast } from "sonner";
 /**
  * CreateServiceVendorModal — Full vendor creation with locked group context
  *
- * Replaces ALL inline name-only vendor creation paths.
  * Always creates via executeServiceAction.CREATE_SERVICE_VENDOR
  * with full metadata + auto-assigned vendor_group_id.
- *
- * Props:
- *   open             — boolean
- *   onClose          — () => void
- *   onCreated        — (vendor) => void — called with new vendor record
- *   serviceGroupId   — string — locked vendor group (required)
- *   serviceGroupName — string — display name of the group
  */
 export default function CreateServiceVendorModal({ open, onClose, onCreated, serviceGroupId, serviceGroupName }) {
   const queryClient = useQueryClient();
@@ -35,6 +27,10 @@ export default function CreateServiceVendorModal({ open, onClose, onCreated, ser
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [cellPhone, setCellPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [website, setWebsite] = useState("");
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -50,6 +46,10 @@ export default function CreateServiceVendorModal({ open, onClose, onCreated, ser
         contact_name: contactName.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
+        cell_phone: cellPhone.trim() || null,
+        address: address.trim() || null,
+        website: website.trim() || null,
+        notes: notes.trim() || null,
       });
       toast.success(`Vendor "${name.trim()}" created`);
       queryClient.invalidateQueries({ queryKey: ["serviceVendors"] });
@@ -68,6 +68,10 @@ export default function CreateServiceVendorModal({ open, onClose, onCreated, ser
     setContactName("");
     setContactEmail("");
     setContactPhone("");
+    setCellPhone("");
+    setAddress("");
+    setWebsite("");
+    setNotes("");
     onClose();
   };
 
@@ -89,41 +93,37 @@ export default function CreateServiceVendorModal({ open, onClose, onCreated, ser
 
           <div>
             <Label className="text-gray-300 text-xs">Vendor Name *</Label>
-            <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g., Chrome Plating Co."
-              className="bg-gray-800 border-gray-600 text-white mt-1"
-              autoFocus
-            />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Chrome Plating Co." className="bg-gray-800 border-gray-600 text-white mt-1" autoFocus />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-gray-300 text-xs">Contact Name</Label>
+              <Input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Primary contact" className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Contact Email</Label>
+              <Input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@vendor.com" className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Contact Phone</Label>
+              <Input value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="(555) 123-4567" className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Cell Phone</Label>
+              <Input value={cellPhone} onChange={e => setCellPhone(e.target.value)} placeholder="(555) 987-6543" className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
           </div>
           <div>
-            <Label className="text-gray-300 text-xs">Contact Name</Label>
-            <Input
-              value={contactName}
-              onChange={e => setContactName(e.target.value)}
-              placeholder="Primary contact"
-              className="bg-gray-800 border-gray-600 text-white mt-1"
-            />
+            <Label className="text-gray-300 text-xs">Address</Label>
+            <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Vendor address" className="bg-gray-800 border-gray-600 text-white mt-1" />
           </div>
           <div>
-            <Label className="text-gray-300 text-xs">Contact Email</Label>
-            <Input
-              type="email"
-              value={contactEmail}
-              onChange={e => setContactEmail(e.target.value)}
-              placeholder="email@vendor.com"
-              className="bg-gray-800 border-gray-600 text-white mt-1"
-            />
+            <Label className="text-gray-300 text-xs">Website</Label>
+            <Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://vendor.com" className="bg-gray-800 border-gray-600 text-white mt-1" />
           </div>
           <div>
-            <Label className="text-gray-300 text-xs">Contact Phone</Label>
-            <Input
-              value={contactPhone}
-              onChange={e => setContactPhone(e.target.value)}
-              placeholder="(555) 123-4567"
-              className="bg-gray-800 border-gray-600 text-white mt-1"
-            />
+            <Label className="text-gray-300 text-xs">Notes</Label>
+            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes..." className="bg-gray-800 border-gray-600 text-white mt-1" />
           </div>
         </div>
         <DialogFooter className="gap-2">
