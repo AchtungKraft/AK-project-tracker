@@ -798,7 +798,8 @@ async function resolveCanonicalFinancials(base44, project_id, commitments, proje
     services_planned_retail += sc.total_billable ?? 0;
     // STABILIZED: Line-item-derived total_cost ONLY — no legacy fallback
     services_planned_cost += sc.total_cost ?? 0;
-    if (sc.is_billed === true || sc.status === 'billed') services_invoiced_amount += sc.total_billable ?? 0;
+    // CANONICAL: Billing lock = is_billed || invoice_id present
+    if (sc.is_billed === true || sc.invoice_id != null) services_invoiced_amount += sc.total_billable ?? 0;
   }
 
   let credit_total = 0;

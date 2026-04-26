@@ -87,15 +87,15 @@ export async function resolveFinancials(base44, project_id) {
 
   for (const sc of serviceCommitments) {
     const billable = sc.total_billable ?? 0;
-    const cost = sc.total_cost > 0
-      ? sc.total_cost
-      : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
+    // STABILIZED: Line-item-derived total_cost ONLY — no legacy fallback
+    const cost = sc.total_cost ?? 0;
 
     services_planned_retail += billable;
     services_planned_cost += cost;
 
-    const isBilled = sc.is_billed === true || sc.status === 'billed';
-    if (isBilled) {
+    // CANONICAL: Billing lock = is_billed || invoice_id present
+    const isLocked = sc.is_billed === true || sc.invoice_id != null;
+    if (isLocked) {
       services_invoiced_amount += billable;
     }
   }

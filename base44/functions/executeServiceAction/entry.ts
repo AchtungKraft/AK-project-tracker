@@ -78,11 +78,11 @@ const VALID_TRANSITIONS = {
 };
 
 // ══════════════════════════════════════════════════════════════
-// PHASE 3: BILLING LOCK GUARD
-// Checks both is_billed and status === 'billed'
+// CANONICAL BILLING LOCK GUARD
+// is_billed || invoice_id — status is display-only
 // ══════════════════════════════════════════════════════════════
 function isBillingLocked(commitment) {
-  return commitment.status === 'billed' || commitment.is_billed === true;
+  return commitment.is_billed === true || commitment.invoice_id != null;
 }
 
 function assertNotBillingLocked(commitment) {

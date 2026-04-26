@@ -95,8 +95,8 @@ Deno.serve(async (req) => {
       const costVariance = r2(totalCost - plannedCost);
       const billableVariance = r2(totalBillable - plannedBillable);
 
-      // PHASE 4: Unified billing lock
-      const billingLocked = c.status === 'billed' || c.is_billed === true;
+      // CANONICAL: Billing lock = is_billed || invoice_id present
+      const billingLocked = c.is_billed === true || c.invoice_id != null;
 
       // PHASE 6: Negative margin warning
       const marginWarning = totalBillable > 0 && totalCost > totalBillable;
