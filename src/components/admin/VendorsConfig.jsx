@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs removed — VendorsConfig is PART-only; Service Vendors have their own admin tab
 import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, GripVertical, Package, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -291,16 +291,16 @@ export default function VendorsConfig() {
             isLoading={groupsLoading}
           />
           <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
-            {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add {activeTab === 'PART' ? 'Part' : 'Service'} Vendor</>}
+            {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add Part Vendor</>}
           </Button>
         </form>
 
         <div>
-          <Label className="text-gray-400 text-xs mb-3 block">{activeTab === 'PART' ? 'Part' : 'Service'} Vendors</Label>
+          <Label className="text-gray-400 text-xs mb-3 block">Part Vendors</Label>
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : typeVendors.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No {activeTab.toLowerCase()} vendors yet</div>
+            <div className="text-center py-8 text-gray-500">No part vendors yet</div>
           ) : (
             <DragDropContext onDragEnd={handleDragEnd}>
               <Droppable droppableId="vendors-list">

@@ -23,6 +23,7 @@ import {
 import { Plus, Loader2, FolderKanban, Trash2, Truck, Package, Clock, DollarSign } from "lucide-react";
 import GroupedProjectSelector from "@/components/supply/GroupedProjectSelector";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
+import CreateServiceVendorModal from "@/components/supply/CreateServiceVendorModal";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { toast } from "sonner";
@@ -65,10 +66,8 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   // --- Inline line items (created before save) ---
   const [lineItems, setLineItems] = useState([]);
 
-  // --- Inline vendor creation ---
-  const [showNewVendor, setShowNewVendor] = useState(false);
-  const [newVendorName, setNewVendorName] = useState("");
-  const [creatingVendor, setCreatingVendor] = useState(false);
+  // --- Vendor creation modal ---
+  const [showVendorModal, setShowVendorModal] = useState(false);
 
   const { data: services = [] } = useQuery({
     queryKey: ["services-catalog"],
@@ -118,26 +117,6 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       billing_rate: "",
       quantity: "1",
     }]);
-  };
-
-  const handleCreateVendor = async () => {
-    if (!newVendorName.trim()) return;
-    setCreatingVendor(true);
-    try {
-      const res = await base44.functions.invoke("executeServiceAction", {
-        action_type: "CREATE_SERVICE_VENDOR",
-        name: newVendorName.trim(),
-        vendor_group_id: selectedGroupId,
-      });
-      setVendorId(res.data.vendor.id);
-      toast.success("Vendor created");
-      setShowNewVendor(false);
-      setNewVendorName("");
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setCreatingVendor(false);
-    }
   };
 
   // --- Line item CRUD (local state only, persisted on save) ---
@@ -370,28 +349,28 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
           <div>
             <div className="flex items-center justify-between">
               <Label className="text-gray-300 text-xs">Primary Vendor</Label>
-              <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowNewVendor(!showNewVendor)}>
-                {showNewVendor ? "Cancel" : "+ New Vendor"}
-              </Button>
-            </div>
-            {showNewVendor ? (
-              <div className="flex gap-2 mt-1">
-                <Input value={newVendorName} onChange={e => setNewVendorName(e.target.value)} placeholder="Vendor name..." className="bg-gray-800 border-gray-600 text-white" />
-                <Button size="sm" onClick={handleCreateVendor} disabled={creatingVendor || !newVendorName.trim()}>
-                  {creatingVendor ? "..." : "Add"}
+              {selectedGroupId && (
+                <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
+                  + New Vendor
                 </Button>
-              </div>
-            ) : (
-              <GroupedVendorSelect
-                value={vendorId}
-                onValueChange={setVendorId}
-                vendorGroups={lockedVendorGroups}
-                vendorsByGroup={lockedVendorsByGroup}
-                selectedGroupId={selectedGroupId}
-                placeholder="Select vendor..."
-                showNone={true}
-              />
-            )}
+              )}
+            </div>
+            <GroupedVendorSelect
+              value={vendorId}
+              onValueChange={setVendorId}
+              vendorGroups={lockedVendorGroups}
+              vendorsByGroup={lockedVendorsByGroup}
+              selectedGroupId={selectedGroupId}
+              placeholder="Select vendor..."
+              showNone={true}
+            />
+            <CreateServiceVendorModal
+              open={showVendorModal}
+              onClose={() => setShowVendorModal(false)}
+              onCreated={(vendor) => setVendorId(vendor.id)}
+              serviceGroupId={selectedGroupId}
+              serviceGroupName={selectedGroup?.name || ""}
+            />
           </div>
 
           {/* ── Notes ── */}

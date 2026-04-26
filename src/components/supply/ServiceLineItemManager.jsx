@@ -25,6 +25,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import MatrixPricingPreview from "@/components/supply/MatrixPricingPreview";
+import CreateServiceVendorModal from "@/components/supply/CreateServiceVendorModal";
 
 const TYPE_CONFIG = {
   vendor_cost: { label: "Vendor Cost", icon: Truck, color: "text-purple-400" },
@@ -225,33 +226,14 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
   const [pricingSource, setPricingSource] = useState(defaults.pricing_source || "manual");
   const [matrixRefId, setMatrixRefId] = useState(defaults.matrix_reference_id || "");
 
-  // Inline vendor creation
-  const [showNewVendor, setShowNewVendor] = useState(false);
-  const [newVendorName, setNewVendorName] = useState("");
-  const [creatingVendor, setCreatingVendor] = useState(false);
+  // Vendor creation modal
+  const [showVendorModal, setShowVendorModal] = useState(false);
 
   const isLabor = type === "internal_labor";
 
-  const handleCreateVendor = async () => {
-    if (!newVendorName.trim()) return;
-    if (!serviceGroupId) { toast.error("Cannot create vendor — service has no vendor group"); return; }
-    setCreatingVendor(true);
-    try {
-      const res = await base44.functions.invoke("executeServiceAction", {
-        action_type: "CREATE_SERVICE_VENDOR",
-        name: newVendorName.trim(),
-        vendor_group_id: serviceGroupId,
-      });
-      setVendorId(res.data.vendor.id);
-      toast.success("Vendor created");
-      setShowNewVendor(false);
-      setNewVendorName("");
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setCreatingVendor(false);
-    }
-  };
+  // Resolve group name for the vendor creation modal
+  const { groupsMap: allGroupsMap } = useServiceVendorGroups();
+  const serviceGroupName = serviceGroupId ? (allGroupsMap.get(serviceGroupId)?.name || "Service Group") : "";
 
   // When user manually edits billing_rate, switch to manual pricing source
   const handleBillingRateChange = (val) => {
@@ -348,32 +330,27 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
           {type !== "internal_labor" && (
             <div>
               <div className="flex items-center justify-between">
-                <Label className="text-gray-300">Service Vendor</Label>
-                <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowNewVendor(!showNewVendor)}>
-                  {showNewVendor ? "Cancel" : "+ New Vendor"}
-                </Button>
-              </div>
-              {showNewVendor ? (
-                <div className="flex gap-2 mt-1">
-                  <Input
-                    value={newVendorName}
-                    onChange={e => setNewVendorName(e.target.value)}
-                    placeholder="Vendor name..."
-                    className="bg-gray-800 border-gray-600 text-white"
-                  />
-                  <Button size="sm" onClick={handleCreateVendor} disabled={creatingVendor || !newVendorName.trim()}>
-                    {creatingVendor ? "..." : "Add"}
+                <Label className="text-gray-300">Service Vendor{type === "vendor_cost" ? " *" : ""}</Label>
+                {serviceGroupId && (
+                  <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
+                    + New Vendor
                   </Button>
-                </div>
-              ) : (
-                <GroupedVendorSelect
-                  value={vendorId}
-                  onValueChange={setVendorId}
-                  vendorGroups={vendorGroups || []}
-                  vendorsByGroup={vendorsByGroup || new Map()}
-                  placeholder="Optional..."
-                />
-              )}
+                )}
+              </div>
+              <GroupedVendorSelect
+                value={vendorId}
+                onValueChange={setVendorId}
+                vendorGroups={vendorGroups || []}
+                vendorsByGroup={vendorsByGroup || new Map()}
+                placeholder={type === "vendor_cost" ? "Select vendor..." : "Optional..."}
+              />
+              <CreateServiceVendorModal
+                open={showVendorModal}
+                onClose={() => setShowVendorModal(false)}
+                onCreated={(vendor) => setVendorId(vendor.id)}
+                serviceGroupId={serviceGroupId}
+                serviceGroupName={serviceGroupName}
+              />
             </div>
           )}
 
