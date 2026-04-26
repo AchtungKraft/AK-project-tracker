@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AdminSidebar from "../components/admin/AdminSidebar";
+import AdminBreadcrumb from "../components/admin/AdminBreadcrumb";
 import ProjectTypesConfig from "../components/admin/ProjectTypesConfig";
 import TaskCategoriesConfig from "../components/admin/TaskCategoriesConfig";
 import StatusListConfig from "../components/admin/StatusListConfig";
@@ -18,106 +19,56 @@ import VendorGroupsConfig from "../components/admin/VendorGroupsConfig";
 import ServiceCatalogConfig from "../components/admin/ServiceCatalogConfig";
 import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
 
+const PANEL_MAP = {
+  "users": UsersConfig,
+  "team-members": TeamMembersConfig,
+  "locations": LocationsConfig,
+  "project-types": ProjectTypesConfig,
+  "task-categories": TaskCategoriesConfig,
+  "statuses": StatusListConfig,
+  "part-categories": PartCategoriesConfig,
+  "service-catalog": ServiceCatalogConfig,
+  "vendor-groups": VendorGroupsConfig,
+  "vendors": VendorsConfig,
+  "service-vendors": ServiceVendorsConfig,
+  "pricing-matrix": RetailMarkupMatrixConfig,
+  "pricing-guardrails": PricingStrictModeConfig,
+  "car-makes": CarMakesConfig,
+  "car-models": CarModelsConfig,
+  "car-years": CarYearsConfig,
+  "email-templates": EmailTemplatesConfig,
+};
+
 export default function AdminConfig() {
+  const [activeKey, setActiveKey] = useState("project-types");
+
+  const ActivePanel = PANEL_MAP[activeKey];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-4">
+          <h1 className="text-2xl md:text-3xl font-bold text-white">
             Admin Configuration
           </h1>
-          <p className="text-gray-400">Manage dropdown lists and team members</p>
+          <p className="text-gray-500 text-sm mt-1">System settings and data management</p>
         </div>
 
-        <Tabs defaultValue="project-types" className="w-full">
-          <TabsList className="bg-gray-900/50 border border-red-900/30 flex-wrap">
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="team-members">Team Members</TabsTrigger>
-            <TabsTrigger value="project-types">Project Types</TabsTrigger>
-            <TabsTrigger value="task-categories">Task Categories</TabsTrigger>
-            <TabsTrigger value="statuses">Status Lists</TabsTrigger>
-            <TabsTrigger value="part-categories">Part Categories</TabsTrigger>
-            <TabsTrigger value="vendors">Vendors</TabsTrigger>
-            <TabsTrigger value="locations">Locations</TabsTrigger>
-            <TabsTrigger value="car-makes">Car Makes</TabsTrigger>
-            <TabsTrigger value="car-models">Car Models</TabsTrigger>
-            <TabsTrigger value="car-years">Car Years</TabsTrigger>
-            <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
-            <TabsTrigger value="pricing-matrix">Pricing Matrix</TabsTrigger>
-            <TabsTrigger value="pricing-guardrails">Pricing Guardrails</TabsTrigger>
-            <TabsTrigger value="vendor-groups">Vendor Groups</TabsTrigger>
-            <TabsTrigger value="service-catalog">Services (by Group)</TabsTrigger>
-            <TabsTrigger value="service-vendors">Service Vendors</TabsTrigger>
-          </TabsList>
+        {/* Mobile sidebar trigger is built into AdminSidebar */}
 
-          <TabsContent value="users" className="mt-6">
-            <UsersConfig />
-          </TabsContent>
+        {/* Layout: Sidebar + Content */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <AdminSidebar activeKey={activeKey} onSelect={setActiveKey} />
 
-          <TabsContent value="project-types" className="mt-6">
-            <ProjectTypesConfig />
-          </TabsContent>
-
-          <TabsContent value="task-categories" className="mt-6">
-            <TaskCategoriesConfig />
-          </TabsContent>
-
-          <TabsContent value="statuses" className="mt-6">
-            <StatusListConfig />
-          </TabsContent>
-
-          <TabsContent value="team-members" className="mt-6">
-            <TeamMembersConfig />
-          </TabsContent>
-
-          <TabsContent value="part-categories" className="mt-6">
-            <PartCategoriesConfig />
-          </TabsContent>
-
-          <TabsContent value="vendors" className="mt-6">
-            <VendorsConfig />
-          </TabsContent>
-
-          <TabsContent value="locations" className="mt-6">
-            <LocationsConfig />
-          </TabsContent>
-
-          <TabsContent value="car-makes" className="mt-6">
-            <CarMakesConfig />
-          </TabsContent>
-
-          <TabsContent value="car-models" className="mt-6">
-            <CarModelsConfig />
-          </TabsContent>
-
-          <TabsContent value="car-years" className="mt-6">
-            <CarYearsConfig />
-          </TabsContent>
-
-          <TabsContent value="email-templates" className="mt-6">
-            <EmailTemplatesConfig />
-          </TabsContent>
-
-          <TabsContent value="pricing-matrix" className="mt-6">
-            <RetailMarkupMatrixConfig />
-          </TabsContent>
-
-          <TabsContent value="pricing-guardrails" className="mt-6">
-            <PricingStrictModeConfig />
-          </TabsContent>
-
-          <TabsContent value="vendor-groups" className="mt-6">
-            <VendorGroupsConfig />
-          </TabsContent>
-
-          <TabsContent value="service-catalog" className="mt-6">
-            <ServiceCatalogConfig />
-          </TabsContent>
-
-          <TabsContent value="service-vendors" className="mt-6">
-            <ServiceVendorsConfig />
-          </TabsContent>
-        </Tabs>
+          {/* Content Panel */}
+          <div className="flex-1 min-w-0">
+            <AdminBreadcrumb activeKey={activeKey} />
+            {ActivePanel ? <ActivePanel /> : (
+              <div className="text-gray-500 text-center py-12">Select a section from the sidebar</div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
