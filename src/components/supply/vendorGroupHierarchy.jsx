@@ -2,7 +2,8 @@
  * vendorGroupHierarchy — Shared helpers for hierarchical vendor groups.
  *
  * Core rule: A vendor is valid for a service if the vendor's group
- * is the service's root group OR any descendant of it.
+ * is the service's group OR any descendant of it (subtree match).
+ * Services can belong to ANY group level (root or child).
  */
 
 /**
@@ -117,9 +118,9 @@ export function buildHierarchicalOptions(groups, vendorType = null) {
 /**
  * Filter vendors that belong to a service's group subtree.
  * vendors: ServiceVendor[]
- * serviceGroupId: string (root group for the service)
+ * serviceGroupId: string (the service's group — can be root or child)
  * allGroups: VendorGroup[]
- * Returns: ServiceVendor[]
+ * Returns: ServiceVendor[] — vendors whose group is serviceGroupId or any descendant
  */
 export function filterVendorsForServiceGroup(vendors, serviceGroupId, allGroups) {
   if (!serviceGroupId) return [];
@@ -148,17 +149,16 @@ export function buildGroupPath(groupId, groupsById) {
 }
 
 /**
- * Format a service label showing the service name with its root group context.
- * Example: "Chrome Plating (Finishing)"
+ * Format a service label showing the service name with its full group path context.
+ * Example: "Chrome Plating (Finishing / Chrome Plating)"
+ * If the service is on a root group: "UPS Ground (Shipping)"
  */
 export function formatServiceLabel(service, groupsById) {
   if (!service) return "";
   const groupId = service.preferred_vendor_group_id;
   if (!groupId) return service.name || "";
-  const rootId = getRootGroupId(groupId, groupsById);
-  const rootGroup = groupsById instanceof Map ? groupsById.get(rootId) : groupsById?.[rootId];
-  const rootName = rootGroup?.name || "";
-  return rootName ? `${service.name} (${rootName})` : service.name;
+  const path = buildGroupPath(groupId, groupsById);
+  return path ? `${service.name} (${path})` : service.name;
 }
 
 /**
@@ -167,4 +167,67 @@ export function formatServiceLabel(service, groupsById) {
  */
 export function formatVendorGroupLabel(groupId, groupsById) {
   return buildGroupPath(groupId, groupsById);
+}
+
+/**
+ * Build a hierarchical tree of vendor groups with services nested under each group.
+ * Returns a flat list of entries suitable for rendering grouped dropdowns.
+ * 
+ * Each entry: { type: 'group'|'service', group, service, depth, groupPath }
+ * - type='group': a group header row
+ * - type='service': a service item nested under a group
+ */
+export function buildHierarchicalServiceOptions(services, groups, vendorType = "SERVICE") {
+  const filtered = groups.filter(g => g.vendor_type === vendorType && g.is_active !== false);
+  const byId = new Map(filtered.map(g => [g.id, g]));
+  
+  // Index services by their group
+  const servicesByGroup = new Map();
+  for (const svc of services) {
+    const gid = svc.preferred_vendor_group_id;
+    if (!gid || !byId.has(gid)) continue;
+    if (!servicesByGroup.has(gid)) servicesByGroup.set(gid, []);
+    servicesByGroup.get(gid).push(svc);
+  }
+  
+  // Build tree
+  const roots = filtered.filter(g => !g.parent_group_id || !byId.has(g.parent_group_id));
+  const childrenOf = new Map();
+  for (const g of filtered) {
+    if (g.parent_group_id && byId.has(g.parent_group_id)) {
+      if (!childrenOf.has(g.parent_group_id)) childrenOf.set(g.parent_group_id, []);
+      childrenOf.get(g.parent_group_id).push(g);
+    }
+  }
+  
+  const sortFn = (a, b) => (a.sort_priority || 0) - (b.sort_priority || 0);
+  roots.sort(sortFn);
+  for (const [, ch] of childrenOf) ch.sort(sortFn);
+  
+  const result = [];
+  function walk(group, depth, pathPrefix) {
+    const groupPath = pathPrefix ? `${pathPrefix} / ${group.name}` : group.name;
+    const groupServices = servicesByGroup.get(group.id) || [];
+    const children = childrenOf.get(group.id) || [];
+    
+    // Only emit group header if it has services or children with services
+    const hasContent = groupServices.length > 0 || children.some(ch => {
+      const chSvcs = servicesByGroup.get(ch.id) || [];
+      return chSvcs.length > 0 || (childrenOf.get(ch.id) || []).length > 0;
+    });
+    
+    if (hasContent || groupServices.length > 0) {
+      result.push({ type: 'group', group, depth, groupPath });
+      for (const svc of groupServices) {
+        result.push({ type: 'service', service: svc, group, depth: depth + 1, groupPath });
+      }
+    }
+    
+    for (const child of children) {
+      walk(child, depth + 1, groupPath);
+    }
+  }
+  
+  for (const root of roots) walk(root, 0, "");
+  return result;
 }

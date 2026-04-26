@@ -604,20 +604,7 @@ async function auditGroupAlignment(base44, user) {
     }
   }
 
-  // 5. Services assigned to child groups instead of root
-  for (const s of allServices) {
-    if (!s.preferred_vendor_group_id) continue;
-    const g = groupMap.get(s.preferred_vendor_group_id);
-    if (g && g.parent_group_id) {
-      issues.push({
-        type: 'SERVICE_ON_CHILD_GROUP',
-        entity: 'Service',
-        id: s.id,
-        name: s.name,
-        detail: `Service "${s.name}" is assigned to sub-group "${g.name}" instead of a root group`,
-      });
-    }
-  }
+  // 5. Services on child groups — now VALID, no longer flagged as issues
 
   console.log(`[AUDIT_GROUP_ALIGNMENT] Found ${issues.length} issues`);
   return {
@@ -629,7 +616,6 @@ async function auditGroupAlignment(base44, user) {
       services_missing_group: issues.filter(i => i.type === 'SERVICE_MISSING_GROUP').length,
       commitment_mismatches: issues.filter(i => i.type === 'COMMITMENT_VENDOR_MISMATCH').length,
       line_item_mismatches: issues.filter(i => i.type === 'LINE_ITEM_VENDOR_MISMATCH').length,
-      services_on_child_groups: issues.filter(i => i.type === 'SERVICE_ON_CHILD_GROUP').length,
     },
   };
 }

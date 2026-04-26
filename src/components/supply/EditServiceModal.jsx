@@ -25,7 +25,8 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
-import { getSubtreeIds, formatServiceLabel, formatVendorGroupLabel } from "@/components/supply/vendorGroupHierarchy";
+import { getSubtreeIds, formatVendorGroupLabel } from "@/components/supply/vendorGroupHierarchy";
+import HierarchicalServiceSelect from "@/components/supply/HierarchicalServiceSelect";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -211,27 +212,21 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
 
           <div>
             <Label className="text-gray-300">Service *</Label>
-            <Select value={serviceId} onValueChange={(id) => {
-              setServiceId(id);
-              // Reset vendor when service changes — use first vendor in group subtree
-              const svc = services.find(s => s.id === id);
-              const gid = svc?.preferred_vendor_group_id;
-              const subtreeV = gid ? getVendorsForServiceGroup(gid) : [];
-              setVendorId(subtreeV[0]?.id || "");
-            }} disabled={isBilled}>
-              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                <SelectValue placeholder="Select a service..." />
-              </SelectTrigger>
-              <SelectContent>
-                {services
-                  .filter(s => s.preferred_vendor_group_id && groupsMap.has(s.preferred_vendor_group_id))
-                  .map(s => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {formatServiceLabel(s, groupsMap)}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <HierarchicalServiceSelect
+              services={services}
+              vendorGroups={vendorGroups}
+              groupsMap={groupsMap}
+              value={serviceId}
+              onValueChange={(id) => {
+                setServiceId(id);
+                // Reset vendor when service changes — use first vendor in group subtree
+                const svc = services.find(s => s.id === id);
+                const gid = svc?.preferred_vendor_group_id;
+                const subtreeV = gid ? getVendorsForServiceGroup(gid) : [];
+                setVendorId(subtreeV[0]?.id || "");
+              }}
+              disabled={isBilled}
+            />
             {selectedGroupId && (
               <div className="mt-1.5">
                 <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">

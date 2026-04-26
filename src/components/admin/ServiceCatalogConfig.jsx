@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers, ChevronDown, ChevronRight, AlertTriangle, ArrowUp } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Layers, ChevronDown, ChevronRight, AlertTriangle, CornerDownRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRootGroupId, buildGroupPath, buildGroupsById } from "@/components/supply/vendorGroupHierarchy";
+import { buildGroupsById, buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
 
 export default function ServiceCatalogConfig() {
   const queryClient = useQueryClient();
@@ -29,32 +29,26 @@ export default function ServiceCatalogConfig() {
 
   const groupsById = useMemo(() => buildGroupsById(vendorGroups), [vendorGroups]);
 
-  // Root groups only — services should be assigned to root groups
-  const rootGroups = useMemo(() => vendorGroups.filter(g => !g.parent_group_id), [vendorGroups]);
+  // Build hierarchical flat list with depth for display
+  const groupTree = useMemo(() => buildHierarchicalOptions(vendorGroups, "SERVICE"), [vendorGroups]);
 
-  const servicesByGroup = useMemo(() => {
+  // Index services by their group
+  const { servicesByGroup, orphans } = useMemo(() => {
     const map = {};
-    for (const g of rootGroups) map[g.id] = [];
-    const orphans = [];
-    const childGroupServices = []; // services wrongly on child groups
+    for (const g of vendorGroups) map[g.id] = [];
+    const orphanList = [];
     for (const svc of services) {
       const gid = svc.preferred_vendor_group_id;
       if (!gid || !groupsById.has(gid)) {
-        orphans.push(svc);
+        orphanList.push(svc);
+      } else if (map[gid]) {
+        map[gid].push(svc);
       } else {
-        const group = groupsById.get(gid);
-        if (!group.parent_group_id) {
-          // Correctly on root group
-          if (map[gid]) map[gid].push(svc);
-          else orphans.push(svc);
-        } else {
-          // On a child group — flag it
-          childGroupServices.push(svc);
-        }
+        orphanList.push(svc);
       }
     }
-    return { grouped: map, orphans, childGroupServices };
-  }, [services, rootGroups, groupsById]);
+    return { servicesByGroup: map, orphans: orphanList };
+  }, [services, vendorGroups, groupsById]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["services-catalog-admin"] });
@@ -71,7 +65,7 @@ export default function ServiceCatalogConfig() {
           Services by Vendor Group
         </CardTitle>
         <p className="text-sm text-gray-400 mt-1">
-          Services are organized under their Vendor Group. Add new services within a group.
+          Services are organized hierarchically under Vendor Groups. Add services to any group level.
         </p>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -85,29 +79,23 @@ export default function ServiceCatalogConfig() {
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : (
-          <div className="space-y-3">
-            {rootGroups.map(group => (
-              <GroupSection
-                key={group.id}
-                group={group}
-                services={servicesByGroup.grouped[group.id] || []}
+          <div className="space-y-1">
+            {groupTree.map(entry => (
+              <GroupNode
+                key={entry.id}
+                group={vendorGroups.find(g => g.id === entry.id)}
+                depth={entry.depth}
+                label={entry.label}
+                services={servicesByGroup[entry.id] || []}
                 onInvalidate={invalidate}
               />
             ))}
 
-            {servicesByGroup.childGroupServices.length > 0 && (
-              <ChildGroupServicesSection
-                services={servicesByGroup.childGroupServices}
-                rootGroups={rootGroups}
-                groupsById={groupsById}
-                onInvalidate={invalidate}
-              />
-            )}
-
-            {servicesByGroup.orphans.length > 0 && (
+            {orphans.length > 0 && (
               <OrphanSection
-                services={servicesByGroup.orphans}
-                vendorGroups={rootGroups}
+                services={orphans}
+                vendorGroups={vendorGroups}
+                groupsById={groupsById}
                 onInvalidate={invalidate}
               />
             )}
@@ -118,15 +106,25 @@ export default function ServiceCatalogConfig() {
   );
 }
 
-function GroupSection({ group, services, onInvalidate }) {
+function GroupNode({ group, depth, label, services, onInvalidate }) {
   const [expanded, setExpanded] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
   const [addingName, setAddingName] = useState("");
   const [addingDesc, setAddingDesc] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
+
+  if (!group) return null;
 
   const active = services.filter(s => s.is_active !== false);
   const inactive = services.filter(s => s.is_active === false);
+  const totalServices = active.length + inactive.length;
+
+  const lineTypeLabel = {
+    vendor_cost: "Vendor Cost",
+    shipping: "Shipping",
+    internal_labor: "Internal Labor",
+    misc: "Misc",
+  }[group.default_line_item_type] || group.default_line_item_type;
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -151,50 +149,50 @@ function GroupSection({ group, services, onInvalidate }) {
     }
   };
 
-  const lineTypeLabel = {
-    vendor_cost: "Vendor Cost",
-    shipping: "Shipping",
-    internal_labor: "Internal Labor",
-    misc: "Misc",
-  }[group.default_line_item_type] || group.default_line_item_type;
+  const isChild = depth > 0;
 
   return (
-    <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 overflow-hidden">
+    <div
+      className={cn(
+        "rounded-lg border overflow-hidden",
+        isChild ? "border-amber-700/30 bg-amber-900/10" : "border-amber-700/40 bg-amber-900/20"
+      )}
+      style={{ marginLeft: depth * 20 }}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 p-3 hover:bg-amber-900/30 transition-colors text-left"
+        className="w-full flex items-center gap-2 p-2.5 hover:bg-amber-900/30 transition-colors text-left"
       >
         {expanded ? (
-          <ChevronDown className="w-4 h-4 text-amber-400 shrink-0" />
+          <ChevronDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
         ) : (
-          <ChevronRight className="w-4 h-4 text-amber-400 shrink-0" />
+          <ChevronRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
         )}
-        <span className="font-medium text-amber-300 flex-1">{group.name}</span>
+        {isChild && <CornerDownRight className="w-3 h-3 text-gray-600 shrink-0" />}
+        <span className={cn("font-medium flex-1", isChild ? "text-amber-200 text-sm" : "text-amber-300")}>
+          {group.name}
+        </span>
+        {isChild && (
+          <Badge variant="outline" className="text-[8px] border-gray-600 text-gray-500 shrink-0">sub</Badge>
+        )}
         <Badge variant="outline" className="text-[9px] border-green-700/50 text-green-400 shrink-0">
           {lineTypeLabel}
         </Badge>
-        <Badge variant="outline" className="text-[10px] border-amber-600/50 text-amber-400 shrink-0">
-          {active.length} active
-        </Badge>
-        {inactive.length > 0 && (
-          <Badge variant="outline" className="text-[10px] border-gray-600/50 text-gray-500 shrink-0">
-            {inactive.length} inactive
+        {totalServices > 0 && (
+          <Badge variant="outline" className="text-[10px] border-amber-600/50 text-amber-400 shrink-0">
+            {active.length} active{inactive.length > 0 ? ` / ${inactive.length} inactive` : ""}
           </Badge>
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-amber-700/30 p-3 space-y-2">
-          {active.length === 0 && inactive.length === 0 && !showAdd && (
-            <p className="text-gray-500 text-sm text-center py-2">No services in this group yet</p>
-          )}
-
+        <div className="border-t border-amber-700/30 p-2.5 space-y-1.5">
           {active.map(svc => (
             <ServiceRow key={svc.id} svc={svc} onInvalidate={onInvalidate} />
           ))}
 
           {inactive.length > 0 && (
-            <div className="opacity-50 space-y-2 pt-2 border-t border-gray-700/30">
+            <div className="opacity-50 space-y-1.5 pt-1.5 border-t border-gray-700/30">
               <span className="text-[10px] text-gray-500 uppercase tracking-wider">Inactive</span>
               {inactive.map(svc => (
                 <ServiceRow key={svc.id} svc={svc} onInvalidate={onInvalidate} />
@@ -203,7 +201,7 @@ function GroupSection({ group, services, onInvalidate }) {
           )}
 
           {showAdd ? (
-            <form onSubmit={handleCreate} className="flex items-end gap-2 pt-2 border-t border-amber-700/30">
+            <form onSubmit={handleCreate} className="flex items-end gap-2 pt-1.5 border-t border-amber-700/30">
               <div className="flex-1">
                 <Label className="text-gray-400 text-[10px]">Service Name *</Label>
                 <Input
@@ -236,9 +234,9 @@ function GroupSection({ group, services, onInvalidate }) {
               size="sm"
               variant="ghost"
               onClick={() => setShowAdd(true)}
-              className="text-amber-400 hover:text-amber-300 gap-1 w-full mt-1"
+              className="text-amber-400 hover:text-amber-300 gap-1 w-full mt-0.5 h-7 text-xs"
             >
-              <Plus className="w-3.5 h-3.5" /> Add Service to {group.name}
+              <Plus className="w-3 h-3" /> Add Service to {group.name}
             </Button>
           )}
         </div>
@@ -313,64 +311,22 @@ function ServiceRow({ svc, onInvalidate }) {
   );
 }
 
-/** Services incorrectly assigned to child groups — offer move to root */
-function ChildGroupServicesSection({ services, rootGroups, groupsById, onInvalidate }) {
-  const moveToRoot = async (svcId, svc) => {
-    const currentGroupId = svc.preferred_vendor_group_id;
-    const rootId = getRootGroupId(currentGroupId, groupsById);
-    if (rootId === currentGroupId) return; // already root
-    await base44.entities.Service.update(svcId, { preferred_vendor_group_id: rootId });
-    toast.success("Moved to root group");
-    onInvalidate();
-  };
+function OrphanSection({ services, vendorGroups, groupsById, onInvalidate }) {
+  const hierarchicalOptions = useMemo(() => buildHierarchicalOptions(vendorGroups, "SERVICE"), [vendorGroups]);
 
-  return (
-    <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 p-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4 text-amber-400" />
-        <span className="text-sm font-medium text-amber-300">Services on Child Groups ({services.length})</span>
-      </div>
-      <p className="text-xs text-gray-400">These services are assigned to sub-groups instead of root groups. Move them up for correct behavior.</p>
-      {services.map(svc => {
-        const groupPath = buildGroupPath(svc.preferred_vendor_group_id, groupsById);
-        const rootId = getRootGroupId(svc.preferred_vendor_group_id, groupsById);
-        const rootGroup = groupsById.get(rootId);
-        return (
-          <div key={svc.id} className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md">
-            <span className="text-sm text-white flex-1 truncate">{svc.name}</span>
-            <Badge variant="outline" className="text-[9px] border-amber-600/50 text-amber-400 shrink-0">{groupPath}</Badge>
-            {rootGroup && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1 border-amber-600 text-amber-300"
-                onClick={() => moveToRoot(svc.id, svc)}
-              >
-                <ArrowUp className="w-3 h-3" />
-                Move to {rootGroup.name}
-              </Button>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function OrphanSection({ services, vendorGroups, onInvalidate }) {
   const reassign = async (svcId, groupId) => {
     await base44.entities.Service.update(svcId, { preferred_vendor_group_id: groupId });
-    toast.success("Reassigned to root group");
+    toast.success("Reassigned");
     onInvalidate();
   };
 
   return (
-    <div className="rounded-lg border border-red-700/40 bg-red-900/20 p-3 space-y-2">
+    <div className="rounded-lg border border-red-700/40 bg-red-900/20 p-3 space-y-2 mt-3">
       <div className="flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 text-red-400" />
         <span className="text-sm font-medium text-red-300">Ungrouped Services ({services.length})</span>
       </div>
-      <p className="text-xs text-gray-400">These services have no vendor group or their group was deleted. Reassign them to a root group.</p>
+      <p className="text-xs text-gray-400">These services have no vendor group or their group was deleted. Reassign them.</p>
       {services.map(svc => (
         <div key={svc.id} className="flex items-center gap-2 p-2 bg-gray-900/40 rounded-md">
           <span className="text-sm text-white flex-1 truncate">{svc.name}</span>
@@ -380,8 +336,10 @@ function OrphanSection({ services, vendorGroups, onInvalidate }) {
             onChange={e => { if (e.target.value) reassign(svc.id, e.target.value); }}
           >
             <option value="" disabled>Reassign to...</option>
-            {vendorGroups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
+            {hierarchicalOptions.map(opt => (
+              <option key={opt.id} value={opt.id}>
+                {opt.depth > 0 ? "  ".repeat(opt.depth) + "↳ " : ""}{opt.name}
+              </option>
             ))}
           </select>
         </div>

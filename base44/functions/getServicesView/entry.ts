@@ -10,6 +10,23 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Build full hierarchy path for a group: "Finishing / Chrome Plating"
+function resolveGroupPath(groupId, groupMap) {
+  if (!groupId) return null;
+  const parts = [];
+  let current = groupId;
+  const visited = new Set();
+  while (current) {
+    if (visited.has(current)) break;
+    visited.add(current);
+    const group = groupMap.get(current);
+    if (!group) break;
+    parts.unshift(group.name);
+    current = group.parent_group_id || null;
+  }
+  return parts.length > 0 ? parts.join(' / ') : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
 
@@ -120,7 +137,7 @@ Deno.serve(async (req) => {
         service_id: c.service_id,
         service_name: service?.name || 'Unknown Service',
         service_group_id: service?.preferred_vendor_group_id || null,
-        service_group_name: service?.preferred_vendor_group_id ? (vendorGroupMap.get(service.preferred_vendor_group_id)?.name || null) : null,
+        service_group_name: service?.preferred_vendor_group_id ? resolveGroupPath(service.preferred_vendor_group_id, vendorGroupMap) : null,
 
         vendor_id: c.vendor_id || null,
         vendor_name: vendor?.name || null,
