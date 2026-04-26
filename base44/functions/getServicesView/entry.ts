@@ -1,16 +1,14 @@
 /**
  * getServicesView — Canonical read model for service commitments.
  *
- * Pre-joins Service, ServiceVendor, Project names + category.
- * Computes effective cost, margin, and has_line_items flag.
- *
- * Params (all optional):
- *   project_id  — filter to one project
- *   status      — filter by commitment status
- *   vendor_id   — filter by vendor
- *   include_line_items — if true, attach line_items[] to each commitment
+ * STABILIZED: Phases 1, 2, 5, 6, 7
+ * - Line items are the ONLY source of cost truth (no legacy fallback)
+ * - Planned vs actual cost comparison
+ * - Internal vs external cost split
+ * - Negative margin warnings
+ * - Billing lock status
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
@@ -23,7 +21,6 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { project_id, status, vendor_id, include_line_items } = body;
 
-    // ── Fetch all data in parallel ──
     const commitmentFilter = {};
     if (project_id) commitmentFilter.project_id = project_id;
     if (status) commitmentFilter.status = status;
@@ -40,18 +37,14 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.Project.list('-created_date', 500),
     ]);
 
-    // ── Build lookup maps ──
     const serviceMap = new Map(services.map(s => [s.id, s]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
     const projectMap = new Map(projects.map(p => [p.id, p]));
 
-    // ── Optionally fetch all line items for has_line_items flag ──
-    // We need to know which commitments have line items, so fetch them grouped
     const commitmentIds = commitments.map(c => c.id);
-    let lineItemsByCommitment = new Map();
+    const lineItemsByCommitment = new Map();
 
     if (commitmentIds.length > 0) {
-      // Fetch all line items for these commitments
       const allLineItems = await base44.asServiceRole.entities.ServiceLineItem.filter({
         service_commitment_id: { $in: commitmentIds },
       });
@@ -63,54 +56,97 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Enrich each commitment ──
+    const r2 = n => Math.round((n || 0) * 100) / 100;
+
     const enriched = commitments.map(c => {
       const service = serviceMap.get(c.service_id);
       const vendor = c.vendor_id ? vendorMap.get(c.vendor_id) : null;
       const project = projectMap.get(c.project_id);
       const lineItems = lineItemsByCommitment.get(c.id) || [];
 
-      const effectiveCost = getEffectiveServiceCost(c);
-      const totalBillable = c.total_billable || 0;
+      // PHASE 1+5: Line items are the ONLY source of cost. No legacy fallback.
+      let totalCost = 0, totalBillable = 0, externalCost = 0, internalCost = 0;
+      for (const li of lineItems) {
+        const qty = li.quantity || 1;
+        const lineCost = (li.cost || 0) * qty;
+        totalCost += lineCost;
+        totalBillable += (li.billing_rate || 0) * qty;
+        // PHASE 7: Split
+        if (li.type === 'internal_labor') internalCost += lineCost;
+        else externalCost += lineCost;
+      }
+
+      // If no line items exist, use stored total_cost (for freshly migrated data)
+      // but NEVER fall back to legacy estimated_cost/actual_cost
+      if (lineItems.length === 0 && (c.total_cost || 0) > 0) {
+        totalCost = c.total_cost;
+        totalBillable = c.total_billable || 0;
+        externalCost = totalCost; // assume external if no line items to classify
+      }
+
       const marginPct = totalBillable > 0
-        ? ((totalBillable - effectiveCost) / totalBillable) * 100
+        ? ((totalBillable - totalCost) / totalBillable) * 100
         : 0;
 
+      // PHASE 2: Planned vs actual
+      const plannedCost = c.planned_cost ?? 0;
+      const plannedBillable = c.planned_billable ?? 0;
+      const plannedMargin = plannedBillable > 0 ? ((plannedBillable - plannedCost) / plannedBillable) * 100 : 0;
+      const costVariance = r2(totalCost - plannedCost);
+      const billableVariance = r2(totalBillable - plannedBillable);
+
+      // PHASE 4: Unified billing lock
+      const billingLocked = c.status === 'billed' || c.is_billed === true;
+
+      // PHASE 6: Negative margin warning
+      const marginWarning = totalBillable > 0 && totalCost > totalBillable;
+
       const result = {
-        // Core identity
         id: c.id,
         created_date: c.created_date,
         updated_date: c.updated_date,
 
-        // Status + lifecycle
         status: c.status || 'planned',
+        is_billed: c.is_billed || false,
+        billing_locked: billingLocked,
         ordered_date: c.ordered_date || null,
         completed_date: c.completed_date || null,
         billed_date: c.billed_date || null,
 
-        // Service (pre-joined)
         service_id: c.service_id,
         service_name: service?.name || 'Unknown Service',
         service_category: service?.category || 'other',
 
-        // Vendor (pre-joined)
         vendor_id: c.vendor_id || null,
         vendor_name: vendor?.name || null,
 
-        // Project (pre-joined)
         project_id: c.project_id,
         project_name: project?.name || 'Unknown Project',
 
-        // Instance fields
         description: c.description || '',
         quantity: c.quantity || 1,
         notes: c.notes || null,
         invoice_reference: c.invoice_reference || null,
+        invoice_id: c.invoice_id || null,
 
-        // Financial (canonical)
-        total_cost: effectiveCost,
-        total_billable: totalBillable,
+        // CANONICAL financial (line-item derived ONLY)
+        total_cost: r2(totalCost),
+        total_billable: r2(totalBillable),
         margin_pct: Math.round(marginPct * 10) / 10,
+
+        // PHASE 7: Internal vs external cost split
+        external_cost: r2(externalCost),
+        internal_cost: r2(internalCost),
+
+        // PHASE 2: Planned vs actual
+        planned_cost: r2(plannedCost),
+        planned_billable: r2(plannedBillable),
+        planned_margin_pct: Math.round(plannedMargin * 10) / 10,
+        cost_variance: costVariance,
+        billable_variance: billableVariance,
+
+        // PHASE 6: Margin warning
+        margin_warning: marginWarning,
 
         // Override flags
         cost_override: c.cost_override || false,
@@ -119,14 +155,8 @@ Deno.serve(async (req) => {
         // Line items metadata
         has_line_items: lineItems.length > 0,
         line_item_count: lineItems.length,
-
-        // Legacy fields (preserved for transition)
-        estimated_cost: c.estimated_cost ?? 0,
-        actual_cost: c.actual_cost ?? null,
-        raw_total_cost: c.total_cost ?? 0,
       };
 
-      // Optionally include full line items
       if (include_line_items) {
         result.line_items = lineItems.map(li => ({
           id: li.id,
@@ -145,42 +175,43 @@ Deno.serve(async (req) => {
       return result;
     });
 
-    // ── Compute summary ──
+    // Summary
     const summary = {
       total: enriched.length,
       by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 },
       total_cost: 0,
       total_billable: 0,
+      external_cost: 0,
+      internal_cost: 0,
+      planned_cost: 0,
+      planned_billable: 0,
       margin_pct: 0,
+      margin_warning_count: 0,
     };
     for (const e of enriched) {
       summary.by_status[e.status] = (summary.by_status[e.status] || 0) + 1;
       summary.total_cost += e.total_cost;
       summary.total_billable += e.total_billable;
+      summary.external_cost += e.external_cost;
+      summary.internal_cost += e.internal_cost;
+      summary.planned_cost += e.planned_cost;
+      summary.planned_billable += e.planned_billable;
+      if (e.margin_warning) summary.margin_warning_count++;
     }
-    summary.total_cost = Math.round(summary.total_cost * 100) / 100;
-    summary.total_billable = Math.round(summary.total_billable * 100) / 100;
+    summary.total_cost = r2(summary.total_cost);
+    summary.total_billable = r2(summary.total_billable);
+    summary.external_cost = r2(summary.external_cost);
+    summary.internal_cost = r2(summary.internal_cost);
+    summary.planned_cost = r2(summary.planned_cost);
+    summary.planned_billable = r2(summary.planned_billable);
     summary.margin_pct = summary.total_billable > 0
       ? Math.round(((summary.total_billable - summary.total_cost) / summary.total_billable) * 1000) / 10
       : 0;
 
-    return Response.json({
-      success: true,
-      commitments: enriched,
-      summary,
-    });
+    return Response.json({ success: true, commitments: enriched, summary });
 
   } catch (error) {
     console.error('getServicesView error:', error);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
-
-/**
- * getEffectiveServiceCost — CANONICAL cost resolver for service commitments.
- * Prefer line-item-derived total_cost; fall back to legacy fields.
- */
-function getEffectiveServiceCost(c) {
-  if (c.total_cost > 0) return c.total_cost;
-  return (c.actual_cost ?? c.estimated_cost ?? 0) * (c.quantity || 1);
-}

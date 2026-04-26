@@ -39,7 +39,7 @@ const TEMPLATES = [
   { type: "misc", description: "Miscellaneous Cost", cost: 0, billing_rate: 0, quantity: 1 },
 ];
 
-export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }) {
+export default function ServiceLineItemManager({ commitmentId, onTotalsChanged, billingLocked = false }) {
   const queryClient = useQueryClient();
   const [editModal, setEditModal] = useState(null); // null | "new" | lineItem object
   const [templateType, setTemplateType] = useState(null);
@@ -101,25 +101,30 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
         </div>
       </div>
 
-      {/* Template Quick Add */}
-      <div className="flex flex-wrap gap-1.5">
-        {TEMPLATES.map(t => {
-          const cfg = TYPE_CONFIG[t.type];
-          const Icon = cfg.icon;
-          return (
-            <Button
-              key={t.type}
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs border-gray-700 text-gray-300 gap-1"
-              onClick={() => handleAddFromTemplate(t)}
-            >
-              <Icon className={`w-3 h-3 ${cfg.color}`} />
-              + {cfg.label}
-            </Button>
-          );
-        })}
-      </div>
+      {/* Template Quick Add — PHASE 3: hidden when billing locked */}
+      {!billingLocked && (
+        <div className="flex flex-wrap gap-1.5">
+          {TEMPLATES.map(t => {
+            const cfg = TYPE_CONFIG[t.type];
+            const Icon = cfg.icon;
+            return (
+              <Button
+                key={t.type}
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-gray-700 text-gray-300 gap-1"
+                onClick={() => handleAddFromTemplate(t)}
+              >
+                <Icon className={`w-3 h-3 ${cfg.color}`} />
+                + {cfg.label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      {billingLocked && (
+        <div className="text-[10px] text-red-400/70 font-mono uppercase tracking-wide">🔒 Locked after billing — line items cannot be modified</div>
+      )}
 
       {/* Line Items List */}
       {sorted.length === 0 ? (
@@ -153,14 +158,17 @@ export default function ServiceLineItemManager({ commitmentId, onTotalsChanged }
                     <p className="text-[10px] font-mono text-green-400">{formatCurrencyUSD(lineBillable)}</p>
                   )}
                 </div>
-                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditModal(li)}>
-                    <Edit2 className="w-3 h-3 text-gray-400" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(li.id)}>
-                    <Trash2 className="w-3 h-3 text-red-400" />
-                  </Button>
-                </div>
+                {/* PHASE 3: Hide edit/delete when billing locked */}
+                {!billingLocked && (
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditModal(li)}>
+                      <Edit2 className="w-3 h-3 text-gray-400" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(li.id)}>
+                      <Trash2 className="w-3 h-3 text-red-400" />
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}

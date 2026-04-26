@@ -145,7 +145,7 @@ export default function ServicesDashboard() {
           </div>
         </div>
 
-        {/* Summary Cards — uses canonical summary from backend */}
+        {/* Summary Cards — STABILIZED: line-item-derived + planned vs actual */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2">
           <SummaryCard label="Total" value={summary.total} color="text-white" />
           <SummaryCard label="Planned" value={summary.by_status.planned} color="text-gray-400" />
@@ -153,8 +153,11 @@ export default function ServicesDashboard() {
           <SummaryCard label="Completed" value={summary.by_status.completed} color="text-blue-400" />
           <SummaryCard label="Billed" value={summary.by_status.billed} color="text-green-400" />
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">Total Cost</p>
+            <p className="text-xs text-gray-500">Actual Cost</p>
             <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(summary.total_cost)}</p>
+            {(summary.planned_cost ?? 0) > 0 && Math.abs(summary.total_cost - summary.planned_cost) > 0.01 && (
+              <p className="text-[9px] text-gray-500 font-mono">Plan: {formatCurrencyUSD(summary.planned_cost)}</p>
+            )}
           </div>
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Billable</p>
@@ -163,7 +166,20 @@ export default function ServicesDashboard() {
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">Margin</p>
             <p className={`text-lg font-bold ${summary.margin_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>{summary.margin_pct.toFixed(1)}%</p>
+            {(summary.margin_warning_count ?? 0) > 0 && (
+              <p className="text-[9px] text-red-400">⚠ {summary.margin_warning_count} neg</p>
+            )}
           </div>
+          {/* PHASE 7: Internal vs External cost split */}
+          {((summary.internal_cost ?? 0) > 0 || (summary.external_cost ?? 0) > 0) && (
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 text-center col-span-2 md:col-span-1">
+              <p className="text-xs text-gray-500">Cost Split</p>
+              <div className="text-[10px] font-mono space-y-0.5">
+                <p className="text-purple-400">Vendor: {formatCurrencyUSD(summary.external_cost ?? 0)}</p>
+                <p className="text-amber-400">Internal: {formatCurrencyUSD(summary.internal_cost ?? 0)}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Service Commitments */}

@@ -37,6 +37,16 @@
       "default": 0,
       "description": "DERIVED: Sum of all ServiceLineItem (billing_rate * quantity)"
     },
+    "planned_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "SNAPSHOT: Total cost at commitment creation time. Never changes after creation."
+    },
+    "planned_billable": {
+      "type": "number",
+      "default": 0,
+      "description": "SNAPSHOT: Total billable at commitment creation time. Never changes after creation."
+    },
     "quantity": {
       "type": "number",
       "default": 1,

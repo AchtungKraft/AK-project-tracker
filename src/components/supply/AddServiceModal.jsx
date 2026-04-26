@@ -195,7 +195,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     }
     setSaving(true);
     try {
-      await base44.functions.invoke("executeServiceAction", {
+      const res = await base44.functions.invoke("executeServiceAction", {
         action_type: "CREATE",
         project_id: resolvedProjectId,
         service_id: serviceId,
@@ -205,7 +205,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
         notes: notes.trim() || null,
         line_items: lineItems.map(li => {
           const cost = parseFloat(li.cost) || 0;
-          const billing_rate = parseFloat(li.billing_rate) || cost; // default billing_rate = cost
+          const billing_rate = parseFloat(li.billing_rate) || cost;
           return {
             type: li.type,
             description: li.description.trim(),
@@ -216,6 +216,10 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
           };
         }),
       });
+      // PHASE 9: Show duplicate warning if detected
+      if (res.data?.duplicate_warning) {
+        toast.warning(res.data.duplicate_warning);
+      }
       toast.success("Service added with line items");
       onSuccess?.();
       onClose();

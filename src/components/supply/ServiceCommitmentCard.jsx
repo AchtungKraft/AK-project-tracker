@@ -69,10 +69,12 @@ export default function ServiceCommitmentCard({
   const vendorName = commitment.vendor_name || legacyVendorName;
   const projectName = commitment.project_name || legacyProjectName;
 
-  // Use canonical cost/margin from read model
+  // CANONICAL cost/margin from read model (line-item-derived ONLY)
   const totalCost = commitment.total_cost || 0;
   const totalBillable = commitment.total_billable || 0;
   const margin = commitment.margin_pct ?? (totalBillable > 0 ? ((totalBillable - totalCost) / totalBillable) * 100 : null);
+  const billingLocked = commitment.billing_locked || status === 'billed';
+  const marginWarning = commitment.margin_warning === true;
 
   return (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg hover:border-gray-600 transition-colors">
@@ -112,7 +114,7 @@ export default function ServiceCommitmentCard({
           </div>
         </div>
 
-        {/* Cost & Billable */}
+        {/* Cost & Billable + margin warning */}
         <div className="text-right shrink-0">
           <p className="text-sm font-mono font-medium text-white">
             {formatCurrencyUSD(totalCost)}
@@ -126,6 +128,18 @@ export default function ServiceCommitmentCard({
                 </span>
               )}
             </div>
+          )}
+          {/* PHASE 2: Planned vs actual variance */}
+          {(commitment.cost_variance ?? 0) !== 0 && (
+            <div className="text-[9px] font-mono text-right">
+              <span className={(commitment.cost_variance ?? 0) > 0 ? "text-red-400" : "text-emerald-400"}>
+                Δ {(commitment.cost_variance ?? 0) > 0 ? '+' : ''}{formatCurrencyUSD(commitment.cost_variance ?? 0)}
+              </span>
+            </div>
+          )}
+          {/* PHASE 6: Margin warning */}
+          {marginWarning && (
+            <Badge className="text-[8px] px-1 py-0 bg-red-900/40 text-red-400 border-red-700/50 mt-0.5">⚠ NEG MARGIN</Badge>
           )}
         </div>
 
@@ -181,6 +195,7 @@ export default function ServiceCommitmentCard({
           <ServiceLineItemManager
             commitmentId={commitment.id}
             onTotalsChanged={onTotalsChanged}
+            billingLocked={billingLocked}
           />
         </div>
       )}

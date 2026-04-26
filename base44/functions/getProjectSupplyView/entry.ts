@@ -796,8 +796,8 @@ async function resolveCanonicalFinancials(base44, project_id, commitments, proje
   let services_planned_retail = 0, services_planned_cost = 0, services_invoiced_amount = 0;
   for (const sc of serviceCommitments) {
     services_planned_retail += sc.total_billable ?? 0;
-    const cost = sc.total_cost > 0 ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
-    services_planned_cost += cost;
+    // STABILIZED: Line-item-derived total_cost ONLY — no legacy fallback
+    services_planned_cost += sc.total_cost ?? 0;
     if (sc.is_billed === true || sc.status === 'billed') services_invoiced_amount += sc.total_billable ?? 0;
   }
 

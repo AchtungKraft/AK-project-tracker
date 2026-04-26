@@ -91,14 +91,15 @@ export default function ProjectServicesSection({ projectId, projectName }) {
         </div>
       </div>
 
-      {/* Summary Strip — uses canonical summary from backend */}
+      {/* Summary Strip — STABILIZED: line-item-derived + internal/external split */}
       {summary.total > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
           <SummaryCell label="Services" value={summary.total} color="text-white" />
-          <SummaryCell label="Total Cost" value={formatCurrencyUSD(summary.total_cost)} color="text-white" mono />
-          <SummaryCell label="Total Billable" value={formatCurrencyUSD(summary.total_billable)} color="text-green-400" mono />
+          <SummaryCell label="Actual Cost" value={formatCurrencyUSD(summary.total_cost)} color="text-white" mono />
+          <SummaryCell label="Billable" value={formatCurrencyUSD(summary.total_billable)} color="text-green-400" mono />
           <SummaryCell label="Margin" value={`${summary.margin_pct.toFixed(1)}%`} color={summary.margin_pct >= 0 ? "text-green-400" : "text-red-400"} />
-          <SummaryCell label="Completed" value={(summary.by_status.completed || 0) + (summary.by_status.billed || 0)} color="text-blue-400" />
+          <SummaryCell label="Vendor Cost" value={formatCurrencyUSD(summary.external_cost ?? 0)} color="text-purple-400" mono />
+          <SummaryCell label="Internal Cost" value={formatCurrencyUSD(summary.internal_cost ?? 0)} color="text-amber-400" mono />
           <SummaryCell label="Pending" value={(summary.by_status.planned || 0) + (summary.by_status.ordered || 0)} color="text-amber-400" />
         </div>
       )}

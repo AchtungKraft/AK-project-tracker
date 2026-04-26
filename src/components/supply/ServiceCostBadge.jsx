@@ -47,8 +47,8 @@ export default function ServiceCostBadge({ commitment, className }) {
   const hasCostOverride = commitment.cost_override === true;
   const hasRetailOverride = commitment.retail_override === true;
 
-  // Billing locked
-  if (status === 'billed') {
+  // PHASE 4: Unified billing lock (is_billed OR status === billed)
+  if (commitment.billing_locked || commitment.is_billed === true || status === 'billed') {
     return <BadgeChip config={CONFIGS.LOCKED} className={className} />;
   }
 
