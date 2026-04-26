@@ -351,6 +351,7 @@ async function addLineItem(base44, user, payload) {
   const existing = await base44.asServiceRole.entities.ServiceLineItem.filter({ service_commitment_id });
   const maxOrder = existing.reduce((max, li) => Math.max(max, li.sort_order || 0), 0);
 
+  const { pricing_source, matrix_reference_id, reference_id } = payload;
   const lineItem = await base44.asServiceRole.entities.ServiceLineItem.create({
     service_commitment_id,
     type,
@@ -361,6 +362,9 @@ async function addLineItem(base44, user, payload) {
     quantity: quantity || 1,
     sort_order: maxOrder + 1,
     notes: notes || null,
+    pricing_source: pricing_source || 'manual',
+    matrix_reference_id: matrix_reference_id || null,
+    reference_id: reference_id || null,
   });
 
   const totals = await recomputeTotals(base44, service_commitment_id);
@@ -379,7 +383,7 @@ async function updateLineItem(base44, user, payload) {
   const [commitment] = await base44.asServiceRole.entities.ServiceCommitment.filter({ id: li.service_commitment_id });
   if (commitment) assertNotBillingLocked(commitment);
 
-  const allowed = ['type', 'description', 'vendor_id', 'cost', 'billing_rate', 'quantity', 'sort_order', 'notes'];
+  const allowed = ['type', 'description', 'vendor_id', 'cost', 'billing_rate', 'quantity', 'sort_order', 'notes', 'pricing_source', 'matrix_reference_id', 'reference_id'];
   const safeUpdates = {};
   for (const key of allowed) {
     if (updates[key] !== undefined) safeUpdates[key] = updates[key];

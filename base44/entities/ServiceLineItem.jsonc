@@ -45,6 +45,23 @@
       "default": 0,
       "description": "Display order"
     },
+    "pricing_source": {
+      "type": "string",
+      "enum": [
+        "matrix",
+        "manual"
+      ],
+      "default": "manual",
+      "description": "Whether pricing was derived from matrix suggestion or manually entered"
+    },
+    "matrix_reference_id": {
+      "type": "string",
+      "description": "Reference to RetailMarkupMatrix tier used (optional)"
+    },
+    "reference_id": {
+      "type": "string",
+      "description": "Optional external reference (PO, shipment, invoice, etc.)"
+    },
     "notes": {
       "type": "string",
       "description": "Additional notes"

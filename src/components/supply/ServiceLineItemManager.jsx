@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
+import MatrixPricingPreview from "@/components/supply/MatrixPricingPreview";
 
 const TYPE_CONFIG = {
   vendor_cost: { label: "Vendor Cost", icon: Truck, color: "text-purple-400" },
@@ -149,14 +150,21 @@ export default function ServiceLineItemManager({ commitmentId, serviceGroupId, o
               <div key={li.id} className="flex items-center gap-2 p-2 bg-gray-900/50 border border-gray-700/50 rounded group">
                 <Icon className={`w-3.5 h-3.5 shrink-0 ${cfg.color}`} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs text-white truncate">{li.description}</span>
-                    <Badge variant="outline" className="text-[9px] px-1 py-0 border-gray-700 text-gray-500">{cfg.label}</Badge>
+                    <Badge variant="outline" className={`text-[9px] px-1 py-0 border-gray-700 ${cfg.color}`}>{cfg.label}</Badge>
+                    {li.pricing_source === "matrix" && (
+                      <Badge variant="outline" className="text-[8px] px-1 py-0 border-blue-700/50 text-blue-400/70">Matrix</Badge>
+                    )}
+                    {li.reference_id && (
+                      <Badge variant="outline" className="text-[8px] px-1 py-0 border-gray-600 text-gray-500">Ref: {li.reference_id}</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-gray-500">
                     {li.vendor_id && <span>{vendorsMap.get(li.vendor_id)?.name || "Vendor"}</span>}
                     {li.type === "internal_labor" && <span>{qty}h × {formatCurrencyUSD(li.cost || 0)}/hr</span>}
                     {li.type !== "internal_labor" && qty > 1 && <span>Qty: {qty}</span>}
+                    {totals.cost > 0 && <span className="text-gray-600">{((lineCost / totals.cost) * 100).toFixed(0)}% of cost</span>}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -210,7 +218,12 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
   const [billingRate, setBillingRate] = useState(String(defaults.billing_rate ?? ""));
   const [quantity, setQuantity] = useState(String(defaults.quantity ?? "1"));
   const [notes, setNotes] = useState(defaults.notes || "");
+  const [referenceId, setReferenceId] = useState(defaults.reference_id || "");
   const [saving, setSaving] = useState(false);
+
+  // Pricing source tracking
+  const [pricingSource, setPricingSource] = useState(defaults.pricing_source || "manual");
+  const [matrixRefId, setMatrixRefId] = useState(defaults.matrix_reference_id || "");
 
   // Inline vendor creation
   const [showNewVendor, setShowNewVendor] = useState(false);
@@ -240,33 +253,56 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
     }
   };
 
+  // When user manually edits billing_rate, switch to manual pricing source
+  const handleBillingRateChange = (val) => {
+    setBillingRate(val);
+    setPricingSource("manual");
+    setMatrixRefId("");
+  };
+
+  // Apply suggested retail from matrix
+  const handleApplyRetail = (suggestedRetail, tierId) => {
+    setBillingRate(String(suggestedRetail));
+    setPricingSource("matrix");
+    setMatrixRefId(tierId || "");
+  };
+
+  // Apply both cost (keep current) and retail from matrix
+  const handleApplyBoth = (_costVal, suggestedRetail, tierId) => {
+    setBillingRate(String(suggestedRetail));
+    setPricingSource("matrix");
+    setMatrixRefId(tierId || "");
+  };
+
   const handleSave = async () => {
     if (!description.trim()) { toast.error("Description required"); return; }
+    if (type === "vendor_cost" && (!vendorId || vendorId === "__none__")) { toast.error("Vendor required for Vendor Cost type"); return; }
     setSaving(true);
     try {
+      const shared = {
+        type,
+        description: description.trim(),
+        vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
+        cost: parseFloat(cost) || 0,
+        billing_rate: parseFloat(billingRate) || 0,
+        quantity: parseFloat(quantity) || 1,
+        notes: notes.trim() || null,
+        pricing_source: pricingSource,
+        matrix_reference_id: matrixRefId || null,
+        reference_id: referenceId.trim() || null,
+      };
+
       if (isNew) {
         await base44.functions.invoke("executeServiceAction", {
           action_type: "ADD_LINE_ITEM",
           service_commitment_id: commitmentId,
-          type,
-          description: description.trim(),
-          vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
-          cost: parseFloat(cost) || 0,
-          billing_rate: parseFloat(billingRate) || 0,
-          quantity: parseFloat(quantity) || 1,
-          notes: notes.trim() || null,
+          ...shared,
         });
       } else {
         await base44.functions.invoke("executeServiceAction", {
           action_type: "UPDATE_LINE_ITEM",
           line_item_id: lineItem.id,
-          type,
-          description: description.trim(),
-          vendor_id: (vendorId && vendorId !== "__none__") ? vendorId : null,
-          cost: parseFloat(cost) || 0,
-          billing_rate: parseFloat(billingRate) || 0,
-          quantity: parseFloat(quantity) || 1,
-          notes: notes.trim() || null,
+          ...shared,
         });
       }
       toast.success(isNew ? "Line item added" : "Line item updated");
@@ -348,13 +384,23 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
             </div>
             <div>
               <Label className="text-gray-300 text-xs">{isLabor ? "Bill Rate" : "Billing Rate"}</Label>
-              <Input type="number" step="0.01" value={billingRate} onChange={e => setBillingRate(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
+              <Input type="number" step="0.01" value={billingRate} onChange={e => handleBillingRateChange(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
             </div>
             <div>
               <Label className="text-gray-300 text-xs">{isLabor ? "Hours" : "Qty"}</Label>
               <Input type="number" step="0.01" min="0" value={quantity} onChange={e => setQuantity(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
             </div>
           </div>
+
+          {/* Matrix Pricing Preview — non-blocking guidance */}
+          {!isLabor && (
+            <MatrixPricingPreview
+              cost={cost}
+              billingRate={billingRate}
+              onApplyRetail={handleApplyRetail}
+              onApplyBoth={handleApplyBoth}
+            />
+          )}
 
           {/* Live Totals */}
           <div className="bg-gray-800/50 border border-gray-700 rounded p-2 grid grid-cols-3 gap-2 text-xs">
@@ -374,9 +420,16 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
             </div>
           </div>
 
-          <div>
-            <Label className="text-gray-300 text-xs">Notes</Label>
-            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional..." className="bg-gray-800 border-gray-600 text-white mt-1" />
+          {/* Reference & Notes */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-gray-300 text-xs">Reference ID</Label>
+              <Input value={referenceId} onChange={e => setReferenceId(e.target.value)} placeholder="PO / Invoice #..." className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Notes</Label>
+              <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional..." className="bg-gray-800 border-gray-600 text-white mt-1" />
+            </div>
           </div>
         </div>
         <DialogFooter className="gap-2">
