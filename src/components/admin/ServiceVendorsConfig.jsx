@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
 
 const EMPTY_FORM = {
   name: "",
@@ -48,6 +49,14 @@ export default function ServiceVendorsConfig() {
     },
   });
   const groupsMap = new Map(vendorGroups.map(g => [g.id, g]));
+
+  // Build hierarchy label map for display
+  const hierarchicalLabels = useMemo(() => {
+    const opts = buildHierarchicalOptions(vendorGroups, "SERVICE");
+    const map = new Map();
+    for (const o of opts) map.set(o.id, o.label);
+    return map;
+  }, [vendorGroups]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["serviceVendors-admin"] });
@@ -124,7 +133,7 @@ export default function ServiceVendorsConfig() {
               return (
                 <div key={group.id}>
                   <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">{group.name}</Badge>
+                    <Badge variant="outline" className="text-[10px] border-purple-600/50 text-purple-400">{hierarchicalLabels.get(group.id) || group.name}</Badge>
                     <span className="text-[10px] text-gray-500">{groupVendors.length} vendor{groupVendors.length !== 1 ? "s" : ""}</span>
                   </div>
                   <div className="space-y-2">
@@ -219,6 +228,12 @@ function AdminServiceVendorModal({ vendor, vendorGroups, onClose, onSuccess }) {
   });
   const [saving, setSaving] = useState(false);
 
+  // Build hierarchical options for group dropdown
+  const hierarchicalOptions = useMemo(
+    () => buildHierarchicalOptions(vendorGroups, "SERVICE"),
+    [vendorGroups]
+  );
+
   const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
   const handleSave = async () => {
@@ -270,8 +285,11 @@ function AdminServiceVendorModal({ vendor, vendorGroups, onClose, onSuccess }) {
                 <SelectValue placeholder="Select group..." />
               </SelectTrigger>
               <SelectContent>
-                {vendorGroups.map(g => (
-                  <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                {hierarchicalOptions.map(opt => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.depth > 0 ? `${"  ".repeat(opt.depth)}↳ ${opt.name}` : opt.name}
+                    {opt.depth > 0 ? ` (${opt.label})` : ""}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

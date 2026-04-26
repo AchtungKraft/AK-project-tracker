@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
+import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,17 +82,25 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap, getVendorsForServiceGroup } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
   const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
   const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) : null;
 
-  // Lock vendor dropdown to ONLY the service's group
-  const lockedVendorGroups = selectedGroup ? [selectedGroup] : [];
-  const lockedVendorsByGroup = selectedGroupId
-    ? new Map([[selectedGroupId, vendorsByGroup.get(selectedGroupId) || []]])
-    : new Map();
+  // Lock vendor dropdown to service's group subtree (root + descendants)
+  const subtreeVendors = getVendorsForServiceGroup(selectedGroupId);
+  const subtreeGroupIds = React.useMemo(() => selectedGroupId ? getSubtreeIds(selectedGroupId, vendorGroups) : new Set(), [selectedGroupId, vendorGroups]);
+  const lockedVendorGroups = React.useMemo(() => vendorGroups.filter(g => subtreeGroupIds.has(g.id)), [vendorGroups, subtreeGroupIds]);
+  const lockedVendorsByGroup = React.useMemo(() => {
+    const map = new Map();
+    for (const v of subtreeVendors) {
+      const gid = v.vendor_group_id || selectedGroupId;
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(v);
+    }
+    return map;
+  }, [subtreeVendors, selectedGroupId]);
 
   // CANONICAL: Use billing_locked from read model (is_billed || invoice_id)
   const isBilled = commitment.billing_locked === true || commitment.is_billed === true || commitment.invoice_id != null;
@@ -204,11 +213,11 @@ export default function EditServiceModal({ commitment, open, onClose, onSuccess 
             <Label className="text-gray-300">Service *</Label>
             <Select value={serviceId} onValueChange={(id) => {
               setServiceId(id);
-              // Reset vendor when service changes — use first vendor in group
+              // Reset vendor when service changes — use first vendor in group subtree
               const svc = services.find(s => s.id === id);
               const gid = svc?.preferred_vendor_group_id;
-              const gVendors = gid ? (vendorsByGroup.get(gid) || []) : [];
-              setVendorId(gVendors[0]?.id || "");
+              const subtreeV = gid ? getVendorsForServiceGroup(gid) : [];
+              setVendorId(subtreeV[0]?.id || "");
             }} disabled={isBilled}>
               <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                 <SelectValue placeholder="Select a service..." />

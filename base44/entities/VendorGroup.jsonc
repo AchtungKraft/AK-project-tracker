@@ -14,6 +14,10 @@
       ],
       "description": "Which vendor domain this group belongs to"
     },
+    "parent_group_id": {
+      "type": "string",
+      "description": "Reference to parent VendorGroup for hierarchy. Null/empty = root group."
+    },
     "default_line_item_type": {
       "type": "string",
       "enum": [

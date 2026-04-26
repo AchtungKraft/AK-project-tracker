@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
 import {
   Dialog,
   DialogContent,
@@ -74,17 +75,25 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
     queryFn: () => base44.entities.Service.filter({ is_active: true }),
   });
 
-  const { vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
+  const { vendorGroups, vendorsByGroup, groupsMap, getVendorsForServiceGroup } = useServiceVendorGroups();
 
   const selectedService = services.find(s => s.id === serviceId);
   const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
   const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) : null;
 
-  // Lock vendor dropdown to ONLY the service's group
-  const lockedVendorGroups = selectedGroup ? [selectedGroup] : [];
-  const lockedVendorsByGroup = selectedGroupId
-    ? new Map([[selectedGroupId, vendorsByGroup.get(selectedGroupId) || []]])
-    : new Map();
+  // Lock vendor dropdown to service's group subtree (root + descendants)
+  const subtreeVendors = getVendorsForServiceGroup(selectedGroupId);
+  const subtreeGroupIds = useMemo(() => selectedGroupId ? getSubtreeIds(selectedGroupId, vendorGroups) : new Set(), [selectedGroupId, vendorGroups]);
+  const lockedVendorGroups = useMemo(() => vendorGroups.filter(g => subtreeGroupIds.has(g.id)), [vendorGroups, subtreeGroupIds]);
+  const lockedVendorsByGroup = useMemo(() => {
+    const map = new Map();
+    for (const v of subtreeVendors) {
+      const gid = v.vendor_group_id || selectedGroupId;
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(v);
+    }
+    return map;
+  }, [subtreeVendors, selectedGroupId]);
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
 
@@ -100,9 +109,9 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       return;
     }
 
-    // Auto-fill vendor: first vendor in group
-    const groupVendors = vendorsByGroup.get(groupId) || [];
-    setVendorId(groupVendors[0]?.id || "");
+    // Auto-fill vendor: first vendor in group subtree
+    const subtreeVendorsList = getVendorsForServiceGroup(groupId);
+    setVendorId(subtreeVendorsList[0]?.id || "");
 
     // Line item type is admin-defined on the VendorGroup — no guessing
     const group = groupsMap.get(groupId);
@@ -112,7 +121,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       _key: Date.now(),
       type: defaultType,
       description: defaultDesc,
-      vendor_id: groupVendors[0]?.id || "",
+      vendor_id: subtreeVendorsList[0]?.id || "",
       cost: "",
       billing_rate: "",
       quantity: "1",

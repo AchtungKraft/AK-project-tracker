@@ -77,7 +77,7 @@ export default function GroupedVendorSelect({
         {groupedEntries.map(({ group, vendors: gv }) => (
           <React.Fragment key={group.id}>
             <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-700/50 mt-1 first:mt-0 first:border-t-0 flex items-center gap-1.5">
-              {group.name}
+              {group.parent_group_id ? `↳ ${group.name}` : group.name}
               {selectedGroupId === group.id && (
                 <Badge variant="outline" className="text-[8px] px-1 py-0 border-green-600 text-green-400 ml-auto">
                   Match

@@ -95,10 +95,26 @@ function assertNotBillingLocked(commitment) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// PHASE 10: VENDOR ↔ GROUP VALIDATION HELPER
-// Resolves service_group_id from a service record and validates
-// that the given vendor belongs to the same group.
+// VENDOR ↔ GROUP VALIDATION HELPER (with hierarchy support)
+// A vendor is valid if its group is the service's root group
+// OR any descendant of it.
 // ══════════════════════════════════════════════════════════════
+
+// Check if groupId is within the subtree rooted at rootGroupId
+function isGroupWithinSubtree(groupId, rootGroupId, groupsById) {
+  if (!groupId || !rootGroupId) return false;
+  let current = groupId;
+  const visited = new Set();
+  while (current) {
+    if (current === rootGroupId) return true;
+    if (visited.has(current)) return false;
+    visited.add(current);
+    const group = groupsById.get(current);
+    current = group?.parent_group_id || null;
+  }
+  return false;
+}
+
 async function validateVendorGroupMatch(base44, vendorId, serviceId, context) {
   if (!vendorId) return; // no vendor to validate
   
@@ -112,8 +128,17 @@ async function validateVendorGroupMatch(base44, vendorId, serviceId, context) {
   if (!vendor) throw new Error(`${context}: Vendor not found`);
   if (!vendor.vendor_group_id) throw new Error(`${context}: Vendor "${vendor.name}" has no vendor group assigned`);
   
-  if (vendor.vendor_group_id !== serviceGroupId) {
-    throw new Error(`${context}: Vendor "${vendor.name}" (group: ${vendor.vendor_group_id}) does not match service group (${serviceGroupId}). Vendor must belong to the same group as the service.`);
+  // Exact match — fast path
+  if (vendor.vendor_group_id === serviceGroupId) return;
+  
+  // Subtree match — walk up from vendor's group to see if service group is an ancestor
+  const allGroups = await base44.asServiceRole.entities.VendorGroup.filter({ vendor_type: 'SERVICE' });
+  const groupsById = new Map(allGroups.map(g => [g.id, g]));
+  
+  if (!isGroupWithinSubtree(vendor.vendor_group_id, serviceGroupId, groupsById)) {
+    const vendorGroup = groupsById.get(vendor.vendor_group_id);
+    const serviceGroup = groupsById.get(serviceGroupId);
+    throw new Error(`${context}: Vendor "${vendor.name}" (group: ${vendorGroup?.name || vendor.vendor_group_id}) is not within the service group subtree (${serviceGroup?.name || serviceGroupId}). Vendor must belong to the service's group or a sub-group.`);
   }
 }
 
@@ -533,14 +558,14 @@ async function auditGroupAlignment(base44, user) {
     }
   }
 
-  // 3. Commitments where vendor group ≠ service group
+  // 3. Commitments where vendor group is outside service group subtree
   for (const c of allCommitments) {
     if (!c.vendor_id) continue;
     const service = serviceMap.get(c.service_id);
     const vendor = vendorMap.get(c.vendor_id);
     if (!service || !vendor) continue;
     const serviceGroupId = service.preferred_vendor_group_id;
-    if (serviceGroupId && vendor.vendor_group_id && vendor.vendor_group_id !== serviceGroupId) {
+    if (serviceGroupId && vendor.vendor_group_id && !isGroupWithinSubtree(vendor.vendor_group_id, serviceGroupId, groupMap)) {
       const sg = groupMap.get(serviceGroupId);
       const vg = groupMap.get(vendor.vendor_group_id);
       issues.push({
@@ -551,12 +576,12 @@ async function auditGroupAlignment(base44, user) {
         vendor_name: vendor.name,
         vendor_group: vg?.name || vendor.vendor_group_id,
         service_group: sg?.name || serviceGroupId,
-        detail: `Vendor "${vendor.name}" (${vg?.name}) does not match service group (${sg?.name})`,
+        detail: `Vendor "${vendor.name}" (${vg?.name}) is outside service group subtree (${sg?.name})`,
       });
     }
   }
 
-  // 4. Line items where vendor group ≠ parent commitment service group
+  // 4. Line items where vendor group is outside parent commitment service group subtree
   const commitmentMap = new Map(allCommitments.map(c => [c.id, c]));
   for (const li of allLineItems) {
     if (!li.vendor_id) continue;
@@ -566,7 +591,7 @@ async function auditGroupAlignment(base44, user) {
     const vendor = vendorMap.get(li.vendor_id);
     if (!service || !vendor) continue;
     const serviceGroupId = service.preferred_vendor_group_id;
-    if (serviceGroupId && vendor.vendor_group_id && vendor.vendor_group_id !== serviceGroupId) {
+    if (serviceGroupId && vendor.vendor_group_id && !isGroupWithinSubtree(vendor.vendor_group_id, serviceGroupId, groupMap)) {
       issues.push({
         type: 'LINE_ITEM_VENDOR_MISMATCH',
         entity: 'ServiceLineItem',
@@ -574,7 +599,22 @@ async function auditGroupAlignment(base44, user) {
         description: li.description,
         vendor_name: vendor.name,
         parent_commitment_id: commitment.id,
-        detail: `Line item vendor "${vendor.name}" does not match service group`,
+        detail: `Line item vendor "${vendor.name}" is outside service group subtree`,
+      });
+    }
+  }
+
+  // 5. Services assigned to child groups instead of root
+  for (const s of allServices) {
+    if (!s.preferred_vendor_group_id) continue;
+    const g = groupMap.get(s.preferred_vendor_group_id);
+    if (g && g.parent_group_id) {
+      issues.push({
+        type: 'SERVICE_ON_CHILD_GROUP',
+        entity: 'Service',
+        id: s.id,
+        name: s.name,
+        detail: `Service "${s.name}" is assigned to sub-group "${g.name}" instead of a root group`,
       });
     }
   }
@@ -589,6 +629,7 @@ async function auditGroupAlignment(base44, user) {
       services_missing_group: issues.filter(i => i.type === 'SERVICE_MISSING_GROUP').length,
       commitment_mismatches: issues.filter(i => i.type === 'COMMITMENT_VENDOR_MISMATCH').length,
       line_item_mismatches: issues.filter(i => i.type === 'LINE_ITEM_VENDOR_MISMATCH').length,
+      services_on_child_groups: issues.filter(i => i.type === 'SERVICE_ON_CHILD_GROUP').length,
     },
   };
 }

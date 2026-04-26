@@ -26,6 +26,7 @@ import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import MatrixPricingPreview from "@/components/supply/MatrixPricingPreview";
 import CreateServiceVendorModal from "@/components/supply/CreateServiceVendorModal";
+import { getSubtreeIds } from "@/components/supply/vendorGroupHierarchy";
 
 const TYPE_CONFIG = {
   vendor_cost: { label: "Vendor Cost", icon: Truck, color: "text-purple-400" },
@@ -52,14 +53,23 @@ export default function ServiceLineItemManager({ commitmentId, serviceGroupId, o
     enabled: !!commitmentId,
   });
 
-  const { vendors: serviceVendors, vendorGroups, vendorsByGroup, groupsMap } = useServiceVendorGroups();
+  const { vendors: serviceVendors, vendorGroups, vendorsByGroup, groupsMap, getVendorsForServiceGroup } = useServiceVendorGroups();
 
-  // Lock vendor dropdown to ONLY the service's vendor group
+  // Lock vendor dropdown to service's group subtree (root + descendants)
   const selectedGroup = serviceGroupId ? groupsMap.get(serviceGroupId) : null;
-  const lockedVendorGroups = selectedGroup ? [selectedGroup] : vendorGroups;
-  const lockedVendorsByGroup = serviceGroupId
-    ? new Map([[serviceGroupId, vendorsByGroup.get(serviceGroupId) || []]])
-    : vendorsByGroup;
+  const subtreeVendors = useMemo(() => getVendorsForServiceGroup(serviceGroupId), [getVendorsForServiceGroup, serviceGroupId]);
+  const subtreeGroupIds = useMemo(() => serviceGroupId ? getSubtreeIds(serviceGroupId, vendorGroups) : new Set(), [serviceGroupId, vendorGroups]);
+  const lockedVendorGroups = useMemo(() => serviceGroupId ? vendorGroups.filter(g => subtreeGroupIds.has(g.id)) : vendorGroups, [vendorGroups, subtreeGroupIds, serviceGroupId]);
+  const lockedVendorsByGroup = useMemo(() => {
+    if (!serviceGroupId) return vendorsByGroup;
+    const map = new Map();
+    for (const v of subtreeVendors) {
+      const gid = v.vendor_group_id || serviceGroupId;
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(v);
+    }
+    return map;
+  }, [subtreeVendors, serviceGroupId, vendorsByGroup]);
 
   const vendorsMap = useMemo(() => new Map(serviceVendors.map(v => [v.id, v])), [serviceVendors]);
 

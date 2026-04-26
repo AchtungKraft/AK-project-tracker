@@ -1,20 +1,20 @@
 import { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import { getSubtreeIds, buildHierarchicalOptions, buildGroupsById } from "@/components/supply/vendorGroupHierarchy";
 
 /**
  * Shared hook — fetches ServiceVendors + SERVICE VendorGroups,
- * builds group-aware lookup structures.
- *
- * Consumers should use service.preferred_vendor_group_id directly
- * to look up vendors via vendorsByGroup.get(groupId).
+ * builds group-aware lookup structures with hierarchy support.
  *
  * Returns:
  *  - vendors: all active ServiceVendor[]
- *  - vendorGroups: VendorGroup[] (SERVICE type only)
+ *  - vendorGroups: VendorGroup[] (SERVICE type only, flat)
  *  - groupsMap: Map<groupId, VendorGroup>
  *  - vendorsByGroup: Map<groupId, ServiceVendor[]>
  *  - ungroupedVendors: ServiceVendor[] with no group
+ *  - getVendorsForServiceGroup(serviceGroupId): ServiceVendor[] — includes subtree
+ *  - hierarchicalOptions: { id, label, depth, isRoot }[] for dropdowns
  *  - isLoading
  */
 export default function useServiceVendorGroups() {
@@ -48,12 +48,29 @@ export default function useServiceVendorGroups() {
     [vendorsByGroup]
   );
 
+  // Hierarchical options for dropdowns
+  const hierarchicalOptions = useMemo(
+    () => buildHierarchicalOptions(vendorGroups, "SERVICE"),
+    [vendorGroups]
+  );
+
+  // Get all vendors within a service group's subtree (root + descendants)
+  const getVendorsForServiceGroup = useMemo(() => {
+    return (serviceGroupId) => {
+      if (!serviceGroupId) return [];
+      const subtreeIds = getSubtreeIds(serviceGroupId, vendorGroups);
+      return vendors.filter(v => v.vendor_group_id && subtreeIds.has(v.vendor_group_id));
+    };
+  }, [vendors, vendorGroups]);
+
   return {
     vendors,
     vendorGroups,
     groupsMap,
     vendorsByGroup,
     ungroupedVendors,
+    getVendorsForServiceGroup,
+    hierarchicalOptions,
     isLoading: loadingV || loadingG,
   };
 }
