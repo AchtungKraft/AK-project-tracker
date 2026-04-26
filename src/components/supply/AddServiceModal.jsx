@@ -351,7 +351,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               <Label className="text-gray-300 text-xs">Primary Vendor</Label>
               {selectedGroupId && (
                 <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
-                  + New Vendor
+                  + Add Vendor{selectedGroup ? ` to ${selectedGroup.name}` : ""}
                 </Button>
               )}
             </div>

@@ -333,7 +333,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
                 <Label className="text-gray-300">Service Vendor{type === "vendor_cost" ? " *" : ""}</Label>
                 {serviceGroupId && (
                   <Button variant="link" size="sm" className="text-xs text-blue-400 h-auto p-0" onClick={() => setShowVendorModal(true)}>
-                    + New Vendor
+                    + Add Vendor{serviceGroupName ? ` to ${serviceGroupName}` : ""}
                   </Button>
                 )}
               </div>
