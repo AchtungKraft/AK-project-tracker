@@ -90,10 +90,17 @@ function validateTestVector(callerName) {
     if (item.line_total < 0)
       errs.push(`INVARIANT: ${item.id} has negative line_total (${item.line_total})`);
   }
+  const warns = [];
   if (errs.length > 0) {
-    console.error(`🚨 CRITICAL: Billing logic edge case failure in ${callerName}! Failures: ${errs.join('; ')}`);
+    console.error(`🚨 CRITICAL: Billing logic edge case failure in ${callerName}!`, {
+      caller: callerName,
+      error_count: errs.length,
+      failures: errs,
+      test_vector_item_count: result.items.length,
+      expected_item_count: EXPECTED_OUTPUT.item_count,
+    });
   }
-  return { ok: errs.length === 0, errors: errs };
+  return { ok: errs.length === 0, errors: errs, warnings: warns };
 }
 
 // ┌──────────────────────────────────────────────────────────────┐

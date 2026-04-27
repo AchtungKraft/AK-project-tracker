@@ -90,10 +90,17 @@ function validateTestVector(callerName) {
     if (item.line_total < 0)
       errs.push(`INVARIANT: ${item.id} has negative line_total (${item.line_total})`);
   }
+  const warns = [];
   if (errs.length > 0) {
-    console.error(`🚨 CRITICAL: Billing logic edge case failure in ${callerName}! Failures: ${errs.join('; ')}`);
+    console.error(`🚨 CRITICAL: Billing logic edge case failure in ${callerName}!`, {
+      caller: callerName,
+      error_count: errs.length,
+      failures: errs,
+      test_vector_item_count: result.items.length,
+      expected_item_count: EXPECTED_OUTPUT.item_count,
+    });
   }
-  return { ok: errs.length === 0, errors: errs };
+  return { ok: errs.length === 0, errors: errs, warnings: warns };
 }
 
 // ┌──────────────────────────────────────────────────────────────┐
@@ -283,6 +290,10 @@ Deno.serve(async (req) => {
       success: true,
       BILLING_LOGIC_VERSION,
       _test_vector_validation,
+      _validation: {
+        ok: _test_vector_validation.ok,
+        failures: _test_vector_validation.ok ? [] : [{ source: 'test_vector', errors: _test_vector_validation.errors }],
+      },
       projects: results,
       total_unbilled_projects: results.length,
       total_unbilled_amount: totalUnbilledAmount,

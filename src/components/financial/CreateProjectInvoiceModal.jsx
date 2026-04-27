@@ -44,6 +44,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
 import BillableItemsSelector from "./BillableItemsSelector";
 import { useFinancialProjectsView } from "./useFinancialProjectsView";
+import BillingValidationBanner from "./BillingValidationBanner";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
@@ -91,6 +92,7 @@ export default function CreateProjectInvoiceModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [creditToApply, setCreditToApply] = useState(null);
   const [creditInputValue, setCreditInputValue] = useState("");
+  const [billingValidation, setBillingValidation] = useState(null);
 
   // Normalize for queries
   const normalizedProjectId = normalizeProjectId(selectedProjectId);
@@ -120,6 +122,19 @@ export default function CreateProjectInvoiceModal({
     staleTime: 30000,
     retry: false,
   });
+
+  // Fetch billing validation state (from summary endpoint)
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const res = await base44.functions.invoke("getProjectsBillingSummary", {});
+        setBillingValidation(res.data?._validation || null);
+      } catch (e) {
+        console.warn('Failed to fetch billing validation:', e);
+      }
+    })();
+  }, [open]);
   const selectedProjectFinancials = financialData?.projects?.find(
     (p) => p.project_id === selectedProjectId
   );
@@ -721,7 +736,8 @@ export default function CreateProjectInvoiceModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 space-y-3">
+          <BillingValidationBanner validation={billingValidation} />
           {renderStepIndicator()}
         </div>
         
@@ -750,7 +766,7 @@ export default function CreateProjectInvoiceModal({
             ) : (
               <Button 
                 onClick={handleSubmit} 
-                disabled={isSubmitting || !canProceed()}
+                disabled={isSubmitting || !canProceed() || billingValidation?.ok === false}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

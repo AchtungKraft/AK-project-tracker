@@ -44,6 +44,7 @@ import ReadyToInvoiceSection from "@/components/financial/ReadyToInvoiceSection"
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 import ApplyCreditModal from "@/components/financial/ApplyCreditModal";
+import BillingValidationBanner from "@/components/financial/BillingValidationBanner";
 import { 
   invoiceKeys, 
   billingKeys, 
@@ -260,6 +261,9 @@ export default function ProjectInvoices() {
           </Button>
         </div>
       </div>
+
+      {/* Phase 3: Billing validation banner (visible when logic drift detected) */}
+      <BillingValidationBanner validation={billingSummaryData?._validation} />
 
       {/* PHASE 6 REFACTORED: Credit Summary uses canonical snapshot when project selected */}
       {/* Pass projectId to enable canonical financial snapshot loading */}
