@@ -27,6 +27,7 @@ import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
 import CreateServiceVendorModal from "@/components/supply/CreateServiceVendorModal";
 import useServiceVendorGroups from "@/components/supply/useServiceVendorGroups";
 import HierarchicalServiceSelect from "@/components/supply/HierarchicalServiceSelect";
+import InlinePricingSuggestion from "@/components/supply/InlinePricingSuggestion";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { toast } from "sonner";
 
@@ -326,20 +327,24 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               )}
             </div>
 
-            {/* Totals preview */}
+            {/* Totals preview — enhanced with margin status */}
             {lineItems.length > 0 && (
               <div className="mt-2 bg-green-900/20 border border-green-800/40 rounded p-2 grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <span className="text-gray-500">Total Cost</span>
+                  <span className="text-gray-500">Cost</span>
                   <p className="text-white font-mono">{formatCurrencyUSD(totals.cost)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Total Billable</span>
-                  <p className="text-green-400 font-mono">{formatCurrencyUSD(totals.billable)}</p>
+                  <span className="text-gray-500">Billable</span>
+                  <p className={totals.billable > 0 ? "text-green-400 font-mono" : "text-gray-500 font-mono"}>
+                    {totals.billable > 0 ? formatCurrencyUSD(totals.billable) : "—"}
+                  </p>
                 </div>
                 <div>
                   <span className="text-gray-500">Margin</span>
-                  <p className={totals.margin >= 0 ? "text-green-400" : "text-red-400"}>{totals.margin.toFixed(1)}%</p>
+                  <p className={totals.billable <= 0 ? "text-gray-500" : totals.margin >= 0 ? "text-green-400" : "text-red-400"}>
+                    {totals.billable > 0 ? `${totals.margin.toFixed(1)}%` : "—"}
+                  </p>
                 </div>
               </div>
             )}
@@ -396,10 +401,15 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
 /** Compact inline row for a single line item during creation */
 function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGroupId, onChange, onRemove, canRemove = true }) {
-  // vendorGroups and vendorsByGroup are already locked to the service's group
   const cfg = TYPE_CONFIG[lineItem.type] || TYPE_CONFIG.misc;
   const Icon = cfg.icon;
   const isLabor = lineItem.type === "internal_labor";
+
+  // Live margin for this line
+  const costNum = parseFloat(lineItem.cost) || 0;
+  const rateNum = parseFloat(lineItem.billing_rate) || 0;
+  const qtyNum = parseFloat(lineItem.quantity) || 1;
+  const lineMargin = rateNum > 0 ? ((rateNum - costNum) / rateNum) * 100 : null;
 
   return (
     <div className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-2.5 space-y-2">
@@ -407,9 +417,17 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
       <div className="flex items-center gap-2">
         <Icon className={`w-3.5 h-3.5 shrink-0 ${cfg.color}`} />
         <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-gray-700 text-gray-400">{cfg.label}</Badge>
-        <div className="flex-1" />
+        {/* Live line total + margin */}
+        {costNum > 0 && (
+          <span className="text-[9px] text-gray-500 font-mono ml-auto mr-1">
+            {formatCurrencyUSD(costNum * qtyNum)}
+            {lineMargin != null && (
+              <span className={lineMargin >= 0 ? " text-green-500" : " text-red-400"}> · {lineMargin.toFixed(0)}%</span>
+            )}
+          </span>
+        )}
         {canRemove && (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRemove}>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={onRemove}>
             <Trash2 className="w-3 h-3 text-red-400" />
           </Button>
         )}
@@ -460,6 +478,15 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
           />
         </div>
       </div>
+
+      {/* Pricing suggestion — non-labor only, Option A safe (no auto-apply) */}
+      {!isLabor && (
+        <InlinePricingSuggestion
+          cost={lineItem.cost}
+          billingRate={lineItem.billing_rate}
+          onApply={(suggested) => onChange("billing_rate", String(suggested))}
+        />
+      )}
 
       {/* Vendor for non-labor */}
       {!isLabor && (

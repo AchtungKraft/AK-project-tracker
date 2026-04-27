@@ -11,26 +11,16 @@ import { buildHierarchicalServiceOptions } from "@/components/supply/vendorGroup
 /**
  * HierarchicalServiceSelect — Renders services grouped by vendor group hierarchy.
  * 
- * Shows group headers (root & child) with services nested underneath.
- * Example dropdown:
- *   ── Finishing ──
- *     ── Chrome Plating ──
+ * True visual hierarchy:
+ *   Finishing
+ *     Chrome Plating
  *       Chrome Plating Service
  *       Nickel Chrome
- *     ── Powder Coating ──
+ *     Powder Coating
  *       Powder Coat
- *   ── Shipping ──
+ *   Shipping
  *     UPS Ground
  *     FedEx Express
- *
- * Props:
- *  - services: Service[] (active services)
- *  - vendorGroups: VendorGroup[] (SERVICE type)
- *  - groupsMap: Map<groupId, VendorGroup>
- *  - value: string (service id)
- *  - onValueChange: (serviceId) => void
- *  - disabled?: boolean
- *  - placeholder?: string
  */
 export default function HierarchicalServiceSelect({
   services = [],
@@ -54,29 +44,30 @@ export default function HierarchicalServiceSelect({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {hierarchicalEntries.map((entry, idx) => {
+        {hierarchicalEntries.map((entry) => {
           if (entry.type === "group") {
-            const indent = entry.depth > 0 ? "pl-" + (entry.depth * 3) : "";
+            const leftPad = 8 + entry.depth * 16;
             return (
               <div
                 key={`group-${entry.group.id}`}
-                className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-700/50 mt-1 first:mt-0 first:border-t-0 ${indent}`}
-                style={entry.depth > 0 ? { paddingLeft: `${8 + entry.depth * 12}px` } : undefined}
+                className="py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-700/50 mt-1 first:mt-0 first:border-t-0 select-none"
+                style={{ paddingLeft: `${leftPad}px`, paddingRight: '8px' }}
               >
-                {entry.depth > 0 ? `↳ ${entry.group.name}` : entry.group.name}
+                {entry.depth > 0 && <span className="text-gray-600 mr-1">↳</span>}
+                {entry.group.name}
               </div>
             );
           }
-          // type === 'service'
+          // type === 'service' — indent under its group
+          const leftPad = entry.depth * 16;
           return (
             <SelectItem
               key={entry.service.id}
               value={entry.service.id}
               className="text-sm"
+              style={{ paddingLeft: `${leftPad + 12}px` }}
             >
-              <span style={{ paddingLeft: `${entry.depth * 8}px` }}>
-                {entry.service.name}
-              </span>
+              {entry.service.name}
             </SelectItem>
           );
         })}
