@@ -327,6 +327,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Phase 3: Line-level validation ──
+    for (const vl of validatedLines) {
+      const expectedLineTotal = (vl.qty ?? 0) * (vl.unit_price ?? 0);
+      if (Math.abs((vl.line_total ?? 0) - expectedLineTotal) > 0.01) {
+        console.error("Retail mismatch", { description: vl.description, line_total: vl.line_total, expected: expectedLineTotal });
+      }
+      const expectedCostTotal = (vl.qty ?? 0) * (vl.unit_cost ?? 0);
+      if (vl.cost_total != null && vl.unit_cost != null && Math.abs((vl.cost_total ?? 0) - expectedCostTotal) > 0.01) {
+        console.error("Cost mismatch", { description: vl.description, cost_total: vl.cost_total, expected: expectedCostTotal });
+      }
+      if ((vl.unit_cost ?? 0) > (vl.unit_price ?? 0) && vl.unit_price > 0) {
+        console.warn("Negative margin line", { description: vl.description, cost: vl.unit_cost, retail: vl.unit_price });
+        warnings.push({ line: vl.sort_order, code: 'NEGATIVE_MARGIN', message: `${vl.description}: cost ($${vl.unit_cost}) > retail ($${vl.unit_price})` });
+      }
+    }
+
     // All blocked?
     if (validatedLines.length === 0 && blockedLines.length > 0) {
       return Response.json({
@@ -424,6 +440,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── Phase 8: Debug summary log ──
+    const totalCostAll = validatedLines.reduce((s, l) => s + (l.cost_total ?? 0), 0);
+    const totalRetailAll = subtotal;
+    const totalMarginAll = totalRetailAll - totalCostAll;
+    console.log("INVOICE SUMMARY", {
+      invoice_id: invoice.id,
+      lines: createdLines.length,
+      retail_total: totalRetailAll,
+      cost_total: totalCostAll,
+      margin_total: totalMarginAll,
+      margin_pct: totalRetailAll > 0 ? ((totalMarginAll / totalRetailAll) * 100).toFixed(1) + '%' : 'N/A',
+    });
+
     return Response.json({
       success: true,
       invoice_id: invoice.id,
@@ -445,6 +474,13 @@ Deno.serve(async (req) => {
       // CANONICAL: Draft does NOT mutate any source records
       source_records_mutated: false,
       credit_ledger_mutated: false,
+      // Phase 8: Cost/margin summary
+      cost_summary: {
+        total_cost: totalCostAll,
+        total_retail: totalRetailAll,
+        total_margin: totalMarginAll,
+        margin_pct: totalRetailAll > 0 ? Math.round((totalMarginAll / totalRetailAll) * 1000) / 10 : 0,
+      },
       // Phase 5: Integrity breakdown
       integrity: {
         parts_total: partsTotal,

@@ -150,12 +150,22 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
         )}
       </div>
 
-      {/* Total */}
-      <div className="text-right shrink-0 min-w-[80px]">
+      {/* Total with cost/margin */}
+      <div className="text-right shrink-0 min-w-[90px]">
         <p className="font-mono font-semibold text-white">
           {formatCurrencyUSD(project.total_billable_amount)}
         </p>
-        <p className="text-xs text-gray-500">
+        {project.total_cost > 0 && (
+          <p className="text-[10px] text-gray-500">
+            Cost: {formatCurrencyUSD(project.total_cost)}
+          </p>
+        )}
+        {project.total_cost > 0 && project.total_billable_amount > 0 && (
+          <p className={cn("text-[10px] font-mono", (project.total_billable_amount - project.total_cost) >= 0 ? "text-green-500" : "text-red-400")}>
+            {formatCurrencyUSD(project.total_billable_amount - project.total_cost)} margin
+          </p>
+        )}
+        <p className="text-[10px] text-gray-500">
           {project.billable_count} item{project.billable_count !== 1 ? "s" : ""}
         </p>
       </div>

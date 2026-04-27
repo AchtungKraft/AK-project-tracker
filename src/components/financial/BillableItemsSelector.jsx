@@ -336,18 +336,39 @@ export default function BillableItemsSelector({
   );
 }
 
-// ── Part row (simple) ──
+// ── Margin helper ──
+function MarginBadge({ cost, retail }) {
+  if (!retail || retail <= 0) return null;
+  const margin = retail - (cost || 0);
+  const pct = ((margin / retail) * 100).toFixed(1);
+  const isNegative = margin < 0;
+  return (
+    <span className={cn("text-[10px] font-mono", isNegative ? "text-red-400" : "text-gray-500")}>
+      {isNegative ? "−" : ""}{formatCurrencyUSD(Math.abs(margin))} ({pct}%)
+    </span>
+  );
+}
+
+// ── Part row (with cost/retail/margin) ──
 function PartItemRow({ item, isSelected, onToggle }) {
+  const unitCost = item.unit_cost ?? 0;
   return (
     <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
       <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
       <Package className="w-3 h-3 text-gray-500" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-white truncate">{item.description}</p>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
           <span>Qty: {item.qty_available_to_bill}</span>
           <span>×</span>
           <span>{formatCurrencyUSD(item.unit_price)}</span>
+          {unitCost > 0 && (
+            <>
+              <span className="text-gray-600">|</span>
+              <span>Cost: {formatCurrencyUSD(unitCost)}</span>
+              <MarginBadge cost={unitCost} retail={item.unit_price} />
+            </>
+          )}
         </div>
         {item.needs_review && (
           <div className="flex items-center gap-1 text-xs text-amber-400 mt-0.5">
@@ -356,7 +377,12 @@ function PartItemRow({ item, isSelected, onToggle }) {
           </div>
         )}
       </div>
-      <p className="text-sm font-medium text-green-400">{formatCurrencyUSD(item.line_total)}</p>
+      <div className="text-right shrink-0">
+        {item.cost_total > 0 && (
+          <p className="text-[10px] text-gray-500">Cost: {formatCurrencyUSD(item.cost_total)}</p>
+        )}
+        <p className="text-sm font-medium text-green-400">{formatCurrencyUSD(item.line_total)}</p>
+      </div>
     </div>
   );
 }
@@ -437,11 +463,14 @@ const ServiceItemRow = React.memo(function ServiceItemRow({ item, isSelected, on
                   <span className="text-gray-500 truncate">({child.vendor_name})</span>
                 )}
               </div>
-              <div className="text-right shrink-0 ml-2">
-                {child.cost_amount > 0 && child.cost_amount !== child.amount && (
-                  <span className="text-gray-500 mr-2">Cost: {formatCurrencyUSD(child.cost_amount)}</span>
+              <div className="text-right shrink-0 ml-2 flex items-center gap-2">
+                {child.cost_amount > 0 && (
+                  <span className="text-gray-500">Cost: {formatCurrencyUSD(child.cost_amount)}</span>
                 )}
                 <span className="text-amber-300 font-mono">{formatCurrencyUSD(child.amount)}</span>
+                {child.cost_amount > 0 && child.amount > 0 && (
+                  <MarginBadge cost={child.cost_amount} retail={child.amount} />
+                )}
               </div>
             </div>
           ))}

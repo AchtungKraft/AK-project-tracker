@@ -254,6 +254,7 @@ Deno.serve(async (req) => {
       const partItems = items.filter(i => i.type === 'part');
       const serviceItems = items.filter(i => i.type === 'service');
       const totalAmount = items.reduce((s, i) => s + i.line_total, 0);
+      const totalCost = items.reduce((s, i) => s + (i.cost_total ?? 0), 0);
 
       const topItems = [...items]
         .sort((a, b) => b.line_total - a.line_total)
@@ -270,6 +271,7 @@ Deno.serve(async (req) => {
         client_name: project.client_name || null,
         billable_count: items.length,
         total_billable_amount: Math.round(totalAmount * 100) / 100,
+        total_cost: Math.round(totalCost * 100) / 100,
         top_items: topItems,
         breakdown: {
           parts_count: partItems.length,

@@ -140,6 +140,10 @@ export default function CreateProjectInvoiceModal({
     return manualLines.reduce((sum, l) => sum + (l.amount || 0), 0);
   }, [manualLines]);
 
+  const totalCost = useMemo(() => {
+    return selectedParts.reduce((sum, p) => sum + (p.cost_total || 0), 0);
+  }, [selectedParts]);
+
   const subtotal = invoiceType === "deposit" 
     ? parseFloat(depositAmount) || 0 
     : partsGrossTotal + manualTotal;
@@ -381,6 +385,7 @@ export default function CreateProjectInvoiceModal({
         {selectedProjectId && (
           <InvoiceTotalsPanel
             subtotal={subtotal}
+            totalCost={invoiceType === "deposit" ? 0 : totalCost}
             availableCredit={availableCredit}
             effectiveCreditToApply={effectiveCreditToApply}
             creditInputValue={creditInputValue}

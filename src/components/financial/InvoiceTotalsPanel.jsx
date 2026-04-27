@@ -14,6 +14,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
  */
 export default function InvoiceTotalsPanel({
   subtotal,
+  totalCost = 0,
   availableCredit,
   effectiveCreditToApply,
   creditInputValue,
@@ -25,8 +26,31 @@ export default function InvoiceTotalsPanel({
   onCreditReset,
   maxCredit,
 }) {
+  const totalMargin = subtotal - totalCost;
+  const marginPct = subtotal > 0 ? ((totalMargin / subtotal) * 100).toFixed(1) : 0;
+
   return (
     <div className="flex-shrink-0 p-3 bg-gray-800/60 border border-gray-700 rounded-lg space-y-2">
+      {/* Cost / Retail / Margin */}
+      {totalCost > 0 && (
+        <div className="grid grid-cols-3 gap-2 text-xs pb-2 border-b border-gray-700/50">
+          <div>
+            <span className="text-gray-500 block">Total Cost</span>
+            <span className="font-mono text-gray-300">{formatCurrencyUSD(totalCost)}</span>
+          </div>
+          <div>
+            <span className="text-gray-500 block">Total Retail</span>
+            <span className="font-mono text-white">{formatCurrencyUSD(subtotal)}</span>
+          </div>
+          <div>
+            <span className="text-gray-500 block">Margin</span>
+            <span className={cn("font-mono", totalMargin >= 0 ? "text-green-400" : "text-red-400")}>
+              {formatCurrencyUSD(totalMargin)} ({marginPct}%)
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Subtotal */}
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-400">Subtotal</span>
