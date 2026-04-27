@@ -340,6 +340,31 @@ Deno.serve(async (req) => {
       createdLines.push(created);
     }
 
+    // ── Phase 5: Invoice Integrity Summary ──
+    const partsTotal = validatedLines.filter(l => l.type === 'part').reduce((s, l) => s + (l.line_total || 0), 0);
+    const servicesTotal = validatedLines.filter(l => l.type === 'service').reduce((s, l) => s + (l.line_total || 0), 0);
+    const manualTotal = validatedLines.filter(l => l.type === 'manual' || l.type === 'outside_cost').reduce((s, l) => s + (l.line_total || 0), 0);
+    const computedTotal = partsTotal + servicesTotal + manualTotal;
+
+    console.log("Invoice Integrity Summary", {
+      invoice_id: invoice.id,
+      line_count: createdLines.length,
+      total_amount: subtotal,
+      parts_total: partsTotal,
+      services_total: servicesTotal,
+      manual_total: manualTotal,
+    });
+
+    // ── Phase 6: Total Validation Guard ──
+    if (Math.abs(computedTotal - subtotal) > 0.01) {
+      console.error("Invoice total mismatch", {
+        invoice_id: invoice.id,
+        expected: computedTotal,
+        actual: subtotal,
+        diff: computedTotal - subtotal,
+      });
+    }
+
     return Response.json({
       success: true,
       invoice_id: invoice.id,
@@ -361,6 +386,15 @@ Deno.serve(async (req) => {
       // CANONICAL: Draft does NOT mutate any source records
       source_records_mutated: false,
       credit_ledger_mutated: false,
+      // Phase 5: Integrity breakdown
+      integrity: {
+        parts_total: partsTotal,
+        services_total: servicesTotal,
+        manual_total: manualTotal,
+        computed_total: computedTotal,
+        invoice_total: subtotal,
+        totals_match: Math.abs(computedTotal - subtotal) <= 0.01,
+      },
     });
   } catch (error) {
     console.error('createProjectInvoiceDraft error:', error);

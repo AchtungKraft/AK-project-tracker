@@ -79,10 +79,34 @@ export default function BillableItemsSelector({
 
   const { partGroups, services, allItems } = useMemo(() => {
     if (!data?.items) return { partGroups: [], services: [], allItems: [] };
-    const items = data.items;
+    // Phase 1: Filter out zero-value items — they are never billable
+    const items = data.items.filter(i => i.line_total > 0 && i.qty_available_to_bill > 0);
     const grouped = groupItems(items);
     return { ...grouped, allItems: items };
   }, [data]);
+
+  // Phase 1: Auto-select ALL valid items on first load (deterministic)
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
+  useEffect(() => {
+    if (allItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
+      // Deduplicate by source_id
+      const seen = new Set();
+      const initial = [];
+      for (const item of allItems) {
+        if (!seen.has(item.source_id)) {
+          seen.add(item.source_id);
+          initial.push(buildPayload(item));
+        }
+      }
+      onSelectionChange(initial);
+      setHasAutoSelected(true);
+    }
+  }, [allItems, hasAutoSelected]);
+
+  // Reset auto-select flag when project changes
+  useEffect(() => {
+    setHasAutoSelected(false);
+  }, [projectId]);
 
   // Auto-expand first group
   useEffect(() => {
@@ -172,7 +196,7 @@ export default function BillableItemsSelector({
     return <div className="flex items-center justify-center h-40 text-red-400"><AlertTriangle className="w-5 h-5 mr-2" />Failed to load</div>;
   }
   if (allItems.length === 0) {
-    return <div className="flex flex-col items-center justify-center h-40 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No billable items available</p></div>;
+    return <div className="flex flex-col items-center justify-center h-40 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No billable items for this project</p></div>;
   }
 
   return (

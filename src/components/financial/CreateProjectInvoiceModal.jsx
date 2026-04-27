@@ -240,7 +240,7 @@ export default function CreateProjectInvoiceModal({
         }
         return selectedParts.length > 0 || manualLines.length > 0;
       case 3:
-        return subtotal > 0 && !creditValidationError;
+        return subtotal > 0 && !creditValidationError && (selectedParts.length > 0 || manualLines.length > 0 || invoiceType === 'deposit');
       default:
         return false;
     }
