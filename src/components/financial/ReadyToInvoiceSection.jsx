@@ -10,9 +10,12 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 /**
  * ReadyToInvoiceSection — Shows projects with unbilled items
- * 
- * Clicking a row opens CreateProjectInvoiceModal with project pre-selected.
- * Uses getProjectsBillingSummary as SINGLE data source.
+ *
+ * PHASE 1: Data comes from getProjectsBillingSummary which delegates
+ * to resolveProjectBillableItems (SINGLE source of truth).
+ * PHASE 3: Within each tier, sorted by total_billable_amount DESC (deterministic).
+ * PHASE 6: Shows top 1-2 item descriptions per project row.
+ * PHASE 8: Shows empty state when no billable projects.
  */
 export default function ReadyToInvoiceSection({ onCreateInvoice }) {
   const { data, isLoading } = useQuery({
@@ -26,6 +29,11 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
 
   const projects = data?.projects || [];
 
+  // PHASE 9: Dev debug output
+  if (import.meta.env.DEV && data?._debug) {
+    console.log("[ReadyToInvoice] Debug:", data._debug);
+  }
+
   if (isLoading) {
     return (
       <Card className="bg-gray-900/50 border-gray-800">
@@ -37,6 +45,7 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
     );
   }
 
+  // PHASE 8: Empty state
   if (projects.length === 0) {
     return (
       <Card className="bg-gray-900/50 border-gray-800">
@@ -48,10 +57,11 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
     );
   }
 
-  // Group by value tier
-  const high = projects.filter(p => p.total_billable_amount > 1000);
-  const medium = projects.filter(p => p.total_billable_amount >= 200 && p.total_billable_amount <= 1000);
-  const low = projects.filter(p => p.total_billable_amount < 200);
+  // Group by value tier — PHASE 3: already sorted DESC by aggregator, but re-sort within tiers
+  const sortDesc = (arr) => [...arr].sort((a, b) => b.total_billable_amount - a.total_billable_amount);
+  const high = sortDesc(projects.filter(p => p.total_billable_amount > 1000));
+  const medium = sortDesc(projects.filter(p => p.total_billable_amount >= 200 && p.total_billable_amount <= 1000));
+  const low = sortDesc(projects.filter(p => p.total_billable_amount < 200));
 
   const renderGroup = (label, items, color) => {
     if (items.length === 0) return null;
@@ -91,13 +101,7 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
 }
 
 function ProjectBillableRow({ project, onCreateInvoice }) {
-  const { breakdown } = project;
-
-  const typeHint = breakdown.services_count > 0 && breakdown.parts_count === 0
-    ? "service"
-    : breakdown.parts_count > 0 && breakdown.services_count === 0
-    ? "parts"
-    : "mixed";
+  const { breakdown, top_items } = project;
 
   return (
     <div
@@ -109,6 +113,24 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
         <p className="text-white font-medium truncate">{project.project_name}</p>
         {project.client_name && (
           <p className="text-xs text-gray-500 truncate">{project.client_name}</p>
+        )}
+        {/* PHASE 6: Top item descriptions */}
+        {top_items && top_items.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {top_items.map((item, idx) => (
+              <p key={idx} className="text-xs text-gray-400 truncate">
+                {item.type === 'service' && (
+                  <span className="text-amber-400 mr-1">SVC</span>
+                )}
+                {item.description}
+                {item.line_total > 0 && (
+                  <span className="text-gray-500 ml-1">
+                    ({formatCurrencyUSD(item.line_total)})
+                  </span>
+                )}
+              </p>
+            ))}
+          </div>
         )}
       </div>
 
@@ -147,7 +169,7 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
           onCreateInvoice(project.project_id);
         }}
       >
-        Create Invoice
+        Invoice
         <ChevronRight className="w-3.5 h-3.5" />
       </Button>
     </div>

@@ -184,16 +184,15 @@ export default function ProjectInvoices() {
   }, [invoices, activeTab, projectFilter, searchTerm]);
 
   const handleRefresh = async () => {
-    // DETERMINISTIC: Invalidate specific keys only - use factory keys
+    // PHASE 7: Invalidate ALL related caches on manual refresh
     const invalidations = [
       queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
       queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
+      queryClient.invalidateQueries({ queryKey: ["billableItems"] }), // All project billable item caches
     ];
-    // Only invalidate scoped keys when we have a valid projectId (not null)
     if (normalizedProjectId) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
       invalidations.push(queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }));
-      // PHASE 4: Also invalidate financial snapshot for canonical data refresh
       invalidations.push(queryClient.invalidateQueries({ queryKey: financialSnapshotKeys.project(normalizedProjectId) }));
     }
     await Promise.all(invalidations);
@@ -201,10 +200,20 @@ export default function ProjectInvoices() {
   };
 
   const handleInvoiceCreated = async () => {
-    // Deterministic refresh AFTER creation, BEFORE closing modal
-    await handleRefresh();
-    // Also refresh billing summary
-    queryClient.invalidateQueries({ queryKey: ["billingSummary"] });
+    // PHASE 7: Comprehensive invalidation after invoice creation
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
+      queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
+      queryClient.invalidateQueries({ queryKey: ["billableItems"] }), // All billable item caches
+    ]);
+    if (normalizedProjectId) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+        queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
+        queryClient.invalidateQueries({ queryKey: financialSnapshotKeys.project(normalizedProjectId) }),
+      ]);
+    }
+    await refetch();
     setShowCreateModal(false);
     setCreateModalProjectId(null);
   };

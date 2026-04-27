@@ -77,10 +77,10 @@ export default function CreateProjectInvoiceModal({
 }) {
   const queryClient = useQueryClient();
   
-  // STABILIZATION FIX: Single normalization at top, used everywhere
+  // PHASE 4: Normalize preselected ID at mount time
   const normalizedPreselectedId = normalizeProjectId(preselectedProjectId);
   
-  // STABILIZATION FIX: Single state declaration - NO other useState for projectId
+  // All modal state
   const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
   const [selectedProjectId, setSelectedProjectId] = useState(normalizedPreselectedId ?? null);
   const [invoiceType, setInvoiceType] = useState("progress");
@@ -89,25 +89,21 @@ export default function CreateProjectInvoiceModal({
   const [selectedParts, setSelectedParts] = useState(initialSelectedItems || []);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // STABILIZATION: Editable credit input
-  const [creditToApply, setCreditToApply] = useState(null); // null = auto-suggest, number = user override
-  const [creditInputValue, setCreditInputValue] = useState(""); // Raw input string for controlled input
+  const [creditToApply, setCreditToApply] = useState(null);
+  const [creditInputValue, setCreditInputValue] = useState("");
 
-  // PERMANENT DEBUG: Track selectedProjectId changes
-  useEffect(() => {
-    console.log("[CreateInvoiceModal] selectedProjectId:", selectedProjectId);
-  }, [selectedProjectId]);
-
-  // STABILIZATION FIX: Normalize for queries using factory helper
+  // Normalize for queries
   const normalizedProjectId = normalizeProjectId(selectedProjectId);
   
-  // STABILIZATION FIX: Reset step/parts when modal closes, but NOT selectedProjectId
-  // State must only change via user selection in the Select component
+  // PHASE 4: Full state reset when modal opens/closes
+  // On open: apply preselected project if provided, otherwise start fresh
+  // On close: reset ALL state unconditionally
   useEffect(() => {
-    if (!open) {
-      // Modal closed - reset step and parts, but preserve project if preselected
-      setStep(normalizedPreselectedId ? 1 : 0);
+    if (open) {
+      // Modal opening — initialize from props
+      const pid = normalizeProjectId(preselectedProjectId);
+      setSelectedProjectId(pid ?? null);
+      setStep(pid ? 1 : 0);
       setSelectedParts(initialSelectedItems || []);
       setInvoiceType("progress");
       setDepositAmount("");
@@ -116,7 +112,7 @@ export default function CreateProjectInvoiceModal({
       setCreditToApply(null);
       setCreditInputValue("");
     }
-  }, [open, normalizedPreselectedId, initialSelectedItems]);
+  }, [open, preselectedProjectId]);
 
   // Get financial projects data for project dropdown
   const { data: financialData } = useFinancialProjectsView({
@@ -334,12 +330,14 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // Invalidate all related caches
+        // PHASE 7: Invalidate ALL related caches after invoice creation
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+          queryClient.invalidateQueries({ queryKey: invoiceKeys.view(null) }), // Global invoice list
           queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: ["billableItems", normalizedProjectId] }),
+          queryClient.invalidateQueries({ queryKey: ["billingSummary"] }), // Ready to Invoice section
         ]);
         
         onSuccess?.();

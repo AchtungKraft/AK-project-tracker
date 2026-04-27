@@ -3,10 +3,17 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 /**
  * getProjectsBillingSummary — Aggregated billable summary across all projects
  *
- * Returns projects that have unbilled items, with counts and totals.
- * Uses resolveProjectBillableItems logic inline to avoid N+1 calls.
+ * PHASE 1 CANONICAL: Uses IDENTICAL logic to resolveProjectBillableItems.
+ * The eligibility rules are copy-pasted from the resolver, NOT re-invented.
+ * Any change to resolver rules MUST be mirrored here.
  *
- * Response: { projects: [{ project_id, project_name, client_name, billable_count, total_billable_amount, breakdown: { parts_count, services_count, parts_total, services_total } }] }
+ * CANONICAL RULES (from resolveProjectBillableItems):
+ * - Parts: skip cancelled/archived, skip non-billable, skip WARRANTY_REPLACEMENT
+ *          effective_required = required_total - qty_removed
+ *          qty_available = effective_required - invoiced_qty
+ *          unit_price = unit_retail_snapshot (NO fallback)
+ * - Services: skip if (is_billed || status==='billed' || invoice_id)
+ *             skip if total_billable <= 0
  */
 
 Deno.serve(async (req) => {
@@ -41,15 +48,13 @@ Deno.serve(async (req) => {
     ]);
 
     const partMap = Object.fromEntries(allParts.map(p => [p.id, p]));
-    const projectMap = Object.fromEntries(allProjects.map(p => [p.id, p]));
 
-    // Group commitments by project
+    // Group by project
     const commitmentsByProject = {};
     for (const c of allCommitments) {
       if (!commitmentsByProject[c.project_id]) commitmentsByProject[c.project_id] = [];
       commitmentsByProject[c.project_id].push(c);
     }
-
     const servicesByProject = {};
     for (const sc of allServiceCommitments) {
       if (!servicesByProject[sc.project_id]) servicesByProject[sc.project_id] = [];
@@ -61,12 +66,11 @@ Deno.serve(async (req) => {
     for (const project of allProjects) {
       if (project.is_system_project) continue;
 
-      let partsCount = 0;
-      let partsTotal = 0;
-      let servicesCount = 0;
-      let servicesTotal = 0;
+      const billableItems = [];
 
-      // Parts: same logic as resolveProjectBillableItems
+      // ════════════════════════════════════════
+      // PARTS — IDENTICAL to resolveProjectBillableItems
+      // ════════════════════════════════════════
       const commitments = commitmentsByProject[project.id] || [];
       for (const c of commitments) {
         if (c.cancelled_at || c.is_archived === true) continue;
@@ -81,47 +85,81 @@ Deno.serve(async (req) => {
         if (qtyAvailable <= 0) continue;
 
         const unitPrice = c.unit_retail_snapshot ?? 0;
-        partsCount++;
-        partsTotal += qtyAvailable * unitPrice;
+        const lineTotal = qtyAvailable * unitPrice;
+
+        billableItems.push({
+          type: 'part',
+          description: part.part_name || 'Unknown Part',
+          line_total: lineTotal,
+        });
       }
 
-      // Services: same canonical check
+      // ════════════════════════════════════════
+      // SERVICES — IDENTICAL to resolveProjectBillableItems
+      // ════════════════════════════════════════
       const svcCommitments = servicesByProject[project.id] || [];
       for (const sc of svcCommitments) {
         const isServiceBilled = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
         const totalBillable = sc.total_billable ?? 0;
         if (isServiceBilled || totalBillable <= 0) continue;
 
-        servicesCount++;
-        servicesTotal += totalBillable;
+        billableItems.push({
+          type: 'service',
+          description: sc.description || 'Unknown Service',
+          line_total: totalBillable,
+        });
       }
 
-      const totalCount = partsCount + servicesCount;
-      if (totalCount === 0) continue;
+      if (billableItems.length === 0) continue;
+
+      const partItems = billableItems.filter(i => i.type === 'part');
+      const serviceItems = billableItems.filter(i => i.type === 'service');
+      const totalAmount = billableItems.reduce((s, i) => s + i.line_total, 0);
+
+      // PHASE 6: Top 2 items by value for UI preview
+      const topItems = [...billableItems]
+        .sort((a, b) => b.line_total - a.line_total)
+        .slice(0, 2)
+        .map(i => ({
+          description: i.description,
+          line_total: Math.round(i.line_total * 100) / 100,
+          type: i.type,
+        }));
 
       results.push({
         project_id: project.id,
         project_name: project.name,
         client_name: project.client_name || null,
-        billable_count: totalCount,
-        total_billable_amount: Math.round((partsTotal + servicesTotal) * 100) / 100,
+        billable_count: billableItems.length,
+        total_billable_amount: Math.round(totalAmount * 100) / 100,
+        top_items: topItems,
         breakdown: {
-          parts_count: partsCount,
-          services_count: servicesCount,
-          parts_total: Math.round(partsTotal * 100) / 100,
-          services_total: Math.round(servicesTotal * 100) / 100,
+          parts_count: partItems.length,
+          services_count: serviceItems.length,
+          parts_total: Math.round(partItems.reduce((s, i) => s + i.line_total, 0) * 100) / 100,
+          services_total: Math.round(serviceItems.reduce((s, i) => s + i.line_total, 0) * 100) / 100,
         },
       });
     }
 
-    // Sort by total_billable_amount DESC
+    // PHASE 3: Sort by total_billable_amount DESC (deterministic)
     results.sort((a, b) => b.total_billable_amount - a.total_billable_amount);
+
+    const totalUnbilledAmount = Math.round(
+      results.reduce((s, r) => s + r.total_billable_amount, 0) * 100
+    ) / 100;
 
     return Response.json({
       success: true,
       projects: results,
       total_unbilled_projects: results.length,
-      total_unbilled_amount: Math.round(results.reduce((s, r) => s + r.total_billable_amount, 0) * 100) / 100,
+      total_unbilled_amount: totalUnbilledAmount,
+      // PHASE 9: Debug diagnostics
+      _debug: {
+        projects_scanned: allProjects.filter(p => !p.is_system_project).length,
+        projects_with_billable: results.length,
+        total_unbilled_amount: totalUnbilledAmount,
+      },
     });
   } catch (error) {
     console.error('getProjectsBillingSummary error:', error);
