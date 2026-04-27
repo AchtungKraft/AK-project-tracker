@@ -1,10 +1,18 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * Phase 9.5 — Lifecycle Primary Action Executor
  * 
  * Validates and executes the primary lifecycle action for a commitment.
  * Logs LifecycleEvent and returns updated state.
+ * 
+ * ============================================================================
+ * GOVERNANCE:
+ * - RECORD_PAYMENT is BLOCKED at backend level. Payment must be handled at
+ *   invoice level via markInvoicePaid, not at part-commitment level.
+ * - INVOICE_CLIENT is BLOCKED at backend level. Invoice creation must go
+ *   through CreateProjectInvoiceModal → createProjectInvoiceDraft.
+ * ============================================================================
  */
 
 const ACTION_TYPES = {
@@ -14,6 +22,15 @@ const ACTION_TYPES = {
   RECEIVE_PART: 'RECEIVE_PART',
   INSTALL_PART: 'INSTALL_PART',
   FIX_DATA: 'FIX_DATA',
+};
+
+// ============================================================================
+// HARD GUARD: Financial mutations blocked at backend level
+// These actions bypass the canonical invoice/payment pipeline and must not execute.
+// ============================================================================
+const BLOCKED_ACTIONS = {
+  RECORD_PAYMENT: 'Payment must be handled at invoice level via markInvoicePaid. Use Project Invoices page.',
+  INVOICE_CLIENT: 'Invoice creation must go through CreateProjectInvoiceModal → createProjectInvoiceDraft. Direct commitment billing_status mutation is not allowed.',
 };
 
 const ACTION_TO_EVENT_TYPE = {
@@ -109,6 +126,17 @@ async function logLifecycleEvent(base44, commitmentId, actionType, previousState
 }
 
 async function executeLifecyclePrimaryAction(base44, userId, commitmentId, actionType, actionData = {}) {
+  // HARD GUARD: Block financial mutations at backend level
+  if (BLOCKED_ACTIONS[actionType]) {
+    console.warn(`[GOVERNANCE] Blocked action ${actionType} for commitment ${commitmentId}: ${BLOCKED_ACTIONS[actionType]}`);
+    return {
+      success: false,
+      error: BLOCKED_ACTIONS[actionType],
+      action_blocked: true,
+      governance_block: true,
+    };
+  }
+
   // Validate action is allowed
   const validation = await validateActionAllowed(base44, commitmentId, actionType);
   

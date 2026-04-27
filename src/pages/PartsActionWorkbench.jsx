@@ -5,6 +5,18 @@
  * CANONICAL ARCHITECTURE LOCK:
  * - Uses queryKeyFactories for all query keys
  * - Invoice creation ONLY via CreateProjectInvoiceModal
+ * 
+ * ============================================================================
+ * GOVERNANCE:
+ * This surface does NOT perform financial mutations directly.
+ * All billing actions must route through:
+ * - CreateProjectInvoiceModal (invoice creation)
+ * - SettlePartsWithCreditModal (credit application)
+ * - ProjectInvoices page (payment recording, invoice management)
+ * 
+ * Workbench is: Operational Command Center + Billing Signal Layer + Navigation Surface
+ * Workbench is NOT: A financial mutation system
+ * ============================================================================
  */
 import React, { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,8 +86,8 @@ if (import.meta.env.DEV) {
 const ACTION_TAB_CONFIG = {
   invoice_client: {
     key: 'invoice_client',
-    label: 'Invoice Client',
-    shortLabel: 'Invoice',
+    label: 'Needs Billing',
+    shortLabel: 'Needs Billing',
     icon: DollarSign,
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-600',
@@ -244,6 +256,7 @@ function KPIHeader({ kpis, activeTab, onTabClick }) {
         onClick={() => onTabClick('invoice_client')}
         isActive={activeTab === 'invoice_client'}
       />
+      {/* GOVERNANCE: KPI is signal-only. Create invoices via modal or Project Invoices page. */}
       <KPICard
         icon={Clock}
         label="Awaiting Pay"
@@ -298,9 +311,37 @@ function InlineActionButton({ item, onExecute, isExecuting }) {
   const actionType = item.action_type;
   if (!actionType) return null;
 
+  // GOVERNANCE: RECORD_PAYMENT is not a part-level action.
+  // Payment must be handled at invoice level via ProjectInvoices page.
+  if (actionType === 'RECORD_PAYMENT') {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              to={`${createPageUrl('ProjectInvoices')}?project_id=${item.project_id}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 gap-1 border-orange-700 text-orange-400 hover:bg-orange-900/30"
+              >
+                <Eye className="w-3 h-3" />
+                <span className="text-xs hidden sm:inline">View Billing</span>
+              </Button>
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="bg-gray-800 border-gray-700">
+            <p className="text-xs">View invoices & record payment in Project Invoices</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
   const actionConfig = {
     INVOICE_CLIENT: { icon: DollarSign, label: 'Invoice', color: 'bg-yellow-600 hover:bg-yellow-700' },
-    RECORD_PAYMENT: { icon: CheckCircle2, label: 'Record Pay', color: 'bg-orange-600 hover:bg-orange-700' },
     CREATE_ORDER: { icon: ShoppingCart, label: 'Create PO', color: 'bg-green-600 hover:bg-green-700' },
     RECEIVE_PART: { icon: Truck, label: 'Receive', color: 'bg-blue-600 hover:bg-blue-700' },
     INSTALL_PART: { icon: Wrench, label: 'Install', color: 'bg-purple-600 hover:bg-purple-700' },
@@ -801,7 +842,7 @@ export default function PartsActionWorkbench() {
                 Parts Action Workbench
               </h1>
               <p className="text-gray-400 text-sm mt-1">
-                Single operational command center
+                Operational command center — create invoices via modal or Project Invoices
               </p>
             </div>
             
@@ -954,6 +995,7 @@ export default function PartsActionWorkbench() {
       </Card>
 
       {/* Invoice Selection Panel - Forward model only */}
+      {/* GOVERNANCE: Selection panel opens canonical modals only. No direct mutations. */}
       {currentTabConfig.allowSelection && currentTabConfig.selectionAction === 'invoice' && (
         <InvoiceSelectionPanel
           selectedItems={selectedItems}
