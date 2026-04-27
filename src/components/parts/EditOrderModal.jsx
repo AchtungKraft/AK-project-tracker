@@ -33,6 +33,10 @@ export default function EditOrderModal({ order, onClose }) {
     eta_date: order?.eta_date || '',
     notes: order?.notes || '',
     vendor_id: order?.vendor_id || '',
+    freight_cost: order?.freight_cost || 0,
+    tariff_cost: order?.tariff_cost || 0,
+    misc_cost: order?.misc_cost || 0,
+    tax: order?.tax || 0,
     billing_status: order?.billing_status || 'Not Invoiced',
     invoice_number: order?.invoice_number || '',
     invoice_date: order?.invoice_date || '',
@@ -44,16 +48,12 @@ export default function EditOrderModal({ order, onClose }) {
   const updateMutation = useMutation({
     mutationFn: async (data) => {
       await base44.entities.Order.update(order.id, data);
-      // Auto-sync: trigger cost sync for all linked commitments after PO edit
+      // Auto-allocate: distribute PO extras to line items, then sync to commitments
       if (order?.id) {
         try {
-          const lineItems = await base44.entities.PartPurchaseLineItem.filter({ order_id: order.id });
-          const commitmentIds = [...new Set(lineItems.map(li => li.commitment_id).filter(Boolean))];
-          if (commitmentIds.length > 0) {
-            await base44.functions.invoke('syncPOCostToCommitment', { commitment_ids: commitmentIds });
-          }
-        } catch (syncErr) {
-          console.warn('[EditOrder] Auto cost sync after edit:', syncErr.message);
+          await base44.functions.invoke('allocatePOCosts', { order_id: order.id });
+        } catch (allocErr) {
+          console.warn('[EditOrder] Auto cost allocation after edit:', allocErr.message);
         }
       }
     },
@@ -79,6 +79,10 @@ export default function EditOrderModal({ order, onClose }) {
       eta_date: formData.eta_date || null,
       notes: formData.notes || null,
       vendor_id: formData.vendor_id || null,
+      freight_cost: parseFloat(formData.freight_cost) || 0,
+      tariff_cost: parseFloat(formData.tariff_cost) || 0,
+      misc_cost: parseFloat(formData.misc_cost) || 0,
+      tax: parseFloat(formData.tax) || 0,
       billing_status: formData.billing_status || 'Not Invoiced',
       invoice_number: formData.invoice_number || null,
       invoice_date: formData.invoice_date || null,
@@ -231,6 +235,71 @@ export default function EditOrderModal({ order, onClose }) {
               placeholder="Order notes..."
               className="bg-gray-800 border-gray-700 h-16"
             />
+          </div>
+
+          <Separator className="bg-gray-700" />
+
+          {/* Landed Cost Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <DollarSign className="w-4 h-4 text-amber-400" />
+              <span className="font-medium">Landed Cost Allocation</span>
+            </div>
+            <p className="text-[10px] text-gray-500">
+              These costs are proportionally allocated across line items to compute true landed cost per unit.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-400 text-xs">Freight / Shipping</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.freight_cost}
+                  onChange={(e) => setFormData({ ...formData, freight_cost: e.target.value })}
+                  className="bg-gray-800 border-gray-700"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Tariff / Duty</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.tariff_cost}
+                  onChange={(e) => setFormData({ ...formData, tariff_cost: e.target.value })}
+                  className="bg-gray-800 border-gray-700"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-400 text-xs">Tax</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.tax}
+                  onChange={(e) => setFormData({ ...formData, tax: e.target.value })}
+                  className="bg-gray-800 border-gray-700"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Misc (handling, insurance…)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.misc_cost}
+                  onChange={(e) => setFormData({ ...formData, misc_cost: e.target.value })}
+                  className="bg-gray-800 border-gray-700"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
           </div>
 
           <Separator className="bg-gray-700" />

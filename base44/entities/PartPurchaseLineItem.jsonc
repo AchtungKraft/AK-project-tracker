@@ -56,6 +56,30 @@
       "type": "number",
       "description": "DEPRECATED: Use extended_cost. Kept for compatibility."
     },
+    "allocated_freight": {
+      "type": "number",
+      "default": 0,
+      "description": "Proportionally allocated freight/shipping cost from PO header"
+    },
+    "allocated_tariff": {
+      "type": "number",
+      "default": 0,
+      "description": "Proportionally allocated tariff/duty cost from PO header"
+    },
+    "allocated_misc": {
+      "type": "number",
+      "default": 0,
+      "description": "Proportionally allocated misc cost from PO header"
+    },
+    "allocated_tax": {
+      "type": "number",
+      "default": 0,
+      "description": "Proportionally allocated tax from PO header"
+    },
+    "effective_unit_cost": {
+      "type": "number",
+      "description": "True landed cost per unit: unit_cost + (allocated extras / qty_ordered). Source of truth for commitment cost sync."
+    },
     "cost_source_reference": {
       "type": "string",
       "description": "Source of cost: 'part_cost', 'default_estimate', 'user_input', 'commitment:{id}', 'vendor_source:{id}'"
@@ -143,12 +167,12 @@
     "freight_cost": {
       "type": "number",
       "default": 0,
-      "description": "DEPRECATED for forward model: Use Order.freight_cost. Line-level allocation for legacy."
+      "description": "DEPRECATED for forward model: Use allocated_freight. Line-level allocation for legacy."
     },
     "tariff_cost": {
       "type": "number",
       "default": 0,
-      "description": "DEPRECATED for forward model: Use Order.tariff_cost. Line-level allocation for legacy."
+      "description": "DEPRECATED for forward model: Use allocated_tariff. Line-level allocation for legacy."
     }
   },
   "required": [

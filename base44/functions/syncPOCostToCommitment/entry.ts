@@ -131,12 +131,14 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
       continue;
     }
 
-    // Compute weighted average cost
+    // PHASE 5: Compute weighted average cost using EFFECTIVE cost (landed)
+    // effective_unit_cost is source of truth when available (includes allocated freight/tariff/misc/tax)
+    // Falls back to unit_cost for backward compatibility
     let totalCost = 0;
     let totalQty = 0;
     for (const li of activePOLines) {
       const qty = li.qty_ordered || 0;
-      const cost = li.unit_cost || 0;
+      const cost = li.effective_unit_cost ?? li.unit_cost ?? 0;
       totalCost += qty * cost;
       totalQty += qty;
     }

@@ -213,13 +213,19 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.LifecycleEvent.create({ event_type: 'PO_CREATED', commitment_id: c.id, project_id, part_id: part.id, order_id: order.id, line_item_id: li.id, vendor_id: vid, qty_delta: qty_to_order, before_state: JSON.stringify({ covered_from_po: curCov, status: c.commitment_status }), after_state: JSON.stringify({ covered_from_po: newCov, qty_to_order: newTO, status: ns }), metadata: JSON.stringify({ po_number: poNum, unit_cost, extended_cost: unit_cost * qty_to_order }), actor_email: user.email, actor_id: user.id, is_reversible: false });
       }
 
-      // Post-PO: Always trigger cost sync to ensure commitment pricing is up-to-date
-      // syncPOCostToCommitment is hardened (no auth dependency) — safe for service role calls
-      for (const cid of commitmentIdsForCostSync) {
-        try {
-          await base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: cid, skip_retail_update: false });
-        } catch (e) {
-          console.warn(`[PO_COST_SYNC] Sync failed for ${cid}: ${e.message}`);
+      // Post-PO: Run landed cost allocation (distributes freight/tariff/misc/tax to lines)
+      // This also triggers syncPOCostToCommitment internally
+      try {
+        await base44.asServiceRole.functions.invoke('allocatePOCosts', { order_id: order.id });
+      } catch (e) {
+        console.warn(`[PO_COST_ALLOC] Allocation failed for order ${order.id}: ${e.message}`);
+        // Fallback: try direct cost sync
+        for (const cid of commitmentIdsForCostSync) {
+          try {
+            await base44.asServiceRole.functions.invoke('syncPOCostToCommitment', { commitment_id: cid, skip_retail_update: false });
+          } catch (e2) {
+            console.warn(`[PO_COST_SYNC] Sync failed for ${cid}: ${e2.message}`);
+          }
         }
       }
 

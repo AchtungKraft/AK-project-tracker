@@ -57,12 +57,17 @@
     "freight_cost": {
       "type": "number",
       "default": 0,
-      "description": "Freight/shipping cost for this order (PO header level)"
+      "description": "Freight/shipping cost for this order (PO header level). Allocated proportionally to line items."
     },
     "tariff_cost": {
       "type": "number",
       "default": 0,
-      "description": "Tariff/duty cost for this order (PO header level)"
+      "description": "Tariff/duty cost for this order (PO header level). Allocated proportionally to line items."
+    },
+    "misc_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Miscellaneous additional costs (handling, insurance, etc.) for this order. Allocated proportionally to line items."
     },
     "tax": {
       "type": "number",
