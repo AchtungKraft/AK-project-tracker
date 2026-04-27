@@ -208,33 +208,92 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        validatedLines.push({
-          type: 'service',
-          source_entity: 'ServiceCommitment',
-          source_id: line.source_id,
-          part_commitment_id: null, // services do NOT use this field
-          part_id: null,
-          part_name: null,
-          part_number: null,
-          description: line.description || sc.description || 'Service',
-          qty: 1,
-          unit_price: totalBillable,
-          line_total: totalBillable,
-          unit_cost: totalCost,
-          cost_total: totalCost,
-          vendor_id: sc.vendor_id || null,
-          vendor_name: null,
-          category_id: null,
-          category_name: 'Service',
-          needs_review: false,
-          review_reason: null,
-          sort_order: i,
-          metadata: {
-            service_id: sc.service_id,
-            service_commitment_id: sc.id,
-            service_status: sc.status,
-          },
-        });
+        // ── SERVICE EXPANSION: If expanded_lines provided, create child lines ──
+        const expandedLines = line.expanded_lines;
+        if (expandedLines && Array.isArray(expandedLines) && expandedLines.length > 0) {
+          // Validate children sum matches parent total
+          const childrenSum = expandedLines.reduce((s, cl) => s + (cl.amount ?? 0), 0);
+          if (Math.abs(childrenSum - totalBillable) > 0.01) {
+            console.error("Service children total mismatch", {
+              service_commitment_id: line.source_id,
+              parent_total: totalBillable,
+              children_sum: childrenSum,
+              diff: childrenSum - totalBillable,
+            });
+            warnings.push({
+              line: i,
+              code: 'SERVICE_CHILDREN_MISMATCH',
+              message: `Service children sum (${childrenSum}) != parent total (${totalBillable}). Using children as-is.`,
+            });
+          }
+
+          for (let ci = 0; ci < expandedLines.length; ci++) {
+            const child = expandedLines[ci];
+            const childAmount = child.amount ?? 0;
+            if (childAmount <= 0) continue; // skip zero-value children
+            const childCost = child.cost_amount ?? 0;
+
+            validatedLines.push({
+              type: 'service',
+              source_entity: 'ServiceCommitment',
+              source_id: line.source_id,
+              part_commitment_id: null,
+              part_id: null,
+              part_name: null,
+              part_number: null,
+              description: child.description || 'Service Line Item',
+              qty: child.quantity ?? 1,
+              unit_price: child.billing_rate ?? childAmount,
+              line_total: childAmount,
+              unit_cost: child.cost ?? 0,
+              cost_total: childCost,
+              vendor_id: null,
+              vendor_name: child.vendor_name || null,
+              category_id: null,
+              category_name: child.type || 'Service',
+              needs_review: false,
+              review_reason: null,
+              sort_order: i + (ci * 0.01), // preserve ordering within parent
+              metadata: {
+                service_id: sc.service_id,
+                service_commitment_id: sc.id,
+                service_status: sc.status,
+                service_line_item_id: child.id || null,
+                service_line_type: child.type || null,
+                parent_service_description: sc.description || line.description || null,
+              },
+            });
+          }
+        } else {
+          // ── FALLBACK: No children — existing single-line behavior ──
+          validatedLines.push({
+            type: 'service',
+            source_entity: 'ServiceCommitment',
+            source_id: line.source_id,
+            part_commitment_id: null,
+            part_id: null,
+            part_name: null,
+            part_number: null,
+            description: line.description || sc.description || 'Service',
+            qty: 1,
+            unit_price: totalBillable,
+            line_total: totalBillable,
+            unit_cost: totalCost,
+            cost_total: totalCost,
+            vendor_id: sc.vendor_id || null,
+            vendor_name: null,
+            category_id: null,
+            category_name: 'Service',
+            needs_review: false,
+            review_reason: null,
+            sort_order: i,
+            metadata: {
+              service_id: sc.service_id,
+              service_commitment_id: sc.id,
+              service_status: sc.status,
+            },
+          });
+        }
       }
 
       // ── MANUAL / OUTSIDE_COST LINE ──

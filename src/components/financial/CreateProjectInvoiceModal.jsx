@@ -183,14 +183,19 @@ export default function CreateProjectInvoiceModal({
 
       for (const item of selectedParts) {
         if (!item.source_id) continue;
-        lines.push({
+        const linePayload = {
           type: item.type || "part",
           source_entity: item.source_entity,
           source_id: item.source_id,
           description: item.description || item.part_name || 'Item',
           qty: item.qty ?? 1,
           unit_price: item.unit_price ?? 0,
-        });
+        };
+        // Phase 1: Pass service children for expanded invoice lines
+        if (item.type === 'service' && item.children?.length > 0) {
+          linePayload.expanded_lines = item.children;
+        }
+        lines.push(linePayload);
       }
 
       for (const line of manualLines) {

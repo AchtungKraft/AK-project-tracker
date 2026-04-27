@@ -362,8 +362,31 @@ function PartItemRow({ item, isSelected, onToggle }) {
 }
 
 // ── Service row (with expandable children) ──
-function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleExpand }) {
+const ServiceItemRow = React.memo(function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleExpand }) {
   const hasChildren = item.children && item.children.length > 0;
+
+  // Phase 5: Memoize children to avoid re-render on parent state changes
+  const memoizedChildren = useMemo(() => item.children, [item.id]);
+
+  // Phase 4: Validate children total matches parent
+  const childrenSum = useMemo(() => {
+    if (!hasChildren) return 0;
+    return memoizedChildren.reduce((s, c) => s + (c.amount ?? 0), 0);
+  }, [memoizedChildren, hasChildren]);
+
+  const hasMismatch = hasChildren && Math.abs(childrenSum - item.line_total) > 0.01;
+
+  // Log mismatch once (dev aid)
+  useEffect(() => {
+    if (hasMismatch) {
+      console.error("Service total mismatch", {
+        service_id: item.source_id,
+        parent_total: item.line_total,
+        children_sum: childrenSum,
+        diff: childrenSum - item.line_total,
+      });
+    }
+  }, [hasMismatch, item.source_id, item.line_total, childrenSum]);
 
   return (
     <div>
@@ -380,9 +403,15 @@ function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleE
           <p className="text-sm text-white truncate">
             {item.description}
             <span className="ml-1.5 text-[10px] text-amber-400 font-mono">SERVICE</span>
+            {hasChildren && (
+              <span className="ml-1 text-[10px] text-gray-500">({memoizedChildren.length} lines)</span>
+            )}
           </p>
-          {hasChildren && (
-            <p className="text-[10px] text-gray-500">{item.children.length} line item{item.children.length !== 1 ? 's' : ''}</p>
+          {hasMismatch && (
+            <div className="flex items-center gap-1 text-[10px] text-red-400 mt-0.5">
+              <AlertTriangle className="w-3 h-3" />
+              <span>Children total ({formatCurrencyUSD(childrenSum)}) ≠ parent ({formatCurrencyUSD(item.line_total)})</span>
+            </div>
           )}
         </div>
         <div className="text-right">
@@ -396,7 +425,7 @@ function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleE
       {/* Expanded children */}
       {hasChildren && isChildExpanded && (
         <div className="ml-14 mr-3 mb-2 border-l-2 border-amber-800/30 pl-3 space-y-1">
-          {item.children.map((child) => (
+          {memoizedChildren.map((child) => (
             <div key={child.id} className="flex items-center justify-between py-1 text-xs">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span className="text-gray-500">↳</span>
@@ -416,8 +445,15 @@ function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleE
               </div>
             </div>
           ))}
+          {/* Children total footer */}
+          <div className="flex items-center justify-between pt-1 border-t border-amber-800/20">
+            <span className="text-[10px] text-gray-500">Children total</span>
+            <span className={cn("text-[10px] font-mono", hasMismatch ? "text-red-400" : "text-amber-300")}>
+              {formatCurrencyUSD(childrenSum)}
+            </span>
+          </div>
         </div>
       )}
     </div>
   );
-}
+});
