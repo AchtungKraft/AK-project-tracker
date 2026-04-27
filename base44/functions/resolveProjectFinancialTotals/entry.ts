@@ -93,8 +93,8 @@ export async function resolveFinancials(base44, project_id) {
     services_planned_retail += billable;
     services_planned_cost += cost;
 
-    // CANONICAL: Billing lock = is_billed || invoice_id present
-    const isLocked = sc.is_billed === true || sc.invoice_id != null;
+    // CANONICAL: Unified billing lock — must match all resolvers
+    const isLocked = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
     if (isLocked) {
       services_invoiced_amount += billable;
     }
@@ -111,8 +111,10 @@ export async function resolveFinancials(base44, project_id) {
   // ══════════════════════════════════════════════
   // INVOICE-LEVEL TOTALS (for reconciliation)
   // ══════════════════════════════════════════════
+  // PHASE 2 FIX: Only sent/paid invoices contribute to financial totals
+  const VALID_INVOICE_STATUSES = ['sent', 'paid'];
   const activeInvoices = invoices.filter(inv =>
-    inv.status !== 'cancelled' && inv.status !== 'void'
+    VALID_INVOICE_STATUSES.includes(inv.status)
   );
 
   let invoice_entity_total = 0;
@@ -126,10 +128,13 @@ export async function resolveFinancials(base44, project_id) {
   }
 
   // Invoice line totals by commitment (for reconciliation)
-  // UNIFIED: Use source_id with fallback to part_commitment_id for legacy lines
+  // PHASE 2 FIX: Only count lines from active (sent/paid) invoices
+  const activeInvoiceIds = new Set(activeInvoices.map(i => i.id));
+  const activeInvoiceLines = invoiceLines.filter(l => activeInvoiceIds.has(l.invoice_id));
+  
   let invoice_lines_total = 0;
   const linesByCommitment = {};
-  for (const line of invoiceLines) {
+  for (const line of activeInvoiceLines) {
     const lineTotal = line.line_total ?? ((line.qty || 0) * (line.unit_price || 0));
     invoice_lines_total += lineTotal;
     const sourceId = line.source_id || line.part_commitment_id;

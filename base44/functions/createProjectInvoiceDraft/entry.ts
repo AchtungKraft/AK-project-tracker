@@ -193,7 +193,9 @@ Deno.serve(async (req) => {
           blockedLines.push({ line: i, source_id: line.source_id, reason: 'WRONG_PROJECT', message: 'ServiceCommitment does not belong to this project' });
           continue;
         }
-        if (sc.is_billed === true || sc.invoice_id) {
+        // CANONICAL: Unified billing lock — must match all resolvers
+        const isServiceBilled = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
+        if (isServiceBilled) {
           blockedLines.push({ line: i, source_id: line.source_id, reason: 'ALREADY_BILLED', message: 'Service is already billed' });
           continue;
         }

@@ -10,7 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - Parts: effective_required = required_total - qty_removed
  *          qty_available = effective_required - invoiced_qty
  *          unit_price = unit_retail_snapshot (NO fallback)
- * - Services: billable if is_billed !== true AND invoice_id is null AND total_billable > 0
+ * - Services: billable if NOT (is_billed || status==='billed' || invoice_id) AND total_billable > 0
  *             unit_price = total_billable, qty = 1
  * - NO pricing fallbacks. If snapshot is 0, report 0 with warning.
  */
@@ -144,12 +144,11 @@ Deno.serve(async (req) => {
     // SERVICES
     // ══════════════════════════════════════
     for (const sc of serviceCommitments) {
-      // Service is billable if: not billed, no invoice_id, and has billable amount
-      const isBilled = sc.is_billed === true;
-      const hasInvoice = !!sc.invoice_id;
+      // CANONICAL: Unified billing lock — must match all resolvers
+      const isServiceBilled = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
       const totalBillable = sc.total_billable ?? 0;
 
-      if (isBilled || hasInvoice || totalBillable <= 0) continue;
+      if (isServiceBilled || totalBillable <= 0) continue;
 
       const svc = serviceMap[sc.service_id];
       const svcVendor = sc.vendor_id ? serviceVendorMap[sc.vendor_id] : null;
