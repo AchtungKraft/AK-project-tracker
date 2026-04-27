@@ -1,0 +1,132 @@
+{
+  "name": "ProjectInvoice",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "invoice_type": {
+      "type": "string",
+      "enum": [
+        "deposit",
+        "progress",
+        "final"
+      ],
+      "description": "Type of invoice in billing lifecycle"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "sent",
+        "paid",
+        "cancelled"
+      ],
+      "default": "draft",
+      "description": "Invoice status"
+    },
+    "qb_invoice_number": {
+      "type": "string",
+      "description": "QuickBooks invoice number (set when sent)"
+    },
+    "qb_invoice_date": {
+      "type": "string",
+      "format": "date",
+      "description": "QuickBooks invoice date (manual metadata entry)"
+    },
+    "issue_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date invoice was issued"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Payment due date"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date payment was received"
+    },
+    "subtotal": {
+      "type": "number",
+      "default": 0,
+      "description": "Sum of all line totals before credits"
+    },
+    "credit_proposed": {
+      "type": "number",
+      "default": 0,
+      "description": "Credit amount proposed at draft creation. NOT deducted from ledger until sent."
+    },
+    "credit_applied": {
+      "type": "number",
+      "default": 0,
+      "description": "Actual credit deducted from ledger. Set ONLY by markInvoiceSent. Zero for drafts."
+    },
+    "credit_preview": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED: Legacy field. Use credit_proposed for drafts, credit_applied for sent."
+    },
+    "total": {
+      "type": "number",
+      "default": 0,
+      "description": "Invoice total (same as subtotal, tax handled externally)"
+    },
+    "balance_due": {
+      "type": "number",
+      "default": 0,
+      "description": "Amount due after credit applied"
+    },
+    "paid_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "Amount actually paid"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Invoice notes"
+    },
+    "credit_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for credit application (set at sent time)"
+    },
+    "payment_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for payment processing"
+    },
+    "apply_credit_at_payment": {
+      "type": "boolean",
+      "default": false,
+      "description": "DEPRECATED: Legacy flag. Credits are now always applied at sent time."
+    },
+    "cancelled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when invoice was cancelled"
+    },
+    "cancelled_by": {
+      "type": "string",
+      "description": "User who cancelled the invoice"
+    },
+    "cancellation_reason": {
+      "type": "string",
+      "description": "Reason for cancellation"
+    },
+    "credit_reversed": {
+      "type": "number",
+      "default": 0,
+      "description": "Amount of credit that was reversed on cancellation"
+    },
+    "reversal_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for credit reversal on cancellation"
+    }
+  },
+  "required": [
+    "project_id",
+    "invoice_type"
+  ]
+}

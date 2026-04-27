@@ -1,35 +1,24 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * createProjectInvoiceDraft - PHASE 10 Forward Invoice System
- * 
- * Creates a draft ProjectInvoice with lines.
- * 
- * CRITICAL RULES:
- * 1. Draft creation does NOT mutate ProjectCreditLedger (credit is only PREVIEWED).
- * 2. BILLED-ONCE ENFORCEMENT: Block if commitment billing_status !== 'unbilled'
- * 3. All-or-nothing: commitments are invoiced fully (remaining qty)
- * 
+ * createProjectInvoiceDraft — UNIFIED INVOICE DRAFT CREATION
+ *
+ * PHASE 3 RULES:
+ * 1. Creates ProjectInvoice (status=draft) + ProjectInvoiceLine rows
+ * 2. Does NOT mutate PartCommitment (no invoiced_qty, no billing_status)
+ * 3. Does NOT mutate ServiceCommitment (no is_billed, no invoice_id)
+ * 4. Does NOT deduct credit from ledger — stores credit_proposed only
+ * 5. Validates lines against canonical resolver output
+ *
+ * Supports line types: part, service, manual, outside_cost
+ *
  * Inputs:
  * - project_id (required)
  * - invoice_type: deposit|progress|final (required)
- * - preview_credit: boolean (default true) - whether to calculate credit_preview
- * - lines: array of { type, part_commitment_id?, description, qty?, unit_price }
- * 
- * Returns:
- * - invoice_id, totals, credit_preview_detail (NOT applied), warnings[], blocked_lines[]
+ * - credit_to_apply: number (proposed credit, not deducted yet)
+ * - lines: [{ type, source_id?, source_entity?, description, qty, unit_price }]
+ * - notes: string
  */
-
-/**
- * Normalize billing_status to canonical enum values
- */
-function normalizeBillingStatus(status) {
-  if (!status) return 'unbilled';
-  const normalized = String(status).toLowerCase().trim();
-  if (normalized === 'paid') return 'paid';
-  if (normalized === 'invoiced' || normalized === 'billed') return 'invoiced';
-  return 'unbilled';
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -45,22 +34,19 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const payload = await req.json();
-    const { 
-      project_id, 
-      invoice_type, 
-      preview_credit = true, 
+    const {
+      project_id,
+      invoice_type,
+      credit_to_apply = 0,
       lines = [],
       notes,
-      credit_to_apply = null, // STABILIZATION: User-specified credit amount to apply at creation
     } = payload;
 
-    // Validate required fields
     if (!project_id) {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
@@ -71,193 +57,204 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'At least one line is required' }, { status: 400 });
     }
 
-    // Fetch project
+    // Verify project exists
     const projects = await base44.entities.Project.filter({ id: project_id });
     if (projects.length === 0) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Prefetch all parts for denormalization
-    const partIds = new Set();
-    const commitmentIds = [];
-    
-    for (const line of lines) {
-      if (line.type === 'part' && line.part_commitment_id) {
-        commitmentIds.push(line.part_commitment_id);
-      }
-    }
+    // ── Prefetch source records for validation ──
+    const partCommitmentIds = lines
+      .filter(l => l.type === 'part' && l.source_id)
+      .map(l => l.source_id);
 
-    // Fetch commitments first, then scope parts/vendors to referenced IDs
-    const [allCommitments, categories] = await Promise.all([
-      base44.entities.PartCommitment.filter({ project_id }),
-      base44.entities.PartCategory.filter({}),
+    const serviceCommitmentIds = lines
+      .filter(l => l.type === 'service' && l.source_id)
+      .map(l => l.source_id);
+
+    const [allPartCommitments, allServiceCommitments, allParts, allVendors, allCategories] = await Promise.all([
+      partCommitmentIds.length > 0
+        ? base44.entities.PartCommitment.filter({ project_id })
+        : [],
+      serviceCommitmentIds.length > 0
+        ? base44.entities.ServiceCommitment.filter({ project_id }).catch(() => [])
+        : [],
+      base44.entities.Part.list(),
+      base44.entities.Vendor.list(),
+      base44.entities.PartCategory.list(),
     ]);
 
-    const commitmentMap = new Map();
-    for (const c of allCommitments) {
-      commitmentMap.set(c.id, c);
-      if (c.part_id) partIds.add(c.part_id);
-    }
-
-    const allParts = partIds.size > 0
-      ? await base44.entities.Part.filter({ id: { $in: [...partIds] } })
-      : [];
-
-    const vendorIdsFromParts = [...new Set(allParts.map(p => p.default_vendor_id).filter(Boolean))];
-    const vendors = vendorIdsFromParts.length > 0
-      ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
-      : [];
-
-    const partMap = new Map();
-    for (const p of allParts) {
-      partMap.set(p.id, p);
-    }
-
-    const vendorMap = new Map(vendors.map(v => [v.id, v]));
-    const categoryMap = new Map(categories.map(c => [c.id, c]));
+    const pcMap = new Map(allPartCommitments.map(c => [c.id, c]));
+    const scMap = new Map(allServiceCommitments.map(s => [s.id, s]));
+    const partMap = new Map(allParts.map(p => [p.id, p]));
+    const vendorMap = new Map(allVendors.map(v => [v.id, v]));
+    const catMap = new Map(allCategories.map(c => [c.id, c]));
 
     const warnings = [];
     const blockedLines = [];
-    const lineResults = [];
+    const validatedLines = [];
 
-    // Validate lines and compute line_total
+    // ── Validate each line ──
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
-      if (!line.type || !['part', 'outside_cost', 'manual'].includes(line.type)) {
-        return Response.json({ error: `Line ${i}: type must be part|outside_cost|manual` }, { status: 400 });
+
+      if (!line.type || !['part', 'service', 'manual', 'outside_cost'].includes(line.type)) {
+        return Response.json({ error: `Line ${i}: type must be part|service|manual|outside_cost` }, { status: 400 });
       }
       if (!line.description) {
         return Response.json({ error: `Line ${i}: description required` }, { status: 400 });
       }
 
-      let lineTotal = 0;
-      const qty = line.qty ?? null;
-      const unitPrice = line.unit_price ?? 0;
-
-      // For part lines, validate commitment and enforce BILLED-ONCE
+      // ── PART LINE ──
       if (line.type === 'part') {
-        if (!line.part_commitment_id) {
-          return Response.json({ error: `Line ${i}: part_commitment_id required for part lines` }, { status: 400 });
+        if (!line.source_id) {
+          return Response.json({ error: `Line ${i}: source_id required for part lines` }, { status: 400 });
         }
 
-        const commitment = commitmentMap.get(line.part_commitment_id);
+        const commitment = pcMap.get(line.source_id);
         if (!commitment) {
-          return Response.json({ error: `Line ${i}: Commitment not found` }, { status: 400 });
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NOT_FOUND', message: 'PartCommitment not found' });
+          continue;
         }
-
         if (commitment.project_id !== project_id) {
-          return Response.json({ error: `Line ${i}: Commitment does not belong to this project` }, { status: 400 });
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'WRONG_PROJECT', message: 'Commitment does not belong to this project' });
+          continue;
         }
-
-        // ===== ARCHIVED/CANCELLED COMMITMENT GUARD (STABILIZATION) =====
-        if (commitment.is_archived === true) {
-          blockedLines.push({
-            line: i,
-            part_commitment_id: line.part_commitment_id,
-            reason: 'ARCHIVED',
-            message: `Commitment is archived. Cannot invoice archived commitments.`,
-          });
-          continue; // Skip this line
-        }
-
-        if (commitment.cancelled_at) {
-          blockedLines.push({
-            line: i,
-            part_commitment_id: line.part_commitment_id,
-            reason: 'CANCELLED',
-            message: `Commitment was cancelled on ${commitment.cancelled_at}. Cannot invoice cancelled commitments.`,
-          });
-          continue; // Skip this line
-        }
-
-        // ============================================================================
-        // INVOICE ELIGIBILITY CANONICAL RULE (Phase 3):
-        // Gate ONLY on remaining_to_bill_qty > 0
-        // DO NOT gate on billing_status enum - it can be stale if normalization
-        // hasn't run. The remainingQty check below is always authoritative.
-        // ============================================================================
-
-        // Calculate remaining to bill qty
-        const required = commitment.required_total ?? commitment.qty_committed ?? 0;
-        const alreadyInvoiced = commitment.invoiced_qty ?? 0;
-        const remainingQty = Math.max(0, required - alreadyInvoiced);
-
-        // Block if nothing to invoice
-        if (remainingQty <= 0) {
-          blockedLines.push({
-            line: i,
-            part_commitment_id: line.part_commitment_id,
-            reason: 'NO_OUTSTANDING',
-            message: `No remaining quantity to invoice (required: ${required}, already invoiced: ${alreadyInvoiced}).`,
-          });
+        if (commitment.cancelled_at || commitment.is_archived === true) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'CANCELLED_OR_ARCHIVED', message: 'Commitment is cancelled or archived' });
           continue;
         }
 
-        // Get part data for denormalization
-        const part = partMap.get(commitment.part_id);
-        const vendor = part?.default_vendor_id ? vendorMap.get(part.default_vendor_id) : null;
-        const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
+        // CANONICAL: effective_required = required_total - qty_removed
+        const requiredTotal = commitment.required_total ?? 0;
+        const qtyRemoved = commitment.qty_removed ?? 0;
+        const effectiveRequired = Math.max(0, requiredTotal - qtyRemoved);
+        const invoicedQty = commitment.invoiced_qty ?? 0;
+        const qtyAvailable = Math.max(0, effectiveRequired - invoicedQty);
 
-        // Determine effective unit retail
-        const effectiveUnitRetail = line.unit_price ?? commitment.unit_retail_snapshot ?? 0;
-        const effectiveUnitCost = commitment.unit_cost_snapshot ?? part?.cost ?? 0;
-
-        // Flag if retail is missing/zero (allow but warn)
-        let needsReview = false;
-        let reviewReason = null;
-        if (!effectiveUnitRetail || effectiveUnitRetail <= 0) {
-          needsReview = true;
-          reviewReason = 'MISSING_RETAIL: Unit retail is missing or zero. Invoice line will show $0.00.';
-          warnings.push({
-            line: i,
-            code: 'MISSING_RETAIL',
-            message: `Line ${i}: Retail price is missing or zero. Proceeding with $0.00.`,
-          });
+        if (qtyAvailable <= 0) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NO_OUTSTANDING', message: `No qty available (effective: ${effectiveRequired}, invoiced: ${invoicedQty})` });
+          continue;
         }
 
-        // Use full remaining qty (all-or-nothing per commitment)
-        const effectiveQty = remainingQty;
-        lineTotal = effectiveQty * effectiveUnitRetail;
+        const effectiveQty = Math.min(line.qty ?? qtyAvailable, qtyAvailable);
+        const unitPrice = line.unit_price ?? commitment.unit_retail_snapshot ?? 0;
+        const unitCost = commitment.unit_cost_snapshot ?? 0;
+        const lineTotal = effectiveQty * unitPrice;
 
-        lineResults.push({
+        const part = partMap.get(commitment.part_id);
+        const vendor = part?.default_vendor_id ? vendorMap.get(part.default_vendor_id) : null;
+        const category = part?.part_category_id ? catMap.get(part.part_category_id) : null;
+
+        let needsReview = false;
+        let reviewReason = null;
+        if (unitPrice <= 0) {
+          needsReview = true;
+          reviewReason = 'MISSING_RETAIL: Unit retail is 0.';
+          warnings.push({ line: i, code: 'MISSING_RETAIL', message: `Line ${i}: Retail price is $0.` });
+        }
+
+        validatedLines.push({
           type: 'part',
-          part_commitment_id: line.part_commitment_id,
+          source_entity: 'PartCommitment',
+          source_id: line.source_id,
+          part_commitment_id: line.source_id, // backward compat
           part_id: commitment.part_id,
           part_name: part?.part_name || line.description,
           part_number: part?.vendor_part_number || null,
           description: line.description || part?.part_name || 'Part',
           qty: effectiveQty,
-          unit_price: effectiveUnitRetail,
+          unit_price: unitPrice,
           line_total: lineTotal,
-          unit_cost: effectiveUnitCost,
-          vendor_id: vendor?.id || part?.default_vendor_id || null,
+          unit_cost: unitCost,
+          cost_total: effectiveQty * unitCost,
+          vendor_id: vendor?.id || null,
           vendor_name: vendor?.vendor_name || null,
-          category_id: category?.id || part?.part_category_id || null,
+          category_id: category?.id || null,
           category_name: category?.name || null,
           needs_review: needsReview,
           review_reason: reviewReason,
           sort_order: i,
         });
-      } else {
-        // outside_cost or manual
-        if (qty !== null && unitPrice > 0) {
-          lineTotal = qty * unitPrice;
-        } else {
-          lineTotal = unitPrice; // Manual amount
+      }
+
+      // ── SERVICE LINE ──
+      else if (line.type === 'service') {
+        if (!line.source_id) {
+          return Response.json({ error: `Line ${i}: source_id required for service lines` }, { status: 400 });
         }
 
-        lineResults.push({
+        const sc = scMap.get(line.source_id);
+        if (!sc) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NOT_FOUND', message: 'ServiceCommitment not found' });
+          continue;
+        }
+        if (sc.project_id !== project_id) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'WRONG_PROJECT', message: 'ServiceCommitment does not belong to this project' });
+          continue;
+        }
+        if (sc.is_billed === true || sc.invoice_id) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'ALREADY_BILLED', message: 'Service is already billed' });
+          continue;
+        }
+
+        const totalBillable = sc.total_billable ?? 0;
+        const totalCost = sc.total_cost ?? 0;
+
+        if (totalBillable <= 0) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'ZERO_BILLABLE', message: 'Service has $0 billable amount' });
+          continue;
+        }
+
+        validatedLines.push({
+          type: 'service',
+          source_entity: 'ServiceCommitment',
+          source_id: line.source_id,
+          part_commitment_id: null, // services do NOT use this field
+          part_id: null,
+          part_name: null,
+          part_number: null,
+          description: line.description || sc.description || 'Service',
+          qty: 1,
+          unit_price: totalBillable,
+          line_total: totalBillable,
+          unit_cost: totalCost,
+          cost_total: totalCost,
+          vendor_id: sc.vendor_id || null,
+          vendor_name: null,
+          category_id: null,
+          category_name: 'Service',
+          needs_review: false,
+          review_reason: null,
+          sort_order: i,
+          metadata: {
+            service_id: sc.service_id,
+            service_commitment_id: sc.id,
+            service_status: sc.status,
+          },
+        });
+      }
+
+      // ── MANUAL / OUTSIDE_COST LINE ──
+      else {
+        const qty = line.qty ?? 1;
+        const unitPrice = line.unit_price ?? 0;
+        const lineTotal = qty * unitPrice;
+
+        validatedLines.push({
           type: line.type,
+          source_entity: 'Manual',
+          source_id: null,
           part_commitment_id: null,
           part_id: null,
           part_name: null,
           part_number: null,
           description: line.description,
-          qty: qty,
+          qty,
           unit_price: unitPrice,
           line_total: lineTotal,
           unit_cost: null,
+          cost_total: null,
           vendor_id: null,
           vendor_name: null,
           category_id: null,
@@ -269,8 +266,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check if all lines were blocked
-    if (lineResults.length === 0 && blockedLines.length > 0) {
+    // All blocked?
+    if (validatedLines.length === 0 && blockedLines.length > 0) {
       return Response.json({
         success: false,
         error: 'All lines were blocked',
@@ -279,111 +276,47 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // Compute subtotal
-    const subtotal = lineResults.reduce((sum, l) => sum + (l.line_total || 0), 0);
+    // ── Compute totals ──
+    const subtotal = validatedLines.reduce((s, l) => s + (l.line_total || 0), 0);
 
-    // ===== STABILIZATION: Hybrid Credit at Invoice Creation =====
-    // Fetch available credits
-    const credits = await base44.entities.ProjectCreditLedger.filter({
-      project_id,
-    });
-
-    const availableCredits = credits
-      .filter(c => (c.remaining_amount ?? 0) > 0)
-      .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
-
-    const totalCreditAvailable = availableCredits.reduce((sum, c) => sum + (c.remaining_amount ?? 0), 0);
-
-    // Calculate credit to apply
-    // If user specified credit_to_apply, use it (with validation)
-    // Otherwise, calculate suggested credit (min of available and subtotal)
-    let creditToApply = 0;
-    let creditAppliedDetail = [];
-    let creditValidationError = null;
-
-    if (credit_to_apply !== null && credit_to_apply !== undefined) {
-      // User specified a credit amount - validate it
-      const requestedCredit = parseFloat(credit_to_apply) || 0;
-      
-      if (requestedCredit < 0) {
-        creditValidationError = 'Credit amount cannot be negative';
-      } else if (requestedCredit > totalCreditAvailable) {
-        creditValidationError = `Credit amount (${requestedCredit}) exceeds available credit (${totalCreditAvailable})`;
-      } else if (requestedCredit > subtotal) {
-        creditValidationError = `Credit amount (${requestedCredit}) exceeds invoice subtotal (${subtotal})`;
-      } else {
-        creditToApply = requestedCredit;
+    // ── Validate proposed credit ──
+    const proposedCredit = Math.max(0, parseFloat(credit_to_apply) || 0);
+    if (proposedCredit > 0) {
+      const credits = await base44.entities.ProjectCreditLedger.filter({ project_id });
+      const totalAvailable = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
+      if (proposedCredit > totalAvailable) {
+        return Response.json({ error: `Proposed credit (${proposedCredit}) exceeds available (${totalAvailable})` }, { status: 400 });
       }
-    } else if (preview_credit && subtotal > 0) {
-      // Auto-suggest: min of available and subtotal
-      creditToApply = Math.min(totalCreditAvailable, subtotal);
+      if (proposedCredit > subtotal) {
+        return Response.json({ error: `Proposed credit (${proposedCredit}) exceeds subtotal (${subtotal})` }, { status: 400 });
+      }
     }
 
-    if (creditValidationError) {
-      return Response.json({
-        success: false,
-        error: creditValidationError,
-        available_credit: totalCreditAvailable,
-        subtotal,
-      }, { status: 400 });
-    }
+    const balanceDue = Math.max(0, subtotal - proposedCredit);
 
-    // Generate idempotency key for credit application
-    const creditIdempotencyKey = `inv_create_${project_id}_${Date.now()}`;
-
-    // APPLY credit NOW (mutate ledger at invoice creation)
-    let remainingToApply = creditToApply;
-
-    for (const credit of availableCredits) {
-      if (remainingToApply <= 0) break;
-
-      const available = credit.remaining_amount ?? 0;
-      const toApply = Math.min(available, remainingToApply);
-
-      if (toApply <= 0) continue;
-
-      // MUTATE LEDGER: Deduct from remaining_amount
-      const newRemaining = available - toApply;
-      await base44.asServiceRole.entities.ProjectCreditLedger.update(credit.id, {
-        remaining_amount: newRemaining,
-        credit_idempotency_key: creditIdempotencyKey,
-      });
-
-      remainingToApply -= toApply;
-
-      creditAppliedDetail.push({
-        credit_id: credit.id,
-        source_invoice_id: credit.source_invoice_id,
-        amount_available: available,
-        amount_applied: toApply,
-        remaining_after: newRemaining,
-      });
-    }
-
-    const total = subtotal;
-    const balanceDue = Math.max(0, subtotal - creditToApply);
-
-    // Create invoice with credit_applied set (not preview)
+    // ── Create invoice (DRAFT — NO source mutations) ──
     const invoice = await base44.asServiceRole.entities.ProjectInvoice.create({
       project_id,
       invoice_type,
       status: 'draft',
       subtotal,
-      credit_preview: 0, // No longer needed - using credit_applied
-      credit_applied: creditToApply, // STABILIZATION: Credit applied at creation
-      total,
+      credit_proposed: proposedCredit,
+      credit_applied: 0, // NOT applied yet — only at sent
+      credit_preview: proposedCredit, // backward compat
+      total: subtotal,
       balance_due: balanceDue,
       notes: notes || null,
-      credit_idempotency_key: creditIdempotencyKey,
     });
 
-    // Create invoice lines with all export fields
+    // ── Create line items ──
     const createdLines = [];
-    for (const line of lineResults) {
-      const createdLine = await base44.asServiceRole.entities.ProjectInvoiceLine.create({
+    for (const line of validatedLines) {
+      const created = await base44.asServiceRole.entities.ProjectInvoiceLine.create({
         invoice_id: invoice.id,
         type: line.type,
-        part_commitment_id: line.part_commitment_id,
+        source_entity: line.source_entity,
+        source_id: line.source_id,
+        part_commitment_id: line.part_commitment_id, // backward compat for parts
         part_id: line.part_id,
         part_name: line.part_name,
         part_number: line.part_number,
@@ -392,6 +325,7 @@ Deno.serve(async (req) => {
         unit_price: line.unit_price,
         line_total: line.line_total,
         unit_cost: line.unit_cost,
+        cost_total: line.cost_total,
         vendor_id: line.vendor_id,
         vendor_name: line.vendor_name,
         category_id: line.category_id,
@@ -399,75 +333,10 @@ Deno.serve(async (req) => {
         needs_review: line.needs_review,
         review_reason: line.review_reason,
         sort_order: line.sort_order,
+        metadata: line.metadata || null,
       });
-      createdLines.push(createdLine);
+      createdLines.push(created);
     }
-
-    // ===== PART 1: AUTO-SETTLE COMMITMENTS FULLY COVERED BY CREDIT =====
-    // DETERMINISTIC: Credit allocated strictly in invoice line order (top-to-bottom)
-    // NO optimization sort - user controls priority by line ordering in the invoice
-    // All-or-nothing per line: fully covered → PAID, otherwise → INVOICED
-    
-    // Get part lines in original invoice line order (lineResults preserves input order via sort_order)
-    const partLineResults = lineResults
-      .filter(l => l.part_commitment_id)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    
-    // Allocate credit to commitments IN LINE ORDER
-    let remainingCreditForCommitments = creditToApply;
-    const commitmentSettlements = [];
-    const autoSettledCommitments = [];
-    
-    for (const lineData of partLineResults) {
-      const commitmentId = lineData.part_commitment_id;
-      const commitment = commitmentMap.get(commitmentId);
-      const lineTotal = lineData.line_total || 0;
-      
-      // Determine if credit fully covers this commitment's outstanding amount
-      const outstanding = lineTotal;
-      const creditForThis = Math.min(remainingCreditForCommitments, outstanding);
-      const isFullyCovered = creditForThis >= outstanding && outstanding > 0;
-      
-      // Update billing status: PAID if fully covered by credit, INVOICED otherwise
-      const newBillingStatus = isFullyCovered ? 'paid' : 'invoiced';
-      
-      await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-        billing_status: newBillingStatus,
-        invoiced_qty: lineData.qty || (commitment?.required_total ?? 0),
-        invoiced_retail_total: lineTotal,
-        invoiced_amount: lineTotal, // Total amount invoiced
-      });
-      
-      // Deduct credit used ONLY if fully covered
-      if (isFullyCovered) {
-        remainingCreditForCommitments -= outstanding;
-        autoSettledCommitments.push({
-          commitment_id: commitmentId,
-          part_id: commitment?.part_id,
-          part_name: lineData.part_name || 'Part',
-          line_total: lineTotal,
-          credit_applied: outstanding,
-          billing_status: 'paid',
-        });
-      }
-      
-      // CANONICAL OUTPUT: Clear mapping of allocation per commitment
-      commitmentSettlements.push({
-        commitment_id: commitmentId,
-        part_name: lineData.part_name || 'Part',
-        outstanding: outstanding,
-        credit_applied: isFullyCovered ? outstanding : 0,
-        resulting_status: newBillingStatus,
-        fully_covered_by_credit: isFullyCovered,
-        line_order: lineData.sort_order ?? 0,
-      });
-    }
-    
-    // Collect all part commitment IDs (in line order)
-    const partCommitmentIds = partLineResults.map(l => l.part_commitment_id);
-
-    // Count lines needing review
-    const linesNeedingReview = lineResults.filter(l => l.needs_review).length;
 
     return Response.json({
       success: true,
@@ -478,28 +347,19 @@ Deno.serve(async (req) => {
         invoice_type,
         status: 'draft',
         subtotal,
-        credit_applied: creditToApply,
-        total,
+        credit_proposed: proposedCredit,
+        credit_applied: 0,
+        total: subtotal,
         balance_due: balanceDue,
       },
       lines_created: createdLines.length,
-      lines_needing_review: linesNeedingReview,
-      commitments_updated: partCommitmentIds.length,
-      part_commitment_ids: partCommitmentIds,
-      credit_applied: creditToApply,
-      credit_available_before: totalCreditAvailable,
-      credit_available_after: totalCreditAvailable - creditToApply,
-      credit_applied_detail: creditAppliedDetail.length > 0 ? creditAppliedDetail : null,
-      ledger_mutated: creditToApply > 0,
+      lines_needing_review: validatedLines.filter(l => l.needs_review).length,
       blocked_lines: blockedLines.length > 0 ? blockedLines : null,
       warnings: warnings.length > 0 ? warnings : null,
-      // PART 1: Auto-settle summary (deterministic, line-order allocation)
-      auto_settled_commitments: autoSettledCommitments,
-      auto_settled_count: autoSettledCommitments.length,
-      // CANONICAL: commitment_settlements in invoice line order with clear mapping
-      commitment_settlements: commitmentSettlements,
+      // CANONICAL: Draft does NOT mutate any source records
+      source_records_mutated: false,
+      credit_ledger_mutated: false,
     });
-
   } catch (error) {
     console.error('createProjectInvoiceDraft error:', error);
     return Response.json({ error: error.message }, { status: 500 });

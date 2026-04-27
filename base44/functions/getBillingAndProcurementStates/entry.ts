@@ -327,8 +327,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     }
   });
 
-  // PHASE 1: Track already-invoiced items via ProjectInvoiceLine (part_commitment_id)
-  const queuedSourceIds = new Set(batchLines.map(bl => bl.part_commitment_id).filter(Boolean));
+  // UNIFIED: Track already-invoiced items via source_id (fallback to part_commitment_id for legacy)
+  const queuedSourceIds = new Set(batchLines.map(bl => bl.source_id || bl.part_commitment_id).filter(Boolean));
 
   // ============================================
   // PHASE 2: Fetch services for billability

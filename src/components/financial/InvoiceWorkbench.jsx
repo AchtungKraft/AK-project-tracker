@@ -738,17 +738,15 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
     staleTime: 30000,
   });
 
-  // PHASE 1: Create invoice using forward system
+  // UNIFIED: Create invoice using source_entity/source_id contract
   const createBatchMutation = useMutation({
     mutationFn: async (items) => {
-      console.log("Create Invoice clicked (forward system)");
-      console.log("Selected items:", items.length);
-      
-      // Build lines for createProjectInvoiceDraft
+      // Build lines using unified contract
       const lines = items.map(item => ({
-        type: 'part',
-        part_commitment_id: item.commitment_id,
-        description: item.part_name || 'Unknown Part',
+        type: item.type || 'part',
+        source_entity: item.type === 'service' ? 'ServiceCommitment' : 'PartCommitment',
+        source_id: item.commitment_id || item.source_id,
+        description: item.part_name || item.description || 'Unknown',
         qty: item.assigned_qty || item.required_total || 1,
         unit_price: item.unit_retail || item.unit_price || 0,
       }));

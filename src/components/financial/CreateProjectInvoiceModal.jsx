@@ -42,8 +42,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
-import BillablePartsSelector from "./BillablePartsSelector";
-import { useFinancialProjectsView, useBillingAndProcurementStates } from "./useFinancialProjectsView";
+import BillableItemsSelector from "./BillableItemsSelector";
+import { useFinancialProjectsView } from "./useFinancialProjectsView";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
@@ -128,21 +128,28 @@ export default function CreateProjectInvoiceModal({
     (p) => p.project_id === selectedProjectId
   );
 
-  // PHASE 1 CANONICAL: Use getBillingAndProcurementStates as single source of truth
-  // HARD FIX: Hard guard - billing query MUST NOT run if projectId is null/empty
-  // PERF FIX: Also guard on step - only fetch when modal is on lines step or later
-  const { data: billingData, isLoading: billingLoading } = useBillingAndProcurementStates(
-    normalizedProjectId,
-    { enabled: Boolean(normalizedProjectId) && open && step >= 2 }
-  );
+  // UNIFIED: Use resolveProjectBillableItems as data source (fetched by BillableItemsSelector)
+  // Credit availability fetched separately for the review step
+  const [availableCredit, setAvailableCredit] = useState(0);
+  
+  useEffect(() => {
+    if (!normalizedProjectId || !open || step < 2) return;
+    (async () => {
+      try {
+        const credits = await base44.entities.ProjectCreditLedger.filter({ project_id: normalizedProjectId });
+        const total = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
+        setAvailableCredit(total);
+      } catch (e) {
+        console.warn('Failed to fetch credits:', e);
+      }
+    })();
+  }, [normalizedProjectId, open, step]);
 
-  // PHASE 1: Extract canonical totals from billing data
-  const canonicalTotals = billingData?.totals || {};
-  const canonicalCreditSummary = billingData?.credit_summary || {};
-  const availableCredit = canonicalCreditSummary.total_credit_available || 0;
-  const creditAppliedTotal = canonicalCreditSummary.total_credit_applied || 0;
-  const grossExposure = canonicalTotals.gross_exposure || 0;
-  const netExposure = canonicalTotals.net_exposure || 0;
+  const billingLoading = false; // Selector handles its own loading
+  const canonicalTotals = {};
+  const creditAppliedTotal = 0;
+  const grossExposure = 0;
+  const netExposure = 0;
 
   // PHASE 5: Remove frontend exposure math - use canonical values from backend
   // Calculate totals - these are for the invoice being CREATED, not exposure calculation
@@ -268,23 +275,22 @@ export default function CreateProjectInvoiceModal({
 
     setIsSubmitting(true);
     try {
-      // Build lines array using CANONICAL backend-provided fields
+      // Build lines using UNIFIED source_entity/source_id contract
       const lines = [];
 
-      // Part lines - use backend-provided qty/price from selector
-      for (const part of selectedParts) {
-        // Validate part_commitment_id exists
-        if (!part.part_commitment_id) {
-          console.warn('[CreateProjectInvoiceModal] Skipping part without commitment ID:', part);
+      for (const item of selectedParts) {
+        if (!item.source_id) {
+          console.warn('[CreateProjectInvoiceModal] Skipping item without source_id:', item);
           continue;
         }
         
         lines.push({
-          type: "part",
-          part_commitment_id: part.part_commitment_id,
-          description: part.part_name || 'Unknown Part',
-          qty: part.qty ?? part.qty_remaining_to_bill ?? 1,
-          unit_price: part.unit_price ?? 0,
+          type: item.type || "part",
+          source_entity: item.source_entity,
+          source_id: item.source_id,
+          description: item.description || item.part_name || 'Item',
+          qty: item.qty ?? 1,
+          unit_price: item.unit_price ?? 0,
         });
       }
 
@@ -313,10 +319,9 @@ export default function CreateProjectInvoiceModal({
       const payload = {
         project_id: selectedProjectId,
         invoice_type: invoiceType,
-        preview_credit: false, // No longer using preview - applying credit at creation
         lines,
         notes,
-        credit_to_apply: effectiveCreditToApply, // STABILIZATION: Send credit amount to backend
+        credit_to_apply: effectiveCreditToApply, // UNIFIED: Proposed credit (NOT deducted at draft)
       };
 
       // DEV GUARDRAIL: Log canonical invoice creation
@@ -329,11 +334,12 @@ export default function CreateProjectInvoiceModal({
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // DETERMINISTIC: Invalidate specific keys using factories
+        // Invalidate all related caches
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
+          queryClient.invalidateQueries({ queryKey: ["billableItems", normalizedProjectId] }),
         ]);
         
         onSuccess?.();
@@ -514,7 +520,7 @@ export default function CreateProjectInvoiceModal({
               </Button>
             </div>
 
-            <BillablePartsSelector
+            <BillableItemsSelector
               projectId={selectedProjectId}
               selectedItems={selectedParts}
               onSelectionChange={setSelectedParts}
@@ -680,64 +686,19 @@ export default function CreateProjectInvoiceModal({
             {effectiveCreditToApply > 0 && (
               <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
                 <p className="text-sm text-green-300">
-                  <strong>Credit will be applied:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is created.
+                  <strong>Credit proposed:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is sent.
                 </p>
                 <p className="text-xs text-green-400/80">
-                  Credit is applied in line order (top-to-bottom). Parts fully covered become PAID immediately.
+                  Credit will be deducted from project balance when the invoice is marked as sent.
                 </p>
                 
-                {/* PART 1 COMPLIANCE: Show line-by-line credit allocation preview */}
-                {(() => {
-                  // Calculate which items will be PAID vs INVOICED in line order
-                  const partLines = invoiceType === "deposit" 
-                    ? [] 
-                    : selectedParts.map((p, idx) => ({
-                        name: p.part_name || 'Part',
-                        total: p.line_total || (p.qty * p.unit_retail) || 0,
-                        order: idx,
-                      }));
-                  
-                  let remainingCredit = effectiveCreditToApply;
-                  const lineStatuses = partLines.map(line => {
-                    const willBePaid = remainingCredit >= line.total && line.total > 0;
-                    if (willBePaid) {
-                      remainingCredit -= line.total;
-                    }
-                    return { ...line, willBePaid };
-                  });
-                  
-                  const paidCount = lineStatuses.filter(l => l.willBePaid).length;
-                  const invoicedCount = lineStatuses.filter(l => !l.willBePaid && l.total > 0).length;
-                  
-                  if (partLines.length === 0) return null;
-                  
-                  return (
-                    <div className="mt-2 space-y-1.5">
-                      {paidCount > 0 && (
-                        <div className="flex items-center gap-2 p-2 bg-emerald-900/30 rounded border border-emerald-700/50">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                          <span className="text-sm text-emerald-300">
-                            <strong>{paidCount}</strong> item{paidCount !== 1 ? 's' : ''} will be <strong>PAID</strong> immediately
-                          </span>
-                        </div>
-                      )}
-                      {invoicedCount > 0 && (
-                        <div className="flex items-center gap-2 p-2 bg-blue-900/30 rounded border border-blue-700/50">
-                          <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                          <span className="text-sm text-blue-300">
-                            <strong>{invoicedCount}</strong> item{invoicedCount !== 1 ? 's' : ''} will remain <strong>INVOICED</strong> (awaiting payment)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Credit will be applied when invoice is sent */}
               </div>
             )}
 
             <div className="p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
               <p className="text-sm text-blue-300">
-                This will create a draft invoice. Commitments will be marked as invoiced (or PAID if fully covered by credit).
+                This creates a draft invoice. No billing state changes until the invoice is sent. Credit is proposed but not deducted until sent.
               </p>
             </div>
           </div>

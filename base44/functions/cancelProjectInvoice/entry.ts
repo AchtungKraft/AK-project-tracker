@@ -1,26 +1,15 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * cancelProjectInvoice - STABILIZATION: Invoice Cancellation with Credit Reversal
- * 
- * Cancels a draft or sent invoice, reversing any credit that was applied.
- * 
- * CRITICAL RULES:
- * 1. Cannot cancel a PAID invoice (use refund flow instead)
- * 2. If credit_applied > 0, credit MUST be reversed to ProjectCreditLedger
- * 3. Idempotent: cancelling twice does not reverse credit twice
- * 4. Linked commitments revert to 'unbilled' status
- * 
- * Inputs:
- * - invoice_id (required)
- * - reason (optional): cancellation reason
- * 
- * Returns:
- * - success, invoice status, credit_reversed, commitments_reverted
+ * cancelProjectInvoice — UNIFIED
+ *
+ * PHASE 6 RULES:
+ * - Draft: No source records were mutated, so just cancel invoice + reverse proposed credit (no ledger changes needed since credit wasn't deducted)
+ * - Sent: Source records WERE mutated — must reverse commitment billing state AND restore credit ledger
+ * - Paid: Cannot cancel (use refund flow)
  */
 
-// Generate deterministic reversal idempotency key
-function generateReversalIdempotencyKey(invoiceId) {
+function generateReversalKey(invoiceId) {
   return `reverse_credit_${invoiceId}`;
 }
 
@@ -38,245 +27,152 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await req.json();
-    const { invoice_id, reason } = payload;
+    const { invoice_id, reason } = await req.json();
+    if (!invoice_id) return Response.json({ error: 'invoice_id required' }, { status: 400 });
 
-    // Validate required fields
-    if (!invoice_id) {
-      return Response.json({ error: 'invoice_id required' }, { status: 400 });
-    }
-
-    // Fetch invoice
     const invoices = await base44.entities.ProjectInvoice.filter({ id: invoice_id });
-    if (invoices.length === 0) {
-      return Response.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-
+    if (invoices.length === 0) return Response.json({ error: 'Invoice not found' }, { status: 404 });
     const invoice = invoices[0];
 
-    // IDEMPOTENCY: If already cancelled, return success without changes
+    // Idempotent
     if (invoice.status === 'cancelled') {
-      return Response.json({ 
-        success: true,
-        idempotent: true,
-        message: 'Invoice already cancelled - no changes made',
-        invoice_id,
-        status: 'cancelled',
-      });
+      return Response.json({ success: true, idempotent: true, message: 'Already cancelled', invoice_id });
     }
 
-    // Cannot cancel PAID invoices
     if (invoice.status === 'paid') {
-      return Response.json({ 
-        error: 'Cannot cancel a paid invoice. Use refund flow instead.',
-        invoice_id,
-        status: invoice.status,
-      }, { status: 400 });
+      return Response.json({ error: 'Cannot cancel a paid invoice. Use refund flow.' }, { status: 400 });
     }
 
-    // Valid states for cancellation: draft, sent
     if (!['draft', 'sent'].includes(invoice.status)) {
-      return Response.json({ 
-        error: `Cannot cancel invoice in status: ${invoice.status}`,
-      }, { status: 400 });
+      return Response.json({ error: `Cannot cancel invoice in status: ${invoice.status}` }, { status: 400 });
     }
 
-    const reversalIdempotencyKey = generateReversalIdempotencyKey(invoice_id);
-    const creditApplied = invoice.credit_applied ?? 0;
+    const lines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id });
+    const reversalKey = generateReversalKey(invoice_id);
+    const commitmentResults = [];
+    const serviceResults = [];
+    let creditReversed = 0;
 
-    // ===== PHASE 1: Revert linked commitments to 'unbilled' (ATOMIC) =====
-    // HARDENING: This phase MUST succeed entirely BEFORE credit reversal or invoice update
-    const invoiceLines = await base44.entities.ProjectInvoiceLine.filter({
-      invoice_id: invoice_id,
-    });
-
-    const commitmentIds = invoiceLines
-      .filter(line => line.part_commitment_id)
-      .map(line => line.part_commitment_id);
-
-    const uniqueCommitmentIds = [...new Set(commitmentIds)];
-    const commitmentRevertResults = [];
-    const revertFailures = [];
-    const revertedCommitmentIds = []; // Track for rollback if needed
-
-    for (const commitmentId of uniqueCommitmentIds) {
-      try {
-        const commitments = await base44.entities.PartCommitment.filter({ id: commitmentId });
-        if (commitments.length === 0) {
-          commitmentRevertResults.push({
-            commitment_id: commitmentId,
-            status: 'skipped',
-            reason: 'not_found',
-          });
-          continue;
-        }
-
-        const commitment = commitments[0];
-        
-        // Revert billing status based on current state
-        // PART 1 FIX: Also revert commitments that were auto-settled to 'paid' via credit
-        if (commitment.billing_status === 'invoiced') {
-          await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-            billing_status: 'unbilled',
-            invoiced_qty: 0,
-            invoiced_retail_total: 0,
-            invoiced_amount: 0,
-          });
-
-          revertedCommitmentIds.push(commitmentId);
-          commitmentRevertResults.push({
-            commitment_id: commitmentId,
-            status: 'reverted',
-            from: 'invoiced',
-            to: 'unbilled',
-          });
-        } else if (commitment.billing_status === 'paid') {
-          // PART 1 STABILIZATION: Check if this commitment was auto-settled by THIS invoice via credit
-          // We can determine this by checking if the commitment's invoiced_amount matches a line on this invoice
-          const matchingLine = invoiceLines.find(l => l.part_commitment_id === commitmentId);
-          const lineTotal = matchingLine?.line_total || 0;
-          
-          // If the commitment was paid via credit on THIS invoice, revert it
-          // We know this because credit_applied > 0 and commitment is 'paid' with matching line total
-          if (creditApplied > 0 && lineTotal > 0) {
-            await base44.asServiceRole.entities.PartCommitment.update(commitmentId, {
-              billing_status: 'unbilled',
-              invoiced_qty: 0,
-              invoiced_retail_total: 0,
-              invoiced_amount: 0,
-            });
-
-            revertedCommitmentIds.push(commitmentId);
-            commitmentRevertResults.push({
-              commitment_id: commitmentId,
-              status: 'reverted',
-              from: 'paid',
-              to: 'unbilled',
-              reason: 'credit_auto_settled_reverted',
-            });
-          } else {
-            // Paid by another mechanism (e.g., direct payment on another invoice)
-            commitmentRevertResults.push({
-              commitment_id: commitmentId,
-              status: 'skipped',
-              reason: 'already_paid_by_other_mechanism',
-            });
-          }
-        } else {
-          commitmentRevertResults.push({
-            commitment_id: commitmentId,
-            status: 'skipped',
-            reason: `unexpected_status_${commitment.billing_status}`,
-          });
-        }
-      } catch (err) {
-        console.error(`Failed to revert commitment ${commitmentId}:`, err);
-        revertFailures.push({
-          commitment_id: commitmentId,
-          error: err.message,
-        });
-        commitmentRevertResults.push({
-          commitment_id: commitmentId,
-          status: 'error',
-          error: err.message,
-        });
-      }
-    }
-
-    // ===== ATOMICITY CHECK: If ANY commitment revert failed, abort cancel =====
-    if (revertFailures.length > 0) {
-      // Rollback any commitments we successfully reverted
-      for (const rollbackId of revertedCommitmentIds) {
-        try {
-          await base44.asServiceRole.entities.PartCommitment.update(rollbackId, {
-            billing_status: 'invoiced',
-          });
-          console.log(`Rolled back commitment ${rollbackId} to 'invoiced'`);
-        } catch (rollbackErr) {
-          console.error(`Rollback failed for commitment ${rollbackId}:`, rollbackErr);
-        }
-      }
+    // ══════════════════════════════════════
+    // DRAFT CANCELLATION — No source rollback needed
+    // ══════════════════════════════════════
+    if (invoice.status === 'draft') {
+      // Draft never mutated sources or ledger. Just cancel.
+      await base44.asServiceRole.entities.ProjectInvoice.update(invoice_id, {
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: user.email,
+        cancellation_reason: reason || 'Draft cancelled',
+      });
 
       return Response.json({
-        success: false,
-        error: 'Cancel aborted - commitment revert failed',
-        message: 'One or more commitments could not be reverted. Invoice was NOT cancelled and credit was NOT reversed.',
-        revert_failures: revertFailures,
-        rolled_back_count: revertedCommitmentIds.length,
+        success: true,
         invoice_id,
-        invoice_status: invoice.status,
-      }, { status: 500 });
+        previous_status: 'draft',
+        new_status: 'cancelled',
+        source_rollback_needed: false,
+        credit_reversed: 0,
+      });
     }
 
-    // ===== PHASE 2: Reverse credit (ONLY if commitment revert succeeded) =====
-    // ASSERTION: This code only executes if ALL commitment reverts passed above
-    let creditReversed = 0;
-    const creditReversalDetail = [];
+    // ══════════════════════════════════════
+    // SENT CANCELLATION — Must reverse source mutations + credit
+    // ══════════════════════════════════════
 
+    // Phase 1: Reverse part commitment billing state
+    for (const line of lines) {
+      if (line.type === 'part') {
+        const sourceId = line.source_id || line.part_commitment_id;
+        if (!sourceId) continue;
+
+        try {
+          const commitments = await base44.entities.PartCommitment.filter({ id: sourceId });
+          if (commitments.length === 0) {
+            commitmentResults.push({ source_id: sourceId, status: 'skipped', reason: 'not_found' });
+            continue;
+          }
+          const c = commitments[0];
+
+          // Revert invoiced_qty and invoiced_amount
+          const revertedQty = Math.max(0, (c.invoiced_qty ?? 0) - (line.qty ?? 0));
+          const revertedAmount = Math.max(0, (c.invoiced_amount ?? 0) - (line.line_total ?? 0));
+          const newStatus = revertedQty <= 0 ? 'unbilled' : 'invoiced';
+
+          await base44.asServiceRole.entities.PartCommitment.update(sourceId, {
+            invoiced_qty: revertedQty,
+            invoiced_amount: revertedAmount,
+            billing_status: newStatus,
+          });
+
+          commitmentResults.push({ source_id: sourceId, status: 'reverted', from: c.billing_status, to: newStatus });
+        } catch (err) {
+          commitmentResults.push({ source_id: sourceId, status: 'error', error: err.message });
+        }
+      }
+
+      if (line.type === 'service') {
+        const sourceId = line.source_id;
+        if (!sourceId) continue;
+
+        try {
+          await base44.asServiceRole.entities.ServiceCommitment.update(sourceId, {
+            is_billed: false,
+            invoice_id: null,
+            billed_date: null,
+          });
+          serviceResults.push({ source_id: sourceId, status: 'reverted' });
+        } catch (err) {
+          serviceResults.push({ source_id: sourceId, status: 'error', error: err.message });
+        }
+      }
+    }
+
+    // Phase 2: Reverse credit deduction (create new credit entry)
+    const creditApplied = invoice.credit_applied ?? 0;
     if (creditApplied > 0) {
-      // Check if reversal already done (idempotency)
-      const existingReversals = await base44.entities.ProjectCreditLedger.filter({
-        project_id: invoice.project_id,
-      });
-      
-      const alreadyReversed = existingReversals.some(
-        c => c.reversal_idempotency_key === reversalIdempotencyKey
-      );
+      const existing = await base44.entities.ProjectCreditLedger.filter({ project_id: invoice.project_id });
+      const alreadyReversed = existing.some(c => c.reversal_idempotency_key === reversalKey);
 
-      if (alreadyReversed) {
-        console.log(`Credit reversal already done for invoice ${invoice_id}`);
-        creditReversed = creditApplied; // Already reversed in prior call
-      } else {
-        // Create a NEW credit entry representing the reversal
-        const reversalCredit = await base44.asServiceRole.entities.ProjectCreditLedger.create({
+      if (!alreadyReversed) {
+        await base44.asServiceRole.entities.ProjectCreditLedger.create({
           project_id: invoice.project_id,
           source_invoice_id: invoice_id,
           credit_amount: creditApplied,
           remaining_amount: creditApplied,
           notes: `Credit reversal from cancelled invoice ${invoice.qb_invoice_number || invoice_id}`,
           reversed_from_invoice_id: invoice_id,
-          reversal_idempotency_key: reversalIdempotencyKey,
+          reversal_idempotency_key: reversalKey,
         });
-
         creditReversed = creditApplied;
-        creditReversalDetail.push({
-          reversal_credit_id: reversalCredit.id,
-          amount_reversed: creditApplied,
-          reversal_idempotency_key: reversalIdempotencyKey,
-        });
+      } else {
+        creditReversed = creditApplied; // Already reversed
       }
     }
 
-    // ===== PHASE 3: Update invoice to cancelled =====
+    // Phase 3: Cancel invoice
     await base44.asServiceRole.entities.ProjectInvoice.update(invoice_id, {
       status: 'cancelled',
       cancelled_at: new Date().toISOString(),
       cancelled_by: user.email,
       cancellation_reason: reason || null,
       credit_reversed: creditReversed,
-      reversal_idempotency_key: reversalIdempotencyKey,
+      reversal_idempotency_key: reversalKey,
     });
 
     return Response.json({
       success: true,
       invoice_id,
-      previous_status: invoice.status,
+      previous_status: 'sent',
       new_status: 'cancelled',
-      credit_applied_original: creditApplied,
+      source_rollback_needed: true,
+      commitment_results: commitmentResults,
+      service_results: serviceResults,
       credit_reversed: creditReversed,
-      credit_reversal_detail: creditReversalDetail.length > 0 ? creditReversalDetail : null,
-      commitments_reverted: commitmentRevertResults.filter(r => r.status === 'reverted').length,
-      commitment_results: commitmentRevertResults,
-      reversal_idempotency_key: reversalIdempotencyKey,
-      cancelled_by: user.email,
-      cancelled_at: new Date().toISOString(),
     });
-
   } catch (error) {
     console.error('cancelProjectInvoice error:', error);
     return Response.json({ error: error.message }, { status: 500 });

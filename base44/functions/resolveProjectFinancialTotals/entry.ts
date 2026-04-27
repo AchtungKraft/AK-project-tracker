@@ -126,14 +126,16 @@ export async function resolveFinancials(base44, project_id) {
   }
 
   // Invoice line totals by commitment (for reconciliation)
+  // UNIFIED: Use source_id with fallback to part_commitment_id for legacy lines
   let invoice_lines_total = 0;
   const linesByCommitment = {};
   for (const line of invoiceLines) {
     const lineTotal = line.line_total ?? ((line.qty || 0) * (line.unit_price || 0));
     invoice_lines_total += lineTotal;
-    if (line.part_commitment_id) {
-      linesByCommitment[line.part_commitment_id] =
-        (linesByCommitment[line.part_commitment_id] || 0) + lineTotal;
+    const sourceId = line.source_id || line.part_commitment_id;
+    if (sourceId && (line.type === 'part' || line.source_entity === 'PartCommitment')) {
+      linesByCommitment[sourceId] =
+        (linesByCommitment[sourceId] || 0) + lineTotal;
     }
   }
 

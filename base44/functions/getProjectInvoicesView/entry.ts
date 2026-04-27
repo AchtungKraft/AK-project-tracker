@@ -95,28 +95,37 @@ Deno.serve(async (req) => {
         linesByInvoice[line.invoice_id] = [];
       }
       
-      // Enrich line with part/category data for export
+      // UNIFIED: Enrich line using source_id (with fallback to part_commitment_id for legacy)
       let enrichedLine = { ...line };
+      const sourceId = line.source_id || line.part_commitment_id;
       
-      if (line.part_commitment_id) {
-        const commitment = commitmentMap[line.part_commitment_id];
+      if (line.type === 'part' && sourceId) {
+        const commitment = commitmentMap[sourceId];
         if (commitment) {
           const part = partMap[commitment.part_id];
           const category = part?.part_category_id ? categoryMap[part.part_category_id] : null;
           
           enrichedLine = {
             ...line,
-            // Export-required fields
             part_name: part?.part_name || line.description || 'Unknown Part',
             vendor_part_number: part?.vendor_part_number || '',
             category_name: category?.name || 'Uncategorized',
-            // Pricing fields from commitment snapshot
             unit_retail_snapshot: commitment.unit_retail_snapshot ?? line.unit_price ?? 0,
             unit_cost_snapshot: commitment.unit_cost_snapshot ?? 0,
           };
         }
+      } else if (line.type === 'service') {
+        // Service line — use description and stored fields
+        enrichedLine = {
+          ...line,
+          part_name: line.description || 'Service',
+          vendor_part_number: '',
+          category_name: 'Service',
+          unit_retail_snapshot: line.unit_price ?? 0,
+          unit_cost_snapshot: line.unit_cost ?? 0,
+        };
       } else {
-        // Manual line - use description directly
+        // Manual/outside_cost line
         enrichedLine = {
           ...line,
           part_name: line.description || 'Manual Item',
