@@ -370,7 +370,7 @@ function LineItemEditModal({ lineItem, template, commitmentId, serviceGroupId, v
               <Input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
             </div>
             <div>
-              <Label className="text-gray-300 text-xs">{isLabor ? "Bill Rate" : "Billing Rate"}</Label>
+              <Label className="text-gray-300 text-xs">{isLabor ? "Bill Rate" : "Retail Price"}</Label>
               <Input type="number" step="0.01" value={billingRate} onChange={e => handleBillingRateChange(e.target.value)} className="bg-gray-800 border-gray-600 text-white mt-1" />
             </div>
             <div>

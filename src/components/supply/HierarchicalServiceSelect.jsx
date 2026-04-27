@@ -9,18 +9,18 @@ import {
 import { buildHierarchicalServiceOptions } from "@/components/supply/vendorGroupHierarchy";
 
 /**
- * HierarchicalServiceSelect — Renders services grouped by vendor group hierarchy.
+ * HierarchicalServiceSelect — PHASE 5 hardened.
  * 
- * True visual hierarchy:
- *   Finishing
- *     Chrome Plating
- *       Chrome Plating Service
- *       Nickel Chrome
- *     Powder Coating
- *       Powder Coat
- *   Shipping
- *     UPS Ground
- *     FedEx Express
+ * Visual hierarchy with group separators, depth indentation, and arrow indicators:
+ *   ── Finishing ──────────────────
+ *     ↳ Chrome Plating
+ *         Chrome Plating Service
+ *         Nickel Chrome
+ *     ↳ Powder Coating
+ *         Powder Coat
+ *   ── Shipping ──────────────────
+ *       UPS Ground
+ *       FedEx Express
  */
 export default function HierarchicalServiceSelect({
   services = [],
@@ -38,6 +38,9 @@ export default function HierarchicalServiceSelect({
     return buildHierarchicalServiceOptions(validServices, vendorGroups, "SERVICE");
   }, [services, vendorGroups, groupsMap]);
 
+  // Track previous entry to insert separators between root groups
+  let lastRootGroupId = null;
+
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
@@ -47,25 +50,37 @@ export default function HierarchicalServiceSelect({
         {hierarchicalEntries.map((entry) => {
           if (entry.type === "group") {
             const leftPad = 8 + entry.depth * 16;
+            const isRoot = entry.depth === 0;
+
+            // Insert separator between root groups
+            const needsSeparator = isRoot && lastRootGroupId !== null;
+            if (isRoot) lastRootGroupId = entry.group.id;
+
             return (
-              <div
-                key={`group-${entry.group.id}`}
-                className="py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-t border-gray-700/50 mt-1 first:mt-0 first:border-t-0 select-none"
-                style={{ paddingLeft: `${leftPad}px`, paddingRight: '8px' }}
-              >
-                {entry.depth > 0 && <span className="text-gray-600 mr-1">↳</span>}
-                {entry.group.name}
+              <div key={`group-${entry.group.id}`}>
+                {/* PHASE 5: Group separation */}
+                {needsSeparator && (
+                  <div className="border-t border-gray-700/40 my-1" />
+                )}
+                <div
+                  className="py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 select-none"
+                  style={{ paddingLeft: `${leftPad}px`, paddingRight: '8px' }}
+                >
+                  {entry.depth > 0 && <span className="opacity-50 mr-1">↳</span>}
+                  {entry.group.name}
+                </div>
               </div>
             );
           }
+
           // type === 'service' — indent under its group
-          const leftPad = entry.depth * 16;
+          const leftPad = entry.depth * 16 + 12;
           return (
             <SelectItem
               key={entry.service.id}
               value={entry.service.id}
               className="text-sm"
-              style={{ paddingLeft: `${leftPad + 12}px` }}
+              style={{ paddingLeft: `${leftPad}px` }}
             >
               {entry.service.name}
             </SelectItem>

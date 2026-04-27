@@ -1,41 +1,51 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Zap, AlertTriangle } from "lucide-react";
+import { TrendingUp, Zap, AlertTriangle, Check } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 /**
- * MatrixPricingPreview — Non-blocking pricing guidance panel
+ * MatrixPricingPreview — Non-blocking pricing guidance panel (edit modal).
  * 
- * Shows suggested retail from the RetailMarkupMatrix based on current cost.
- * NEVER auto-applies. User must click "Apply" buttons explicitly.
+ * OPTION A SAFE: NEVER auto-applies. User must click "Apply" buttons.
+ * PHASE 6: Shows apply feedback.
+ * PHASE 10: Shows deviation indicators.
  * 
  * Props:
- *   cost           — current cost value (number)
- *   billingRate    — current billing rate value (number)
+ *   cost           — current cost value (string|number)
+ *   billingRate    — current billing rate value (string|number)
  *   onApplyRetail  — (suggestedRetail, tierId) => void
  *   onApplyBoth    — (cost, suggestedRetail, tierId) => void
  */
 export default function MatrixPricingPreview({ cost, billingRate, onApplyRetail, onApplyBoth }) {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [justApplied, setJustApplied] = useState(false);
   const debounceRef = useRef(null);
   const lastCostRef = useRef(null);
+  const appliedTimerRef = useRef(null);
 
   const costNum = parseFloat(cost) || 0;
   const rateNum = parseFloat(billingRate) || 0;
 
+  const flashApplied = useCallback(() => {
+    setJustApplied(true);
+    if (appliedTimerRef.current) clearTimeout(appliedTimerRef.current);
+    appliedTimerRef.current = setTimeout(() => setJustApplied(false), 2000);
+  }, []);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
+    // PHASE 3: Guard — cost must be positive
     if (costNum <= 0) {
       setPreview(null);
       lastCostRef.current = null;
       return;
     }
 
-    // Skip if cost hasn't changed
+    // PHASE 3: Skip if cost hasn't changed (prevent recompute loops)
     if (lastCostRef.current === costNum) return;
 
     debounceRef.current = setTimeout(async () => {
@@ -54,6 +64,9 @@ export default function MatrixPricingPreview({ cost, billingRate, onApplyRetail,
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [costNum]);
 
+  // Cleanup timer
+  useEffect(() => () => { if (appliedTimerRef.current) clearTimeout(appliedTimerRef.current); }, []);
+
   if (costNum <= 0) return null;
   if (loading) {
     return (
@@ -68,9 +81,23 @@ export default function MatrixPricingPreview({ cost, billingRate, onApplyRetail,
   const { suggested_retail, margin_pct, markup_pct, tier_label, tier_id } = preview;
 
   // Deviation detection
-  const hasDeviation = rateNum > 0 && rateNum !== suggested_retail;
+  const isApplied = rateNum > 0 && Math.abs(rateNum - suggested_retail) < 0.01;
+  const hasDeviation = rateNum > 0 && !isApplied;
   const userMargin = rateNum > 0 ? ((rateNum - costNum) / rateNum) * 100 : 0;
-  const belowTarget = hasDeviation && rateNum < suggested_retail;
+
+  // PHASE 10: Deviation percentage
+  const deviation = rateNum > 0 && suggested_retail > 0
+    ? ((rateNum - suggested_retail) / suggested_retail) * 100
+    : null;
+
+  const handleApplyRetail = () => {
+    onApplyRetail(suggested_retail, tier_id);
+    flashApplied();
+  };
+  const handleApplyBoth = () => {
+    onApplyBoth(costNum, suggested_retail, tier_id);
+    flashApplied();
+  };
 
   return (
     <div className="bg-blue-950/20 border border-blue-800/30 rounded p-2.5 space-y-2">
@@ -101,46 +128,59 @@ export default function MatrixPricingPreview({ cost, billingRate, onApplyRetail,
         </div>
       </div>
 
-      {/* Deviation warning */}
-      {hasDeviation && (
+      {/* PHASE 10: Deviation indicator */}
+      {hasDeviation && deviation !== null && (
         <div className={`flex items-start gap-1.5 text-[10px] rounded px-2 py-1.5 ${
-          belowTarget 
-            ? "bg-amber-950/30 border border-amber-800/30 text-amber-400" 
-            : "bg-emerald-950/30 border border-emerald-800/30 text-emerald-400"
+          Math.abs(deviation) <= 5
+            ? "bg-emerald-950/30 border border-emerald-800/30 text-emerald-400"
+            : deviation > 5
+              ? "bg-blue-950/30 border border-blue-800/30 text-blue-400"
+              : "bg-amber-950/30 border border-amber-800/30 text-amber-400"
         }`}>
-          {belowTarget && <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />}
+          {deviation < -5 && <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />}
           <div>
             <span className="font-medium">Your Price: {formatCurrencyUSD(rateNum)}</span>
             <span className="mx-1">·</span>
-            <span>Suggested: {formatCurrencyUSD(suggested_retail)}</span>
-            <span className="mx-1">·</span>
-            <span>Your Margin: {userMargin.toFixed(1)}%{belowTarget ? " (below target)" : ""}</span>
+            {Math.abs(deviation) <= 5 && <span>On target ({userMargin.toFixed(1)}% margin)</span>}
+            {deviation > 5 && <span>+{deviation.toFixed(0)}% above suggested ({userMargin.toFixed(1)}% margin)</span>}
+            {deviation < -5 && <span>{deviation.toFixed(0)}% below suggested ({userMargin.toFixed(1)}% margin)</span>}
           </div>
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-6 text-[10px] border-blue-700/50 text-blue-400 hover:bg-blue-950/40 gap-1"
-          onClick={() => onApplyRetail(suggested_retail, tier_id)}
-        >
-          <Zap className="w-2.5 h-2.5" />
-          Apply Suggested Retail
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-6 text-[10px] border-blue-700/50 text-blue-400 hover:bg-blue-950/40 gap-1"
-          onClick={() => onApplyBoth(costNum, suggested_retail, tier_id)}
-        >
-          <Zap className="w-2.5 h-2.5" />
-          Apply Both
-        </Button>
+      {/* Action buttons + apply feedback */}
+      <div className="flex items-center gap-2">
+        {!isApplied && !justApplied && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] border-blue-700/50 text-blue-400 hover:bg-blue-950/40 gap-1"
+              onClick={handleApplyRetail}
+            >
+              <Zap className="w-2.5 h-2.5" />
+              Apply Suggested Retail
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] border-blue-700/50 text-blue-400 hover:bg-blue-950/40 gap-1"
+              onClick={handleApplyBoth}
+            >
+              <Zap className="w-2.5 h-2.5" />
+              Apply Both
+            </Button>
+          </>
+        )}
+        {/* PHASE 6: Apply feedback */}
+        {(isApplied || justApplied) && (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-500">
+            <Check className="w-3 h-3" />
+            Suggested pricing applied
+          </span>
+        )}
       </div>
     </div>
   );

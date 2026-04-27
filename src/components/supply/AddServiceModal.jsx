@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { getSubtreeIds, formatServiceLabel, formatVendorGroupLabel, buildHierarchicalServiceOptions } from "@/components/supply/vendorGroupHierarchy";
+import { getSubtreeIds, formatVendorGroupLabel, } from "@/components/supply/vendorGroupHierarchy";
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Plus, Loader2, FolderKanban, Trash2, Truck, Package, Clock, DollarSign } from "lucide-react";
 import GroupedProjectSelector from "@/components/supply/GroupedProjectSelector";
 import GroupedVendorSelect from "@/components/supply/GroupedVendorSelect";
@@ -38,26 +31,16 @@ const TYPE_CONFIG = {
   misc: { label: "Misc", icon: DollarSign, color: "text-gray-400" },
 };
 
-// No string-guessing. Line item type comes from VendorGroup.default_line_item_type.
-
 /**
  * AddServiceModal — Line-Item-Driven Create Flow
  *
  * Creates a ServiceCommitment + at least one ServiceLineItem atomically.
- * No legacy estimated_cost / actual_cost fields are written.
- *
- * Props:
- *  - projectId: string | null — when provided, project is locked
- *  - projectName: string | null
- *  - open: boolean
- *  - onClose: () => void
- *  - onSuccess: () => void
+ * OPTION A SAFE: No pricing enforcement. Suggestions are guidance only.
  */
 export default function AddServiceModal({ projectId: rawProjectId, projectName: lockedProjectName, open, onClose, onSuccess }) {
   const lockedProjectId = (rawProjectId != null && rawProjectId !== "") ? String(rawProjectId) : null;
   const isProjectLocked = lockedProjectId !== null;
 
-  // --- Commitment fields ---
   const [selectedProjectId, setSelectedProjectId] = useState(lockedProjectId || "");
   const [projectSearch, setProjectSearch] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -65,11 +48,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   const [vendorId, setVendorId] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // --- Inline line items (created before save) ---
   const [lineItems, setLineItems] = useState([]);
-
-  // --- Vendor creation modal ---
   const [showVendorModal, setShowVendorModal] = useState(false);
 
   const { data: services = [] } = useQuery({
@@ -83,7 +62,6 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
   const selectedGroupId = selectedService?.preferred_vendor_group_id || null;
   const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) : null;
 
-  // Lock vendor dropdown to service's group subtree (root + descendants)
   const subtreeVendors = getVendorsForServiceGroup(selectedGroupId);
   const subtreeGroupIds = useMemo(() => selectedGroupId ? getSubtreeIds(selectedGroupId, vendorGroups) : new Set(), [selectedGroupId, vendorGroups]);
   const lockedVendorGroups = useMemo(() => vendorGroups.filter(g => subtreeGroupIds.has(g.id)), [vendorGroups, subtreeGroupIds]);
@@ -99,7 +77,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
   const resolvedProjectId = isProjectLocked ? lockedProjectId : selectedProjectId;
 
-  // Smart defaults when service changes — ALWAYS reset line items
+  // PHASE 4: Service change resets ALL pricing context
   const handleServiceChange = (id) => {
     setServiceId(id);
     const svc = services.find(s => s.id === id);
@@ -111,14 +89,14 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       return;
     }
 
-    // Auto-fill vendor: first vendor in group subtree
     const subtreeVendorsList = getVendorsForServiceGroup(groupId);
     setVendorId(subtreeVendorsList[0]?.id || "");
 
-    // Line item type is admin-defined on the VendorGroup — no guessing
     const group = groupsMap.get(groupId);
     const defaultType = group?.default_line_item_type || "vendor_cost";
     const defaultDesc = defaultType === "shipping" ? "Shipping / Freight" : `${svc.name || "Service"} Cost`;
+
+    // Full reset including pricing state
     setLineItems([{
       _key: Date.now(),
       type: defaultType,
@@ -127,12 +105,13 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       cost: "",
       billing_rate: "",
       quantity: "1",
+      suggested_retail: null,
+      suggested_margin: null,
+      pricing_source: null,
     }]);
   };
 
-  // --- Line item CRUD (local state only, persisted on save) ---
   const addLineItem = (type) => {
-    const cfg = TYPE_CONFIG[type];
     const defaultDesc = type === "shipping" ? "Shipping / Freight"
       : type === "internal_labor" ? "Achtung Kraft Labor"
       : type === "misc" ? "Miscellaneous Cost"
@@ -147,12 +126,34 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
       cost: defaultCost,
       billing_rate: defaultRate,
       quantity: "1",
+      suggested_retail: null,
+      suggested_margin: null,
+      pricing_source: null,
     }]);
   };
 
-  const updateLineItem = (key, field, value) => {
+  const updateLineItem = useCallback((key, field, value) => {
     setLineItems(prev => prev.map(li => li._key === key ? { ...li, [field]: value } : li));
-  };
+  }, []);
+
+  // PHASE 1: Batch update suggestion fields
+  const updateLineItemSuggestion = useCallback((key, suggestion) => {
+    setLineItems(prev => prev.map(li => {
+      if (li._key !== key) return li;
+      // PHASE 3: Only update if changed
+      if (suggestion === null) {
+        if (li.suggested_retail === null) return li;
+        return { ...li, suggested_retail: null, suggested_margin: null, pricing_source: null };
+      }
+      if (li.suggested_retail === suggestion.suggested_retail) return li;
+      return {
+        ...li,
+        suggested_retail: suggestion.suggested_retail,
+        suggested_margin: suggestion.suggested_margin,
+        pricing_source: suggestion.pricing_source,
+      };
+    }));
+  }, []);
 
   const removeLineItem = (key) => {
     setLineItems(prev => prev.filter(li => li._key !== key));
@@ -160,26 +161,42 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
   // --- Computed totals ---
   const totals = useMemo(() => {
-    let cost = 0, billable = 0;
+    let cost = 0, billable = 0, suggestedTotal = 0;
+    let allHaveSuggestions = true;
+
     for (const li of lineItems) {
       const qty = parseFloat(li.quantity) || 1;
       cost += (parseFloat(li.cost) || 0) * qty;
       billable += (parseFloat(li.billing_rate) || 0) * qty;
+
+      // PHASE 2: Track suggested totals — only valid when ALL items have suggestions
+      if (li.type !== "internal_labor" && li.suggested_retail != null) {
+        suggestedTotal += li.suggested_retail * qty;
+      } else if (li.type === "internal_labor") {
+        // Labor uses its own billing rate, not matrix
+        suggestedTotal += (parseFloat(li.billing_rate) || 0) * qty;
+      } else {
+        allHaveSuggestions = false;
+      }
     }
+
     const margin = billable > 0 ? ((billable - cost) / billable) * 100 : 0;
-    return { cost, billable, margin };
+    return {
+      cost,
+      billable,
+      margin,
+      suggestedTotal: allHaveSuggestions ? suggestedTotal : null,
+    };
   }, [lineItems]);
 
-  // --- Validation: at least one line item with cost or billing rate ---
   const canSave = resolvedProjectId && serviceId && description.trim() &&
     lineItems.length > 0 &&
     lineItems.some(li => (parseFloat(li.cost) || 0) > 0 || (parseFloat(li.billing_rate) || 0) > 0);
 
-  // --- Save: atomic CREATE_WITH_LINE_ITEMS ---
   const handleSave = async () => {
     if (!canSave) {
       if (lineItems.length === 0) toast.error("Add at least one line item");
-      else if (!lineItems.some(li => (parseFloat(li.cost) || 0) > 0 || (parseFloat(li.billing_rate) || 0) > 0)) toast.error("At least one line item needs a cost or billing rate");
+      else if (!lineItems.some(li => (parseFloat(li.cost) || 0) > 0 || (parseFloat(li.billing_rate) || 0) > 0)) toast.error("At least one line item needs a cost or retail price");
       else toast.error("Please fill all required fields");
       return;
     }
@@ -194,19 +211,18 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
         quantity: 1,
         notes: notes.trim() || null,
         line_items: lineItems.map(li => {
-          const cost = parseFloat(li.cost) || 0;
-          const billing_rate = parseFloat(li.billing_rate) || cost;
+          const liCost = parseFloat(li.cost) || 0;
+          const billing_rate = parseFloat(li.billing_rate) || liCost;
           return {
             type: li.type,
             description: li.description.trim(),
             vendor_id: (li.vendor_id && li.vendor_id !== "__none__") ? li.vendor_id : null,
-            cost,
+            cost: liCost,
             billing_rate,
             quantity: parseFloat(li.quantity) || 1,
           };
         }),
       });
-      // PHASE 9: Show duplicate warning if detected
       if (res.data?.duplicate_warning) {
         toast.warning(res.data.duplicate_warning);
       }
@@ -228,7 +244,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
         </DialogHeader>
 
         <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
-          {/* Project (compact) */}
+          {/* Project */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <FolderKanban className="w-4 h-4 text-blue-400" />
@@ -251,7 +267,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 
           <div className="border-t border-gray-700/50" />
 
-          {/* ── Service Selection ── */}
+          {/* Service Selection */}
           <div>
             <Label className="text-gray-300">Service *</Label>
             <HierarchicalServiceSelect
@@ -280,7 +296,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
             />
           </div>
 
-          {/* Line Items Section - PRIMARY */}
+          {/* Line Items Section */}
           <div className="bg-gray-800/30 border border-green-800/40 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-green-400" />
@@ -307,52 +323,66 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
               })}
             </div>
 
-            {/* Line items list — always show rows, never empty state */}
+            {/* Line items list */}
             <div className="space-y-2">
               {lineItems.length === 0 ? (
                 <div className="text-xs text-gray-500 py-3 text-center border border-dashed border-gray-700 rounded">Select a service above to get started</div>
               ) : (
                 lineItems.map(li => (
                   <InlineLineItemRow
-                  key={li._key}
-                  lineItem={li}
-                  vendorGroups={lockedVendorGroups}
-                  vendorsByGroup={lockedVendorsByGroup}
-                  selectedGroupId={selectedGroupId}
-                  onChange={(field, val) => updateLineItem(li._key, field, val)}
-                  onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
-                  canRemove={lineItems.length > 1}
+                    key={li._key}
+                    lineItem={li}
+                    vendorGroups={lockedVendorGroups}
+                    vendorsByGroup={lockedVendorsByGroup}
+                    selectedGroupId={selectedGroupId}
+                    onChange={(field, val) => updateLineItem(li._key, field, val)}
+                    onSuggestionResolved={(s) => updateLineItemSuggestion(li._key, s)}
+                    onRemove={() => lineItems.length > 1 && removeLineItem(li._key)}
+                    canRemove={lineItems.length > 1}
                   />
                 ))
               )}
             </div>
 
-            {/* Totals preview — enhanced with margin status */}
+            {/* PHASE 2: Totals preview — no mixed states */}
             {lineItems.length > 0 && (
-              <div className="mt-2 bg-green-900/20 border border-green-800/40 rounded p-2 grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-gray-500">Cost</span>
-                  <p className="text-white font-mono">{formatCurrencyUSD(totals.cost)}</p>
+              <div className="mt-2 space-y-1.5">
+                <div className="bg-green-900/20 border border-green-800/40 rounded p-2 grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-500">Cost</span>
+                    <p className="text-white font-mono">{formatCurrencyUSD(totals.cost)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Retail</span>
+                    <p className={totals.billable > 0 ? "text-green-400 font-mono" : "text-gray-500 font-mono"}>
+                      {totals.billable > 0 ? formatCurrencyUSD(totals.billable) : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Margin</span>
+                    <p className={totals.billable <= 0 ? "text-gray-500" : totals.margin >= 0 ? "text-green-400" : "text-red-400"}>
+                      {totals.billable > 0 ? `${totals.margin.toFixed(1)}%` : "—"}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-gray-500">Billable</span>
-                  <p className={totals.billable > 0 ? "text-green-400 font-mono" : "text-gray-500 font-mono"}>
-                    {totals.billable > 0 ? formatCurrencyUSD(totals.billable) : "—"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Margin</span>
-                  <p className={totals.billable <= 0 ? "text-gray-500" : totals.margin >= 0 ? "text-green-400" : "text-red-400"}>
-                    {totals.billable > 0 ? `${totals.margin.toFixed(1)}%` : "—"}
-                  </p>
-                </div>
+                {/* Suggested total — only when ALL lines have valid suggestions */}
+                {totals.suggestedTotal !== null && totals.billable > 0 && Math.abs(totals.billable - totals.suggestedTotal) > 0.01 && (
+                  <div className="text-[10px] text-blue-400/70 px-1">
+                    Suggested Total: {formatCurrencyUSD(totals.suggestedTotal)}
+                  </div>
+                )}
+                {totals.suggestedTotal === null && totals.cost > 0 && totals.billable <= 0 && (
+                  <div className="text-[10px] text-gray-500 px-1">
+                    Suggested Total: —
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           <div className="border-t border-gray-700/50" />
 
-          {/* ── Vendor (locked to group) ── */}
+          {/* Vendor */}
           <div>
             <div className="flex items-center justify-between">
               <Label className="text-gray-300 text-xs">Primary Vendor</Label>
@@ -380,7 +410,7 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
             />
           </div>
 
-          {/* ── Notes ── */}
+          {/* Notes */}
           <div>
             <Label className="text-gray-300 text-xs">Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes..." className="bg-gray-800 border-gray-600 text-white mt-1" rows={2} />
@@ -400,12 +430,11 @@ export default function AddServiceModal({ projectId: rawProjectId, projectName: 
 }
 
 /** Compact inline row for a single line item during creation */
-function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGroupId, onChange, onRemove, canRemove = true }) {
+function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGroupId, onChange, onSuggestionResolved, onRemove, canRemove = true }) {
   const cfg = TYPE_CONFIG[lineItem.type] || TYPE_CONFIG.misc;
   const Icon = cfg.icon;
   const isLabor = lineItem.type === "internal_labor";
 
-  // Live margin for this line
   const costNum = parseFloat(lineItem.cost) || 0;
   const rateNum = parseFloat(lineItem.billing_rate) || 0;
   const qtyNum = parseFloat(lineItem.quantity) || 1;
@@ -417,7 +446,6 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
       <div className="flex items-center gap-2">
         <Icon className={`w-3.5 h-3.5 shrink-0 ${cfg.color}`} />
         <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-gray-700 text-gray-400">{cfg.label}</Badge>
-        {/* Live line total + margin */}
         {costNum > 0 && (
           <span className="text-[9px] text-gray-500 font-mono ml-auto mr-1">
             {formatCurrencyUSD(costNum * qtyNum)}
@@ -441,7 +469,7 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
         className="bg-gray-900/50 border-gray-700 text-white h-7 text-xs"
       />
 
-      {/* Cost / Billing Rate / Qty row */}
+      {/* PHASE 9: Cost / Retail Price (Override) / Qty */}
       <div className="grid grid-cols-3 gap-2">
         <div>
           <Label className="text-gray-500 text-[10px]">{isLabor ? "Hourly Rate" : "Cost"}</Label>
@@ -455,7 +483,7 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
           />
         </div>
         <div>
-          <Label className="text-gray-500 text-[10px]">{isLabor ? "Bill Rate" : "Billing Rate"}</Label>
+          <Label className="text-gray-500 text-[10px]">{isLabor ? "Bill Rate" : "Retail Price"}</Label>
           <Input
             type="number"
             step="0.01"
@@ -479,12 +507,14 @@ function InlineLineItemRow({ lineItem, vendorGroups, vendorsByGroup, selectedGro
         </div>
       </div>
 
-      {/* Pricing suggestion — non-labor only, Option A safe (no auto-apply) */}
+      {/* Pricing suggestion — non-labor only, Option A safe */}
       {!isLabor && (
         <InlinePricingSuggestion
           cost={lineItem.cost}
           billingRate={lineItem.billing_rate}
           onApply={(suggested) => onChange("billing_rate", String(suggested))}
+          onSuggestionResolved={onSuggestionResolved}
+          pricingSource={lineItem.pricing_source}
         />
       )}
 
