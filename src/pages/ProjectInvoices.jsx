@@ -40,6 +40,7 @@ import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
+import ReadyToInvoiceSection from "@/components/financial/ReadyToInvoiceSection";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 import ApplyCreditModal from "@/components/financial/ApplyCreditModal";
@@ -69,6 +70,7 @@ export default function ProjectInvoices() {
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalProjectId, setCreateModalProjectId] = useState(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [showApplyCreditModal, setShowApplyCreditModal] = useState(false);
 
@@ -131,6 +133,16 @@ export default function ProjectInvoices() {
     });
   }
 
+  // Billing summary for "Ready to Invoice" section + unbilled metric card
+  const { data: billingSummaryData } = useQuery({
+    queryKey: ["billingSummary"],
+    queryFn: async () => {
+      const res = await base44.functions.invoke("getProjectsBillingSummary", {});
+      return res.data;
+    },
+    staleTime: 30000,
+  });
+
   const financialProjects = financialData?.projects || [];
 
   const invoices = invoicesData?.invoices || [];
@@ -175,6 +187,7 @@ export default function ProjectInvoices() {
     // DETERMINISTIC: Invalidate specific keys only - use factory keys
     const invalidations = [
       queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
+      queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
     ];
     // Only invalidate scoped keys when we have a valid projectId (not null)
     if (normalizedProjectId) {
@@ -188,9 +201,17 @@ export default function ProjectInvoices() {
   };
 
   const handleInvoiceCreated = async () => {
-    // PHASE 1 UNIFIED: Deterministic refresh AFTER creation, BEFORE closing modal
+    // Deterministic refresh AFTER creation, BEFORE closing modal
     await handleRefresh();
+    // Also refresh billing summary
+    queryClient.invalidateQueries({ queryKey: ["billingSummary"] });
     setShowCreateModal(false);
+    setCreateModalProjectId(null);
+  };
+
+  const handleCreateFromProject = (projectId) => {
+    setCreateModalProjectId(projectId);
+    setShowCreateModal(true);
   };
 
   const getInvoiceTypeBadge = (type) => {
@@ -224,7 +245,7 @@ export default function ProjectInvoices() {
             <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
             Refresh
           </Button>
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+          <Button onClick={() => { setCreateModalProjectId(null); setShowCreateModal(true); }} className="gap-2">
             <Plus className="w-4 h-4" />
             Create Invoice
           </Button>
@@ -242,7 +263,21 @@ export default function ProjectInvoices() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card className="bg-red-900/20 border-red-800/50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="w-4 h-4 text-red-400" />
+              <span className="text-xs text-gray-400 uppercase">Unbilled</span>
+            </div>
+            <p className="text-2xl font-bold text-red-300">
+              {billingSummaryData?.total_unbilled_projects || 0}
+            </p>
+            <p className="text-xs text-gray-500">
+              {formatCurrencyUSD(billingSummaryData?.total_unbilled_amount || 0)}
+            </p>
+          </CardContent>
+        </Card>
         <Card className="bg-gray-900/50 border-gray-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -283,6 +318,9 @@ export default function ProjectInvoices() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ready to Invoice Section */}
+      <ReadyToInvoiceSection onCreateInvoice={handleCreateFromProject} />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
@@ -428,9 +466,9 @@ export default function ProjectInvoices() {
       {showCreateModal && (
         <CreateProjectInvoiceModal
           open={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => { setShowCreateModal(false); setCreateModalProjectId(null); }}
           onSuccess={handleInvoiceCreated}
-          preselectedProjectId={projectFilter !== "all" ? projectFilter : null}
+          preselectedProjectId={createModalProjectId || (projectFilter !== "all" ? projectFilter : null)}
         />
       )}
 
