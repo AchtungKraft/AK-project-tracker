@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
             is_billed: false,
             invoice_id: null,
             billed_date: null,
+            status: 'completed', // Reset status from 'billed' back to 'completed'
           });
         } catch (rollbackErr) {
           console.error(`Service rollback failed for ${update.source_id}:`, rollbackErr);

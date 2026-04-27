@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
             is_billed: false,
             invoice_id: null,
             billed_date: null,
+            status: 'completed', // PHASE 3 FIX: Reset status from 'billed' back to 'completed'
           });
           serviceResults.push({ source_id: sourceId, status: 'reverted' });
         } catch (err) {

@@ -722,8 +722,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     // Effective cost: total_cost > 0 ? total_cost : (actual_cost ?? estimated_cost) * quantity
     const effectiveCost = (sc.total_cost > 0) ? sc.total_cost : ((sc.actual_cost ?? sc.estimated_cost ?? 0) * (sc.quantity || 1));
     const totalBillable = sc.total_billable || 0;
-    // CANONICAL: Use explicit is_billed flag (fallback to status for pre-migration data)
-    const isBilled = sc.is_billed === true || sc.status === 'billed';
+    // CANONICAL: Service is billed if ANY of these are true (unified across all files)
+    const isBilled = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
     const isCompleted = sc.status === 'completed';
     const isReadyToBill = isCompleted && totalBillable > 0 && !isBilled;
 
