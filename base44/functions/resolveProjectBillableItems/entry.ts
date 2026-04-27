@@ -20,23 +20,39 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const BILLING_LOGIC_VERSION = "v1.0";
 
 // ── Phase 1+2: Deterministic test vector with expected output ──
+// Includes core cases + edge cases for removed, over-invoiced, billed, zero-value
 const TEST_VECTOR = {
-  partCommitments: [{
-    id: "TV_P1", part_id: "TV_PART_1", required_total: 5, qty_removed: 1,
-    invoiced_qty: 2, unit_retail_snapshot: 100, unit_cost_snapshot: 50,
-  }],
-  serviceCommitments: [{
-    id: "TV_S1", service_id: "TV_SVC_1", description: "Test Service",
-    total_billable: 500, total_cost: 300, is_billed: false, status: "active", invoice_id: null,
-  }],
-  partMap: { "TV_PART_1": { part_name: "Test Part", requires_client_billing: true } },
+  partCommitments: [
+    { id: "TV_P1", part_id: "TV_PART_1", required_total: 5, qty_removed: 1,
+      invoiced_qty: 2, unit_retail_snapshot: 100, unit_cost_snapshot: 50 },
+    { id: "TV_P_REMOVED", part_id: "TV_PART_2", required_total: 3, qty_removed: 3,
+      invoiced_qty: 0, unit_retail_snapshot: 100, unit_cost_snapshot: 50 },
+    { id: "TV_P_OVER", part_id: "TV_PART_3", required_total: 5, qty_removed: 0,
+      invoiced_qty: 6, unit_retail_snapshot: 100, unit_cost_snapshot: 50 },
+  ],
+  serviceCommitments: [
+    { id: "TV_S1", service_id: "TV_SVC_1", description: "Test Service",
+      total_billable: 500, total_cost: 300, is_billed: false, status: "active", invoice_id: null },
+    { id: "TV_S_STATUS", service_id: "TV_SVC_2", description: "Billed By Status",
+      total_billable: 400, total_cost: 200, is_billed: false, status: "billed", invoice_id: null },
+    { id: "TV_S_INVOICE", service_id: "TV_SVC_3", description: "Billed By Invoice",
+      total_billable: 300, total_cost: 150, is_billed: false, status: "active", invoice_id: "inv_123" },
+    { id: "TV_S_ZERO", service_id: "TV_SVC_4", description: "Zero Service",
+      total_billable: 0, total_cost: 0, is_billed: false, status: "active", invoice_id: null },
+  ],
+  partMap: {
+    "TV_PART_1": { part_name: "Test Part", requires_client_billing: true },
+    "TV_PART_2": { part_name: "Removed Part", requires_client_billing: true },
+    "TV_PART_3": { part_name: "Over Invoiced", requires_client_billing: true },
+  },
   lookups: {},
 };
 
 const EXPECTED_OUTPUT = {
   item_count: 2,
-  part: { source_entity: "PartCommitment", qty_available_to_bill: 2, line_total: 200 },
-  service: { source_entity: "ServiceCommitment", qty_available_to_bill: 1, line_total: 500 },
+  part: { id: "TV_P1", source_entity: "PartCommitment", qty_available_to_bill: 2, line_total: 200 },
+  service: { id: "TV_S1", source_entity: "ServiceCommitment", qty_available_to_bill: 1, line_total: 500 },
+  excluded_ids: ["TV_P_REMOVED", "TV_P_OVER", "TV_S_STATUS", "TV_S_INVOICE", "TV_S_ZERO"],
 };
 
 function validateTestVector(callerName) {
@@ -44,9 +60,9 @@ function validateTestVector(callerName) {
   const errs = [];
   if (result.items.length !== EXPECTED_OUTPUT.item_count)
     errs.push(`item_count: got ${result.items.length}, expected ${EXPECTED_OUTPUT.item_count}`);
-  const part = result.items.find(i => i.type === 'part');
-  const svc = result.items.find(i => i.type === 'service');
-  if (!part) errs.push('part item missing');
+  const part = result.items.find(i => i.id === EXPECTED_OUTPUT.part.id);
+  const svc = result.items.find(i => i.id === EXPECTED_OUTPUT.service.id);
+  if (!part) errs.push('valid part item (TV_P1) missing');
   else {
     if (part.source_entity !== EXPECTED_OUTPUT.part.source_entity)
       errs.push(`part.source_entity: got ${part.source_entity}, expected ${EXPECTED_OUTPUT.part.source_entity}`);
@@ -55,7 +71,7 @@ function validateTestVector(callerName) {
     if (part.line_total !== EXPECTED_OUTPUT.part.line_total)
       errs.push(`part.line_total: got ${part.line_total}, expected ${EXPECTED_OUTPUT.part.line_total}`);
   }
-  if (!svc) errs.push('service item missing');
+  if (!svc) errs.push('valid service item (TV_S1) missing');
   else {
     if (svc.source_entity !== EXPECTED_OUTPUT.service.source_entity)
       errs.push(`svc.source_entity: got ${svc.source_entity}, expected ${EXPECTED_OUTPUT.service.source_entity}`);
@@ -64,8 +80,18 @@ function validateTestVector(callerName) {
     if (svc.line_total !== EXPECTED_OUTPUT.service.line_total)
       errs.push(`svc.line_total: got ${svc.line_total}, expected ${EXPECTED_OUTPUT.service.line_total}`);
   }
+  for (const excludedId of EXPECTED_OUTPUT.excluded_ids) {
+    const leaked = result.items.find(i => i.id === excludedId);
+    if (leaked) errs.push(`EDGE CASE LEAK: ${excludedId} should be excluded but appeared in output`);
+  }
+  for (const item of result.items) {
+    if (item.qty_available_to_bill < 0)
+      errs.push(`INVARIANT: ${item.id} has negative qty_available_to_bill (${item.qty_available_to_bill})`);
+    if (item.line_total < 0)
+      errs.push(`INVARIANT: ${item.id} has negative line_total (${item.line_total})`);
+  }
   if (errs.length > 0) {
-    console.error(`🚨 CRITICAL: Billing logic drift detected in ${callerName}! Failures: ${errs.join('; ')}`);
+    console.error(`🚨 CRITICAL: Billing logic edge case failure in ${callerName}! Failures: ${errs.join('; ')}`);
   }
   return { ok: errs.length === 0, errors: errs };
 }
