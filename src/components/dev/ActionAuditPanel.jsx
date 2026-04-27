@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getActionLog, clearActionLog } from "./wiringAudit";
+import LandedCostAuditPanel from "./LandedCostAuditPanel";
 
 /**
  * ActionAuditPanel - Admin-only overlay for debugging UI/function wiring
@@ -145,6 +146,11 @@ export default function ActionAuditPanel() {
               </ScrollArea>
             </CardContent>
           </Card>
+
+          {/* Landed Cost Audit */}
+          <div className="mt-2">
+            <LandedCostAuditPanel />
+          </div>
         </div>
       )}
     </>

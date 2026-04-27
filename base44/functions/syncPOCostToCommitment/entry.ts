@@ -18,7 +18,7 @@
  * Input: { commitment_ids: string[] }  (or single commitment_id)
  * Output: { synced: [...], skipped: [...], errors: [...] }
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
@@ -43,10 +43,37 @@ Deno.serve(async (req) => {
     }
 
     const result = await syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate);
-    return Response.json({ success: true, ...result });
+
+    // PHASE 1: Structured return contract
+    const syncedCount = result.synced?.length || 0;
+    const failedCount = result.errors?.length || 0;
+    const skippedCount = result.skipped?.length || 0;
+
+    console.log('[SYNC_PO_COST] Complete', {
+      total: commitmentIds.length,
+      synced_count: syncedCount,
+      skipped_count: skippedCount,
+      failed_count: failedCount,
+    });
+
+    return Response.json({
+      success: failedCount === 0,
+      synced_count: syncedCount,
+      skipped_count: skippedCount,
+      failed_count: failedCount,
+      failures: result.errors || [],
+      ...result,
+    });
   } catch (error) {
-    console.error('syncPOCostToCommitment error:', error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    console.error('syncPOCostToCommitment CRITICAL error:', error);
+    return Response.json({
+      success: false,
+      error: 'SYNC_FAILED',
+      error_message: error.message,
+      synced_count: 0,
+      failed_count: 1,
+      failures: [{ reason: error.message }],
+    }, { status: 500 });
   }
 });
 
@@ -210,8 +237,24 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
       continue;
     }
 
-    // Apply updates
-    await base44.asServiceRole.entities.PartCommitment.update(cid, updates);
+    // PHASE 1: Apply updates with per-commitment error handling
+    try {
+      await base44.asServiceRole.entities.PartCommitment.update(cid, updates);
+    } catch (updateErr) {
+      console.error(`[SYNC_PO_COST] FAILED to update commitment=${cid}`, {
+        error: updateErr.message,
+        status: updateErr.status,
+        updates,
+      });
+      errors.push({
+        commitment_id: cid,
+        reason: 'UPDATE_FAILED',
+        error: updateErr.message,
+        status: updateErr.status,
+        attempted_cost: updates.unit_cost_snapshot ?? oldCost,
+      });
+      continue;
+    }
 
     console.log(`[SYNC_PO_COST] commitment=${cid} old_cost=${oldCost} new_cost=${updates.unit_cost_snapshot ?? oldCost} retail_updated=${retailUpdated} actor=${actorEmail}`);
 

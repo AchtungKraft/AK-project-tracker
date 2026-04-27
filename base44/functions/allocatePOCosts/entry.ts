@@ -187,31 +187,118 @@ Deno.serve(async (req) => {
       actor: actorEmail,
     });
 
-    // ── PHASE 5: Propagate to commitments via syncPOCostToCommitment ──
+    // ── PHASE 5: Propagate to commitments — INLINE via service role ──
+    // Direct entity updates avoid service-to-service 403 issues
     const commitmentIds = [...new Set(
       activeLines.map(l => l.commitment_id).filter(Boolean)
     )];
 
-    let commitmentSync = { synced: 0, skipped: 0, errors: 0 };
+    const commitmentSync = { synced: 0, skipped: 0, failed: 0, failures: [] };
+
     if (commitmentIds.length > 0) {
-      try {
-        const syncResult = await base44.asServiceRole.functions.invoke(
-          'syncPOCostToCommitment',
-          { commitment_ids: commitmentIds }
-        );
-        commitmentSync = {
-          synced: syncResult.data?.synced?.length || 0,
-          skipped: syncResult.data?.skipped?.length || 0,
-          errors: syncResult.data?.errors?.length || 0,
+      // Fetch commitments and markup matrix
+      const [commitments, matrixTiers] = await Promise.all([
+        base44.asServiceRole.entities.PartCommitment.filter({ id: { $in: commitmentIds } }),
+        base44.asServiceRole.entities.RetailMarkupMatrix.list().then(t => t.filter(x => x.active).sort((a, b) => (a.min_cost || 0) - (b.min_cost || 0))).catch(() => []),
+      ]);
+      const commitmentMap = new Map(commitments.map(c => [c.id, c]));
+
+      // Group allocated lines by commitment
+      const linesByCommitment = new Map();
+      for (const al of allocatedLines) {
+        const line = activeLines.find(l => l.id === al.line_id);
+        if (!line?.commitment_id) continue;
+        if (!linesByCommitment.has(line.commitment_id)) linesByCommitment.set(line.commitment_id, []);
+        linesByCommitment.get(line.commitment_id).push({ ...line, effective_unit_cost: al.effective_unit_cost });
+      }
+
+      for (const cid of commitmentIds) {
+        const commitment = commitmentMap.get(cid);
+        if (!commitment) { commitmentSync.failed++; commitmentSync.failures.push({ commitment_id: cid, reason: 'NOT_FOUND' }); continue; }
+        if (['cancelled', 'closed'].includes(commitment.commitment_status)) { commitmentSync.skipped++; continue; }
+        if (['invoiced', 'paid'].includes(commitment.billing_status)) { commitmentSync.skipped++; continue; }
+        if (commitment.cost_override === true) { commitmentSync.skipped++; continue; }
+
+        const cLines = (linesByCommitment.get(cid) || []).filter(l => l.status !== 'Cancelled');
+        if (cLines.length === 0) { commitmentSync.skipped++; continue; }
+
+        // Weighted average using effective_unit_cost (landed cost)
+        let tc = 0, tq = 0;
+        for (const li of cLines) {
+          const qty = li.qty_ordered || 0;
+          const cost = li.effective_unit_cost ?? li.unit_cost ?? 0;
+          tc += qty * cost;
+          tq += qty;
+        }
+        const weightedAvg = tq > 0 ? Number((tc / tq).toFixed(2)) : 0;
+        if (weightedAvg <= 0) { commitmentSync.skipped++; continue; }
+
+        const oldCost = commitment.unit_cost_snapshot ?? 0;
+        if (Math.abs(weightedAvg - oldCost) < 0.001) { commitmentSync.skipped++; continue; }
+
+        const updates = {
+          unit_cost_snapshot: weightedAvg,
+          planned_cost_total: Number((weightedAvg * (commitment.required_total || 0)).toFixed(2)),
         };
-      } catch (e) {
-        console.warn('[ALLOCATE_PO] Commitment sync failed:', e.message);
-        commitmentSync = { synced: 0, skipped: 0, errors: 1, error_message: e.message };
+
+        // Margin recalc
+        const curRetail = commitment.unit_retail_snapshot ?? 0;
+        if (curRetail > 0) {
+          updates.margin_pct = Number(((curRetail - weightedAvg) / curRetail * 100).toFixed(2));
+          updates.pricing_integrity_status = curRetail >= weightedAvg ? 'ok' : 'margin_negative';
+        } else {
+          updates.pricing_integrity_status = 'missing_retail';
+          // Try matrix for missing retail
+          if (matrixTiers.length > 0) {
+            for (const tier of matrixTiers) {
+              if (weightedAvg >= (tier.min_cost ?? 0) && (tier.max_cost == null || weightedAvg < tier.max_cost)) {
+                const retail = Math.round(weightedAvg * (1 + (tier.markup_pct ?? 0)));
+                if (retail > 0) {
+                  updates.unit_retail_snapshot = retail;
+                  updates.planned_retail_total = retail * (commitment.required_total || 0);
+                  updates.margin_pct = Number(((retail - weightedAvg) / retail * 100).toFixed(2));
+                  updates.pricing_integrity_status = 'ok';
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        try {
+          await base44.asServiceRole.entities.PartCommitment.update(cid, updates);
+          commitmentSync.synced++;
+        } catch (syncErr) {
+          console.error(`[ALLOCATE_PO] Commitment sync FAILED for ${cid}:`, syncErr.message);
+          commitmentSync.failed++;
+          commitmentSync.failures.push({ commitment_id: cid, reason: syncErr.message });
+        }
       }
     }
 
+    // PHASE 3: Warn if sync incomplete
+    if (commitmentSync.failed > 0) {
+      console.warn("PO ALLOCATION INCOMPLETE: commitment sync failures", {
+        order_id,
+        synced: commitmentSync.synced,
+        failed: commitmentSync.failed,
+        failures: commitmentSync.failures,
+      });
+    }
+
+    console.log("PO ALLOCATION COMPLETE", {
+      order_id,
+      base_total: Number(baseTotal.toFixed(2)),
+      extras_total: extrasTotal,
+      allocated_total: Number(totalAllocated.toFixed(2)),
+      sync_status: commitmentSync.failed === 0 ? 'OK' : 'PARTIAL_FAILURE',
+      synced: commitmentSync.synced,
+      failed: commitmentSync.failed,
+    });
+
     return Response.json({
       success: true,
+      sync_complete: commitmentSync.failed === 0,
       allocated_lines: allocatedLines,
       allocation_summary: {
         order_id,
