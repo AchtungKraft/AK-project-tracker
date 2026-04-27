@@ -220,6 +220,7 @@ Deno.serve(async (req) => {
 
     const [
       commitments, serviceCommitments, parts, vendors, categories, services, serviceVendors,
+      serviceLineItems,
     ] = await Promise.all([
       base44.entities.PartCommitment.filter({ project_id }),
       base44.entities.ServiceCommitment.filter({ project_id }).catch(() => []),
@@ -228,6 +229,7 @@ Deno.serve(async (req) => {
       base44.entities.PartCategory.list(),
       base44.entities.Service.list().catch(() => []),
       base44.entities.ServiceVendor.list().catch(() => []),
+      base44.entities.ServiceLineItem.list().catch(() => []),
     ]);
 
     const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
@@ -236,12 +238,45 @@ Deno.serve(async (req) => {
     const serviceMap = Object.fromEntries(services.map(s => [s.id, s]));
     const serviceVendorMap = Object.fromEntries(serviceVendors.map(v => [v.id, v]));
 
+    // Group service line items by service_commitment_id
+    const sliByCommitment = {};
+    for (const sli of serviceLineItems) {
+      if (!sli.service_commitment_id) continue;
+      if (!sliByCommitment[sli.service_commitment_id]) sliByCommitment[sli.service_commitment_id] = [];
+      sliByCommitment[sli.service_commitment_id].push(sli);
+    }
+
     const { items, warnings } = computeItems({
       partCommitments: commitments,
       serviceCommitments,
       partMap,
       lookups: { vendorMap, categoryMap, serviceMap, serviceVendorMap },
     });
+
+    // Phase 4: Attach service line item children to service items
+    for (const item of items) {
+      if (item.type === 'service' && item.source_id) {
+        const childLines = sliByCommitment[item.source_id];
+        if (childLines && childLines.length > 0) {
+          item.children = childLines
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+            .map(sli => {
+              const sliVendor = sli.vendor_id ? serviceVendorMap[sli.vendor_id] : null;
+              return {
+                id: sli.id,
+                type: sli.type || 'vendor_cost',
+                description: sli.description || sli.type || 'Line Item',
+                cost: sli.cost ?? 0,
+                billing_rate: sli.billing_rate ?? 0,
+                quantity: sli.quantity ?? 1,
+                amount: (sli.billing_rate ?? 0) * (sli.quantity ?? 1),
+                cost_amount: (sli.cost ?? 0) * (sli.quantity ?? 1),
+                vendor_name: sliVendor?.name || null,
+              };
+            });
+        }
+      }
+    }
 
     const partItems = items.filter(i => i.type === 'part');
     const serviceItems = items.filter(i => i.type === 'service');

@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +12,7 @@ import {
   Package,
   Truck,
   AlertTriangle,
+  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -18,13 +20,14 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 /**
  * BillableItemsSelector — UNIFIED selector for parts + services
  *
- * Uses resolveProjectBillableItems as SINGLE data source.
- * No more service-as-part mapping. No more getBillingAndProcurementStates dependency.
+ * PERFORMANCE:
+ * - Groups collapsed by default (lazy expansion)
+ * - Auto-select only for datasets < 50 items
+ * - O(1) selection lookup via Set
+ * - Memoized grouping + filtering
  *
- * SELECTION PAYLOAD:
- * {
- *   source_entity, source_id, type, description, qty, unit_price, line_total, ...
- * }
+ * SERVICE EXPANSION:
+ * - Services with children show expandable line item breakdown
  */
 
 function useProjectBillableItems(projectId) {
@@ -45,7 +48,6 @@ function groupItems(items) {
   const parts = items.filter(i => i.type === 'part');
   const services = items.filter(i => i.type === 'service');
 
-  // Group parts by vendor
   const vendorGroups = {};
   for (const item of parts) {
     const key = item.vendor_name || 'Unknown Vendor';
@@ -73,56 +75,25 @@ export default function BillableItemsSelector({
   className,
 }) {
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [expandedServices, setExpandedServices] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   const { data, isLoading, error } = useProjectBillableItems(projectId);
 
+  // Filter + group (memoized)
   const { partGroups, services, allItems } = useMemo(() => {
     if (!data?.items) return { partGroups: [], services: [], allItems: [] };
-    // Phase 1: Filter out zero-value items — they are never billable
     const items = data.items.filter(i => i.line_total > 0 && i.qty_available_to_bill > 0);
     const grouped = groupItems(items);
     return { ...grouped, allItems: items };
   }, [data]);
 
-  // Phase 1: Auto-select ALL valid items on first load (deterministic)
-  const [hasAutoSelected, setHasAutoSelected] = useState(false);
-  useEffect(() => {
-    if (allItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
-      // Deduplicate by source_id
-      const seen = new Set();
-      const initial = [];
-      for (const item of allItems) {
-        if (!seen.has(item.source_id)) {
-          seen.add(item.source_id);
-          initial.push(buildPayload(item));
-        }
-      }
-      onSelectionChange(initial);
-      setHasAutoSelected(true);
-    }
-  }, [allItems, hasAutoSelected]);
+  // O(1) selection lookup
+  const selectedSet = useMemo(() => new Set(selectedItems.map(s => s.source_id)), [selectedItems]);
 
-  // Reset auto-select flag when project changes
-  useEffect(() => {
-    setHasAutoSelected(false);
-  }, [projectId]);
-
-  // Auto-expand first group
-  useEffect(() => {
-    if (partGroups.length > 0 && Object.keys(expandedGroups).length === 0) {
-      setExpandedGroups({ [partGroups[0].vendor_name]: true, __services__: true });
-    }
-  }, [partGroups]);
-
-  const toggleGroup = (key) => {
-    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // Selection helpers
-  const isSelected = (sourceId) => selectedItems.some(s => s.source_id === sourceId);
-
-  const buildPayload = (item) => ({
+  // Build selection payload for an item
+  const buildPayload = useCallback((item) => ({
     source_entity: item.source_entity,
     source_id: item.source_id,
     type: item.type,
@@ -143,35 +114,87 @@ export default function BillableItemsSelector({
     credit_applied: 0,
     needs_review: item.needs_review,
     review_reason: item.review_reason,
-  });
+    children: item.children || null,
+  }), []);
 
-  const handleToggle = (item, checked) => {
+  // Auto-select: only for small datasets (<50), once per project
+  useEffect(() => {
+    if (allItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
+      if (allItems.length < 50) {
+        const seen = new Set();
+        const initial = [];
+        for (const item of allItems) {
+          if (!seen.has(item.source_id)) {
+            seen.add(item.source_id);
+            initial.push(buildPayload(item));
+          }
+        }
+        onSelectionChange(initial);
+      }
+      setHasAutoSelected(true);
+    }
+  }, [allItems, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
+
+  // Reset when project changes
+  useEffect(() => {
+    setHasAutoSelected(false);
+    setExpandedGroups({});
+    setExpandedServices({});
+  }, [projectId]);
+
+  // Performance warning
+  useEffect(() => {
+    if (allItems.length > 100) {
+      console.warn(`[BillableItemsSelector] Large dataset: ${allItems.length} items`);
+    }
+  }, [allItems.length]);
+
+  const toggleGroup = useCallback((key) => {
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const toggleServiceExpand = useCallback((id) => {
+    setExpandedServices(prev => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  // Selection handlers
+  const handleToggle = useCallback((item, checked) => {
     if (checked) {
       onSelectionChange([...selectedItems, buildPayload(item)]);
     } else {
       onSelectionChange(selectedItems.filter(s => s.source_id !== item.source_id));
     }
-  };
+  }, [selectedItems, onSelectionChange, buildPayload]);
 
-  const handleSelectGroup = (items) => {
+  const handleSelectAll = useCallback(() => {
+    const seen = new Set(selectedItems.map(s => s.source_id));
+    const newItems = allItems.filter(i => !seen.has(i.source_id)).map(buildPayload);
+    onSelectionChange([...selectedItems, ...newItems]);
+  }, [allItems, selectedItems, onSelectionChange, buildPayload]);
+
+  const handleDeselectAll = useCallback(() => {
+    onSelectionChange([]);
+  }, [onSelectionChange]);
+
+  const handleSelectGroup = useCallback((items) => {
     const currentIds = new Set(selectedItems.map(s => s.source_id));
     const newItems = items.filter(i => !currentIds.has(i.source_id)).map(buildPayload);
     onSelectionChange([...selectedItems, ...newItems]);
-  };
+  }, [selectedItems, onSelectionChange, buildPayload]);
 
-  const handleDeselectGroup = (items) => {
+  const handleDeselectGroup = useCallback((items) => {
     const ids = new Set(items.map(i => i.source_id));
     onSelectionChange(selectedItems.filter(s => !ids.has(s.source_id)));
-  };
+  }, [selectedItems, onSelectionChange]);
 
   const isGroupFullySelected = (items) =>
-    items.length > 0 && items.every(i => isSelected(i.source_id));
+    items.length > 0 && items.every(i => selectedSet.has(i.source_id));
   const isGroupPartiallySelected = (items) => {
-    const selected = items.filter(i => isSelected(i.source_id));
-    return selected.length > 0 && selected.length < items.length;
+    const count = items.filter(i => selectedSet.has(i.source_id)).length;
+    return count > 0 && count < items.length;
   };
 
-  // Filter by search
+  // Search filter (memoized)
   const filteredPartGroups = useMemo(() => {
     if (!searchTerm) return partGroups;
     const s = searchTerm.toLowerCase();
@@ -186,6 +209,7 @@ export default function BillableItemsSelector({
     return services.filter(i => i.description?.toLowerCase().includes(s));
   }, [services, searchTerm]);
 
+  // ── RENDER STATES ──
   if (!projectId) {
     return <div className="flex items-center justify-center h-40 text-gray-500">Select a project</div>;
   }
@@ -199,88 +223,106 @@ export default function BillableItemsSelector({
     return <div className="flex flex-col items-center justify-center h-40 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No billable items for this project</p></div>;
   }
 
+  const allSelected = allItems.length > 0 && allItems.every(i => selectedSet.has(i.source_id));
+
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Summary */}
-      {data?.summary && (
-        <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
-          <span className="text-gray-400">
-            {data.summary.part_count} parts, {data.summary.service_count} services
-          </span>
-          <span className="text-green-400 font-medium">{formatCurrencyUSD(data.summary.grand_total)}</span>
+      {/* Summary + Select All */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
+        <span className="text-gray-400">
+          {data?.summary?.part_count || 0} parts, {data?.summary?.service_count || 0} services
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-green-400 font-medium">{formatCurrencyUSD(data?.summary?.grand_total || 0)}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={allSelected ? handleDeselectAll : handleSelectAll}
+            className="h-6 px-2 text-xs gap-1"
+          >
+            <CheckSquare className="w-3 h-3" />
+            {allSelected ? "Deselect All" : "Select All"}
+          </Button>
         </div>
+      </div>
+
+      {searchTerm !== undefined && (
+        <Input
+          placeholder="Search items..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="bg-gray-800 border-gray-700"
+        />
       )}
 
-      <Input
-        placeholder="Search items..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="bg-gray-800 border-gray-700"
-      />
-
-      <div className="overflow-x-auto">
-        <div className="space-y-2 min-w-full">
-          {/* ── PARTS by vendor ── */}
-          {filteredPartGroups.map((group) => {
-            const isExpanded = expandedGroups[group.vendor_name];
-            return (
-              <div key={group.vendor_name} className="border border-gray-700 rounded-lg overflow-hidden">
-                <div
-                  className="flex items-center gap-2 p-3 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
-                  onClick={() => toggleGroup(group.vendor_name)}
-                >
-                  <Checkbox
-                    checked={isGroupFullySelected(group.items)}
-                    ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(group.items); }}
-                    onCheckedChange={(checked) => checked ? handleSelectGroup(group.items) : handleDeselectGroup(group.items)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                  <Package className="w-4 h-4 text-blue-400" />
-                  <span className="font-medium text-white flex-1">{group.vendor_name}</span>
-                  <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">{group.items.length}</Badge>
-                  <span className="text-green-400 text-sm font-medium">{formatCurrencyUSD(group.total)}</span>
-                </div>
-                {isExpanded && (
-                  <div className="border-t border-gray-700">
-                    {group.items.map((item) => (
-                      <ItemRow key={item.source_id} item={item} isSelected={isSelected(item.source_id)} onToggle={handleToggle} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* ── SERVICES ── */}
-          {filteredServices.length > 0 && (
-            <div className="border border-amber-700/50 rounded-lg overflow-hidden">
+      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+        {/* ── PARTS by vendor (collapsed by default) ── */}
+        {filteredPartGroups.map((group) => {
+          const isExpanded = !!expandedGroups[group.vendor_name];
+          return (
+            <div key={group.vendor_name} className="border border-gray-700 rounded-lg overflow-hidden">
               <div
-                className="flex items-center gap-2 p-3 bg-amber-900/20 cursor-pointer hover:bg-amber-900/30"
-                onClick={() => toggleGroup('__services__')}
+                className="flex items-center gap-2 p-2.5 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
+                onClick={() => toggleGroup(group.vendor_name)}
               >
                 <Checkbox
-                  checked={isGroupFullySelected(filteredServices)}
-                  ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(filteredServices); }}
-                  onCheckedChange={(checked) => checked ? handleSelectGroup(filteredServices) : handleDeselectGroup(filteredServices)}
+                  checked={isGroupFullySelected(group.items)}
+                  ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(group.items); }}
+                  onCheckedChange={(checked) => checked ? handleSelectGroup(group.items) : handleDeselectGroup(group.items)}
                   onClick={(e) => e.stopPropagation()}
                 />
-                {expandedGroups['__services__'] ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-400" />}
-                <Truck className="w-4 h-4 text-amber-400" />
-                <span className="font-medium text-amber-300 flex-1">Services</span>
-                <Badge variant="outline" className="text-xs border-amber-700 text-amber-400">{filteredServices.length}</Badge>
-                <span className="text-amber-400 text-sm font-medium">{formatCurrencyUSD(filteredServices.reduce((s, i) => s + i.line_total, 0))}</span>
+                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                <Package className="w-4 h-4 text-blue-400" />
+                <span className="font-medium text-white flex-1 text-sm">{group.vendor_name}</span>
+                <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">{group.items.length}</Badge>
+                <span className="text-green-400 text-sm font-medium">{formatCurrencyUSD(group.total)}</span>
               </div>
-              {expandedGroups['__services__'] && (
-                <div className="border-t border-amber-700/30">
-                  {filteredServices.map((item) => (
-                    <ItemRow key={item.source_id} item={item} isSelected={isSelected(item.source_id)} onToggle={handleToggle} isService />
+              {isExpanded && (
+                <div className="border-t border-gray-700">
+                  {group.items.map((item) => (
+                    <PartItemRow key={item.source_id} item={item} isSelected={selectedSet.has(item.source_id)} onToggle={handleToggle} />
                   ))}
                 </div>
               )}
             </div>
-          )}
-        </div>
+          );
+        })}
+
+        {/* ── SERVICES (collapsed by default) ── */}
+        {filteredServices.length > 0 && (
+          <div className="border border-amber-700/50 rounded-lg overflow-hidden">
+            <div
+              className="flex items-center gap-2 p-2.5 bg-amber-900/20 cursor-pointer hover:bg-amber-900/30"
+              onClick={() => toggleGroup('__services__')}
+            >
+              <Checkbox
+                checked={isGroupFullySelected(filteredServices)}
+                ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(filteredServices); }}
+                onCheckedChange={(checked) => checked ? handleSelectGroup(filteredServices) : handleDeselectGroup(filteredServices)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              {expandedGroups['__services__'] ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-400" />}
+              <Truck className="w-4 h-4 text-amber-400" />
+              <span className="font-medium text-amber-300 flex-1 text-sm">Services</span>
+              <Badge variant="outline" className="text-xs border-amber-700 text-amber-400">{filteredServices.length}</Badge>
+              <span className="text-amber-400 text-sm font-medium">{formatCurrencyUSD(filteredServices.reduce((s, i) => s + i.line_total, 0))}</span>
+            </div>
+            {expandedGroups['__services__'] && (
+              <div className="border-t border-amber-700/30">
+                {filteredServices.map((item) => (
+                  <ServiceItemRow
+                    key={item.source_id}
+                    item={item}
+                    isSelected={selectedSet.has(item.source_id)}
+                    onToggle={handleToggle}
+                    isChildExpanded={!!expandedServices[item.source_id]}
+                    onToggleExpand={() => toggleServiceExpand(item.source_id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Selection Summary */}
@@ -294,16 +336,14 @@ export default function BillableItemsSelector({
   );
 }
 
-function ItemRow({ item, isSelected, onToggle, isService = false }) {
+// ── Part row (simple) ──
+function PartItemRow({ item, isSelected, onToggle }) {
   return (
-    <div className={cn("flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50")}>
+    <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
       <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
-      {isService ? <Truck className="w-3 h-3 text-amber-500" /> : <Package className="w-3 h-3 text-gray-500" />}
+      <Package className="w-3 h-3 text-gray-500" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white truncate">
-          {item.description}
-          {isService && <span className="ml-1.5 text-[10px] text-amber-400 font-mono">SERVICE</span>}
-        </p>
+        <p className="text-sm text-white truncate">{item.description}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span>Qty: {item.qty_available_to_bill}</span>
           <span>×</span>
@@ -316,12 +356,68 @@ function ItemRow({ item, isSelected, onToggle, isService = false }) {
           </div>
         )}
       </div>
-      <div className="text-right">
-        {isService && item.cost_total > 0 && (
-          <p className="text-xs text-gray-500">Cost: {formatCurrencyUSD(item.cost_total)}</p>
+      <p className="text-sm font-medium text-green-400">{formatCurrencyUSD(item.line_total)}</p>
+    </div>
+  );
+}
+
+// ── Service row (with expandable children) ──
+function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleExpand }) {
+  const hasChildren = item.children && item.children.length > 0;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
+        <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
+        {hasChildren ? (
+          <button onClick={(e) => { e.stopPropagation(); onToggleExpand(); }} className="p-0">
+            {isChildExpanded ? <ChevronDown className="w-3 h-3 text-amber-400" /> : <ChevronRight className="w-3 h-3 text-amber-400" />}
+          </button>
+        ) : (
+          <Truck className="w-3 h-3 text-amber-500" />
         )}
-        <p className="text-sm font-medium text-green-400">{formatCurrencyUSD(item.line_total)}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white truncate">
+            {item.description}
+            <span className="ml-1.5 text-[10px] text-amber-400 font-mono">SERVICE</span>
+          </p>
+          {hasChildren && (
+            <p className="text-[10px] text-gray-500">{item.children.length} line item{item.children.length !== 1 ? 's' : ''}</p>
+          )}
+        </div>
+        <div className="text-right">
+          {item.cost_total > 0 && (
+            <p className="text-xs text-gray-500">Cost: {formatCurrencyUSD(item.cost_total)}</p>
+          )}
+          <p className="text-sm font-medium text-amber-400">{formatCurrencyUSD(item.line_total)}</p>
+        </div>
       </div>
+
+      {/* Expanded children */}
+      {hasChildren && isChildExpanded && (
+        <div className="ml-14 mr-3 mb-2 border-l-2 border-amber-800/30 pl-3 space-y-1">
+          {item.children.map((child) => (
+            <div key={child.id} className="flex items-center justify-between py-1 text-xs">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-gray-500">↳</span>
+                <Badge variant="outline" className="text-[9px] border-gray-700 text-gray-400 px-1 py-0 h-4 shrink-0">
+                  {child.type}
+                </Badge>
+                <span className="text-gray-300 truncate">{child.description}</span>
+                {child.vendor_name && (
+                  <span className="text-gray-500 truncate">({child.vendor_name})</span>
+                )}
+              </div>
+              <div className="text-right shrink-0 ml-2">
+                {child.cost_amount > 0 && child.cost_amount !== child.amount && (
+                  <span className="text-gray-500 mr-2">Cost: {formatCurrencyUSD(child.cost_amount)}</span>
+                )}
+                <span className="text-amber-300 font-mono">{formatCurrencyUSD(child.amount)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
