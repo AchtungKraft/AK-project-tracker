@@ -1,15 +1,17 @@
 /**
- * CreateProjectInvoiceModal - CANONICAL INVOICE CREATION SURFACE
+ * CreateProjectInvoiceModal - SINGLE-SCREEN INVOICE BUILDER
  * 
  * ARCHITECTURE LOCK:
  * - This is the ONLY component allowed to call createProjectInvoiceDraft
  * - All invoice creation MUST flow through this modal
- * - Uses queryKeyFactories for all queries
- * - Uses getBillingAndProcurementStates as SOLE exposure source
+ * - NO wizard steps — the builder IS the review
  * 
- * INVOICEBATCH IS REMOVED. Do not import or use InvoiceBatch* components or functions.
+ * BACKEND: UNTOUCHED. Uses:
+ * - resolveProjectBillableItems (via BillableItemsSelector)
+ * - createProjectInvoiceDraft
+ * - getProjectsBillingSummary (validation)
  */
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
@@ -18,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,28 +28,30 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronLeft,
-  ChevronRight,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Plus,
   Trash2,
   Loader2,
-  DollarSign,
-  FileText,
-  CheckCircle2,
   AlertTriangle,
-  Wallet,
+  FileText,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
 import BillableItemsSelector from "./BillableItemsSelector";
-import { useFinancialProjectsView } from "./useFinancialProjectsView";
 import BillingValidationBanner from "./BillingValidationBanner";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
-import CreditSummaryStrip from "./CreditSummaryStrip";
 import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
 import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
+import InvoiceTotalsPanel from "./InvoiceTotalsPanel";
+import ManualLinesSection from "./ManualLinesSection";
 
 // DEV guardrails
 if (import.meta.env.DEV) {
@@ -57,55 +60,36 @@ if (import.meta.env.DEV) {
   registerInvoiceCreationSurface('CreateProjectInvoiceModal');
 }
 
-const STEPS = ["project", "type", "lines", "review"];
-
-/**
- * PHASE 1 REFACTOR — Invoice Builder Flow
- * 
- * NOW USES getBillingAndProcurementStates as CANONICAL exposure engine.
- * 
- * Step 1: Select Project (grouped by type, only eligible shown)
- * Step 2: Select Billing Type (deposit, progress, final)
- * Step 3: Select Parts / Add Lines (uses canonical commitments from getBillingAndProcurementStates)
- * Step 4: Review Summary (displays gross, credit applied, net from canonical source)
- */
 export default function CreateProjectInvoiceModal({ 
   open, 
   onClose, 
   onSuccess,
-  preselectedProjectId = null, // PHASE 1: Allow pre-selection from ForwardInvoiceDashboard
-  initialSelectedItems = [], // PHASE 2: Allow pre-selection from PartsActionWorkbench
+  preselectedProjectId = null,
+  initialSelectedItems = [],
 }) {
   const queryClient = useQueryClient();
   
-  // PHASE 4: Normalize preselected ID at mount time
-  const normalizedPreselectedId = normalizeProjectId(preselectedProjectId);
-  
-  // All modal state
-  const [step, setStep] = useState(normalizedPreselectedId ? 1 : 0);
-  const [selectedProjectId, setSelectedProjectId] = useState(normalizedPreselectedId ?? null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [invoiceType, setInvoiceType] = useState("progress");
   const [depositAmount, setDepositAmount] = useState("");
   const [notes, setNotes] = useState("");
-  const [selectedParts, setSelectedParts] = useState(initialSelectedItems || []);
+  const [selectedParts, setSelectedParts] = useState([]);
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [creditToApply, setCreditToApply] = useState(null);
-  const [creditInputValue, setCreditInputValue] = useState("");
   const [billingValidation, setBillingValidation] = useState(null);
 
-  // Normalize for queries
+  // Credit state
+  const [availableCredit, setAvailableCredit] = useState(0);
+  const [creditToApply, setCreditToApply] = useState(null);
+  const [creditInputValue, setCreditInputValue] = useState("");
+
   const normalizedProjectId = normalizeProjectId(selectedProjectId);
-  
-  // PHASE 4: Full state reset when modal opens/closes
-  // On open: apply preselected project if provided, otherwise start fresh
-  // On close: reset ALL state unconditionally
+
+  // ── Reset on open/close ──
   useEffect(() => {
     if (open) {
-      // Modal opening — initialize from props
       const pid = normalizeProjectId(preselectedProjectId);
       setSelectedProjectId(pid ?? null);
-      setStep(pid ? 1 : 0);
       setSelectedParts(initialSelectedItems || []);
       setInvoiceType("progress");
       setDepositAmount("");
@@ -113,17 +97,11 @@ export default function CreateProjectInvoiceModal({
       setManualLines([]);
       setCreditToApply(null);
       setCreditInputValue("");
+      setAvailableCredit(0);
     }
   }, [open, preselectedProjectId]);
 
-  // Get financial projects data for project dropdown
-  const { data: financialData } = useFinancialProjectsView({
-    enabled: open,
-    staleTime: 30000,
-    retry: false,
-  });
-
-  // Fetch billing validation state (from summary endpoint)
+  // ── Fetch billing validation once ──
   useEffect(() => {
     if (!open) return;
     (async () => {
@@ -135,16 +113,13 @@ export default function CreateProjectInvoiceModal({
       }
     })();
   }, [open]);
-  const selectedProjectFinancials = financialData?.projects?.find(
-    (p) => p.project_id === selectedProjectId
-  );
 
-  // UNIFIED: Use resolveProjectBillableItems as data source (fetched by BillableItemsSelector)
-  // Credit availability fetched separately for the review step
-  const [availableCredit, setAvailableCredit] = useState(0);
-  
+  // ── Fetch credit for selected project ──
   useEffect(() => {
-    if (!normalizedProjectId || !open || step < 2) return;
+    if (!normalizedProjectId || !open) {
+      setAvailableCredit(0);
+      return;
+    }
     (async () => {
       try {
         const credits = await base44.entities.ProjectCreditLedger.filter({ project_id: normalizedProjectId });
@@ -154,49 +129,24 @@ export default function CreateProjectInvoiceModal({
         console.warn('Failed to fetch credits:', e);
       }
     })();
-  }, [normalizedProjectId, open, step]);
+  }, [normalizedProjectId, open]);
 
-  const billingLoading = false; // Selector handles its own loading
-  const canonicalTotals = {};
-  const creditAppliedTotal = 0;
-  const grossExposure = 0;
-  const netExposure = 0;
-
-  // PHASE 5: Remove frontend exposure math - use canonical values from backend
-  // Calculate totals - these are for the invoice being CREATED, not exposure calculation
-  const partsTotal = useMemo(() => {
-    // Use net_exposure from selected parts (already credit-adjusted from backend)
-    return selectedParts.reduce((sum, p) => sum + (p.net_exposure || p.line_total || 0), 0);
-  }, [selectedParts]);
-
+  // ── Computed totals (memoized) ──
   const partsGrossTotal = useMemo(() => {
-    return selectedParts.reduce((sum, p) => sum + (p.gross_exposure || p.line_total || 0), 0);
-  }, [selectedParts]);
-
-  const partsCreditApplied = useMemo(() => {
-    return selectedParts.reduce((sum, p) => sum + (p.credit_applied || 0), 0);
+    return selectedParts.reduce((sum, p) => sum + (p.line_total || 0), 0);
   }, [selectedParts]);
 
   const manualTotal = useMemo(() => {
     return manualLines.reduce((sum, l) => sum + (l.amount || 0), 0);
   }, [manualLines]);
 
-  // PHASE 5: Use canonical net values - no frontend credit math
   const subtotal = invoiceType === "deposit" 
     ? parseFloat(depositAmount) || 0 
-    : partsGrossTotal + manualTotal; // Use GROSS for subtotal, credit is applied separately
-
-  // For display: gross total before credit
-  const grossSubtotal = invoiceType === "deposit"
-    ? parseFloat(depositAmount) || 0
     : partsGrossTotal + manualTotal;
 
-  // STABILIZATION: Compute effective credit to apply
-  // If user has set a value, use it; otherwise use suggested (min of available and subtotal)
   const suggestedCredit = Math.min(availableCredit, subtotal);
   const effectiveCreditToApply = creditToApply !== null ? creditToApply : suggestedCredit;
-  
-  // Credit validation
+
   const creditValidationError = useMemo(() => {
     if (effectiveCreditToApply < 0) return "Credit cannot be negative";
     if (effectiveCreditToApply > availableCredit) return `Exceeds available credit (${formatCurrencyUSD(availableCredit)})`;
@@ -204,97 +154,35 @@ export default function CreateProjectInvoiceModal({
     return null;
   }, [effectiveCreditToApply, availableCredit, subtotal]);
 
-  // Balance due after credit
   const balanceDue = Math.max(0, subtotal - effectiveCreditToApply);
 
-  // Manual line handlers
-  const handleAddManualLine = () => {
-    setManualLines([
-      ...manualLines,
-      { id: Date.now(), description: "", amount: 0, type: "outside_cost" },
-    ]);
-  };
+  // ── Item count for display ──
+  const lineItemCount = invoiceType === "deposit" 
+    ? 1 
+    : selectedParts.length + manualLines.filter(l => l.amount > 0).length;
 
-  const handleRemoveManualLine = (id) => {
-    setManualLines(manualLines.filter((l) => l.id !== id));
-  };
+  // ── Validation ──
+  const validationFailed = billingValidation?.ok === false;
+  
+  const canSubmit = useMemo(() => {
+    if (!selectedProjectId) return false;
+    if (validationFailed) return false;
+    if (creditValidationError) return false;
+    if (isSubmitting) return false;
+    if (invoiceType === "deposit") return (parseFloat(depositAmount) || 0) > 0;
+    return (selectedParts.length > 0 || manualLines.some(l => l.amount > 0)) && subtotal > 0;
+  }, [selectedProjectId, validationFailed, creditValidationError, isSubmitting, invoiceType, depositAmount, selectedParts, manualLines, subtotal]);
 
-  const handleUpdateManualLine = (id, field, value) => {
-    setManualLines(
-      manualLines.map((l) =>
-        l.id === id ? { ...l, [field]: field === "amount" ? parseFloat(value) || 0 : value } : l
-      )
-    );
-  };
-
-  // Validation
-  const canProceed = () => {
-    switch (step) {
-      case 0:
-        return !!selectedProjectId;
-      case 1:
-        return !!invoiceType;
-      case 2:
-        if (invoiceType === "deposit") {
-          return parseFloat(depositAmount) > 0;
-        }
-        return selectedParts.length > 0 || manualLines.length > 0;
-      case 3:
-        return subtotal > 0 && !creditValidationError && (selectedParts.length > 0 || manualLines.length > 0 || invoiceType === 'deposit');
-      default:
-        return false;
-    }
-  };
-
-  const getValidationMessage = () => {
-    switch (step) {
-      case 0:
-        return "Select a project to continue";
-      case 2:
-        if (invoiceType === "deposit") {
-          return "Enter a deposit amount";
-        }
-        return "Add at least one line item";
-      default:
-        return null;
-    }
-  };
-
-  const handleNext = () => {
-    if (!canProceed()) {
-      const msg = getValidationMessage();
-      if (msg) toast.error(msg);
-      return;
-    }
-    setStep(step + 1);
-  };
-
-  const handleBack = () => {
-    setStep(step - 1);
-  };
-
-  const handleSubmit = async () => {
-    // PHASE 6 Safety Guards
-    if (subtotal <= 0) {
-      toast.error("Invoice total must be greater than zero");
-      return;
-    }
-    if (invoiceType !== "deposit" && selectedParts.length === 0 && manualLines.length === 0) {
-      toast.error("Cannot create progress/final invoice without line items");
-      return;
-    }
-
+  // ── Submit handler ──
+  const handleSubmit = useCallback(async () => {
+    if (!canSubmit) return;
+    
     setIsSubmitting(true);
     try {
-      // Build lines using UNIFIED source_entity/source_id contract
       const lines = [];
 
       for (const item of selectedParts) {
-        if (!item.source_id) {
-          console.warn('[CreateProjectInvoiceModal] Skipping item without source_id:', item);
-          continue;
-        }
-        
+        if (!item.source_id) continue;
         lines.push({
           type: item.type || "part",
           source_entity: item.source_entity,
@@ -305,7 +193,6 @@ export default function CreateProjectInvoiceModal({
         });
       }
 
-      // Manual lines
       for (const line of manualLines) {
         if (line.description && line.amount > 0) {
           lines.push({
@@ -317,7 +204,6 @@ export default function CreateProjectInvoiceModal({
         }
       }
 
-      // Deposit line
       if (invoiceType === "deposit" && lines.length === 0) {
         lines.push({
           type: "manual",
@@ -327,32 +213,28 @@ export default function CreateProjectInvoiceModal({
         });
       }
 
-      const payload = {
-        project_id: selectedProjectId,
-        invoice_type: invoiceType,
-        lines,
-        notes,
-        credit_to_apply: effectiveCreditToApply, // UNIFIED: Proposed credit (NOT deducted at draft)
-      };
-
-      // DEV GUARDRAIL: Log canonical invoice creation
       if (import.meta.env.DEV) {
         guardInvoiceMutation('createProjectInvoiceDraft', 'CreateProjectInvoiceModal');
       }
 
-      const response = await base44.functions.invoke("createProjectInvoiceDraft", payload);
+      const response = await base44.functions.invoke("createProjectInvoiceDraft", {
+        project_id: selectedProjectId,
+        invoice_type: invoiceType,
+        lines,
+        notes,
+        credit_to_apply: effectiveCreditToApply,
+      });
 
       if (response.data?.success) {
         toast.success("Invoice draft created");
         
-        // PHASE 7: Invalidate ALL related caches after invoice creation
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
-          queryClient.invalidateQueries({ queryKey: invoiceKeys.view(null) }), // Global invoice list
+          queryClient.invalidateQueries({ queryKey: invoiceKeys.view(null) }),
           queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
           queryClient.invalidateQueries({ queryKey: ["billableItems", normalizedProjectId] }),
-          queryClient.invalidateQueries({ queryKey: ["billingSummary"] }), // Ready to Invoice section
+          queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
         ]);
         
         onSuccess?.();
@@ -365,416 +247,184 @@ export default function CreateProjectInvoiceModal({
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [canSubmit, selectedParts, manualLines, invoiceType, depositAmount, selectedProjectId, notes, effectiveCreditToApply, normalizedProjectId, queryClient, onSuccess]);
 
-  const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-2 mb-6">
-      {STEPS.map((s, idx) => (
-        <div key={s} className="flex items-center">
-          <div
-            className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
-              idx < step
-                ? "bg-green-600 text-white"
-                : idx === step
-                ? "bg-red-600 text-white"
-                : "bg-gray-700 text-gray-400"
-            )}
-          >
-            {idx < step ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
-          </div>
-          {idx < STEPS.length - 1 && (
-            <div
-              className={cn(
-                "w-8 h-0.5 mx-1",
-                idx < step ? "bg-green-600" : "bg-gray-700"
-              )}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
+  if (!open) return null;
 
-  const renderStepContent = () => {
-    switch (step) {
-      case 0:
-        return (
-          <div className="space-y-4 py-4">
-            <Label>Select Project</Label>
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="text-lg">Create Invoice</DialogTitle>
+          <DialogDescription className="sr-only">
+            Single-screen invoice builder
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Validation banner */}
+        <BillingValidationBanner validation={billingValidation} />
+
+        {/* ── HEADER: Project + Type ── */}
+        <div className="flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">Project</Label>
             <FinancialProjectSelector
               value={selectedProjectId ?? undefined}
               onValueChange={(val) => {
                 if (!val) return;
-                console.log("[Modal] Project selected:", val);
                 setSelectedProjectId(val);
+                setSelectedParts([]);
+                setCreditToApply(null);
+                setCreditInputValue("");
               }}
               className="w-full"
             />
-            {/* PHASE 1: Show canonical exposure data from getBillingAndProcurementStates */}
-            {selectedProjectId && (
-              <div className="space-y-3">
-                {billingLoading ? (
-                  <div className="flex items-center justify-center p-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                  </div>
-                ) : (
-                  <>
-                    <div className="p-4 bg-gray-800/50 rounded-lg space-y-2">
-                      <p className="text-white font-medium">{selectedProjectFinancials?.project_name || 'Selected Project'}</p>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-gray-400">Unbilled Items:</span>
-                          <span className="ml-2 font-mono text-amber-400">
-                            {canonicalTotals.unbilled_count || 0}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Net to Bill:</span>
-                          <span className="ml-2 font-mono text-amber-400">
-                            {formatCurrencyUSD(canonicalTotals.unbilled_total || 0)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* PHASE 1: Credit summary from canonical source */}
-                    {(availableCredit > 0 || creditAppliedTotal > 0) && (
-                      <CreditSummaryStrip
-                        grossExposure={grossExposure}
-                        creditAvailable={availableCredit}
-                        creditApplied={creditAppliedTotal}
-                        netExposure={netExposure}
-                        isLoading={billingLoading}
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            )}
           </div>
-        );
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">Invoice Type</Label>
+            <Select value={invoiceType} onValueChange={setInvoiceType}>
+              <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deposit">Deposit</SelectItem>
+                <SelectItem value="progress">Progress</SelectItem>
+                <SelectItem value="final">Final</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-      case 1:
-        return (
-          <div className="space-y-4 py-4">
-            <Label>Invoice Type</Label>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { value: "deposit", label: "Deposit", desc: "Initial payment", icon: DollarSign },
-                { value: "progress", label: "Progress", desc: "Ongoing work", icon: FileText },
-                { value: "final", label: "Final", desc: "Project completion", icon: CheckCircle2 },
-              ].map((t) => {
-                const Icon = t.icon;
-                return (
-                  <button
-                    key={t.value}
-                    onClick={() => setInvoiceType(t.value)}
-                    className={cn(
-                      "p-4 rounded-lg border text-left transition-colors",
-                      invoiceType === t.value
-                        ? "border-red-500 bg-red-500/10"
-                        : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
-                    )}
-                  >
-                    <Icon className={cn("w-5 h-5 mb-2", invoiceType === t.value ? "text-red-400" : "text-gray-400")} />
-                    <p className="text-white font-medium">{t.label}</p>
-                    <p className="text-xs text-gray-400">{t.desc}</p>
-                  </button>
-                );
-              })}
+        <Separator className="bg-gray-700/50" />
+
+        {/* ── BODY: Scrollable content ── */}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-1">
+          {!selectedProjectId ? (
+            <div className="flex flex-col items-center justify-center h-40 text-gray-500">
+              <FileText className="w-8 h-8 mb-2 text-gray-600" />
+              <p>Select a project to begin</p>
             </div>
-            {invoiceType === "deposit" && (
-              <div className="p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-                <p className="text-sm text-blue-300">
-                  Deposit invoices allow a manual amount without selecting specific parts.
-                </p>
+          ) : invoiceType === "deposit" ? (
+            /* ── DEPOSIT FLOW ── */
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Deposit Amount</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-lg">$</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0.00"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    className="text-lg font-mono"
+                    autoFocus
+                  />
+                </div>
               </div>
-            )}
-          </div>
-        );
-
-      case 2:
-        if (invoiceType === "deposit") {
-          return (
-            <div className="space-y-4 py-4">
-              <Label>Deposit Amount</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400 text-lg">$</span>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="text-lg font-mono"
-                />
-              </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Notes (optional)</Label>
                 <Textarea
                   placeholder="Invoice notes..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
+                  rows={2}
                 />
               </div>
             </div>
-          );
-        }
-
-        return (
-          <div className="space-y-4 py-4">
-            <div className="flex items-center justify-between">
-              <Label>Select Parts to Bill</Label>
-              <Button variant="outline" size="sm" onClick={handleAddManualLine} className="gap-1">
-                <Plus className="w-3 h-3" />
-                Manual Line
-              </Button>
-            </div>
-
-            <BillableItemsSelector
-              projectId={selectedProjectId}
-              selectedItems={selectedParts}
-              onSelectionChange={setSelectedParts}
-            />
-
-            {/* Manual Lines */}
-            {manualLines.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-gray-400">Manual / Outside Costs</Label>
-                {manualLines.map((line) => (
-                  <div key={line.id} className="flex items-center gap-2 p-2 bg-gray-800/50 rounded-lg">
-                    <Input
-                      placeholder="Description"
-                      value={line.description}
-                      onChange={(e) => handleUpdateManualLine(line.id, "description", e.target.value)}
-                      className="flex-1"
-                    />
-                    <div className="flex items-center gap-1">
-                      <span className="text-gray-400">$</span>
-                      <Input
-                        type="number"
-                        placeholder="0.00"
-                        value={line.amount || ""}
-                        onChange={(e) => handleUpdateManualLine(line.id, "amount", e.target.value)}
-                        className="w-24"
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveManualLine(line.id)}
-                      className="text-gray-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+          ) : (
+            /* ── PROGRESS / FINAL FLOW ── */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>Billable Items</Label>
+                <Button variant="outline" size="sm" onClick={() => setManualLines(prev => [...prev, { id: Date.now(), description: "", amount: 0, type: "outside_cost" }])} className="gap-1 h-7 text-xs">
+                  <Plus className="w-3 h-3" />
+                  Manual Line
+                </Button>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                placeholder="Invoice notes..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
+              <BillableItemsSelector
+                projectId={selectedProjectId}
+                selectedItems={selectedParts}
+                onSelectionChange={setSelectedParts}
               />
-            </div>
-          </div>
-        );
 
-      case 3:
-        return (
-          <div className="space-y-4 py-4">
-            <div className="text-center mb-4">
-              <h3 className="text-lg font-medium text-white">Review Invoice</h3>
-              <p className="text-sm text-gray-400">Verify details before creating draft</p>
-            </div>
+              <ManualLinesSection
+                lines={manualLines}
+                onUpdate={(id, field, value) =>
+                  setManualLines(prev => prev.map(l => l.id === id ? { ...l, [field]: field === "amount" ? parseFloat(value) || 0 : value } : l))
+                }
+                onRemove={(id) => setManualLines(prev => prev.filter(l => l.id !== id))}
+              />
 
-            <div className="p-4 bg-gray-800/50 rounded-lg space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Project</span>
-                <span className="text-white font-medium">
-                  {selectedProjectFinancials?.project_name}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Type</span>
-                <Badge className="bg-purple-600/20 text-purple-400">
-                  {invoiceType.charAt(0).toUpperCase() + invoiceType.slice(1)}
-                </Badge>
-              </div>
-              <Separator className="bg-gray-700" />
-              <div className="flex justify-between">
-                <span className="text-gray-400">Line Items</span>
-                <span className="text-white">
-                  {invoiceType === "deposit" ? 1 : selectedParts.length + manualLines.filter(l => l.amount > 0).length}
-                </span>
-              </div>
-              <Separator className="bg-gray-700" />
-              
-              {/* Invoice Subtotal */}
-              <div className="flex justify-between">
-                <span className="text-gray-400">Subtotal</span>
-                <span className="font-mono text-gray-300">{formatCurrencyUSD(subtotal)}</span>
-              </div>
-              
-              {/* STABILIZATION: Editable Credit Input */}
-              {availableCredit > 0 && (
-                <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-green-400 text-sm font-medium">Project Credit Available</span>
-                    <span className="font-mono text-green-400">{formatCurrencyUSD(availableCredit)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-green-300 text-sm whitespace-nowrap">Apply Credit:</Label>
-                    <div className="flex items-center gap-1 flex-1">
-                      <span className="text-green-400">$</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={Math.min(availableCredit, subtotal)}
-                        step="0.01"
-                        placeholder={suggestedCredit.toFixed(2)}
-                        value={creditInputValue}
-                        onChange={(e) => {
-                          setCreditInputValue(e.target.value);
-                          const val = parseFloat(e.target.value);
-                          setCreditToApply(isNaN(val) ? null : val);
-                        }}
-                        className={cn(
-                          "font-mono bg-gray-800 border-green-700",
-                          creditValidationError && "border-red-500"
-                        )}
-                      />
-                    </div>
-                    {creditToApply !== null && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setCreditToApply(null);
-                          setCreditInputValue("");
-                        }}
-                        className="text-gray-400 hover:text-white text-xs"
-                      >
-                        Reset
-                      </Button>
-                    )}
-                  </div>
-                  {creditValidationError && (
-                    <p className="text-red-400 text-xs flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      {creditValidationError}
-                    </p>
-                  )}
-                  {!creditValidationError && effectiveCreditToApply > 0 && (
-                    <p className="text-green-300 text-xs">
-                      {creditToApply === null ? "Suggested amount" : "Custom amount"}: {formatCurrencyUSD(effectiveCreditToApply)} will be applied
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              {/* Credit Applied (if any) */}
-              {effectiveCreditToApply > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Credit Applied</span>
-                  <span className="font-mono text-green-400">-{formatCurrencyUSD(effectiveCreditToApply)}</span>
-                </div>
-              )}
-              
-              <Separator className="bg-gray-700" />
-              
-              <div className="flex justify-between text-xl font-bold">
-                <span className="text-white">Balance Due</span>
-                <span className="font-mono text-white">{formatCurrencyUSD(balanceDue)}</span>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-gray-400">Notes (optional)</Label>
+                <Textarea
+                  placeholder="Invoice notes..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  className="bg-gray-800 border-gray-700"
+                />
               </div>
             </div>
+          )}
+        </div>
 
-            {/* PART 4: Helper text about credit behavior with line-order preview */}
-            {effectiveCreditToApply > 0 && (
-              <div className="p-3 bg-green-900/20 border border-green-800/50 rounded-lg space-y-2">
-                <p className="text-sm text-green-300">
-                  <strong>Credit proposed:</strong> {formatCurrencyUSD(effectiveCreditToApply)} will be deducted from your project credit balance when this invoice is sent.
-                </p>
-                <p className="text-xs text-green-400/80">
-                  Credit will be deducted from project balance when the invoice is marked as sent.
-                </p>
-                
-                {/* Credit will be applied when invoice is sent */}
-              </div>
+        {/* ── TOTALS PANEL (always visible) ── */}
+        {selectedProjectId && (
+          <InvoiceTotalsPanel
+            subtotal={subtotal}
+            availableCredit={availableCredit}
+            effectiveCreditToApply={effectiveCreditToApply}
+            creditInputValue={creditInputValue}
+            creditValidationError={creditValidationError}
+            suggestedCredit={suggestedCredit}
+            balanceDue={balanceDue}
+            lineItemCount={lineItemCount}
+            onCreditChange={(val) => {
+              setCreditInputValue(val);
+              const parsed = parseFloat(val);
+              setCreditToApply(isNaN(parsed) ? null : parsed);
+            }}
+            onCreditReset={() => {
+              setCreditToApply(null);
+              setCreditInputValue("");
+            }}
+            maxCredit={Math.min(availableCredit, subtotal)}
+          />
+        )}
+
+        {/* ── ACTION BAR ── */}
+        <div className="flex-shrink-0 flex items-center justify-between border-t border-gray-700 pt-3 mt-1">
+          <div className="text-sm text-gray-400">
+            {selectedProjectId && subtotal > 0 && (
+              <span className="text-white font-medium">
+                {lineItemCount} item{lineItemCount !== 1 ? 's' : ''} — {formatCurrencyUSD(subtotal)}
+              </span>
             )}
-
-            <div className="p-3 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-              <p className="text-sm text-blue-300">
-                This creates a draft invoice. No billing state changes until the invoice is sent. Credit is proposed but not deducted until sent.
-              </p>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  // HARD MOUNT GUARD: If modal is not open, render nothing.
-  // This prevents all hooks above from causing query storms when modal is hidden.
-  if (!open) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Create Invoice</DialogTitle>
-          <DialogDescription>
-            Create a new invoice for the selected project.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-shrink-0 space-y-3">
-          <BillingValidationBanner validation={billingValidation} />
-          {renderStepIndicator()}
-        </div>
-        
-        <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-          {renderStepContent()}
-        </div>
-
-        <DialogFooter className="flex justify-between flex-shrink-0 border-t border-gray-700 pt-4 mt-2">
-          <div>
-            {step > 0 && (
-              <Button variant="outline" onClick={handleBack} disabled={isSubmitting}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
-              </Button>
+            {validationFailed && (
+              <span className="text-red-400 ml-2 text-xs flex items-center gap-1 inline-flex">
+                <AlertTriangle className="w-3 h-3" />
+                Billing validation failed
+              </span>
             )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            {step < STEPS.length - 1 ? (
-              <Button onClick={handleNext} disabled={!canProceed()}>
-                Next
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleSubmit} 
-                disabled={isSubmitting || !canProceed() || billingValidation?.ok === false}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Create Invoice
-              </Button>
-            )}
+            <Button 
+              onClick={handleSubmit} 
+              disabled={!canSubmit}
+              className="bg-green-600 hover:bg-green-700 gap-1"
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save Draft
+            </Button>
           </div>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
