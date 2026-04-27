@@ -1,15 +1,74 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * resolveProjectBillableItems — Project-level billable item resolver
+/*
+ * ═══════════════════════════════════════════════════════════════
+ * ⚠️  BILLING LOGIC CONTRACT
  *
- * ALL billing eligibility logic is in computeItems() below.
- * That function is IDENTICAL to the one in:
- *   - functions/computeBillableItemsCore (canonical reference)
- *   - functions/getProjectsBillingSummary (aggregator copy)
+ * computeItems() MUST be identical across:
+ *   1. functions/computeBillableItemsCore  (CANONICAL SOURCE)
+ *   2. functions/resolveProjectBillableItems  ← YOU ARE HERE
+ *   3. functions/getProjectsBillingSummary
  *
- * ⚠️  DO NOT modify computeItems() here without updating all 3 files.
+ * If you change logic:
+ *   1. Update computeItems() in ALL 3 files
+ *   2. Bump BILLING_LOGIC_VERSION
+ *   3. Update EXPECTED_OUTPUT in TEST_VECTOR if behavior changed
+ * ═══════════════════════════════════════════════════════════════
  */
+
+// ── Phase 4: Version lock ──
+const BILLING_LOGIC_VERSION = "v1.0";
+
+// ── Phase 1+2: Deterministic test vector with expected output ──
+const TEST_VECTOR = {
+  partCommitments: [{
+    id: "TV_P1", part_id: "TV_PART_1", required_total: 5, qty_removed: 1,
+    invoiced_qty: 2, unit_retail_snapshot: 100, unit_cost_snapshot: 50,
+  }],
+  serviceCommitments: [{
+    id: "TV_S1", service_id: "TV_SVC_1", description: "Test Service",
+    total_billable: 500, total_cost: 300, is_billed: false, status: "active", invoice_id: null,
+  }],
+  partMap: { "TV_PART_1": { part_name: "Test Part", requires_client_billing: true } },
+  lookups: {},
+};
+
+const EXPECTED_OUTPUT = {
+  item_count: 2,
+  part: { source_entity: "PartCommitment", qty_available_to_bill: 2, line_total: 200 },
+  service: { source_entity: "ServiceCommitment", qty_available_to_bill: 1, line_total: 500 },
+};
+
+function validateTestVector(callerName) {
+  const result = computeItems(TEST_VECTOR);
+  const errs = [];
+  if (result.items.length !== EXPECTED_OUTPUT.item_count)
+    errs.push(`item_count: got ${result.items.length}, expected ${EXPECTED_OUTPUT.item_count}`);
+  const part = result.items.find(i => i.type === 'part');
+  const svc = result.items.find(i => i.type === 'service');
+  if (!part) errs.push('part item missing');
+  else {
+    if (part.source_entity !== EXPECTED_OUTPUT.part.source_entity)
+      errs.push(`part.source_entity: got ${part.source_entity}, expected ${EXPECTED_OUTPUT.part.source_entity}`);
+    if (part.qty_available_to_bill !== EXPECTED_OUTPUT.part.qty_available_to_bill)
+      errs.push(`part.qty_available_to_bill: got ${part.qty_available_to_bill}, expected ${EXPECTED_OUTPUT.part.qty_available_to_bill}`);
+    if (part.line_total !== EXPECTED_OUTPUT.part.line_total)
+      errs.push(`part.line_total: got ${part.line_total}, expected ${EXPECTED_OUTPUT.part.line_total}`);
+  }
+  if (!svc) errs.push('service item missing');
+  else {
+    if (svc.source_entity !== EXPECTED_OUTPUT.service.source_entity)
+      errs.push(`svc.source_entity: got ${svc.source_entity}, expected ${EXPECTED_OUTPUT.service.source_entity}`);
+    if (svc.qty_available_to_bill !== EXPECTED_OUTPUT.service.qty_available_to_bill)
+      errs.push(`svc.qty_available_to_bill: got ${svc.qty_available_to_bill}, expected ${EXPECTED_OUTPUT.service.qty_available_to_bill}`);
+    if (svc.line_total !== EXPECTED_OUTPUT.service.line_total)
+      errs.push(`svc.line_total: got ${svc.line_total}, expected ${EXPECTED_OUTPUT.service.line_total}`);
+  }
+  if (errs.length > 0) {
+    console.error(`🚨 CRITICAL: Billing logic drift detected in ${callerName}! Failures: ${errs.join('; ')}`);
+  }
+  return { ok: errs.length === 0, errors: errs };
+}
 
 // ┌──────────────────────────────────────────────────────────────┐
 // │  CANONICAL COMPUTE — v1.0 — COPY FROM computeBillableItemsCore │
@@ -118,12 +177,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // ── Phase 3: Run test vector validation on every call ──
+    const _test_vector_validation = validateTestVector('resolveProjectBillableItems');
+
     const { project_id } = await req.json();
     if (!project_id) {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
 
-    // ── Parallel fetch ──
     const [
       commitments, serviceCommitments, parts, vendors, categories, services, serviceVendors,
     ] = await Promise.all([
@@ -142,7 +203,6 @@ Deno.serve(async (req) => {
     const serviceMap = Object.fromEntries(services.map(s => [s.id, s]));
     const serviceVendorMap = Object.fromEntries(serviceVendors.map(v => [v.id, v]));
 
-    // ── DELEGATE to canonical computeItems ──
     const { items, warnings } = computeItems({
       partCommitments: commitments,
       serviceCommitments,
@@ -156,6 +216,8 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       project_id,
+      BILLING_LOGIC_VERSION,
+      _test_vector_validation,
       items,
       summary: {
         total_items: items.length,
