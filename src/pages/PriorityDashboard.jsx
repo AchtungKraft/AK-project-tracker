@@ -725,6 +725,8 @@ export default function PriorityDashboard() {
                 teamMembers={teamMembers}
                 statuses={statuses}
                 commentCountByTaskId={commentCountByTaskId}
+                allTaskComments={allTaskComments}
+                updateTaskMutation={updateTaskMutation}
                 onTaskClick={setSelectedTask}
                 onToggleComplete={handleToggleComplete}
                 onUpdateDueDate={handleUpdateDueDate}
