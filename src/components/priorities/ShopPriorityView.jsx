@@ -1,28 +1,28 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, AlertTriangle, Zap, Clock, User, UserX, ChevronDown, ChevronRight } from "lucide-react";
+import { Flame, AlertTriangle, Zap, Clock, User, UserX, ChevronDown, ChevronRight, FolderKanban } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 
-const URGENCY_CONFIG = {
-  overdue: { label: "OVERDUE", icon: AlertTriangle, border: "border-l-red-600", bg: "bg-red-600/10", text: "text-red-400" },
-  today:   { label: "TODAY",   icon: Zap,           border: "border-l-orange-500", bg: "bg-orange-500/8", text: "text-orange-300" },
-  ready:   { label: "READY",   icon: Clock,         border: "border-l-gray-600", bg: "bg-gray-700/10", text: "text-gray-400" },
+// ── urgency helpers ──
+const URGENCY = {
+  overdue: { label: "OVERDUE", icon: AlertTriangle, text: "text-red-400", bg: "bg-red-600/10", border: "border-l-red-600" },
+  today:   { label: "TODAY",   icon: Zap,           text: "text-orange-300", bg: "bg-orange-500/8", border: "border-l-orange-500" },
+  ready:   { label: "READY",   icon: Clock,         text: "text-gray-400", bg: "bg-gray-700/10", border: "border-l-gray-700" },
 };
 
 function getSubBucket(task) {
   if (!task.due_date) return "ready";
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const dueStr = task.due_date.slice(0, 10);
   if (dueStr < todayStr) return "overdue";
   if (dueStr === todayStr) return "today";
   return "ready";
 }
 
-// Sort: due date asc within each sub-bucket
 const dueDateSort = (a, b) => {
   if (!a.due_date && !b.due_date) return 0;
   if (!a.due_date) return 1;
@@ -30,38 +30,50 @@ const dueDateSort = (a, b) => {
   return new Date(a.due_date) - new Date(b.due_date);
 };
 
-function UrgencySection({ config, tasks, sharedProps }) {
-  if (tasks.length === 0) return null;
+function splitAndSort(tasks) {
+  const o = [], t = [], r = [];
+  tasks.forEach(tk => {
+    const b = getSubBucket(tk);
+    if (b === "overdue") o.push(tk);
+    else if (b === "today") t.push(tk);
+    else r.push(tk);
+  });
+  [o, t, r].forEach(arr => arr.sort(dueDateSort));
+  return { overdue: o, today: t, ready: r };
+}
+
+// ── tiny urgency section inside a column ──
+function UrgencyBlock({ config, tasks, sp }) {
+  if (!tasks.length) return null;
   const Icon = config.icon;
   return (
     <div className="mt-1">
-      <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${config.bg}`}>
+      <div className={`flex items-center gap-1 px-1 py-px rounded ${config.bg}`}>
         <Icon className={`w-3 h-3 ${config.text}`} />
-        <span className={`text-[10px] font-bold tracking-wide ${config.text}`}>{config.label}</span>
+        <span className={`text-[10px] font-bold ${config.text}`}>{config.label}</span>
         <span className={`text-[10px] ${config.text} ml-auto`}>{tasks.length}</span>
       </div>
-      <div className="mt-0.5">
+      <div className="mt-px space-y-px">
         {tasks.map(task => (
-          <div key={task.id} className={`border-l ${config.border} pl-2 py-px`}>
+          <div key={task.id} className={`border-l ${config.border} pl-1.5 py-px`}>
             <TaskQuickPreview
               task={task}
-              projectName={sharedProps.projectMap[task.project_id]}
-              latestComment={sharedProps.latestCommentByTaskId[task.id]}
-              teamMembers={sharedProps.teamMembers}
-              onAssign={sharedProps.onAssign}
-              onTaskClick={sharedProps.onTaskClick}
+              latestComment={sp.latestCommentByTaskId[task.id]}
+              teamMembers={sp.teamMembers}
+              onAssign={sp.onAssign}
+              onTaskClick={sp.onTaskClick}
             >
               <TaskCard
                 task={task}
-                categories={sharedProps.categories}
-                teamMembers={sharedProps.teamMembers}
-                statuses={sharedProps.statuses}
-                onToggleComplete={sharedProps.onToggleComplete}
+                categories={sp.categories}
+                teamMembers={sp.teamMembers}
+                statuses={sp.statuses}
+                onToggleComplete={sp.onToggleComplete}
                 onClick={() => {}}
-                commentCount={sharedProps.commentCountByTaskId[task.id] || 0}
-                onUpdateDueDate={sharedProps.onUpdateDueDate}
-                onUpdateStartDate={sharedProps.onUpdateStartDate}
-                onTogglePriority={sharedProps.onTogglePriority}
+                commentCount={sp.commentCountByTaskId[task.id] || 0}
+                onUpdateDueDate={sp.onUpdateDueDate}
+                onUpdateStartDate={sp.onUpdateStartDate}
+                onTogglePriority={sp.onTogglePriority}
                 showInlineControls={true}
                 compact={true}
               />
@@ -73,64 +85,130 @@ function UrgencySection({ config, tasks, sharedProps }) {
   );
 }
 
-function PersonGroup({ memberId, memberName, tasks, isUnassigned, sharedProps }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  // Split tasks into overdue / today / ready
-  const { overdue, today, ready } = useMemo(() => {
-    const o = [], t = [], r = [];
-    tasks.forEach(task => {
-      const b = getSubBucket(task);
-      if (b === "overdue") o.push(task);
-      else if (b === "today") t.push(task);
-      else r.push(task);
-    });
-    [o, t, r].forEach(arr => arr.sort(dueDateSort));
-    return { overdue: o, today: t, ready: r };
-  }, [tasks]);
-
+// ── single column (person or unassigned) ──
+function PersonColumn({ name, initials, tasks, isShop, sp }) {
+  const { overdue, today, ready } = useMemo(() => splitAndSort(tasks), [tasks]);
   const overdueCount = overdue.length;
 
   return (
-    <div className={`rounded-lg border ${isUnassigned ? "border-yellow-700/40 bg-yellow-900/5" : "border-gray-800 bg-gray-900/30"}`}>
-      {/* Group header */}
+    <div className={`w-[290px] min-w-[290px] shrink-0 rounded-lg border flex flex-col ${
+      isShop ? "border-yellow-700/40 bg-yellow-950/10" : "border-gray-800 bg-gray-900/30"
+    }`}>
+      {/* Column header */}
+      <div className={`px-2.5 py-1.5 border-b ${isShop ? "border-yellow-800/30" : "border-gray-800"} flex items-center gap-1.5`}>
+        {isShop ? (
+          <UserX className="w-3.5 h-3.5 text-yellow-500" />
+        ) : (
+          <div className="w-5 h-5 rounded-full bg-blue-600/30 flex items-center justify-center text-[9px] font-bold text-blue-400">
+            {initials}
+          </div>
+        )}
+        <span className={`text-xs font-semibold truncate ${isShop ? "text-yellow-400" : "text-white"}`}>
+          {isShop ? "UNASSIGNED / SHOP" : name}
+        </span>
+        <span className="text-[10px] text-gray-500 ml-auto shrink-0">{tasks.length}</span>
+        {overdueCount > 0 && (
+          <span className="text-[9px] font-semibold text-red-400 bg-red-900/30 px-1 py-px rounded shrink-0">
+            {overdueCount}!
+          </span>
+        )}
+      </div>
+      {/* Tasks */}
+      <div className="px-1.5 pb-1.5 overflow-y-auto flex-1">
+        <UrgencyBlock config={URGENCY.overdue} tasks={overdue} sp={sp} />
+        <UrgencyBlock config={URGENCY.today} tasks={today} sp={sp} />
+        <UrgencyBlock config={URGENCY.ready} tasks={ready} sp={sp} />
+        {tasks.length === 0 && (
+          <p className="text-[10px] text-gray-600 text-center py-4">No tasks</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── project section with horizontal columns ──
+function ProjectSection({ project, projectTasks, allTeamMembers, sp }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Build columns: unassigned + each member who has tasks
+  const { shopTasks, memberColumns } = useMemo(() => {
+    const shop = [];
+    const byMember = {};
+
+    projectTasks.forEach(t => {
+      if (!t.assigned_team_member_id) {
+        shop.push(t);
+      } else {
+        if (!byMember[t.assigned_team_member_id]) byMember[t.assigned_team_member_id] = [];
+        byMember[t.assigned_team_member_id].push(t);
+      }
+    });
+
+    const cols = Object.entries(byMember)
+      .map(([id, tasks]) => {
+        const tm = allTeamMembers.find(m => m.id === id);
+        const name = tm?.full_name || "Unknown";
+        const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+        return { id, name, initials, tasks };
+      })
+      .sort((a, b) => b.tasks.length - a.tasks.length);
+
+    return { shopTasks: shop, memberColumns: cols };
+  }, [projectTasks, allTeamMembers]);
+
+  const overdueTotal = projectTasks.filter(t => getSubBucket(t) === "overdue").length;
+
+  return (
+    <div className="rounded-lg border border-gray-800 bg-black/20">
+      {/* Project header */}
       <button
         onClick={() => setCollapsed(v => !v)}
         className="flex items-center gap-2 w-full px-3 py-2 text-left"
       >
         {collapsed ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />}
-        {isUnassigned ? (
-          <UserX className="w-4 h-4 text-yellow-500" />
-        ) : (
-          <div className="w-5 h-5 rounded-full bg-blue-600/30 flex items-center justify-center text-[10px] font-bold text-blue-400">
-            {(memberName || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
-          </div>
+        <FolderKanban className="w-4 h-4 text-red-400" />
+        <span className="text-sm font-semibold text-white truncate">{project.name}</span>
+        {project.client_name && (
+          <span className="text-xs text-gray-500 truncate">— {project.client_name}</span>
         )}
-        <span className={`text-sm font-semibold ${isUnassigned ? "text-yellow-400" : "text-white"}`}>
-          {isUnassigned ? "UNASSIGNED" : memberName}
-        </span>
-        <span className="text-xs text-gray-500 ml-auto">
-          {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
-        </span>
-        {overdueCount > 0 && (
-          <span className="text-[10px] font-semibold text-red-400 bg-red-900/30 px-1.5 py-0.5 rounded">
-            {overdueCount} overdue
+        <span className="text-xs text-gray-500 ml-auto shrink-0">{projectTasks.length} tasks</span>
+        {overdueTotal > 0 && (
+          <span className="text-[10px] font-semibold text-red-400 bg-red-900/30 px-1.5 py-0.5 rounded shrink-0">
+            {overdueTotal} overdue
           </span>
         )}
       </button>
 
-      {/* Tasks */}
+      {/* Horizontal columns */}
       {!collapsed && (
-        <div className="px-2 pb-2">
-          <UrgencySection config={URGENCY_CONFIG.overdue} tasks={overdue} sharedProps={sharedProps} />
-          <UrgencySection config={URGENCY_CONFIG.today} tasks={today} sharedProps={sharedProps} />
-          <UrgencySection config={URGENCY_CONFIG.ready} tasks={ready} sharedProps={sharedProps} />
+        <div className="px-2 pb-2 overflow-x-auto">
+          <div className="flex gap-2 min-w-min">
+            {/* Unassigned / Shop first */}
+            {shopTasks.length > 0 && (
+              <PersonColumn name="" tasks={shopTasks} isShop sp={sp} />
+            )}
+            {/* Team member columns */}
+            {memberColumns.map(col => (
+              <PersonColumn
+                key={col.id}
+                name={col.name}
+                initials={col.initials}
+                tasks={col.tasks}
+                isShop={false}
+                sp={sp}
+              />
+            ))}
+            {shopTasks.length === 0 && memberColumns.length === 0 && (
+              <p className="text-xs text-gray-600 py-4 px-2">No tasks in this project.</p>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+// ── main view ──
 export default function ShopPriorityView({
   tasks, projects, categories, teamMembers, statuses,
   commentCountByTaskId, allTaskComments, updateTaskMutation,
@@ -150,12 +228,6 @@ export default function ShopPriorityView({
     return () => { cancelled = true; };
   }, [teamMembers]);
 
-  const projectMap = useMemo(() => {
-    const m = {};
-    projects.forEach(p => { m[p.id] = p.name; });
-    return m;
-  }, [projects]);
-
   const latestCommentByTaskId = useMemo(() => {
     const m = {};
     if (!allTaskComments) return m;
@@ -166,7 +238,7 @@ export default function ShopPriorityView({
     return m;
   }, [allTaskComments]);
 
-  // Apply filters
+  // Filter
   const filteredTasks = useMemo(() => {
     let result = tasks;
     if (showMine && currentUserId) result = result.filter(t => t.assigned_team_member_id === currentUserId);
@@ -178,30 +250,20 @@ export default function ShopPriorityView({
     return result;
   }, [tasks, showMine, currentUserId, filterByMemberId]);
 
-  // Group by assignee
-  const groups = useMemo(() => {
-    const byMember = {};
-    const unassigned = [];
-
-    filteredTasks.forEach(task => {
-      if (!task.assigned_team_member_id) {
-        unassigned.push(task);
-      } else {
-        if (!byMember[task.assigned_team_member_id]) byMember[task.assigned_team_member_id] = [];
-        byMember[task.assigned_team_member_id].push(task);
-      }
+  // Group by project — only projects that have tasks
+  const projectGroups = useMemo(() => {
+    const byProject = {};
+    filteredTasks.forEach(t => {
+      if (!byProject[t.project_id]) byProject[t.project_id] = [];
+      byProject[t.project_id].push(t);
     });
-
-    // Build sorted array: most tasks first
-    const memberGroups = Object.entries(byMember)
-      .map(([id, tasks]) => {
-        const tm = teamMembers.find(m => m.id === id);
-        return { id, name: tm?.full_name || "Unknown", tasks };
+    return Object.entries(byProject)
+      .map(([pid, ptasks]) => {
+        const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown Project" };
+        return { project, tasks: ptasks };
       })
       .sort((a, b) => b.tasks.length - a.tasks.length);
-
-    return { unassigned, memberGroups };
-  }, [filteredTasks, teamMembers]);
+  }, [filteredTasks, projects]);
 
   const handleAssign = useCallback(async (task, memberId) => {
     if (!updateTaskMutation) return;
@@ -214,19 +276,16 @@ export default function ShopPriorityView({
     setShowMine(false);
   }, []);
 
-  const sharedProps = {
-    categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap,
+  const sp = {
+    categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId,
     onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
     onAssign: handleAssign,
   };
-
-  const totalCount = filteredTasks.length;
 
   return (
     <div className="space-y-3">
       <ShopTeamSummaryBar tasks={tasks} teamMembers={teamMembers} onFilterByMember={handleFilterByMember} activeFilterId={filterByMemberId} />
 
-      {/* Light filters */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <button
           onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}
@@ -243,32 +302,20 @@ export default function ShopPriorityView({
         )}
       </div>
 
-      {totalCount === 0 ? (
+      {filteredTasks.length === 0 ? (
         <div className="text-center py-10">
           <Flame className="w-8 h-8 text-red-500/20 mx-auto mb-2" />
           <p className="text-gray-500 text-sm">No priority tasks.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {/* Unassigned first */}
-          {groups.unassigned.length > 0 && (
-            <PersonGroup
-              memberId="unassigned"
-              memberName="Unassigned"
-              tasks={groups.unassigned}
-              isUnassigned={true}
-              sharedProps={sharedProps}
-            />
-          )}
-          {/* Then by person, most tasks first */}
-          {groups.memberGroups.map(g => (
-            <PersonGroup
-              key={g.id}
-              memberId={g.id}
-              memberName={g.name}
-              tasks={g.tasks}
-              isUnassigned={false}
-              sharedProps={sharedProps}
+        <div className="space-y-3">
+          {projectGroups.map(({ project, tasks: ptasks }) => (
+            <ProjectSection
+              key={project.id}
+              project={project}
+              projectTasks={ptasks}
+              allTeamMembers={teamMembers}
+              sp={sp}
             />
           ))}
         </div>
