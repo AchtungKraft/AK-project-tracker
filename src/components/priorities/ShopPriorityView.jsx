@@ -254,7 +254,7 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
         )}
       </div>
       {/* Project groups */}
-      <div className="flex-1 overflow-y-auto px-0.5 py-0.5">
+      <div className="flex-1 overflow-y-auto overflow-x-visible px-0.5 py-0.5">
         {projectGroups.map(({ project, tasks: ptasks }) => (
           <ProjectGroup key={project.id} project={project} tasks={ptasks} sp={sp} memberId={memberId} />
         ))}

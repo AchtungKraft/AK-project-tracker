@@ -19,7 +19,7 @@ export default function TaskQuickPreview({
   const assigned = teamMembers.find(m => m.id === task.assigned_team_member_id);
 
   return (
-    <div className="flex items-start gap-1 py-px">
+    <div className="group/row relative flex items-start gap-1 py-px">
       {/* Task content — click opens detail */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick(task)}>
         {children}
@@ -36,6 +36,14 @@ export default function TaskQuickPreview({
           </div>
         )}
       </div>
+
+      {/* Hover description panel */}
+      {task.description && (
+        <div className="absolute z-50 left-full top-0 ml-2 w-72 rounded-md bg-neutral-900/95 border border-white/10 p-3 shadow-lg pointer-events-none opacity-0 group-hover/row:opacity-100 transition-opacity duration-150 delay-150">
+          <div className="text-xs font-medium text-white mb-1 line-clamp-1">{task.name}</div>
+          <div className="text-xs text-white/70 leading-snug line-clamp-5 whitespace-pre-wrap">{task.description}</div>
+        </div>
+      )}
 
       {/* Assign popover trigger — icon only, hover reveals name */}
       <div className="shrink-0 mt-0.5 group/assign" onClick={e => e.stopPropagation()}>
