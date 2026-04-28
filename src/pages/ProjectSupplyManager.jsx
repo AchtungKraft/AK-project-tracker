@@ -70,7 +70,7 @@ import { cn } from "@/lib/utils";
 import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
 import ReceivingGapDiagnosticsPanel from "@/components/supply/ReceivingGapDiagnosticsPanel";
 import IntegrityViolationSummary from "@/components/supply/IntegrityViolationSummary";
-import { resolveCanonicalCommitment, createModalGuard } from "@/components/supply/resolveCanonicalCommitment";
+import { resolveCanonicalCommitment, normalizeCommitmentForModal, validateCommitmentForModal } from "@/components/supply/commitmentModalAdapter";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -423,14 +423,14 @@ export default function ProjectSupplyManager() {
         inventory_snapshot: item.inventory_snapshot,
         
         // PART 3: Inventory location for expanded detail view
-        inventory_location: item.inventory_location || item._raw?.inventory_location || null,
+        inventory_location: item.inventory_location || null,
         
         // PO fields for "View PO" navigation
         order_id: item.order_id ?? null,
         order_number: item.order_number ?? null,
         
-        // FIX 3: order_line_item_ids promoted to top-level — primary source, _raw fallback
-        order_line_item_ids: item.order_line_item_ids || item._raw?.order_line_item_ids || [],
+        // CANONICAL: order_line_item_ids promoted to top-level — no _raw fallback
+        order_line_item_ids: item.order_line_item_ids || [],
         
         // Override flags for pricing
         cost_override: item._raw?.cost_override || false,
@@ -477,38 +477,32 @@ export default function ProjectSupplyManager() {
   // may pass partial/minimal commitment refs — these guards resolve
   // to the full enriched object or reject with a console warning.
   // ═══════════════════════════════════════════════════════════════════
-  const guardedSetQtyManagerDrawer = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:qtyManager] Rejected:', incoming?.id || incoming); return; } setQtyManagerDrawer(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetReceiveModal = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:receive] Rejected:', incoming?.id || incoming); return; } setReceiveModal(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetInstallModal = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:install] Rejected:', incoming?.id || incoming); return; } setInstallModal(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetReverseInstallModal = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:reverseInstall] Rejected:', incoming?.id || incoming); return; } setReverseInstallModal(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetDeltaOrderCommitment = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:deltaOrder] Rejected:', incoming?.id || incoming); return; } setDeltaOrderCommitment(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetCancelModal = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:cancel] Rejected:', incoming?.id || incoming); return; } setCancelModal(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetRemoveCreditModal = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:removeCredit] Rejected:', incoming?.id || incoming); return; } setRemoveCreditModal(r); },
-    [enrichedCommitments]
-  );
-  const guardedSetPricingEditor = useCallback(
-    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:pricingEditor] Rejected:', incoming?.id || incoming); return; } setPricingEditorCommitment(r); },
-    [enrichedCommitments]
-  );
+  // CANONICAL MODAL OPENERS — resolve + normalize + validate before setting state
+  const openModal = useCallback((modalName, setter, incoming) => {
+    const resolved = resolveCanonicalCommitment(incoming, enrichedCommitments);
+    if (!resolved) {
+      console.warn(`[ModalGuard:${modalName}] Rejected — no canonical match:`, incoming?.id || incoming);
+      toast.error(`Cannot open ${modalName}: commitment not found`);
+      return;
+    }
+    const normalized = normalizeCommitmentForModal(resolved);
+    const { valid, missing } = validateCommitmentForModal(normalized, modalName);
+    if (!valid) {
+      console.warn(`[ModalGuard:${modalName}] Invalid commitment — missing:`, missing);
+      toast.error(`Cannot open ${modalName}: invalid data`);
+      return;
+    }
+    setter(normalized);
+  }, [enrichedCommitments]);
+
+  const guardedSetQtyManagerDrawer = useCallback((incoming) => openModal('Quantity Manager', setQtyManagerDrawer, incoming), [openModal]);
+  const guardedSetReceiveModal = useCallback((incoming) => openModal('Receive', setReceiveModal, incoming), [openModal]);
+  const guardedSetInstallModal = useCallback((incoming) => openModal('Install', setInstallModal, incoming), [openModal]);
+  const guardedSetReverseInstallModal = useCallback((incoming) => openModal('Reverse Install', setReverseInstallModal, incoming), [openModal]);
+  const guardedSetDeltaOrderCommitment = useCallback((incoming) => openModal('Delta Order', setDeltaOrderCommitment, incoming), [openModal]);
+  const guardedSetCancelModal = useCallback((incoming) => openModal('Cancel', setCancelModal, incoming), [openModal]);
+  const guardedSetRemoveCreditModal = useCallback((incoming) => openModal('Remove Credit', setRemoveCreditModal, incoming), [openModal]);
+  const guardedSetPricingEditor = useCallback((incoming) => openModal('Pricing Editor', setPricingEditorCommitment, incoming), [openModal]);
 
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
@@ -1375,12 +1369,14 @@ export default function ProjectSupplyManager() {
 
       {/* Pricing Editor Modal */}
       {pricingEditorCommitment && (
-        <CommitmentPricingEditor
-          commitment={pricingEditorCommitment}
-          open={!!pricingEditorCommitment}
-          onClose={() => setPricingEditorCommitment(null)}
-          onSuccess={() => invalidateSupply()}
-        />
+        <SafeRenderBoundary context="Pricing Modal">
+          <CommitmentPricingEditor
+            commitment={pricingEditorCommitment}
+            open={!!pricingEditorCommitment}
+            onClose={() => setPricingEditorCommitment(null)}
+            onSuccess={() => invalidateSupply()}
+          />
+        </SafeRenderBoundary>
       )}
 
       {/* Backfill PO Costs Modal */}
@@ -1393,42 +1389,48 @@ export default function ProjectSupplyManager() {
       {/* Modals - FORWARD MODEL (no pool modals) */}
       {/* FIX 4: Pass full enriched commitment */}
       {deltaOrderCommitment && (
-        <DeltaOrderModal
-          commitment={deltaOrderCommitment}
-          part={deltaOrderCommitment.part}
-          onClose={() => setDeltaOrderCommitment(null)}
-          onSuccess={() => invalidateSupply()}
-        />
+        <SafeRenderBoundary context="Delta Order Modal">
+          <DeltaOrderModal
+            commitment={deltaOrderCommitment}
+            part={deltaOrderCommitment.part}
+            onClose={() => setDeltaOrderCommitment(null)}
+            onSuccess={() => invalidateSupply()}
+          />
+        </SafeRenderBoundary>
       )}
 
       {installModal && (
-        <InstallPartModal
-          requirement={{ 
-            part_id: installModal.part_id, 
-            project_id: installModal.project_id || projectId,
-            commitment_id: installModal.id
-          }}
-          commitment={installModal}
-          part={installModal.part}
-          onClose={() => setInstallModal(null)}
-          onSuccess={() => {
-            invalidateSupply();
-            setInstallModal(null);
-          }}
-        />
+        <SafeRenderBoundary context="Install Modal">
+          <InstallPartModal
+            requirement={{ 
+              part_id: installModal.part_id, 
+              project_id: installModal.project_id || projectId,
+              commitment_id: installModal.id
+            }}
+            commitment={installModal}
+            part={installModal.part}
+            onClose={() => setInstallModal(null)}
+            onSuccess={() => {
+              invalidateSupply();
+              setInstallModal(null);
+            }}
+          />
+        </SafeRenderBoundary>
       )}
 
       {reverseInstallModal && (
-        <ReverseInstallationModal
-          installedParts={[]}
-          commitment={reverseInstallModal}
-          part={reverseInstallModal.part}
-          onClose={() => setReverseInstallModal(null)}
-          onSuccess={() => {
-            invalidateSupply();
-            setReverseInstallModal(null);
-          }}
-        />
+        <SafeRenderBoundary context="Reverse Install Modal">
+          <ReverseInstallationModal
+            installedParts={[]}
+            commitment={reverseInstallModal}
+            part={reverseInstallModal.part}
+            onClose={() => setReverseInstallModal(null)}
+            onSuccess={() => {
+              invalidateSupply();
+              setReverseInstallModal(null);
+            }}
+          />
+        </SafeRenderBoundary>
       )}
 
       {/* FIX 3+4: Pass full enriched commitment — order_line_item_ids now top-level */}
@@ -1453,44 +1455,50 @@ export default function ProjectSupplyManager() {
 
       {/* FIX 2+4: Pass full enriched commitment — no payload stripping */}
       {removeCreditModal && (
-        <RemovePartCreditModal
-          commitment={removeCreditModal}
-          part={removeCreditModal.part}
-          project={project}
-          onClose={() => setRemoveCreditModal(null)}
-          onSuccess={() => {
-            invalidateSupply();
-            setRemoveCreditModal(null);
-          }}
-        />
+        <SafeRenderBoundary context="Remove Credit Modal">
+          <RemovePartCreditModal
+            commitment={removeCreditModal}
+            part={removeCreditModal.part}
+            project={project}
+            onClose={() => setRemoveCreditModal(null)}
+            onSuccess={() => {
+              invalidateSupply();
+              setRemoveCreditModal(null);
+            }}
+          />
+        </SafeRenderBoundary>
       )}
 
       {/* FIX 4: Pass full enriched commitment */}
       {cancelModal && (
-        <CancelCommitmentModal
-          commitment={cancelModal}
-          part={cancelModal.part}
-          project={project}
-          onClose={() => setCancelModal(null)}
-          onSuccess={() => {
-            invalidateSupply();
-            setCancelModal(null);
-            toast.success('Commitment removed');
-          }}
-        />
+        <SafeRenderBoundary context="Cancel Modal">
+          <CancelCommitmentModal
+            commitment={cancelModal}
+            part={cancelModal.part}
+            project={project}
+            onClose={() => setCancelModal(null)}
+            onSuccess={() => {
+              invalidateSupply();
+              setCancelModal(null);
+              toast.success('Commitment removed');
+            }}
+          />
+        </SafeRenderBoundary>
       )}
 
       {/* FIX 4+6: Pass full enriched commitment — includes coverage_qty, to_order_qty, received_qty, coverage_percent */}
       {qtyManagerDrawer && (
-        <CommitmentQuantityDrawer
-          open={!!qtyManagerDrawer}
-          onClose={() => setQtyManagerDrawer(null)}
-          commitment={qtyManagerDrawer}
-          part={qtyManagerDrawer.part}
-          onSuccess={() => {
-            invalidateSupply();
-          }}
-        />
+        <SafeRenderBoundary context="Quantity Modal">
+          <CommitmentQuantityDrawer
+            open={!!qtyManagerDrawer}
+            onClose={() => setQtyManagerDrawer(null)}
+            commitment={qtyManagerDrawer}
+            part={qtyManagerDrawer.part}
+            onSuccess={() => {
+              invalidateSupply();
+            }}
+          />
+        </SafeRenderBoundary>
       )}
 
       {/* Bulk PO Preview Modal — Enhanced with expand/collapse */}

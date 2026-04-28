@@ -196,7 +196,7 @@ export default function ReceiveInventoryModal({
   
   const handleConfirmedReceive = async () => {
     // PHASE: CRASH-PROOF INSTRUMENTATION
-    const orderLineItemIds = commitment?.order_line_item_ids ?? commitment?._raw?.order_line_item_ids ?? [];
+    const orderLineItemIds = commitment?.order_line_item_ids || [];
     const debugPayload = {
       timestamp: new Date().toISOString(),
       mode: commitment && orderLineItemIds[0] ? 'RECEIVE_PO' : 'ADD_STOCK',
