@@ -43,6 +43,7 @@ import BlockedActionResolutionModal from "@/components/supply/BlockedActionResol
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import SafeRenderBoundary from "@/components/ui/SafeRenderBoundary";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
@@ -562,9 +563,15 @@ export default function ProjectSupplyManager() {
   // NOTE: Old table-based rendering functions removed.
   // Now using PSMGroupedView component for GNO-style card layout.
 
+  // CANONICAL: Single refresh handler for ALL modal success callbacks.
+  // Uses forceAppRefresh for comprehensive cross-domain invalidation + refetch.
+  const handleModalSuccess = useCallback(async () => {
+    await forceAppRefresh(queryClient, { projectIds: [projectId] });
+  }, [queryClient, projectId]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refetchSupply();
+    await forceAppRefresh(queryClient, { projectIds: [projectId] });
     setIsRefreshing(false);
   };
 
@@ -674,13 +681,13 @@ export default function ProjectSupplyManager() {
         toast.error('No orders created - check commitment eligibility');
       }
 
-      // Invalidate via read model
-      invalidateSupply();
-      
       // Clear selection - stay on Buy tab (no navigation)
       setSelectedItems(new Set());
       setShowBulkPOPreview(false);
       setBulkPOPreviewData(null);
+      
+      // Comprehensive refresh after PO creation
+      await handleModalSuccess();
       
       audit.trackSuccess('bulk_po_execute', { created_count: created_orders.length });
     } catch (error) {
@@ -734,8 +741,8 @@ export default function ProjectSupplyManager() {
         toast.error('No orders created - check commitment eligibility');
       }
 
-      // Invalidate and refresh via read model - stay on current tab
-      invalidateSupply();
+      // Comprehensive refresh after PO creation
+      await handleModalSuccess();
       audit.trackSuccess('single_po_create');
     } catch (error) {
       audit.trackError('single_po_create', error);
@@ -814,11 +821,11 @@ export default function ProjectSupplyManager() {
         commitment_ids: [commitment.id],
       });
       toast.success('Costs updated from PO');
-      invalidateSupply();
+      await handleModalSuccess();
     } catch (err) {
       toast.error('Sync failed: ' + err.message);
     }
-  }, [invalidateSupply]);
+  }, [handleModalSuccess]);
 
   const handleBatchSyncCost = useCallback(async (commitmentIds) => {
     // Accept explicit array (from monitor) or use selectedItems
@@ -852,11 +859,11 @@ export default function ProjectSupplyManager() {
       }
       
       setSelectedItems(new Set());
-      invalidateSupply();
+      await handleModalSuccess();
     } catch (err) {
       toast.error('Sync failed: ' + err.message);
     }
-  }, [selectedItems, invalidateSupply]);
+  }, [selectedItems, handleModalSuccess]);
 
   if (!projectId) {
     return (
@@ -1029,7 +1036,7 @@ export default function ProjectSupplyManager() {
                   <p className="text-xs text-gray-500">Auto: reserves stock first, remainder goes to order queue.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <AddPartButton projectId={projectId} onSuccess={() => invalidateSupply()} />
+                  <AddPartButton projectId={projectId} onSuccess={handleModalSuccess} />
                 </div>
               </div>
 
@@ -1371,10 +1378,10 @@ export default function ProjectSupplyManager() {
       {pricingEditorCommitment && (
         <SafeRenderBoundary context="Pricing Modal">
           <CommitmentPricingEditor
-            commitment={pricingEditorCommitment}
-            open={!!pricingEditorCommitment}
-            onClose={() => setPricingEditorCommitment(null)}
-            onSuccess={() => invalidateSupply()}
+           commitment={pricingEditorCommitment}
+           open={!!pricingEditorCommitment}
+           onClose={() => setPricingEditorCommitment(null)}
+           onSuccess={() => { setPricingEditorCommitment(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1383,6 +1390,7 @@ export default function ProjectSupplyManager() {
       <BackfillPOCostsModal
         open={showBackfillModal}
         onClose={() => setShowBackfillModal(false)}
+        onSuccess={handleModalSuccess}
         projectId={projectId}
       />
 
@@ -1394,7 +1402,7 @@ export default function ProjectSupplyManager() {
             commitment={deltaOrderCommitment}
             part={deltaOrderCommitment.part}
             onClose={() => setDeltaOrderCommitment(null)}
-            onSuccess={() => invalidateSupply()}
+            onSuccess={() => { setDeltaOrderCommitment(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1410,10 +1418,7 @@ export default function ProjectSupplyManager() {
             commitment={installModal}
             part={installModal.part}
             onClose={() => setInstallModal(null)}
-            onSuccess={() => {
-              invalidateSupply();
-              setInstallModal(null);
-            }}
+            onSuccess={() => { setInstallModal(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1425,10 +1430,7 @@ export default function ProjectSupplyManager() {
             commitment={reverseInstallModal}
             part={reverseInstallModal.part}
             onClose={() => setReverseInstallModal(null)}
-            onSuccess={() => {
-              invalidateSupply();
-              setReverseInstallModal(null);
-            }}
+            onSuccess={() => { setReverseInstallModal(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1441,14 +1443,7 @@ export default function ProjectSupplyManager() {
             commitment={receiveModal}
             part={receiveModal.part}
             onClose={() => setReceiveModal(null)}
-            onSuccess={() => {
-              try {
-                invalidateSupply();
-              } catch (err) {
-                console.error("[PSM] invalidateSupply error (non-fatal):", err);
-              }
-              setReceiveModal(null);
-            }}
+            onSuccess={() => { setReceiveModal(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1461,10 +1456,7 @@ export default function ProjectSupplyManager() {
             part={removeCreditModal.part}
             project={project}
             onClose={() => setRemoveCreditModal(null)}
-            onSuccess={() => {
-              invalidateSupply();
-              setRemoveCreditModal(null);
-            }}
+            onSuccess={() => { setRemoveCreditModal(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1477,11 +1469,7 @@ export default function ProjectSupplyManager() {
             part={cancelModal.part}
             project={project}
             onClose={() => setCancelModal(null)}
-            onSuccess={() => {
-              invalidateSupply();
-              setCancelModal(null);
-              toast.success('Commitment removed');
-            }}
+            onSuccess={() => { setCancelModal(null); handleModalSuccess(); toast.success('Commitment removed'); }}
           />
         </SafeRenderBoundary>
       )}
@@ -1494,9 +1482,7 @@ export default function ProjectSupplyManager() {
             onClose={() => setQtyManagerDrawer(null)}
             commitment={qtyManagerDrawer}
             part={qtyManagerDrawer.part}
-            onSuccess={() => {
-              invalidateSupply();
-            }}
+            onSuccess={handleModalSuccess}
           />
         </SafeRenderBoundary>
       )}
@@ -1538,7 +1524,7 @@ export default function ProjectSupplyManager() {
           onClose={() => setBlockedItems(null)}
           onResolved={() => {
             setBlockedItems(null);
-            invalidateSupply();
+            handleModalSuccess();
           }}
           onResolveVendor={resolveVendor}
           onResolveBilling={resolveBilling}
@@ -1551,7 +1537,7 @@ export default function ProjectSupplyManager() {
       {selectedPartId && (
         <PartModal
           partId={selectedPartId}
-          onClose={() => setSelectedPartId(null)}
+          onClose={() => { setSelectedPartId(null); handleModalSuccess(); }}
         />
       )}
     </MobileSafeAreaContainer>
