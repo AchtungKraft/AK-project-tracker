@@ -225,10 +225,13 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
     <div
       className={cn(
         "rounded transition-all cursor-pointer group",
-        task.is_priority 
-          ? 'bg-red-950/20 border-l-2 border-l-red-500' 
-          : 'hover:bg-gray-800/40',
-        isCompact ? "py-0.5 px-1" : "p-2"
+        isCompact
+          ? task.is_priority
+            ? "border-l-2 border-l-red-500 py-0.5 px-1"
+            : "py-0.5 px-1"
+          : task.is_priority
+            ? "bg-red-950/20 border-l-2 border-l-red-500 p-2"
+            : "hover:bg-gray-800/40 p-2"
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1.5" : "gap-2")}>

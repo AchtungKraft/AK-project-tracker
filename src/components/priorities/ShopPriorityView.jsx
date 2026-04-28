@@ -85,11 +85,11 @@ function UrgencyRows({ bucket, tasks, sp, showProject }) {
         <span className={`text-[8px] font-bold tracking-wider ${cfg.text}`}>{cfg.label}</span>
         <span className={`text-[8px] ${cfg.text} ml-auto`}>{tasks.length}</span>
       </div>
-      {tasks.map(task => (
-        <div key={task.id} className="-mt-px">
-          <ShopTaskRow task={task} sp={sp} showProject={showProject} />
-        </div>
-      ))}
+      <div className="space-y-1">
+        {tasks.map(task => (
+          <ShopTaskRow key={task.id} task={task} sp={sp} showProject={showProject} />
+        ))}
+      </div>
     </>
   );
 }
@@ -171,47 +171,52 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
     sp.onAddTask?.(project.id, memberId);
   };
 
+  const hasOverdue = overdueCount > 0;
+
   return (
     <div className="mt-4 first:mt-1">
       {/* Top divider */}
       <div className="border-t border-white/10" />
-      {/* Project header */}
-      <div className="flex items-center gap-1.5 w-full pt-1.5">
-        <button
-          onClick={() => setCollapsed(v => !v)}
-          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
-        >
-          {collapsed
-            ? <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
-            : <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />}
-          <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
-        </button>
-        <span className="text-[9px] text-gray-600 shrink-0">
-          {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-          {overdueCount > 0 && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
-        </span>
-        <button
-          onClick={handleAddTask}
-          className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-green-400 transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-green-900/20"
-          title="Add task to this project"
-        >
-          <Plus className="w-2.5 h-2.5" />
-          <span className="hidden sm:inline">Task</span>
-        </button>
-      </div>
-      <div className="border-b border-white/10 mt-0.5 mb-0.5" />
-      {!collapsed && (
-        <div>
-          {bucketGroups.map(({ bucket, tasks: bTasks }) => (
-            <BucketGroup key={bucket.id} bucketName={bucket.name} tasks={bTasks} sp={sp} />
-          ))}
-          <div className="ml-4">
-            <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
-            <UrgencyRows bucket="today" tasks={today} sp={sp} />
-            <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
-          </div>
+      {/* Project block with subtle background */}
+      <div className={`rounded-md px-2 py-1.5 mt-0.5 ${hasOverdue ? "bg-red-500/5" : "bg-white/[0.03]"}`}>
+        {/* Project header */}
+        <div className="flex items-center gap-1.5 w-full">
+          <button
+            onClick={() => setCollapsed(v => !v)}
+            className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+          >
+            {collapsed
+              ? <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
+              : <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />}
+            <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
+          </button>
+          <span className="text-[9px] text-gray-600 shrink-0">
+            {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+            {hasOverdue && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
+          </span>
+          <button
+            onClick={handleAddTask}
+            className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-green-400 transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-green-900/20"
+            title="Add task to this project"
+          >
+            <Plus className="w-2.5 h-2.5" />
+            <span className="hidden sm:inline">Task</span>
+          </button>
         </div>
-      )}
+        <div className="border-b border-white/10 mt-0.5 mb-1" />
+        {!collapsed && (
+          <div>
+            {bucketGroups.map(({ bucket, tasks: bTasks }) => (
+              <BucketGroup key={bucket.id} bucketName={bucket.name} tasks={bTasks} sp={sp} />
+            ))}
+            <div className="ml-4">
+              <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
+              <UrgencyRows bucket="today" tasks={today} sp={sp} />
+              <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
