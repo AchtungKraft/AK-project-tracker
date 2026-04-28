@@ -181,6 +181,7 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
   // Use canonical supply action dispatcher
   const mutation = useMutation({
     mutationFn: async ({ action_type, qty_delta, reason }) => {
+      if (!commitment) throw new Error('No commitment provided');
       // Calculate new required_total based on action
       const currentRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
       let newRequired;
@@ -397,10 +398,11 @@ export default function CommitmentQuantityManager({
   const [impactPreview, setImpactPreview] = useState(null);
   const queryClient = useQueryClient();
 
-  // Fetch projects for reallocation
+  // Fetch projects for reallocation — disabled when no commitment
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list()
+    queryFn: () => base44.entities.Project.list(),
+    enabled: !!commitment,
   });
 
   const otherProjects = projects.filter(p => p.id !== commitment?.project_id);
