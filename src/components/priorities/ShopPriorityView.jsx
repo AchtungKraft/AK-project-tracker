@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus, Users, Layers } from "lucide-react";
+import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus, Users, Layers, Printer } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -195,6 +195,13 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
             {tasks.length} task{tasks.length !== 1 ? 's' : ''}
             {hasOverdue && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
           </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); window.open(`/projectprintview?id=${project.id}`, '_blank'); }}
+            className="text-[9px] text-gray-600 hover:text-white transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-gray-800"
+            title="Print checklist"
+          >
+            <Printer className="w-2.5 h-2.5" />
+          </button>
           <button
             onClick={handleAddTask}
             className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-green-400 transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-green-900/20"
