@@ -19,8 +19,10 @@ export default function CommitmentQuantityDrawer({
   part,
   onSuccess 
 }) {
-  // Don't render if no commitment
-  if (!commitment) {
+  // Don't render if no commitment or missing required canonical fields
+  // Diagnostic panels (ReceivingGapDiagnosticsPanel) may pass minimal objects
+  // that lack required_total — guard here to prevent crash in CommitmentQuantityManager
+  if (!commitment || commitment.required_total === undefined) {
     return null;
   }
 
@@ -36,7 +38,7 @@ export default function CommitmentQuantityDrawer({
 
         <CommitmentQuantityManager
           commitment={commitment}
-          part={part}
+          part={part || commitment.part}
           onClose={onClose}
           onSuccess={onSuccess}
         />

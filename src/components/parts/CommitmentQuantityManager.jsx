@@ -507,6 +507,7 @@ export default function CommitmentQuantityManager({
   };
 
   // Calculate constraints - use canonical fields with legacy fallback
+  // Guard: commitment may be null during initial render cycle
   const constraints = useMemo(() => {
     if (!commitment) return { maxDecrease: 0, maxCancelUnordered: 0, maxSplit: 0, maxMove: 0 };
     
