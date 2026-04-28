@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -568,6 +568,25 @@ export default function ProjectSupplyManager() {
   const handleModalSuccess = useCallback(async () => {
     await forceAppRefresh(queryClient, { projectIds: [projectId] });
   }, [queryClient, projectId]);
+
+  // BULLETPROOF REFRESH: Detect when ANY modal closes and force refetch.
+  // Child modals use their own internal useSupplyAction which calls forceAppRefresh,
+  // but that may not reliably refetch the PSM's projectSupplyView due to staleTime.
+  // This ensures the PSM always gets fresh data when a modal dismisses.
+  const anyModalOpen = !!(
+    orderModalPart || deltaOrderCommitment || installModal || reverseInstallModal ||
+    receiveModal || cancelModal || removeCreditModal || qtyManagerDrawer ||
+    pricingEditorCommitment || showBulkPOPreview || vendorPickerCommitment ||
+    blockedItems || selectedPartId || showBackfillModal
+  );
+  const prevModalOpen = useRef(anyModalOpen);
+  useEffect(() => {
+    if (prevModalOpen.current && !anyModalOpen) {
+      // A modal just closed — force refetch
+      refetchSupply();
+    }
+    prevModalOpen.current = anyModalOpen;
+  }, [anyModalOpen, refetchSupply]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
