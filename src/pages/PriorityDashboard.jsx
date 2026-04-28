@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
+import ShopPriorityView from "../components/priorities/ShopPriorityView";
 import PriorityRemoveConfirm from "../components/tasks/PriorityRemoveConfirm";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
@@ -40,7 +41,7 @@ export default function PriorityDashboard() {
   const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
   // Persist view mode in localStorage
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('priority_view_mode') || 'calendar-view';
+    return localStorage.getItem('priority_view_mode') || 'shop-view';
   });
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [sortDrawerOpen, setSortDrawerOpen] = useState(false);
@@ -560,11 +561,18 @@ export default function PriorityDashboard() {
                   className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
                 >
                   <Calendar className="w-4 h-4" />
-                  <span className="hidden sm:inline">Calendar View</span>
+                  <span className="hidden sm:inline">Calendar</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="shop-view" 
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+                >
+                  <Flame className="w-4 h-4" />
+                  <span className="hidden sm:inline">Shop</span>
                 </TabsTrigger>
               </TabsList>
 
-              {/* Filters - only show on card view */}
+              {/* Grouping dropdowns - only show on card view */}
               {activeTab === 'card-view' && priorityTasks.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
@@ -706,6 +714,23 @@ export default function PriorityDashboard() {
               })}
             </div>
           )}
+            </TabsContent>
+
+            {/* Shop View Tab Content */}
+            <TabsContent value="shop-view" className="mt-0">
+              <ShopPriorityView
+                tasks={activePriorityTasks}
+                projects={projects}
+                categories={categories}
+                teamMembers={teamMembers}
+                statuses={statuses}
+                commentCountByTaskId={commentCountByTaskId}
+                onTaskClick={setSelectedTask}
+                onToggleComplete={handleToggleComplete}
+                onUpdateDueDate={handleUpdateDueDate}
+                onUpdateStartDate={handleUpdateStartDate}
+                onTogglePriority={wrappedTogglePriority}
+              />
             </TabsContent>
 
             {/* Calendar View Tab Content */}
