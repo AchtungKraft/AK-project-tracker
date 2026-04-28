@@ -1,117 +1,132 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, Clock, AlertTriangle, Timer, HelpCircle, User, UserX, Zap, ArrowDown as ArrowDownIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Flame, AlertTriangle, Zap, Clock, User, UserX, ChevronDown, ChevronRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 
-// Sub-buckets for NOW
-const NOW_SUB_CONFIG = {
+const URGENCY_CONFIG = {
   overdue: { label: "OVERDUE", icon: AlertTriangle, border: "border-l-red-600", bg: "bg-red-600/10", text: "text-red-400" },
-  today: { label: "TODAY", icon: Zap, border: "border-l-red-400", bg: "bg-red-500/8", text: "text-red-300" },
-  ready: { label: "READY", icon: ArrowDownIcon, border: "border-l-orange-500", bg: "bg-orange-500/8", text: "text-orange-300" },
+  today:   { label: "TODAY",   icon: Zap,           border: "border-l-orange-500", bg: "bg-orange-500/8", text: "text-orange-300" },
+  ready:   { label: "READY",   icon: Clock,         border: "border-l-gray-600", bg: "bg-gray-700/10", text: "text-gray-400" },
 };
 
-const BUCKET_CONFIG = {
-  next: { label: "NEXT", icon: Timer, border: "border-l-orange-500", bg: "bg-orange-500/10", text: "text-orange-400" },
-  queued: { label: "QUEUED", icon: Clock, border: "border-l-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-400" },
-  undefined: { label: "NO DUE DATE", icon: HelpCircle, border: "border-l-gray-600", bg: "bg-gray-600/10", text: "text-gray-400" },
-};
+function getSubBucket(task) {
+  if (!task.due_date) return "ready";
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dueStr = task.due_date.slice(0, 10);
+  if (dueStr < todayStr) return "overdue";
+  if (dueStr === todayStr) return "today";
+  return "ready";
+}
 
-const getUrgencyBucket = (task) => {
-  if (!task.due_date) return "undefined";
-  const now = new Date();
-  const due = new Date(task.due_date);
-  const diffDays = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
-  if (diffDays <= 0) return "now";
-  if (diffDays <= 3) return "next";
-  return "queued";
-};
-
-// Sort: unassigned first, then due date asc
-const shopSort = (a, b) => {
-  const aUnassigned = !a.assigned_team_member_id ? 0 : 1;
-  const bUnassigned = !b.assigned_team_member_id ? 0 : 1;
-  if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
+// Sort: due date asc within each sub-bucket
+const dueDateSort = (a, b) => {
   if (!a.due_date && !b.due_date) return 0;
   if (!a.due_date) return 1;
   if (!b.due_date) return -1;
   return new Date(a.due_date) - new Date(b.due_date);
 };
 
-function FilterToggle({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-        active
-          ? "bg-red-600/30 border border-red-500/50 text-white"
-          : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SectionHeader({ config, count }) {
+function UrgencySection({ config, tasks, sharedProps }) {
+  if (tasks.length === 0) return null;
   const Icon = config.icon;
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${config.bg}`}>
-      <Icon className={`w-3.5 h-3.5 ${config.text}`} />
-      <span className={`text-xs font-bold tracking-wide ${config.text}`}>{config.label}</span>
-      <span className={`ml-auto text-[10px] font-semibold ${config.text}`}>{count}</span>
-    </div>
-  );
-}
-
-function TaskRow({
-  task, config, categories, teamMembers, statuses,
-  commentCountByTaskId, latestCommentByTaskId, projectMap,
-  onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority, onAssign,
-}) {
-  return (
-    <div className={`border-l-2 ${config.border} pl-2 py-0.5`}>
-      <TaskQuickPreview
-        task={task}
-        projectName={projectMap[task.project_id]}
-        latestComment={latestCommentByTaskId[task.id]}
-        teamMembers={teamMembers}
-        onAssign={onAssign}
-        onTaskClick={onTaskClick}
-        onUpdateDueDate={onUpdateDueDate}
-      >
-        <TaskCard
-          task={task}
-          categories={categories}
-          teamMembers={teamMembers}
-          statuses={statuses}
-          onToggleComplete={onToggleComplete}
-          onClick={() => {}}
-          commentCount={commentCountByTaskId[task.id] || 0}
-          onUpdateDueDate={onUpdateDueDate}
-          onUpdateStartDate={onUpdateStartDate}
-          onTogglePriority={onTogglePriority}
-          showInlineControls={true}
-          compact={true}
-        />
-      </TaskQuickPreview>
-    </div>
-  );
-}
-
-function TaskList({ tasks, config, sharedProps }) {
-  if (tasks.length === 0) return null;
-  return (
-    <div>
-      <SectionHeader config={config} count={tasks.length} />
-      <div className="space-y-0.5 mt-1">
+    <div className="mt-1">
+      <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${config.bg}`}>
+        <Icon className={`w-3 h-3 ${config.text}`} />
+        <span className={`text-[10px] font-bold tracking-wide ${config.text}`}>{config.label}</span>
+        <span className={`text-[10px] ${config.text} ml-auto`}>{tasks.length}</span>
+      </div>
+      <div className="mt-0.5">
         {tasks.map(task => (
-          <TaskRow key={task.id} task={task} config={config} {...sharedProps} />
+          <div key={task.id} className={`border-l ${config.border} pl-2 py-px`}>
+            <TaskQuickPreview
+              task={task}
+              projectName={sharedProps.projectMap[task.project_id]}
+              latestComment={sharedProps.latestCommentByTaskId[task.id]}
+              teamMembers={sharedProps.teamMembers}
+              onAssign={sharedProps.onAssign}
+              onTaskClick={sharedProps.onTaskClick}
+            >
+              <TaskCard
+                task={task}
+                categories={sharedProps.categories}
+                teamMembers={sharedProps.teamMembers}
+                statuses={sharedProps.statuses}
+                onToggleComplete={sharedProps.onToggleComplete}
+                onClick={() => {}}
+                commentCount={sharedProps.commentCountByTaskId[task.id] || 0}
+                onUpdateDueDate={sharedProps.onUpdateDueDate}
+                onUpdateStartDate={sharedProps.onUpdateStartDate}
+                onTogglePriority={sharedProps.onTogglePriority}
+                showInlineControls={true}
+                compact={true}
+              />
+            </TaskQuickPreview>
+          </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PersonGroup({ memberId, memberName, tasks, isUnassigned, sharedProps }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Split tasks into overdue / today / ready
+  const { overdue, today, ready } = useMemo(() => {
+    const o = [], t = [], r = [];
+    tasks.forEach(task => {
+      const b = getSubBucket(task);
+      if (b === "overdue") o.push(task);
+      else if (b === "today") t.push(task);
+      else r.push(task);
+    });
+    [o, t, r].forEach(arr => arr.sort(dueDateSort));
+    return { overdue: o, today: t, ready: r };
+  }, [tasks]);
+
+  const overdueCount = overdue.length;
+
+  return (
+    <div className={`rounded-lg border ${isUnassigned ? "border-yellow-700/40 bg-yellow-900/5" : "border-gray-800 bg-gray-900/30"}`}>
+      {/* Group header */}
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        className="flex items-center gap-2 w-full px-3 py-2 text-left"
+      >
+        {collapsed ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />}
+        {isUnassigned ? (
+          <UserX className="w-4 h-4 text-yellow-500" />
+        ) : (
+          <div className="w-5 h-5 rounded-full bg-blue-600/30 flex items-center justify-center text-[10px] font-bold text-blue-400">
+            {(memberName || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <span className={`text-sm font-semibold ${isUnassigned ? "text-yellow-400" : "text-white"}`}>
+          {isUnassigned ? "UNASSIGNED" : memberName}
+        </span>
+        <span className="text-xs text-gray-500 ml-auto">
+          {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+        </span>
+        {overdueCount > 0 && (
+          <span className="text-[10px] font-semibold text-red-400 bg-red-900/30 px-1.5 py-0.5 rounded">
+            {overdueCount} overdue
+          </span>
+        )}
+      </button>
+
+      {/* Tasks */}
+      {!collapsed && (
+        <div className="px-2 pb-2">
+          <UrgencySection config={URGENCY_CONFIG.overdue} tasks={overdue} sharedProps={sharedProps} />
+          <UrgencySection config={URGENCY_CONFIG.today} tasks={today} sharedProps={sharedProps} />
+          <UrgencySection config={URGENCY_CONFIG.ready} tasks={ready} sharedProps={sharedProps} />
+        </div>
+      )}
     </div>
   );
 }
@@ -121,11 +136,9 @@ export default function ShopPriorityView({
   commentCountByTaskId, allTaskComments, updateTaskMutation,
   onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
 }) {
-  const [showMine, setShowMine] = useState(false);
-  const [showUnassigned, setShowUnassigned] = useState(false);
-  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   const [filterByMemberId, setFilterByMemberId] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [showMine, setShowMine] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,63 +161,47 @@ export default function ShopPriorityView({
     if (!allTaskComments) return m;
     allTaskComments.forEach(c => {
       const existing = m[c.task_id];
-      if (!existing || new Date(c.created_date) > new Date(existing.created_date)) {
-        m[c.task_id] = c;
-      }
+      if (!existing || new Date(c.created_date) > new Date(existing.created_date)) m[c.task_id] = c;
     });
     return m;
   }, [allTaskComments]);
 
+  // Apply filters
   const filteredTasks = useMemo(() => {
     let result = tasks;
     if (showMine && currentUserId) result = result.filter(t => t.assigned_team_member_id === currentUserId);
-    if (showUnassigned) result = result.filter(t => !t.assigned_team_member_id);
-    if (showOverdueOnly) {
-      const now = new Date();
-      result = result.filter(t => t.due_date && new Date(t.due_date) <= now);
-    }
     if (filterByMemberId) {
       result = filterByMemberId === "unassigned"
         ? result.filter(t => !t.assigned_team_member_id)
         : result.filter(t => t.assigned_team_member_id === filterByMemberId);
     }
     return result;
-  }, [tasks, showMine, showUnassigned, showOverdueOnly, filterByMemberId, currentUserId]);
+  }, [tasks, showMine, currentUserId, filterByMemberId]);
 
-  // Split NOW into overdue / today / ready, plus standard buckets
-  const sections = useMemo(() => {
-    const nowTasks = [];
-    const nextTasks = [];
-    const queuedTasks = [];
-    const undefinedTasks = [];
+  // Group by assignee
+  const groups = useMemo(() => {
+    const byMember = {};
+    const unassigned = [];
 
     filteredTasks.forEach(task => {
-      const bucket = getUrgencyBucket(task);
-      if (bucket === "now") nowTasks.push(task);
-      else if (bucket === "next") nextTasks.push(task);
-      else if (bucket === "queued") queuedTasks.push(task);
-      else undefinedTasks.push(task);
+      if (!task.assigned_team_member_id) {
+        unassigned.push(task);
+      } else {
+        if (!byMember[task.assigned_team_member_id]) byMember[task.assigned_team_member_id] = [];
+        byMember[task.assigned_team_member_id].push(task);
+      }
     });
 
-    // Split NOW into sub-buckets
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const overdue = [];
-    const todayBucket = [];
-    const ready = [];
+    // Build sorted array: most tasks first
+    const memberGroups = Object.entries(byMember)
+      .map(([id, tasks]) => {
+        const tm = teamMembers.find(m => m.id === id);
+        return { id, name: tm?.full_name || "Unknown", tasks };
+      })
+      .sort((a, b) => b.tasks.length - a.tasks.length);
 
-    nowTasks.forEach(t => {
-      const dueStr = t.due_date ? t.due_date.slice(0, 10) : "";
-      if (dueStr < todayStr) overdue.push(t);
-      else if (dueStr === todayStr) todayBucket.push(t);
-      else ready.push(t);
-    });
-
-    // Sort all
-    [overdue, todayBucket, ready, nextTasks, queuedTasks, undefinedTasks].forEach(arr => arr.sort(shopSort));
-
-    return { overdue, today: todayBucket, ready, next: nextTasks, queued: queuedTasks, undefined: undefinedTasks };
-  }, [filteredTasks]);
+    return { unassigned, memberGroups };
+  }, [filteredTasks, teamMembers]);
 
   const handleAssign = useCallback(async (task, memberId) => {
     if (!updateTaskMutation) return;
@@ -215,11 +212,7 @@ export default function ShopPriorityView({
   const handleFilterByMember = useCallback((memberId) => {
     setFilterByMemberId(prev => prev === memberId ? null : memberId);
     setShowMine(false);
-    setShowUnassigned(false);
   }, []);
-
-  const totalCount = filteredTasks.length;
-  const hasActiveFilter = showMine || showUnassigned || showOverdueOnly || filterByMemberId;
 
   const sharedProps = {
     categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap,
@@ -227,23 +220,25 @@ export default function ShopPriorityView({
     onAssign: handleAssign,
   };
 
+  const totalCount = filteredTasks.length;
+
   return (
     <div className="space-y-3">
       <ShopTeamSummaryBar tasks={tasks} teamMembers={teamMembers} onFilterByMember={handleFilterByMember} activeFilterId={filterByMemberId} />
 
+      {/* Light filters */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        <FilterToggle active={showMine} onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}>
+        <button
+          onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}
+          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            showMine ? "bg-red-600/30 border border-red-500/50 text-white" : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600"
+          }`}
+        >
           <span className="flex items-center gap-1"><User className="w-3 h-3" /> Mine</span>
-        </FilterToggle>
-        <FilterToggle active={showUnassigned} onClick={() => { setShowUnassigned(v => !v); setFilterByMemberId(null); }}>
-          <span className="flex items-center gap-1"><UserX className="w-3 h-3" /> Unassigned</span>
-        </FilterToggle>
-        <FilterToggle active={showOverdueOnly} onClick={() => setShowOverdueOnly(v => !v)}>
-          <span className="flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Overdue</span>
-        </FilterToggle>
+        </button>
         {filterByMemberId && (
           <button onClick={() => setFilterByMemberId(null)} className="px-2 py-0.5 rounded text-[11px] text-red-400 hover:text-red-300 bg-red-900/20 border border-red-700/30">
-            ✕ Clear
+            ✕ Clear filter
           </button>
         )}
       </div>
@@ -251,16 +246,31 @@ export default function ShopPriorityView({
       {totalCount === 0 ? (
         <div className="text-center py-10">
           <Flame className="w-8 h-8 text-red-500/20 mx-auto mb-2" />
-          <p className="text-gray-500 text-sm">{hasActiveFilter ? "No tasks match filters." : "No priority tasks."}</p>
+          <p className="text-gray-500 text-sm">No priority tasks.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <TaskList tasks={sections.overdue} config={NOW_SUB_CONFIG.overdue} sharedProps={sharedProps} />
-          <TaskList tasks={sections.today} config={NOW_SUB_CONFIG.today} sharedProps={sharedProps} />
-          <TaskList tasks={sections.ready} config={NOW_SUB_CONFIG.ready} sharedProps={sharedProps} />
-          <TaskList tasks={sections.next} config={BUCKET_CONFIG.next} sharedProps={sharedProps} />
-          <TaskList tasks={sections.queued} config={BUCKET_CONFIG.queued} sharedProps={sharedProps} />
-          <TaskList tasks={sections.undefined} config={BUCKET_CONFIG.undefined} sharedProps={sharedProps} />
+        <div className="space-y-2">
+          {/* Unassigned first */}
+          {groups.unassigned.length > 0 && (
+            <PersonGroup
+              memberId="unassigned"
+              memberName="Unassigned"
+              tasks={groups.unassigned}
+              isUnassigned={true}
+              sharedProps={sharedProps}
+            />
+          )}
+          {/* Then by person, most tasks first */}
+          {groups.memberGroups.map(g => (
+            <PersonGroup
+              key={g.id}
+              memberId={g.id}
+              memberName={g.name}
+              tasks={g.tasks}
+              isUnassigned={false}
+              sharedProps={sharedProps}
+            />
+          ))}
         </div>
       )}
     </div>
