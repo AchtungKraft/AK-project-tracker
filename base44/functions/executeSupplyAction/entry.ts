@@ -769,7 +769,18 @@ async function install(ctx,commitment_ids,payload) {
   const installable=Math.min(maxInstallable, cn.reserved_from_stock);
   const st=c.supply_source_type??'VENDOR', affStock=st!=='CLIENT_SUPPLIED';
   if(qty_to_install>installable&&affStock) throw new Error(`Cannot install ${qty_to_install}, only ${installable} installable (effective_required=${cn.effective_required}, qty_removed=${cn.qty_removed})`);
-  if(affStock&&(part.physical_stock??0)<qty_to_install) throw new Error(`NEGATIVE_STOCK: ${qty_to_install}>${part.physical_stock??0}`);
+  // NEGATIVE_STOCK guard: Trust reservations. If reserved_from_stock >= qty_to_install,
+  // the stock was already claimed at reservation time. Only block if BOTH physical_stock
+  // AND reserved_from_stock are insufficient (true data corruption).
+  if(affStock&&(part.physical_stock??0)<qty_to_install&&cn.reserved_from_stock<qty_to_install) throw new Error(`NEGATIVE_STOCK: ${qty_to_install}>${part.physical_stock??0} (reserved=${cn.reserved_from_stock})`);
+  // If physical_stock drifted below reserved, auto-repair before proceeding
+  if(affStock&&(part.physical_stock??0)<qty_to_install&&cn.reserved_from_stock>=qty_to_install){
+    console.warn(`[INSTALL_AUTO_REPAIR] Part ${part.id} physical_stock=${part.physical_stock} < qty_to_install=${qty_to_install}, but reserved=${cn.reserved_from_stock}. Recomputing physical stock.`);
+    await inlineRecompute(ctx,part.id,false);
+    // Re-read part after recompute
+    const [freshPart]=await ctx.base44.entities.Part.filter({id:part.id});
+    if(freshPart) Object.assign(part,freshPart);
+  }
   if(ctx.dry_run) return {preview:{commitment_id:cid,qty_installing:qty_to_install,installable,effective_required:cn.effective_required,qty_removed:cn.qty_removed,affects_stock:affStock}};
 
   const newInst=cn.qty_installed+qty_to_install, newRes=Math.max(0,cn.reserved_from_stock-qty_to_install);
