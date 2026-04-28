@@ -26,17 +26,14 @@ export default function TaskQuickPreview({
       {/* Task content — click opens detail */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick(task)}>
         {children}
-        {/* Faint second line: project or latest note */}
-        {(projectName || latestComment) && (
-          <div className="flex items-center gap-1 text-[10px] text-gray-600 truncate mt-px">
-            {projectName && <span className="truncate">{projectName}</span>}
-            {projectName && latestComment && <span>·</span>}
-            {latestComment && (
-              <>
-                <MessageSquare className="w-2.5 h-2.5 shrink-0" />
-                <span className="truncate">{latestComment.content}</span>
-              </>
-            )}
+        {/* Project label */}
+        {projectName && (
+          <div className="text-[10px] text-gray-500 truncate leading-tight">{projectName}</div>
+        )}
+        {/* Latest update */}
+        {latestComment && (
+          <div className="text-[10px] text-gray-600 truncate leading-tight">
+            💬 {latestComment.content}
           </div>
         )}
       </div>

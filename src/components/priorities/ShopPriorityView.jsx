@@ -125,17 +125,18 @@ function ProjectGroup({ project, tasks, sp }) {
   const { overdue, today, ready } = splitAndSort(tasks);
 
   return (
-    <div className="mb-0.5">
+    <div className="mt-1">
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="flex items-center gap-1 w-full text-left py-px px-0.5"
+        className="flex items-center gap-1 w-full text-left px-0.5"
       >
         {collapsed
           ? <ChevronRight className="w-2.5 h-2.5 text-gray-600" />
           : <ChevronDown className="w-2.5 h-2.5 text-gray-600" />}
-        <span className="text-[10px] font-medium text-gray-400 truncate flex-1">— {project.name} —</span>
+        <span className="text-[11px] font-semibold text-gray-300 truncate flex-1">{project.name}</span>
         <span className="text-[9px] text-gray-600 shrink-0">{tasks.length}</span>
       </button>
+      <div className="border-b border-gray-700/30 mx-0.5 mt-px" />
       {!collapsed && (
         <div className="mt-px">
           <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
