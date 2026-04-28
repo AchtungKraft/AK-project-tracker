@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Plus, User } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, User, Zap, Clock } from "lucide-react";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 
-// ── urgency helpers (same as ShopPriorityView) ──
+// ── urgency helpers ──
 function getSubBucket(task) {
   if (!task.due_date) return "ready";
   const d = new Date();
@@ -21,48 +21,8 @@ const dueDateSort = (a, b) => {
   return new Date(a.due_date) - new Date(b.due_date);
 };
 
-function splitAndSort(tasks) {
-  const o = [], t = [], r = [];
-  tasks.forEach(tk => {
-    const b = getSubBucket(tk);
-    if (b === "overdue") o.push(tk);
-    else if (b === "today") t.push(tk);
-    else r.push(tk);
-  });
-  [o, t, r].forEach(arr => arr.sort(dueDateSort));
-  return { overdue: o, today: t, ready: r };
-}
-
-// ── urgency labels ──
-import { Zap, Clock } from "lucide-react";
-
-const URGENCY_LABEL = {
-  overdue: { icon: AlertTriangle, text: "text-red-400", label: "OVERDUE" },
-  today:   { icon: Zap,           text: "text-orange-300", label: "TODAY" },
-  ready:   { icon: Clock,         text: "text-gray-500", label: "READY" },
-};
-
-function UrgencyRows({ bucket, tasks, sp }) {
-  if (!tasks.length) return null;
-  const cfg = URGENCY_LABEL[bucket];
-  const Icon = cfg.icon;
-  return (
-    <>
-      <div className="flex items-center gap-1 px-0.5 mt-px">
-        <Icon className={`w-2.5 h-2.5 ${cfg.text}`} />
-        <span className={`text-[8px] font-bold tracking-wider ${cfg.text}`}>{cfg.label}</span>
-        <span className={`text-[8px] ${cfg.text} ml-auto`}>{tasks.length}</span>
-      </div>
-      <div className="space-y-1">
-        {tasks.map(task => (
-          <ShopTaskRow key={task.id} task={task} sp={sp} />
-        ))}
-      </div>
-    </>
-  );
-}
-
-function ShopTaskRow({ task, sp }) {
+// ── Task row ──
+function TaskRow({ task, sp }) {
   return (
     <TaskQuickPreview
       task={task}
@@ -90,13 +50,111 @@ function ShopTaskRow({ task, sp }) {
   );
 }
 
-// ── Person sub-group inside a project ──
-function PersonSubGroup({ name, initials, tasks, sp, bucketsByProjectId, projectId }) {
-  const buckets = bucketsByProjectId?.[projectId] || [];
-  const hasBuckets = buckets.length > 0;
+// ── Person group inside a bucket column ──
+function PersonGroup({ name, initials, tasks, sp }) {
+  // Sort: overdue first, then by due date asc
+  const sorted = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      const aUrgency = getSubBucket(a) === "overdue" ? 0 : getSubBucket(a) === "today" ? 1 : 2;
+      const bUrgency = getSubBucket(b) === "overdue" ? 0 : getSubBucket(b) === "today" ? 1 : 2;
+      if (aUrgency !== bUrgency) return aUrgency - bUrgency;
+      return dueDateSort(a, b);
+    });
+  }, [tasks]);
 
-  const { bucketGroups, unbucketedTasks } = useMemo(() => {
-    if (!hasBuckets) return { bucketGroups: [], unbucketedTasks: tasks };
+  const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
+
+  return (
+    <div className="mt-1.5 first:mt-0">
+      <div className="flex items-center gap-1.5 py-0.5 px-0.5">
+        {initials ? (
+          <div className="w-4 h-4 rounded-full bg-blue-600/20 flex items-center justify-center text-[8px] font-bold text-blue-400 shrink-0">
+            {initials}
+          </div>
+        ) : (
+          <User className="w-3.5 h-3.5 text-yellow-500/60 shrink-0" />
+        )}
+        <span className="text-[10px] font-semibold text-gray-300 truncate">{name}</span>
+        <span className="text-[9px] text-gray-600 ml-auto shrink-0">{tasks.length}</span>
+        {overdueCount > 0 && (
+          <span className="text-[8px] text-red-400 shrink-0">{overdueCount} late</span>
+        )}
+      </div>
+      <div className="space-y-1 ml-1">
+        {sorted.map(task => (
+          <TaskRow key={task.id} task={task} sp={sp} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Bucket column ──
+function BucketColumn({ bucketName, tasks, sp, teamMembers }) {
+  // Group by person, unassigned first
+  const personGroups = useMemo(() => {
+    const byPerson = {};
+    tasks.forEach(t => {
+      const key = t.assigned_team_member_id || "__unassigned__";
+      if (!byPerson[key]) byPerson[key] = [];
+      byPerson[key].push(t);
+    });
+
+    return Object.entries(byPerson)
+      .map(([personId, personTasks]) => {
+        if (personId === "__unassigned__") {
+          return { id: personId, name: "Unassigned", initials: null, tasks: personTasks, sortKey: -1 };
+        }
+        const tm = teamMembers.find(m => m.id === personId);
+        const name = tm?.full_name || "Unknown";
+        const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+        return { id: personId, name, initials, tasks: personTasks, sortKey: 0 };
+      })
+      .sort((a, b) => a.sortKey - b.sortKey || b.tasks.length - a.tasks.length);
+  }, [tasks, teamMembers]);
+
+  const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
+
+  return (
+    <div className="min-w-[280px] w-[280px] shrink-0 flex flex-col">
+      {/* Bucket header */}
+      <div className="flex items-center gap-1.5 px-1.5 py-1 border-b border-gray-700/40">
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{bucketName}</span>
+        <span className="text-[9px] text-gray-600 ml-auto shrink-0">{tasks.length}</span>
+        {overdueCount > 0 && (
+          <span className="text-[8px] text-red-400 shrink-0">{overdueCount} overdue</span>
+        )}
+      </div>
+      {/* People inside bucket */}
+      <div className="flex-1 overflow-y-auto px-0.5 py-1 space-y-2">
+        {personGroups.map(person => (
+          <PersonGroup
+            key={person.id}
+            name={person.name}
+            initials={person.initials}
+            tasks={person.tasks}
+            sp={sp}
+          />
+        ))}
+        {tasks.length === 0 && (
+          <p className="text-[10px] text-gray-700 text-center py-3">No tasks</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Project block with horizontal bucket lanes ──
+function ProjectBlock({ project, tasks, sp, teamMembers, buckets }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
+  const hasOverdue = overdueCount > 0;
+
+  // Group tasks by bucket
+  const { bucketColumns, unbucketedTasks } = useMemo(() => {
+    const hasBuckets = buckets.length > 0;
+    if (!hasBuckets) return { bucketColumns: [], unbucketedTasks: tasks };
+
     const byBucket = {};
     const unbucketed = [];
     tasks.forEach(t => {
@@ -107,71 +165,15 @@ function PersonSubGroup({ name, initials, tasks, sp, bucketsByProjectId, project
         unbucketed.push(t);
       }
     });
-    const groups = buckets
+
+    const cols = buckets
       .sort((a, b) => (a.order || 0) - (b.order || 0))
-      .filter(b => byBucket[b.id]?.length > 0)
-      .map(b => ({ bucket: b, tasks: byBucket[b.id] }));
-    return { bucketGroups: groups, unbucketedTasks: unbucketed };
-  }, [tasks, hasBuckets, buckets]);
+      .map(b => ({ bucket: b, tasks: byBucket[b.id] || [] }));
 
-  const { overdue, today, ready } = splitAndSort(unbucketedTasks);
+    return { bucketColumns: cols, unbucketedTasks: unbucketed };
+  }, [tasks, buckets]);
 
-  return (
-    <div className="ml-2 mt-1">
-      <div className="flex items-center gap-1.5 py-0.5">
-        {initials ? (
-          <div className="w-4 h-4 rounded-full bg-blue-600/20 flex items-center justify-center text-[8px] font-bold text-blue-400">
-            {initials}
-          </div>
-        ) : (
-          <User className="w-3.5 h-3.5 text-yellow-500/60" />
-        )}
-        <span className="text-[10px] font-semibold text-gray-300">{name}</span>
-        <span className="text-[9px] text-gray-600 ml-auto">{tasks.length}</span>
-      </div>
-      <div className="ml-4">
-        {bucketGroups.map(({ bucket, tasks: bTasks }) => {
-          const { overdue: bo, today: bt, ready: br } = splitAndSort(bTasks);
-          return (
-            <div key={bucket.id} className="ml-2 mt-px">
-              <div className="text-[8px] text-gray-600 tracking-wider uppercase pl-1 py-px">{bucket.name}</div>
-              <div className="ml-2">
-                <UrgencyRows bucket="overdue" tasks={bo} sp={sp} />
-                <UrgencyRows bucket="today" tasks={bt} sp={sp} />
-                <UrgencyRows bucket="ready" tasks={br} sp={sp} />
-              </div>
-            </div>
-          );
-        })}
-        <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
-        <UrgencyRows bucket="today" tasks={today} sp={sp} />
-        <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
-      </div>
-    </div>
-  );
-}
-
-// ── Project column in project-first mode ──
-function ProjectColumn({ project, tasksByPerson, sp, teamMembers }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const totalTasks = Object.values(tasksByPerson).reduce((s, arr) => s + arr.length, 0);
-  const overdueCount = Object.values(tasksByPerson).flat().filter(t => getSubBucket(t) === "overdue").length;
-  const hasOverdue = overdueCount > 0;
-
-  // Sort: Unassigned first, then by task count desc
-  const sortedPeople = useMemo(() => {
-    return Object.entries(tasksByPerson)
-      .map(([personId, tasks]) => {
-        if (personId === "__unassigned__") {
-          return { id: personId, name: "Unassigned", initials: null, tasks, sortKey: -1 };
-        }
-        const tm = teamMembers.find(m => m.id === personId);
-        const name = tm?.full_name || "Unknown";
-        const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-        return { id: personId, name, initials, tasks, sortKey: 0 };
-      })
-      .sort((a, b) => a.sortKey - b.sortKey || b.tasks.length - a.tasks.length);
-  }, [tasksByPerson, teamMembers]);
+  const hasBucketColumns = bucketColumns.some(c => c.tasks.length > 0);
 
   const handleAddTask = (e) => {
     e.stopPropagation();
@@ -182,6 +184,7 @@ function ProjectColumn({ project, tasksByPerson, sp, teamMembers }) {
     <div className="mt-4 first:mt-1">
       <div className="border-t border-white/10" />
       <div className={`rounded-md px-2 py-1.5 mt-0.5 ${hasOverdue ? "bg-red-500/5" : "bg-white/[0.03]"}`}>
+        {/* Project header */}
         <div className="flex items-center gap-1.5 w-full">
           <button
             onClick={() => setCollapsed(v => !v)}
@@ -193,7 +196,7 @@ function ProjectColumn({ project, tasksByPerson, sp, teamMembers }) {
             <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
           </button>
           <span className="text-[9px] text-gray-600 shrink-0">
-            {totalTasks} task{totalTasks !== 1 ? "s" : ""}
+            {tasks.length} task{tasks.length !== 1 ? "s" : ""}
             {hasOverdue && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
           </span>
           <button
@@ -205,20 +208,40 @@ function ProjectColumn({ project, tasksByPerson, sp, teamMembers }) {
             <span className="hidden sm:inline">Task</span>
           </button>
         </div>
-        <div className="border-b border-white/10 mt-0.5 mb-1" />
+
         {!collapsed && (
-          <div>
-            {sortedPeople.map(person => (
-              <PersonSubGroup
-                key={person.id}
-                name={person.name}
-                initials={person.initials}
-                tasks={person.tasks}
-                sp={sp}
-                bucketsByProjectId={sp.bucketsByProjectId}
-                projectId={project.id}
-              />
-            ))}
+          <div className="mt-1">
+            {/* Horizontal bucket lanes */}
+            {hasBucketColumns && (
+              <div className="overflow-x-auto -mx-1">
+                <div className="flex gap-3 min-w-max px-1 pb-1">
+                  {bucketColumns.filter(c => c.tasks.length > 0).map(({ bucket, tasks: bTasks }) => (
+                    <BucketColumn
+                      key={bucket.id}
+                      bucketName={bucket.name}
+                      tasks={bTasks}
+                      sp={sp}
+                      teamMembers={teamMembers}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Unbucketed tasks */}
+            {unbucketedTasks.length > 0 && (
+              <div className={hasBucketColumns ? "mt-2 border-t border-white/5 pt-1" : ""}>
+                {hasBucketColumns && (
+                  <div className="text-[9px] text-gray-600 uppercase tracking-wider px-1 mb-1">Unsorted</div>
+                )}
+                <BucketColumn
+                  bucketName={hasBucketColumns ? "" : "All Tasks"}
+                  tasks={unbucketedTasks}
+                  sp={sp}
+                  teamMembers={teamMembers}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -228,35 +251,33 @@ function ProjectColumn({ project, tasksByPerson, sp, teamMembers }) {
 
 // ── Main ProjectFirstView ──
 export default function ProjectFirstView({ tasks, projects, sp, teamMembers }) {
-  // Group: project → person → tasks
+  const bucketsByProjectId = sp.bucketsByProjectId || {};
+
   const projectGroups = useMemo(() => {
     const byProject = {};
     tasks.forEach(t => {
-      const pid = t.project_id;
-      if (!byProject[pid]) byProject[pid] = {};
-      const personKey = t.assigned_team_member_id || "__unassigned__";
-      if (!byProject[pid][personKey]) byProject[pid][personKey] = [];
-      byProject[pid][personKey].push(t);
+      if (!byProject[t.project_id]) byProject[t.project_id] = [];
+      byProject[t.project_id].push(t);
     });
 
     return Object.entries(byProject)
-      .map(([pid, people]) => {
+      .map(([pid, ptasks]) => {
         const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown" };
-        const totalTasks = Object.values(people).reduce((s, arr) => s + arr.length, 0);
-        return { project, tasksByPerson: people, totalTasks };
+        return { project, tasks: ptasks };
       })
-      .sort((a, b) => b.totalTasks - a.totalTasks);
+      .sort((a, b) => b.tasks.length - a.tasks.length);
   }, [tasks, projects]);
 
   return (
     <div className="space-y-0">
-      {projectGroups.map(({ project, tasksByPerson }) => (
-        <ProjectColumn
+      {projectGroups.map(({ project, tasks: ptasks }) => (
+        <ProjectBlock
           key={project.id}
           project={project}
-          tasksByPerson={tasksByPerson}
+          tasks={ptasks}
           sp={sp}
           teamMembers={teamMembers}
+          buckets={bucketsByProjectId[project.id] || []}
         />
       ))}
     </div>
