@@ -299,7 +299,7 @@ export default function ProjectSupplyManager() {
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
-        to_order: item.to_order_qty ?? item.to_order,
+        to_order: item.to_order_qty ?? item.to_order ?? 0,
         needs_order: item.needs_order,
         commitment_fulfilled: item.commitment_fulfilled,
         commitment_status: item._raw?.commitment_status || 'planned',
@@ -311,23 +311,19 @@ export default function ProjectSupplyManager() {
 
       // Build coverage block from canonical fields - NO local computation
       const coverage = {
-        // Canonical fields from read model
         required_total: item.required_total,
         effective_required: item.effective_required,
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
         coverage_qty: item.coverage_qty,
-        to_order_qty: item.to_order_qty,
-        to_order: item.to_order_qty ?? item.to_order,
+        to_order_qty: item.to_order_qty ?? item.to_order ?? 0,
         needs_order: item.needs_order,
         commitment_fulfilled: item.commitment_fulfilled,
-        // Derived from read model
-        coverage_total: item.coverage_qty ?? (item.reserved_from_stock + item.covered_from_po + item.qty_installed),
-        gap_qty: item.to_order_qty ?? item.to_order,
+        coverage_total: item.coverage_qty,
+        gap_qty: item.to_order_qty ?? item.to_order ?? 0,
         coverage_status: item.coverage_status,
         coverage_percent: item.coverage_percent,
-        // Availability for install
         available_to_install: item.available_to_install,
         on_order_qty: item.on_order_qty,
         received_qty: item.received_qty,
@@ -372,10 +368,9 @@ export default function ProjectSupplyManager() {
         reserved_from_stock: item.reserved_from_stock,
         covered_from_po: item.covered_from_po,
         qty_installed: item.qty_installed,
-        // CANONICAL derived supply fields from backend
+        // FIX 5: Single canonical field — to_order_qty only, no dual alias
         coverage_qty: item.coverage_qty,
-        to_order_qty: item.to_order_qty,
-        to_order: item.to_order_qty ?? item.to_order,
+        to_order_qty: item.to_order_qty ?? item.to_order ?? 0,
         needs_order: item.needs_order,
         commitment_fulfilled: item.commitment_fulfilled,
         
@@ -403,15 +398,14 @@ export default function ProjectSupplyManager() {
         planned_retail_total: item.planned_retail_total,
         billing_status: item.billing_status,
         
-        // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
-        // Use backend value if available, else compute locally
-        cost_at_risk: item.cost_at_risk ?? Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
-        // ALIAS: resolved_exposure kept for downstream consumers during transition
-        resolved_exposure: item.cost_at_risk ?? Math.max(0, (item.planned_cost_total ?? 0) - (item.invoiced_amount ?? 0)),
-        // Margin = retail - cost
-        resolved_margin: (item.planned_retail_total ?? 0) - (item.planned_cost_total ?? 0),
-        // Keep cost total accessible under canonical name
-        resolved_cost_total: item.planned_cost_total ?? 0,
+        // CANONICAL: cost_at_risk from backend only — no local recomputation
+        cost_at_risk: item.cost_at_risk ?? 0,
+        // FIX 1: Margin from backend actual_margin (uses PO cost), NOT local planned computation
+        resolved_margin: item.actual_margin ?? item.resolved_margin ?? 0,
+        // Actual margin fields from backend for display
+        actual_margin: item.actual_margin ?? 0,
+        planned_margin: item.planned_margin ?? 0,
+        margin_delta: item.margin_delta ?? 0,
         
         // CANONICAL: billing_state for 3-state filter (NOT_INVOICED, INVOICED, PAID)
         billing_state: item.billing_state || 'NOT_INVOICED',
@@ -434,8 +428,8 @@ export default function ProjectSupplyManager() {
         order_id: item.order_id ?? null,
         order_number: item.order_number ?? null,
         
-        // PO line item tracking for receive action - CRITICAL for Receive modal
-        order_line_item_ids: item._raw?.order_line_item_ids || item.order_line_item_ids || [],
+        // FIX 3: order_line_item_ids promoted to top-level — primary source, _raw fallback
+        order_line_item_ids: item.order_line_item_ids || item._raw?.order_line_item_ids || [],
         
         // Override flags for pricing
         cost_override: item._raw?.cost_override || false,
@@ -563,7 +557,7 @@ export default function ProjectSupplyManager() {
     // PHASE 6: PROCUREMENT GUARD - Disable ordering when gap_qty === 0
     // Check if any selected items have to_order <= 0 OR coverage_status === 'FULL'
     const selectedWithZeroOrder = enrichedCommitments.filter(
-      c => selectedItems.has(c.id) && (c.to_order <= 0 || c.coverage_status === 'FULL')
+      c => selectedItems.has(c.id) && ((c.to_order_qty ?? 0) <= 0 || c.coverage_status === 'FULL')
     );
     if (selectedWithZeroOrder.length > 0) {
       const fullyCovered = selectedWithZeroOrder.filter(c => c.coverage_status === 'FULL');
@@ -1356,17 +1350,10 @@ export default function ProjectSupplyManager() {
       />
 
       {/* Modals - FORWARD MODEL (no pool modals) */}
+      {/* FIX 4: Pass full enriched commitment */}
       {deltaOrderCommitment && (
         <DeltaOrderModal
-          commitment={{
-            id: deltaOrderCommitment.id,
-            commitment_status: deltaOrderCommitment.commitment_status,
-            required_total: deltaOrderCommitment.required_total,
-            reserved_from_stock: deltaOrderCommitment.reserved_from_stock,
-            covered_from_po: deltaOrderCommitment.covered_from_po,
-            qty_installed: deltaOrderCommitment.qty_installed,
-            unit_cost_snapshot: deltaOrderCommitment.unit_cost,
-          }}
+          commitment={deltaOrderCommitment}
           part={deltaOrderCommitment.part}
           onClose={() => setDeltaOrderCommitment(null)}
           onSuccess={() => invalidateSupply()}
@@ -1407,22 +1394,12 @@ export default function ProjectSupplyManager() {
         />
       )}
 
+      {/* FIX 3+4: Pass full enriched commitment — order_line_item_ids now top-level */}
       {receiveModal && (
         <SafeRenderBoundary context="ReceiveInventoryModal">
           <ReceiveInventoryModal
             open={true}
-            commitment={{
-              id: receiveModal.id || receiveModal.commitment_id,
-              commitment_status: receiveModal.commitment_status,
-              required_total: receiveModal.required_total,
-              reserved_from_stock: receiveModal.reserved_from_stock,
-              covered_from_po: receiveModal.covered_from_po,
-              on_order_qty: receiveModal.on_order_qty,
-              // CRITICAL: Try all possible paths for order_line_item_ids
-              order_line_item_ids: receiveModal.order_line_item_ids || receiveModal._raw?.order_line_item_ids || [],
-              part_id: receiveModal.part_id,
-              project_id: receiveModal.project_id || projectId,
-            }}
+            commitment={receiveModal}
             part={receiveModal.part}
             onClose={() => setReceiveModal(null)}
             onSuccess={() => {
@@ -1437,20 +1414,10 @@ export default function ProjectSupplyManager() {
         </SafeRenderBoundary>
       )}
 
+      {/* FIX 2+4: Pass full enriched commitment — no payload stripping */}
       {removeCreditModal && (
         <RemovePartCreditModal
-          commitment={{
-            id: removeCreditModal.id,
-            commitment_status: removeCreditModal.commitment_status,
-            required_total: removeCreditModal.required_total,
-            reserved_from_stock: removeCreditModal.reserved_from_stock,
-            covered_from_po: removeCreditModal.covered_from_po,
-            qty_installed: removeCreditModal.qty_installed,
-            invoiced_amount: removeCreditModal.invoiced_amount,
-            invoiced_qty: removeCreditModal.invoiced_qty,
-            part_id: removeCreditModal.part_id,
-            project_id: removeCreditModal.project_id || projectId,
-          }}
+          commitment={removeCreditModal}
           part={removeCreditModal.part}
           project={project}
           onClose={() => setRemoveCreditModal(null)}
@@ -1461,18 +1428,10 @@ export default function ProjectSupplyManager() {
         />
       )}
 
+      {/* FIX 4: Pass full enriched commitment */}
       {cancelModal && (
         <CancelCommitmentModal
-          commitment={{
-            id: cancelModal.id,
-            commitment_status: cancelModal.commitment_status,
-            required_total: cancelModal.required_total,
-            reserved_from_stock: cancelModal.reserved_from_stock,
-            covered_from_po: cancelModal.covered_from_po,
-            qty_installed: cancelModal.qty_installed,
-            part_id: cancelModal.part_id,
-            project_id: cancelModal.project_id,
-          }}
+          commitment={cancelModal}
           part={cancelModal.part}
           project={project}
           onClose={() => setCancelModal(null)}
@@ -1484,20 +1443,12 @@ export default function ProjectSupplyManager() {
         />
       )}
 
+      {/* FIX 4+6: Pass full enriched commitment — includes coverage_qty, to_order_qty, received_qty, coverage_percent */}
       {qtyManagerDrawer && (
         <CommitmentQuantityDrawer
           open={!!qtyManagerDrawer}
           onClose={() => setQtyManagerDrawer(null)}
-          commitment={{
-            id: qtyManagerDrawer.id,
-            commitment_status: qtyManagerDrawer.commitment_status,
-            required_total: qtyManagerDrawer.required_total,
-            reserved_from_stock: qtyManagerDrawer.reserved_from_stock,
-            covered_from_po: qtyManagerDrawer.covered_from_po,
-            qty_installed: qtyManagerDrawer.qty_installed,
-            part_id: qtyManagerDrawer.part_id,
-            project_id: qtyManagerDrawer.project_id,
-          }}
+          commitment={qtyManagerDrawer}
           part={qtyManagerDrawer.part}
           onSuccess={() => {
             invalidateSupply();

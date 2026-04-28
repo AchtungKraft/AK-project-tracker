@@ -590,6 +590,9 @@ Deno.serve(async (req) => {
 
           inventory_snapshot,
 
+          // FIX 3: Promote order_line_item_ids to top-level for receive modal
+          order_line_item_ids: c.order_line_item_ids || [],
+
           _raw: {
             commitment_status: c.commitment_status,
             billing_status: c.billing_status,

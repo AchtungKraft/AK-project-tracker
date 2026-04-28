@@ -83,7 +83,7 @@ function applySorting(items, sortMode) {
   const sorted = [...items];
   switch (sortMode) {
     case 'cost_at_risk_desc':
-      return sorted.sort((a, b) => (b.cost_at_risk ?? b.resolved_exposure ?? 0) - (a.cost_at_risk ?? a.resolved_exposure ?? 0));
+      return sorted.sort((a, b) => (b.cost_at_risk ?? 0) - (a.cost_at_risk ?? 0));
     case 'margin_desc':
       return sorted.sort((a, b) => (b.resolved_margin ?? 0) - (a.resolved_margin ?? 0));
     case 'retail_desc':
@@ -91,7 +91,7 @@ function applySorting(items, sortMode) {
     case 'required_desc':
       return sorted.sort((a, b) => (b.required_total ?? 0) - (a.required_total ?? 0));
     case 'to_order_desc':
-      return sorted.sort((a, b) => (b.to_order ?? 0) - (a.to_order ?? 0));
+      return sorted.sort((a, b) => (b.to_order_qty ?? 0) - (a.to_order_qty ?? 0));
     case 'alphabetical':
       return sorted.sort((a, b) => (a.part?.part_name || '').localeCompare(b.part?.part_name || ''));
     default:
@@ -106,8 +106,8 @@ export function PSMSummaryStrip({ items, tab }) {
   const isOrderingContext = tab === 'buy';
   const stats = useMemo(() => {
     const totalItems = items.length;
-    // CANONICAL: cost_at_risk = max(0, planned_cost - invoiced_amount)
-    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
+    // CANONICAL: cost_at_risk from backend only
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? 0), 0);
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
     const installReadyCount = items.filter(i => 
@@ -284,13 +284,13 @@ export function PSMItemRow({
   // CANONICAL inventory values
   const inv = commitment.inventory_snapshot || {};
   const reservedProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
-  const toOrder = commitment.to_order ?? 0;
+  const toOrder = commitment.to_order_qty ?? 0;
   const available = inv.available_global_active ?? inv.available ?? 0;
 
   // Resolve names
 
-  // CANONICAL: cost_at_risk = max(0, actual_cost - invoiced_amount)
-  const costExposure = commitment.cost_at_risk ?? commitment.resolved_exposure ?? 0;
+  // CANONICAL: cost_at_risk from backend only
+  const costExposure = commitment.cost_at_risk ?? 0;
   // PLANNED vs ACTUAL
   const actualMargin = commitment.actual_margin ?? commitment.resolved_margin ?? 0;
   const plannedMargin = commitment.planned_margin ?? 0;
@@ -365,6 +365,7 @@ export function PSMItemRow({
 
   // PHASE 5: canOrder is STRICTLY gated by backend needs_order flag
   // If needs_order !== true, Create PO is hidden regardless of local state
+  // FIX 5: Use to_order_qty consistently
   const canOrder = allowed?.canCreatePO && commitment.needs_order === true;
   
   // CANONICAL: Invoice eligibility - use canCreateInvoice from getAllowedCommitmentActions
@@ -678,7 +679,7 @@ export function PSMItemRow({
       {/* Debug supply truth strip — always visible */}
       <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600 flex-wrap">
         <span>needs_order: <span className={commitment.needs_order ? "text-red-400" : "text-emerald-400"}>{String(!!commitment.needs_order)}</span></span>
-        <span>to_order: <span className={((commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? commitment.to_order ?? 0}</span></span>
+        <span>to_order: <span className={((commitment.to_order_qty ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? 0}</span></span>
         <span>plan_cost: <span className="text-gray-400">${(commitment.planned_unit_cost ?? 0).toFixed(2)}</span></span>
         <span>actual_cost: <span className={commitment.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>${(commitment.actual_unit_cost ?? commitment.unit_cost ?? 0).toFixed(2)} ({commitment.cost_source || '?'})</span></span>
         <span>Δmargin: <span className={(commitment.margin_delta ?? 0) < -0.01 ? "text-red-400" : (commitment.margin_delta ?? 0) > 0.01 ? "text-emerald-400" : "text-gray-500"}>${(commitment.margin_delta ?? 0).toFixed(2)}</span></span>
@@ -741,12 +742,12 @@ export function PSMGroupCard({
     const totalActualCost = items.reduce((sum, i) => sum + (i.actual_cost_total ?? i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const totalPlannedCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? 0), 0);
     const totalActualMargin = items.reduce((sum, i) => sum + (i.actual_margin ?? i.resolved_margin ?? 0), 0);
     const totalPlannedMargin = items.reduce((sum, i) => sum + (i.planned_margin ?? 0), 0);
     const totalMarginDelta = totalActualMargin - totalPlannedMargin;
     const readyCount = items.filter(i => {
-      if (tab === 'buy') return i.to_order > 0 && i.allowed?.canCreatePO;
+      if (tab === 'buy') return (i.to_order_qty ?? 0) > 0 && i.allowed?.canCreatePO;
       if (tab === 'receive') {
         const effReq = i.effective_required ?? (i.required_total ?? 0) - (i.qty_removed ?? 0);
         const totalCov = (i.reserved_from_stock ?? 0) + (i.covered_from_po ?? 0) + (i.qty_installed ?? 0);
@@ -768,7 +769,7 @@ export function PSMGroupCard({
       : GROUP_COLORS.category;
 
   // Check if all orderable items are selected
-  const orderableIds = sortedItems.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+  const orderableIds = sortedItems.filter(i => i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0).map(i => i.id);
   const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
   const someSelected = orderableIds.some(id => selectedItems.has(id));
 
@@ -997,7 +998,7 @@ function PSMSubGroupCard({
       ? GROUP_COLORS.inventory[subgroup.inventoryState] || GROUP_COLORS.category
       : GROUP_COLORS.category;
 
-  const orderableIds = sortedItems.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+  const orderableIds = sortedItems.filter(i => i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0).map(i => i.id);
   const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
   const someSelected = orderableIds.some(id => selectedItems.has(id));
 
@@ -1285,7 +1286,7 @@ export default function PSMGroupedView({
 
   // Select all in group
   const selectAllInGroup = (groupItems) => {
-    const orderableIds = groupItems.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+    const orderableIds = groupItems.filter(i => i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0).map(i => i.id);
     const allSelected = orderableIds.every(id => selectedItems.has(id));
     
     setSelectedItems(prev => {
@@ -1311,7 +1312,7 @@ export default function PSMGroupedView({
 
   // Order all in group
   const handleGroupOrder = (groupItems) => {
-    const orderableIds = groupItems.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+    const orderableIds = groupItems.filter(i => i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0).map(i => i.id);
     orderableIds.forEach(id => {
       setSelectedItems(prev => new Set(prev).add(id));
     });
@@ -1522,12 +1523,12 @@ function PSMGroupCardWithSubgroups({
     const totalActualCost = items.reduce((sum, i) => sum + (i.actual_cost_total ?? i.resolved_cost_total ?? i.planned_cost_total ?? 0), 0);
     const totalPlannedCost = items.reduce((sum, i) => sum + (i.planned_cost_total ?? 0), 0);
     const totalRetail = items.reduce((sum, i) => sum + (i.planned_retail_total ?? 0), 0);
-    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? i.resolved_exposure ?? 0), 0);
+    const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? 0), 0);
     const totalActualMargin = items.reduce((sum, i) => sum + (i.actual_margin ?? i.resolved_margin ?? 0), 0);
     const totalPlannedMargin = items.reduce((sum, i) => sum + (i.planned_margin ?? 0), 0);
     const totalMarginDelta = totalActualMargin - totalPlannedMargin;
     const readyCount = items.filter(i => {
-      if (tab === 'buy') return i.allowed?.canCreatePO && i.to_order > 0;
+      if (tab === 'buy') return i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0;
       if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
       return true;
     }).length;
@@ -1544,7 +1545,7 @@ function PSMGroupCardWithSubgroups({
       : GROUP_COLORS.category;
 
   // Check if all orderable items are selected
-  const orderableIds = items.filter(i => i.allowed?.canCreatePO && i.to_order > 0).map(i => i.id);
+  const orderableIds = items.filter(i => i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0).map(i => i.id);
   const allSelected = orderableIds.length > 0 && orderableIds.every(id => selectedItems.has(id));
   const someSelected = orderableIds.some(id => selectedItems.has(id));
 
