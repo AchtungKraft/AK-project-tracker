@@ -80,13 +80,13 @@ function UrgencyRows({ bucket, tasks, sp, showProject }) {
   const Icon = cfg.icon;
   return (
     <>
-      <div className="flex items-center gap-1 px-0.5 mt-0.5">
+      <div className="flex items-center gap-1 px-0.5 mt-px">
         <Icon className={`w-2.5 h-2.5 ${cfg.text}`} />
-        <span className={`text-[9px] font-bold tracking-wide ${cfg.text}`}>{cfg.label}</span>
-        <span className={`text-[9px] ${cfg.text} ml-auto`}>{tasks.length}</span>
+        <span className={`text-[8px] font-bold tracking-wider ${cfg.text}`}>{cfg.label}</span>
+        <span className={`text-[8px] ${cfg.text} ml-auto`}>{tasks.length}</span>
       </div>
       {tasks.map(task => (
-        <div key={task.id} className="px-0.5">
+        <div key={task.id} className="-mt-px">
           <ShopTaskRow task={task} sp={sp} showProject={showProject} />
         </div>
       ))}
@@ -126,11 +126,13 @@ function BucketGroup({ bucketName, tasks, sp }) {
   if (!tasks.length) return null;
   const { overdue, today, ready } = splitAndSort(tasks);
   return (
-    <div className="mt-0.5">
-      <div className="text-[9px] font-medium text-gray-500 px-1 py-0.5 tracking-wide">— {bucketName} —</div>
-      <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
-      <UrgencyRows bucket="today" tasks={today} sp={sp} />
-      <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+    <div className="ml-2 mt-px">
+      <div className="text-[8px] text-gray-600 tracking-wider uppercase pl-1 py-px">{bucketName}</div>
+      <div className="ml-2">
+        <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
+        <UrgencyRows bucket="today" tasks={today} sp={sp} />
+        <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+      </div>
     </div>
   );
 }
@@ -162,6 +164,7 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
   }, [tasks, hasBuckets, buckets]);
 
   const { overdue, today, ready } = splitAndSort(unbucketedTasks);
+  const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 
   const handleAddTask = (e) => {
     e.stopPropagation();
@@ -169,18 +172,22 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
   };
 
   return (
-    <div className="mt-1.5">
-      <div className="flex items-center gap-1 w-full px-0.5">
+    <div className="mt-3 first:mt-1">
+      {/* Project header */}
+      <div className="flex items-center gap-1.5 w-full">
         <button
           onClick={() => setCollapsed(v => !v)}
-          className="flex items-center gap-1 flex-1 min-w-0 text-left"
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
         >
           {collapsed
-            ? <ChevronRight className="w-2.5 h-2.5 text-gray-600 shrink-0" />
-            : <ChevronDown className="w-2.5 h-2.5 text-gray-600 shrink-0" />}
-          <span className="text-[11px] font-semibold text-gray-300 truncate">{project.name}</span>
-          <span className="text-[9px] text-gray-600 shrink-0 ml-auto">{tasks.length}</span>
+            ? <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
+            : <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />}
+          <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
         </button>
+        <span className="text-[9px] text-gray-600 shrink-0">
+          {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+          {overdueCount > 0 && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
+        </span>
         <button
           onClick={handleAddTask}
           className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-green-400 transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-green-900/20"
@@ -190,15 +197,17 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
           <span className="hidden sm:inline">Task</span>
         </button>
       </div>
-      <div className="border-b border-gray-700/30 mx-0.5 mt-px" />
+      <div className="border-b border-gray-600/40 mt-0.5 mb-0.5" />
       {!collapsed && (
-        <div className="mt-px">
+        <div>
           {bucketGroups.map(({ bucket, tasks: bTasks }) => (
             <BucketGroup key={bucket.id} bucketName={bucket.name} tasks={bTasks} sp={sp} />
           ))}
-          <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
-          <UrgencyRows bucket="today" tasks={today} sp={sp} />
-          <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+          <div className="ml-4">
+            <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
+            <UrgencyRows bucket="today" tasks={today} sp={sp} />
+            <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+          </div>
         </div>
       )}
     </div>
