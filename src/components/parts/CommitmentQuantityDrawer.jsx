@@ -19,11 +19,14 @@ export default function CommitmentQuantityDrawer({
   part,
   onSuccess 
 }) {
-  // Guard: only open sheet when commitment has required canonical fields
-  const isValid = !!commitment && commitment.required_total !== undefined;
+  // Guard: don't render anything if commitment lacks required canonical fields
+  // Callers like ReceivingGapDiagnosticsPanel pass minimal objects without required_total
+  if (!commitment || commitment.required_total === undefined) {
+    return null;
+  }
 
   return (
-    <Sheet open={open && isValid} onOpenChange={(o) => !o && onClose?.()}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose?.()}>
       <SheetContent className="bg-gray-900 border-gray-700 w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-4">
           <SheetTitle className="text-white">Manage Commitment Quantity</SheetTitle>
@@ -32,14 +35,12 @@ export default function CommitmentQuantityDrawer({
           </SheetDescription>
         </SheetHeader>
 
-        {isValid && (
-          <CommitmentQuantityManager
-            commitment={commitment}
-            part={part || commitment?.part}
-            onClose={onClose}
-            onSuccess={onSuccess}
-          />
-        )}
+        <CommitmentQuantityManager
+          commitment={commitment}
+          part={part || commitment.part}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
       </SheetContent>
     </Sheet>
   );

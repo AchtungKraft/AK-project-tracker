@@ -385,12 +385,17 @@ const ConfirmMutationModal = ({ open, onClose, onConfirm, action, commitment, is
 };
 
 // Main Commitment Quantity Manager Component
+// CRITICAL: commitment prop may be undefined if Radix Sheet renders children while closed
 export default function CommitmentQuantityManager({ 
   commitment, 
   part,
   onClose, 
   onSuccess 
 }) {
+  // EARLY GUARD: Radix Sheet may render children even when open=false.
+  // All hooks below are safe with commitment=undefined, but we return early after hooks.
+  const safeCommitment = commitment || null;
+  
   const [activeAction, setActiveAction] = useState(null);
   const [qtyInput, setQtyInput] = useState(1);
   const [targetProjectId, setTargetProjectId] = useState('');
@@ -402,10 +407,10 @@ export default function CommitmentQuantityManager({
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
-    enabled: !!commitment,
+    enabled: !!safeCommitment,
   });
 
-  const otherProjects = projects.filter(p => p.id !== commitment?.project_id);
+  const otherProjects = projects.filter(p => p.id !== safeCommitment?.project_id);
 
   // Dry run mutation for impact preview - use canonical dispatcher
   const previewMutation = useMutation({
@@ -509,29 +514,24 @@ export default function CommitmentQuantityManager({
   };
 
   // Calculate constraints - use canonical fields with legacy fallback
-  // Guard: commitment may be null during initial render cycle
   const constraints = useMemo(() => {
-    if (!commitment) return { maxDecrease: 0, maxCancelUnordered: 0, maxSplit: 0, maxMove: 0 };
+    if (!safeCommitment) return { maxDecrease: 0, maxCancelUnordered: 0, maxSplit: 0, maxMove: 0 };
     
-    const required_total = commitment.required_total ?? commitment.qty_committed ?? 0;
-    const covered_from_po = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
-    const qty_installed = commitment.qty_installed ?? 0;
+    const required_total = safeCommitment.required_total ?? safeCommitment.qty_committed ?? 0;
+    const covered_from_po = safeCommitment.covered_from_po ?? safeCommitment.qty_ordered ?? 0;
+    const qty_installed = safeCommitment.qty_installed ?? 0;
     
     return {
       maxDecrease: required_total - Math.max(covered_from_po, qty_installed),
-      maxCancelUnordered: Math.max(0, required_total - (commitment.reserved_from_stock ?? 0) - covered_from_po),
+      maxCancelUnordered: Math.max(0, required_total - (safeCommitment.reserved_from_stock ?? 0) - covered_from_po),
       maxSplit: required_total - 1,
       maxMove: required_total - qty_installed
     };
-  }, [commitment]);
+  }, [safeCommitment]);
 
   // Guard against undefined commitment (after all hooks)
-  if (!commitment) {
-    return (
-      <div className="p-4 text-center text-gray-400">
-        No commitment selected
-      </div>
-    );
+  if (!safeCommitment) {
+    return null;
   }
 
   const actions = [
