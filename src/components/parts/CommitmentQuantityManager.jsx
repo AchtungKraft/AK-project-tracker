@@ -393,8 +393,8 @@ export default function CommitmentQuantityManager({
   onSuccess 
 }) {
   // EARLY GUARD: Radix Sheet may render children even when open=false.
-  // All hooks below are safe with commitment=undefined, but we return early after hooks.
-  const safeCommitment = commitment || null;
+  // All hooks below must use safeCommitment, never raw commitment prop.
+  const safeCommitment = (commitment && commitment.required_total !== undefined) ? commitment : null;
   
   const [activeAction, setActiveAction] = useState(null);
   const [qtyInput, setQtyInput] = useState(1);
@@ -415,7 +415,8 @@ export default function CommitmentQuantityManager({
   // Dry run mutation for impact preview - use canonical dispatcher
   const previewMutation = useMutation({
     mutationFn: async (params) => {
-      const currentRequired = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+      if (!safeCommitment) throw new Error('No valid commitment');
+      const currentRequired = safeCommitment.required_total ?? safeCommitment.qty_committed ?? 0;
       let newRequired;
       
       if (params.action_type === ACTION_TYPES.INCREASE_QTY) {
@@ -428,7 +429,7 @@ export default function CommitmentQuantityManager({
 
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'ADJUST_REQUIRED',
-        commitment_ids: [commitment.id],
+        commitment_ids: [safeCommitment.id],
         payload: { required_total_set: newRequired },
         dry_run: true
       });
@@ -451,7 +452,8 @@ export default function CommitmentQuantityManager({
   // Execute mutation - use canonical dispatcher
   const executeMutation = useMutation({
     mutationFn: async (params) => {
-      const currentRequired = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+      if (!safeCommitment) throw new Error('No valid commitment');
+      const currentRequired = safeCommitment.required_total ?? safeCommitment.qty_committed ?? 0;
       let newRequired;
       
       if (params.action_type === ACTION_TYPES.INCREASE_QTY) {
@@ -464,7 +466,7 @@ export default function CommitmentQuantityManager({
 
       const response = await base44.functions.invoke('executeSupplyAction', {
         action_type: 'ADJUST_REQUIRED',
-        commitment_ids: [commitment.id],
+        commitment_ids: [safeCommitment.id],
         payload: { required_total_set: newRequired },
         dry_run: false
       });
@@ -475,9 +477,9 @@ export default function CommitmentQuantityManager({
         toast.success(`Requirement updated to ${data.required_total}`);
         // PHASE 17: Deterministic refresh
         await forceAppRefresh(queryClient, {
-          partIds: commitment?.part_id ? [commitment.part_id] : [],
-          projectIds: commitment?.project_id ? [commitment.project_id] : [],
-          commitmentIds: [commitment.id],
+          partIds: safeCommitment?.part_id ? [safeCommitment.part_id] : [],
+          projectIds: safeCommitment?.project_id ? [safeCommitment.project_id] : [],
+          commitmentIds: safeCommitment ? [safeCommitment.id] : [],
         });
         onSuccess?.();
         onClose?.();
@@ -491,10 +493,10 @@ export default function CommitmentQuantityManager({
   });
 
   const handlePreview = () => {
-    if (!activeAction) return;
+    if (!activeAction || !safeCommitment) return;
     
     previewMutation.mutate({
-      commitment_id: commitment.id,
+      commitment_id: safeCommitment.id,
       action_type: activeAction,
       qty_delta: qtyInput,
       target_project_id: targetProjectId || undefined
@@ -502,10 +504,10 @@ export default function CommitmentQuantityManager({
   };
 
   const handleExecute = () => {
-    if (!activeAction) return;
+    if (!activeAction || !safeCommitment) return;
 
     executeMutation.mutate({
-      commitment_id: commitment.id,
+      commitment_id: safeCommitment.id,
       action_type: activeAction,
       qty_delta: qtyInput,
       target_project_id: targetProjectId || undefined,
@@ -599,7 +601,7 @@ export default function CommitmentQuantityManager({
           <CardTitle className="text-sm text-gray-400">Quantity Status</CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <QuantityStateMatrix commitment={commitment} />
+          <QuantityStateMatrix commitment={safeCommitment} />
         </CardContent>
       </Card>
 
