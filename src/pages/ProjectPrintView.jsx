@@ -1,7 +1,8 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
+import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 
 export default function ProjectPrintView() {
   const projectId = new URLSearchParams(window.location.search).get("id");
@@ -35,16 +36,8 @@ export default function ProjectPrintView() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  // Filter out completed tasks
-  const activeTasks = useMemo(() => {
-    const taskStatuses = statuses.filter(s => s.scope === "Task" && s.active);
-    const completedStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes("complete") || label.includes("done");
-    });
-    if (!completedStatus) return allTasks;
-    return allTasks.filter(t => t.status_id !== completedStatus.id);
-  }, [allTasks, statuses]);
+  // Filter out completed/done/closed/archived/cancelled tasks (matches dashboard)
+  const activeTasks = useMemo(() => filterActiveTasks(allTasks, statuses), [allTasks, statuses]);
 
   // Sort buckets by order, group tasks
   const sections = useMemo(() => {

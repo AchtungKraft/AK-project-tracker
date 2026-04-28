@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
+import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 
 export default function PersonPrintView() {
   const params = new URLSearchParams(window.location.search);
@@ -35,16 +36,8 @@ export default function PersonPrintView() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  // Filter out completed tasks
-  const activeTasks = useMemo(() => {
-    const taskStatuses = statuses.filter(s => s.scope === "Task" && s.active);
-    const completedStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes("complete") || label.includes("done");
-    });
-    if (!completedStatus) return allTasks;
-    return allTasks.filter(t => t.status_id !== completedStatus.id);
-  }, [allTasks, statuses]);
+  // Filter out completed/done/closed/archived/cancelled tasks (matches dashboard)
+  const activeTasks = useMemo(() => filterActiveTasks(allTasks, statuses), [allTasks, statuses]);
 
   const projectMap = useMemo(() => {
     const m = {};
@@ -77,7 +70,7 @@ export default function PersonPrintView() {
 
     return Object.entries(byProject)
       .map(([pid, tasks]) => {
-        const project = projectMap[pid] || { name: "Unknown Project" };
+        const project = projectMap[pid] || { id: pid, name: "Unassigned / General" };
         const projectBuckets = allBuckets
           .filter((b) => b.project_id === pid)
           .sort((a, b) => (a.order || 0) - (b.order || 0));
