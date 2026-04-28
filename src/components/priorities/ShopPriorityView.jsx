@@ -1,18 +1,23 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, Clock, AlertTriangle, Timer, HelpCircle, User, UserX, Users } from "lucide-react";
+import { Flame, Clock, AlertTriangle, Timer, HelpCircle, User, UserX, Zap, ArrowDown as ArrowDownIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 
+// Sub-buckets for NOW
+const NOW_SUB_CONFIG = {
+  overdue: { label: "OVERDUE", icon: AlertTriangle, border: "border-l-red-600", bg: "bg-red-600/10", text: "text-red-400" },
+  today: { label: "TODAY", icon: Zap, border: "border-l-red-400", bg: "bg-red-500/8", text: "text-red-300" },
+  ready: { label: "READY", icon: ArrowDownIcon, border: "border-l-orange-500", bg: "bg-orange-500/8", text: "text-orange-300" },
+};
+
 const BUCKET_CONFIG = {
-  now: { label: "NOW", icon: AlertTriangle, border: "border-l-red-500", bg: "bg-red-500/10", text: "text-red-400" },
   next: { label: "NEXT", icon: Timer, border: "border-l-orange-500", bg: "bg-orange-500/10", text: "text-orange-400" },
   queued: { label: "QUEUED", icon: Clock, border: "border-l-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-400" },
-  undefined: { label: "NO DUE DATE", icon: HelpCircle, border: "border-l-gray-500", bg: "bg-gray-500/10", text: "text-gray-400" },
+  undefined: { label: "NO DUE DATE", icon: HelpCircle, border: "border-l-gray-600", bg: "bg-gray-600/10", text: "text-gray-400" },
 };
 
 const getUrgencyBucket = (task) => {
@@ -25,12 +30,22 @@ const getUrgencyBucket = (task) => {
   return "queued";
 };
 
-// Toggle button reused across filters
+// Sort: unassigned first, then due date asc
+const shopSort = (a, b) => {
+  const aUnassigned = !a.assigned_team_member_id ? 0 : 1;
+  const bUnassigned = !b.assigned_team_member_id ? 0 : 1;
+  if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
+  if (!a.due_date && !b.due_date) return 0;
+  if (!a.due_date) return 1;
+  if (!b.due_date) return -1;
+  return new Date(a.due_date) - new Date(b.due_date);
+};
+
 function FilterToggle({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
         active
           ? "bg-red-600/30 border border-red-500/50 text-white"
           : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600"
@@ -41,64 +56,60 @@ function FilterToggle({ active, onClick, children }) {
   );
 }
 
-function BucketSection({
-  bucketKey, tasks, categories, teamMembers, statuses,
-  commentCountByTaskId, latestCommentByTaskId, projectMap,
-  onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
-  assignmentMode, onAssign, updateTaskMutation,
-}) {
-  const config = BUCKET_CONFIG[bucketKey];
+function SectionHeader({ config, count }) {
   const Icon = config.icon;
-
-  if (tasks.length === 0) return null;
-
-  const unassignedInBucket = tasks.filter(t => !t.assigned_team_member_id);
-
-  const handleAssignAllUnassigned = async (memberId) => {
-    if (!updateTaskMutation || unassignedInBucket.length === 0) return;
-    for (const t of unassignedInBucket) {
-      await updateTaskMutation.mutateAsync({ id: t.id, data: { assigned_team_member_id: memberId } });
-    }
-    toast.success(`Assigned ${unassignedInBucket.length} tasks`);
-  };
-
   return (
-    <div className="space-y-2">
-      <div className={`flex items-center gap-2 px-2 py-1.5 rounded-md ${config.bg}`}>
-        <Icon className={`w-4 h-4 ${config.text}`} />
-        <span className={`text-sm font-bold tracking-wide ${config.text}`}>{config.label}</span>
-        <Badge variant="outline" className={`ml-auto text-xs ${config.text} border-current`}>
-          {tasks.length}
-        </Badge>
-      </div>
-      <div className="space-y-2">
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${config.bg}`}>
+      <Icon className={`w-3.5 h-3.5 ${config.text}`} />
+      <span className={`text-xs font-bold tracking-wide ${config.text}`}>{config.label}</span>
+      <span className={`ml-auto text-[10px] font-semibold ${config.text}`}>{count}</span>
+    </div>
+  );
+}
+
+function TaskRow({
+  task, config, categories, teamMembers, statuses,
+  commentCountByTaskId, latestCommentByTaskId, projectMap,
+  onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority, onAssign,
+}) {
+  return (
+    <div className={`border-l-2 ${config.border} pl-2 py-0.5`}>
+      <TaskQuickPreview
+        task={task}
+        projectName={projectMap[task.project_id]}
+        latestComment={latestCommentByTaskId[task.id]}
+        teamMembers={teamMembers}
+        onAssign={onAssign}
+        onTaskClick={onTaskClick}
+        onUpdateDueDate={onUpdateDueDate}
+      >
+        <TaskCard
+          task={task}
+          categories={categories}
+          teamMembers={teamMembers}
+          statuses={statuses}
+          onToggleComplete={onToggleComplete}
+          onClick={() => {}}
+          commentCount={commentCountByTaskId[task.id] || 0}
+          onUpdateDueDate={onUpdateDueDate}
+          onUpdateStartDate={onUpdateStartDate}
+          onTogglePriority={onTogglePriority}
+          showInlineControls={true}
+          compact={true}
+        />
+      </TaskQuickPreview>
+    </div>
+  );
+}
+
+function TaskList({ tasks, config, sharedProps }) {
+  if (tasks.length === 0) return null;
+  return (
+    <div>
+      <SectionHeader config={config} count={tasks.length} />
+      <div className="space-y-0.5 mt-1">
         {tasks.map(task => (
-          <div key={task.id} className={`border-l-3 ${config.border} pl-2`}>
-            <TaskQuickPreview
-              task={task}
-              projectName={projectMap[task.project_id]}
-              latestComment={latestCommentByTaskId[task.id]}
-              teamMembers={teamMembers}
-              assignmentMode={assignmentMode}
-              onAssign={onAssign}
-              onTaskClick={onTaskClick}
-            >
-              <TaskCard
-                task={task}
-                categories={categories}
-                teamMembers={teamMembers}
-                statuses={statuses}
-                onToggleComplete={onToggleComplete}
-                onClick={() => {}} // handled by TaskQuickPreview wrapper
-                commentCount={commentCountByTaskId[task.id] || 0}
-                onUpdateDueDate={onUpdateDueDate}
-                onUpdateStartDate={onUpdateStartDate}
-                onTogglePriority={onTogglePriority}
-                showInlineControls={true}
-                compact={false}
-              />
-            </TaskQuickPreview>
-          </div>
+          <TaskRow key={task.id} task={task} config={config} {...sharedProps} />
         ))}
       </div>
     </div>
@@ -106,28 +117,16 @@ function BucketSection({
 }
 
 export default function ShopPriorityView({
-  tasks,
-  projects,
-  categories,
-  teamMembers,
-  statuses,
-  commentCountByTaskId,
-  allTaskComments,
-  updateTaskMutation,
-  onTaskClick,
-  onToggleComplete,
-  onUpdateDueDate,
-  onUpdateStartDate,
-  onTogglePriority,
+  tasks, projects, categories, teamMembers, statuses,
+  commentCountByTaskId, allTaskComments, updateTaskMutation,
+  onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
 }) {
   const [showMine, setShowMine] = useState(false);
   const [showUnassigned, setShowUnassigned] = useState(false);
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   const [filterByMemberId, setFilterByMemberId] = useState(null);
-  const [assignmentMode, setAssignmentMode] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Resolve current user's team member ID once
   useEffect(() => {
     let cancelled = false;
     base44.auth.me().then(user => {
@@ -138,14 +137,12 @@ export default function ShopPriorityView({
     return () => { cancelled = true; };
   }, [teamMembers]);
 
-  // Memoized project map
   const projectMap = useMemo(() => {
     const m = {};
     projects.forEach(p => { m[p.id] = p.name; });
     return m;
   }, [projects]);
 
-  // Memoized latest comment per task
   const latestCommentByTaskId = useMemo(() => {
     const m = {};
     if (!allTaskComments) return m;
@@ -158,131 +155,112 @@ export default function ShopPriorityView({
     return m;
   }, [allTaskComments]);
 
-  // Filter tasks
   const filteredTasks = useMemo(() => {
     let result = tasks;
-    if (showMine && currentUserId) {
-      result = result.filter(t => t.assigned_team_member_id === currentUserId);
-    }
-    if (showUnassigned) {
-      result = result.filter(t => !t.assigned_team_member_id);
-    }
+    if (showMine && currentUserId) result = result.filter(t => t.assigned_team_member_id === currentUserId);
+    if (showUnassigned) result = result.filter(t => !t.assigned_team_member_id);
     if (showOverdueOnly) {
       const now = new Date();
       result = result.filter(t => t.due_date && new Date(t.due_date) <= now);
     }
     if (filterByMemberId) {
-      if (filterByMemberId === "unassigned") {
-        result = result.filter(t => !t.assigned_team_member_id);
-      } else {
-        result = result.filter(t => t.assigned_team_member_id === filterByMemberId);
-      }
+      result = filterByMemberId === "unassigned"
+        ? result.filter(t => !t.assigned_team_member_id)
+        : result.filter(t => t.assigned_team_member_id === filterByMemberId);
     }
     return result;
   }, [tasks, showMine, showUnassigned, showOverdueOnly, filterByMemberId, currentUserId]);
 
-  // Bucket tasks
-  const buckets = useMemo(() => {
-    const b = { now: [], next: [], queued: [], undefined: [] };
-    filteredTasks.forEach(task => { b[getUrgencyBucket(task)].push(task); });
-    const sortFn = (a, b) => {
-      if (!a.due_date && !b.due_date) return 0;
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return new Date(a.due_date) - new Date(b.due_date);
-    };
-    Object.values(b).forEach(arr => arr.sort(sortFn));
-    return b;
+  // Split NOW into overdue / today / ready, plus standard buckets
+  const sections = useMemo(() => {
+    const nowTasks = [];
+    const nextTasks = [];
+    const queuedTasks = [];
+    const undefinedTasks = [];
+
+    filteredTasks.forEach(task => {
+      const bucket = getUrgencyBucket(task);
+      if (bucket === "now") nowTasks.push(task);
+      else if (bucket === "next") nextTasks.push(task);
+      else if (bucket === "queued") queuedTasks.push(task);
+      else undefinedTasks.push(task);
+    });
+
+    // Split NOW into sub-buckets
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const overdue = [];
+    const todayBucket = [];
+    const ready = [];
+
+    nowTasks.forEach(t => {
+      const dueStr = t.due_date ? t.due_date.slice(0, 10) : "";
+      if (dueStr < todayStr) overdue.push(t);
+      else if (dueStr === todayStr) todayBucket.push(t);
+      else ready.push(t);
+    });
+
+    // Sort all
+    [overdue, todayBucket, ready, nextTasks, queuedTasks, undefinedTasks].forEach(arr => arr.sort(shopSort));
+
+    return { overdue, today: todayBucket, ready, next: nextTasks, queued: queuedTasks, undefined: undefinedTasks };
   }, [filteredTasks]);
 
-  // Assignment handler using same mutation pattern
   const handleAssign = useCallback(async (task, memberId) => {
     if (!updateTaskMutation) return;
-    await updateTaskMutation.mutateAsync({
-      id: task.id,
-      data: { assigned_team_member_id: memberId },
-    });
-    toast.success(memberId ? "Task assigned" : "Task unassigned");
+    await updateTaskMutation.mutateAsync({ id: task.id, data: { assigned_team_member_id: memberId } });
+    toast.success(memberId ? "Assigned" : "Unassigned");
   }, [updateTaskMutation]);
 
-  // Team summary bar click handler
   const handleFilterByMember = useCallback((memberId) => {
     setFilterByMemberId(prev => prev === memberId ? null : memberId);
-    // Clear conflicting quick filters
     setShowMine(false);
     setShowUnassigned(false);
   }, []);
 
   const totalCount = filteredTasks.length;
-  const bucketOrder = ["now", "next", "queued", "undefined"];
   const hasActiveFilter = showMine || showUnassigned || showOverdueOnly || filterByMemberId;
 
-  return (
-    <div className="space-y-4">
-      {/* Team Summary Bar */}
-      <ShopTeamSummaryBar
-        tasks={tasks}
-        teamMembers={teamMembers}
-        onFilterByMember={handleFilterByMember}
-      />
+  const sharedProps = {
+    categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap,
+    onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
+    onAssign: handleAssign,
+  };
 
-      {/* Filter + Mode Bar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <FilterToggle active={showMine} onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}>
-            <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> My Tasks</span>
-          </FilterToggle>
-          <FilterToggle active={showUnassigned} onClick={() => { setShowUnassigned(v => !v); setFilterByMemberId(null); }}>
-            <span className="flex items-center gap-1.5"><UserX className="w-3.5 h-3.5" /> Unassigned</span>
-          </FilterToggle>
-          <FilterToggle active={showOverdueOnly} onClick={() => setShowOverdueOnly(v => !v)}>
-            <span className="flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Overdue</span>
-          </FilterToggle>
-          {filterByMemberId && (
-            <button
-              onClick={() => setFilterByMemberId(null)}
-              className="px-2 py-1 rounded-md text-xs text-red-400 hover:text-red-300 bg-red-900/20 border border-red-700/30"
-            >
-              ✕ Clear member filter
-            </button>
-          )}
-        </div>
-        <FilterToggle active={assignmentMode} onClick={() => setAssignmentMode(v => !v)}>
-          <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Assign Mode</span>
+  return (
+    <div className="space-y-3">
+      <ShopTeamSummaryBar tasks={tasks} teamMembers={teamMembers} onFilterByMember={handleFilterByMember} activeFilterId={filterByMemberId} />
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <FilterToggle active={showMine} onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}>
+          <span className="flex items-center gap-1"><User className="w-3 h-3" /> Mine</span>
         </FilterToggle>
+        <FilterToggle active={showUnassigned} onClick={() => { setShowUnassigned(v => !v); setFilterByMemberId(null); }}>
+          <span className="flex items-center gap-1"><UserX className="w-3 h-3" /> Unassigned</span>
+        </FilterToggle>
+        <FilterToggle active={showOverdueOnly} onClick={() => setShowOverdueOnly(v => !v)}>
+          <span className="flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Overdue</span>
+        </FilterToggle>
+        {filterByMemberId && (
+          <button onClick={() => setFilterByMemberId(null)} className="px-2 py-0.5 rounded text-[11px] text-red-400 hover:text-red-300 bg-red-900/20 border border-red-700/30">
+            ✕ Clear
+          </button>
+        )}
       </div>
 
-      {/* Bucket Lanes */}
       {totalCount === 0 ? (
-        <div className="text-center py-12">
-          <Flame className="w-10 h-10 text-red-500/30 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">
-            {hasActiveFilter ? "No tasks match the current filters." : "No priority tasks."}
-          </p>
+        <div className="text-center py-10">
+          <Flame className="w-8 h-8 text-red-500/20 mx-auto mb-2" />
+          <p className="text-gray-500 text-sm">{hasActiveFilter ? "No tasks match filters." : "No priority tasks."}</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {bucketOrder.map(key => (
-            <BucketSection
-              key={key}
-              bucketKey={key}
-              tasks={buckets[key]}
-              categories={categories}
-              teamMembers={teamMembers}
-              statuses={statuses}
-              commentCountByTaskId={commentCountByTaskId}
-              latestCommentByTaskId={latestCommentByTaskId}
-              projectMap={projectMap}
-              onTaskClick={onTaskClick}
-              onToggleComplete={onToggleComplete}
-              onUpdateDueDate={onUpdateDueDate}
-              onUpdateStartDate={onUpdateStartDate}
-              onTogglePriority={onTogglePriority}
-              assignmentMode={assignmentMode}
-              onAssign={handleAssign}
-              updateTaskMutation={updateTaskMutation}
-            />
-          ))}
+        <div className="space-y-4">
+          <TaskList tasks={sections.overdue} config={NOW_SUB_CONFIG.overdue} sharedProps={sharedProps} />
+          <TaskList tasks={sections.today} config={NOW_SUB_CONFIG.today} sharedProps={sharedProps} />
+          <TaskList tasks={sections.ready} config={NOW_SUB_CONFIG.ready} sharedProps={sharedProps} />
+          <TaskList tasks={sections.next} config={BUCKET_CONFIG.next} sharedProps={sharedProps} />
+          <TaskList tasks={sections.queued} config={BUCKET_CONFIG.queued} sharedProps={sharedProps} />
+          <TaskList tasks={sections.undefined} config={BUCKET_CONFIG.undefined} sharedProps={sharedProps} />
         </div>
       )}
     </div>
