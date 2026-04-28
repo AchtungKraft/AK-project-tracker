@@ -93,7 +93,8 @@ export default function GlobalNeedToOrder() {
   // CANONICAL: Filter using read model fields only — no local derivation
   const filteredItems = useMemo(() => {
     return needToOrderItems.filter(item => {
-      if (item.coverage_status === 'FULL') return false;
+      // Skip fully covered items (coverage_status now includes qty_installed)
+      if (item.coverage_status === 'FULL' || item.coverage_status === 'OVER') return false;
       if ((item.to_order ?? 0) === 0) return false;
       
       if (coverageFilter !== 'all') {

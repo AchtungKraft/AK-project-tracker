@@ -274,7 +274,9 @@ Deno.serve(async (req) => {
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
-      inv.to_order_global += Math.max(0, required - reserved - covered - (c.qty_installed ?? 0));
+      // CANONICAL: Use effective_required (accounts for qty_removed) not required_total
+      const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
+      inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
     }
     
     for (const [partId, inv] of partInventoryMap.entries()) {
@@ -373,7 +375,8 @@ Deno.serve(async (req) => {
 
         const received_qty = commitmentLineItems.reduce((sum, li) => sum + (li.qty_received || 0), 0);
 
-        const total_covered = reserved_from_stock + covered_from_po;
+        // CANONICAL: coverage_status MUST include qty_installed in total coverage
+        const total_covered = reserved_from_stock + covered_from_po + qty_installed;
         let coverage_status;
         if (total_covered >= effective_required && effective_required > 0) coverage_status = 'FULL';
         else if (total_covered > effective_required) coverage_status = 'OVER';
@@ -516,7 +519,7 @@ Deno.serve(async (req) => {
           available_to_install,
 
           coverage_total: coverage_qty,
-          coverage_gap: Math.max(0, required_total - reserved_from_stock - covered_from_po - qty_installed),
+          coverage_gap: Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed),
           coverage_actual: reserved_from_stock + covered_from_po + qty_installed + to_order,
           coverage_expected: required_total,
           coverage_drift: Math.abs((reserved_from_stock + covered_from_po + qty_installed + to_order) - required_total) > 0.01,
