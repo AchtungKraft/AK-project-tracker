@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Package, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { CommitmentActions } from "@/components/financial/financialMutationGuard";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { useSupplyAction } from "@/components/supply/useSupplyAction";
 
 const REVERSAL_TYPES = [
   { value: 'scope_reduction', label: 'Scope Reduction', description: 'Part no longer needed in project scope' },
@@ -31,45 +30,46 @@ export default function ReverseInstallationModal({
   commitment,
   onClose 
 }) {
-  const queryClient = useQueryClient();
   const [reason, setReason] = useState('');
   const [reversalType, setReversalType] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const reverseMutation = useMutation({
-    mutationFn: async () => {
-      if (!reason.trim()) {
-        throw new Error('Reversal reason is required');
-      }
-      if (!reversalType) {
-        throw new Error('Reversal type is required');
-      }
-
-      // Route through CommitmentService - no direct entity mutations
-      return CommitmentActions.reverseInstalledPart({
-        installed_part_id: installedPart.id,
-        reason: reason.trim(),
-        reversal_type: reversalType,
-      });
-    },
-    onSuccess: async (data) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        partIds: part?.id ? [part.id] : [],
-        commitmentIds: commitment?.id ? [commitment.id] : [],
-        projectIds: commitment?.project_id ? [commitment.project_id] : [],
-      });
-      
-      if (data.alreadyReversed) {
-        toast.info('Installation was already reversed');
-      } else {
-        toast.success('Installation reversed successfully');
-      }
+  const { reverseInstall } = useSupplyAction({
+    onSuccess: () => {
+      toast.success('Installation reversed successfully');
       onClose();
     },
     onError: (error) => {
       toast.error(`Reversal failed: ${error.message}`);
-    }
+    },
   });
+
+  const handleReverse = async () => {
+    if (!reason.trim()) {
+      toast.error('Reversal reason is required');
+      return;
+    }
+    if (!reversalType) {
+      toast.error('Reversal type is required');
+      return;
+    }
+    if (!commitment?.id) {
+      toast.error('No commitment linked to this installation');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await reverseInstall(commitment.id, {
+        qty_to_reverse: installedPart.qty_consumed || 0,
+        reason: `[${reversalType}] ${reason.trim()}`,
+      });
+    } catch (e) {
+      // error handled by onError callback
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // HARD GUARD (after hooks): commitment must be canonical if provided
   if (commitment && commitment.required_total === undefined) {
@@ -203,16 +203,16 @@ export default function ReverseInstallationModal({
             variant="outline" 
             onClick={onClose} 
             className="border-gray-600"
-            disabled={reverseMutation.isPending}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
           <Button 
-            onClick={() => reverseMutation.mutate()}
-            disabled={reverseMutation.isPending || !isValid}
+            onClick={handleReverse}
+            disabled={isSubmitting || !isValid}
             className="bg-orange-600 hover:bg-orange-700 gap-2"
           >
-            {reverseMutation.isPending ? (
+            {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Reversing...

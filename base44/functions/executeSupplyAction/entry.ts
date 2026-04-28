@@ -808,7 +808,9 @@ async function reverseInstall(ctx,commitment_ids,payload) {
   if(qty_to_reverse>cn.qty_installed) throw new Error(`Cannot reverse ${qty_to_reverse}, only ${cn.qty_installed} installed`);
   const affStock=(c.supply_source_type??'VENDOR')!=='CLIENT_SUPPLIED';
   if(ctx.dry_run) return {preview:{commitment_id:cid,qty_reversing:qty_to_reverse,affects_stock:affStock}};
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:cn.qty_installed-qty_to_reverse,commitment_status:'allocated',commitment_version:(c.commitment_version??0)+1});
+  const newInstalled = cn.qty_installed - qty_to_reverse;
+  const newStatus = newInstalled >= cn.effective_required ? 'installed' : 'allocated';
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInstalled,commitment_status:newStatus,commitment_version:(c.commitment_version??0)+1});
   if(affStock){
     const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id});
     if(inv.length>0) await ctx.base44.asServiceRole.entities.InventoryItem.update(inv[0].id,{quantity_on_hand:(inv[0].quantity_on_hand??0)+qty_to_reverse});
@@ -817,7 +819,7 @@ async function reverseInstall(ctx,commitment_ids,payload) {
     ctx.mutations.push({entity:'Part',id:part.id,action:'REVERSE_INSTALL'});
   }
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'REVERSE_INSTALL'});
-  return {commitment_id:cid,qty_reversed:qty_to_reverse,new_installed:cn.qty_installed-qty_to_reverse};
+  return {commitment_id:cid,qty_reversed:qty_to_reverse,new_installed:newInstalled,new_status:newStatus,part_id:part.id,project_id:c.project_id};
 }
 
 async function cancelCommitment(ctx,commitment_ids,payload) {
