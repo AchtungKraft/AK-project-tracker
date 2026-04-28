@@ -130,6 +130,97 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
     }
   };
 
+  const renderInlineControls = () => (
+    <>
+      {onTogglePriority && (
+        <button
+          onClick={handleTogglePriority}
+          disabled={isUpdatingPriority}
+          className={cn(
+            "rounded hover:bg-gray-700 transition-colors",
+            task.is_priority ? 'text-orange-500' : 'text-gray-500 hover:text-orange-400',
+            isCompact ? "p-0.5" : "p-1"
+          )}
+          title={task.is_priority ? 'Remove from priority' : 'Mark as priority'}
+        >
+          {isUpdatingPriority ? (
+            <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
+          ) : (
+            <Flag className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", task.is_priority && "fill-current")} />
+          )}
+        </button>
+      )}
+      {onUpdateStartDate && (
+        <Popover open={startDateCalendarOpen} onOpenChange={setStartDateCalendarOpen}>
+          <PopoverTrigger asChild>
+            <button
+              onClick={(e) => e.stopPropagation()}
+              disabled={isUpdatingStartDate}
+              className={cn(
+                "rounded hover:bg-gray-700 transition-colors",
+                task.start_date ? 'text-blue-400' : 'text-gray-500 hover:text-blue-300',
+                isCompact ? "p-0.5" : "p-1"
+              )}
+              title={task.start_date ? `Start: ${format(new Date(task.start_date), 'MMM d, yyyy')}` : 'Set start date'}
+            >
+              {isUpdatingStartDate ? (
+                <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
+              ) : (
+                <PlayCircle className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" onClick={(e) => e.stopPropagation()} side={isMobile ? "top" : "bottom"} align={isMobile ? "center" : "start"}>
+            <div className="p-2 border-b border-gray-700">
+              <p className="text-xs text-gray-400">Start Date</p>
+              {task.start_date && <p className="text-sm text-white">{format(new Date(task.start_date), 'MMM d, yyyy')}</p>}
+            </div>
+            <Calendar mode="single" selected={task.start_date ? new Date(task.start_date) : undefined} onSelect={handleStartDateSelect} defaultMonth={task.start_date ? new Date(task.start_date) : new Date()} className="bg-gray-900" />
+            {task.start_date && (
+              <div className="p-2 border-t border-gray-700">
+                <Button variant="ghost" size="sm" onClick={() => handleStartDateSelect(null)} className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20">Clear Start Date</Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
+      {onUpdateDueDate && (
+        <Popover open={dueDateCalendarOpen} onOpenChange={setDueDateCalendarOpen}>
+          <PopoverTrigger asChild>
+            <button
+              onClick={(e) => e.stopPropagation()}
+              disabled={isUpdatingDueDate}
+              className={cn(
+                "rounded hover:bg-gray-700 transition-colors",
+                task.due_date ? 'text-red-400' : 'text-gray-500 hover:text-red-300',
+                isCompact ? "p-0.5" : "p-1"
+              )}
+              title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
+            >
+              {isUpdatingDueDate ? (
+                <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
+              ) : (
+                <CalendarIcon className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" onClick={(e) => e.stopPropagation()} side={isMobile ? "top" : "bottom"} align={isMobile ? "center" : "start"}>
+            <div className="p-2 border-b border-gray-700">
+              <p className="text-xs text-gray-400">Due Date</p>
+              {task.due_date && <p className="text-sm text-white">{format(new Date(task.due_date), 'MMM d, yyyy')}</p>}
+            </div>
+            <Calendar mode="single" selected={task.due_date ? new Date(task.due_date) : undefined} onSelect={handleDueDateSelect} defaultMonth={task.due_date ? new Date(task.due_date) : new Date()} className="bg-gray-900" />
+            {task.due_date && (
+              <div className="p-2 border-t border-gray-700">
+                <Button variant="ghost" size="sm" onClick={() => handleDueDateSelect(null)} className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20">Clear Due Date</Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
+    </>
+  );
+
   return (
     <div
       className={cn(
@@ -153,16 +244,20 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
         </button>
         
         <div className="flex-1 min-w-0" onClick={onClick}>
-          <div className={cn("flex items-start gap-1.5", isCompact ? "mb-0.5" : "mb-1")}>
+          <div className="flex items-center gap-1">
             <h4 className={cn(
-              "text-white font-medium leading-tight group-hover:text-red-400 transition-colors flex-1",
+              "text-white font-medium leading-tight group-hover:text-red-400 transition-colors flex-1 min-w-0",
               isCompact ? "text-xs line-clamp-1" : "text-sm line-clamp-2",
               isCompleted && "line-through opacity-60"
             )}>
               {task.name}
             </h4>
-            {hasComments && (
-              <MessageSquare className={cn("text-blue-400/60 flex-shrink-0 mt-0.5", isCompact ? "w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" : "w-3.5 h-3.5")} />
+            {/* Compact: inline controls on same row as name, visible on hover */}
+            {isCompact && hasInlineControls && (
+              <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">{renderInlineControls()}</div>
+            )}
+            {hasComments && !isCompact && (
+              <MessageSquare className="text-blue-400/60 flex-shrink-0 w-3.5 h-3.5" />
             )}
           </div>
           
@@ -174,151 +269,21 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
             </div>
           )}
           
+          {/* Non-compact: controls on separate row */}
+          {!isCompact && (
           <div className="flex items-center justify-between gap-1">
-            {assignedMember && !isCompact && (
+            {assignedMember && (
               <div className="flex items-center gap-1 text-gray-400 text-xs">
                 <User className="w-3 h-3 text-gray-500" />
                 <span>{assignedMember.full_name}</span>
               </div>
             )}
             
-            {/* Inline Edit Controls - show on hover in compact mode */}
             {hasInlineControls && (
-              <div className={cn("flex items-center", isCompact ? "gap-0 opacity-0 group-hover:opacity-100 transition-opacity" : "gap-1")}>
-                {/* Priority Toggle */}
-                {onTogglePriority && (
-                  <button
-                    onClick={handleTogglePriority}
-                    disabled={isUpdatingPriority}
-                    className={cn(
-                      "rounded hover:bg-gray-700 transition-colors",
-                      task.is_priority ? 'text-orange-500' : 'text-gray-500 hover:text-orange-400',
-                      isCompact ? "p-0.5" : "p-1"
-                    )}
-                    title={task.is_priority ? 'Remove from priority' : 'Mark as priority'}
-                  >
-                    {isUpdatingPriority ? (
-                      <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
-                    ) : (
-                      <Flag className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", task.is_priority && "fill-current")} />
-                    )}
-                  </button>
-                )}
-                
-                {/* Start Date */}
-                {onUpdateStartDate && (
-                  <Popover open={startDateCalendarOpen} onOpenChange={setStartDateCalendarOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        disabled={isUpdatingStartDate}
-                        className={cn(
-                          "rounded hover:bg-gray-700 transition-colors",
-                          task.start_date ? 'text-blue-400' : 'text-gray-500 hover:text-blue-300',
-                          isCompact ? "p-0.5" : "p-1"
-                        )}
-                        title={task.start_date ? `Start: ${format(new Date(task.start_date), 'MMM d, yyyy')}` : 'Set start date'}
-                      >
-                        {isUpdatingStartDate ? (
-                          <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
-                        ) : (
-                          <PlayCircle className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent 
-                      className="w-auto p-0 bg-gray-900 border-gray-700" 
-                      onClick={(e) => e.stopPropagation()}
-                      side={isMobile ? "top" : "bottom"}
-                      align={isMobile ? "center" : "start"}
-                    >
-                      <div className="p-2 border-b border-gray-700">
-                        <p className="text-xs text-gray-400">Start Date</p>
-                        {task.start_date && (
-                          <p className="text-sm text-white">{format(new Date(task.start_date), 'MMM d, yyyy')}</p>
-                        )}
-                      </div>
-                      <Calendar
-                        mode="single"
-                        selected={task.start_date ? new Date(task.start_date) : undefined}
-                        onSelect={handleStartDateSelect}
-                        defaultMonth={task.start_date ? new Date(task.start_date) : new Date()}
-                        className="bg-gray-900"
-                      />
-                      {task.start_date && (
-                        <div className="p-2 border-t border-gray-700">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleStartDateSelect(null)}
-                            className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                          >
-                            Clear Start Date
-                          </Button>
-                        </div>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
-                
-                {/* Due Date */}
-                {onUpdateDueDate && (
-                  <Popover open={dueDateCalendarOpen} onOpenChange={setDueDateCalendarOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        disabled={isUpdatingDueDate}
-                        className={cn(
-                          "rounded hover:bg-gray-700 transition-colors",
-                          task.due_date ? 'text-red-400' : 'text-gray-500 hover:text-red-300',
-                          isCompact ? "p-0.5" : "p-1"
-                        )}
-                        title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
-                      >
-                        {isUpdatingDueDate ? (
-                          <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
-                        ) : (
-                          <CalendarIcon className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent 
-                      className="w-auto p-0 bg-gray-900 border-gray-700" 
-                      onClick={(e) => e.stopPropagation()}
-                      side={isMobile ? "top" : "bottom"}
-                      align={isMobile ? "center" : "start"}
-                    >
-                      <div className="p-2 border-b border-gray-700">
-                        <p className="text-xs text-gray-400">Due Date</p>
-                        {task.due_date && (
-                          <p className="text-sm text-white">{format(new Date(task.due_date), 'MMM d, yyyy')}</p>
-                        )}
-                      </div>
-                      <Calendar
-                        mode="single"
-                        selected={task.due_date ? new Date(task.due_date) : undefined}
-                        onSelect={handleDueDateSelect}
-                        defaultMonth={task.due_date ? new Date(task.due_date) : new Date()}
-                        className="bg-gray-900"
-                      />
-                      {task.due_date && (
-                        <div className="p-2 border-t border-gray-700">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDueDateSelect(null)}
-                            className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                          >
-                            Clear Due Date
-                          </Button>
-                        </div>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
+              <div className="flex items-center gap-1">{renderInlineControls()}</div>
             )}
           </div>
+          )}
         </div>
       </div>
 
