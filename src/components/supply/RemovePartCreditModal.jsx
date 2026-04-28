@@ -44,6 +44,12 @@ export default function RemovePartCreditModal({
   const [disposition, setDisposition] = useState("no_inventory");
   const [successResult, setSuccessResult] = useState(null);
 
+  // HARD GUARD (after hooks): Reject non-canonical commitment objects
+  if (!commitment || commitment.required_total === undefined) {
+    console.warn('[ModalGuard] Invalid commitment passed to RemovePartCreditModal', commitment);
+    return null;
+  }
+
   const requiredTotal = commitment.required_total ?? 0;
   const existingRemoved = commitment.qty_removed ?? 0;
   const maxRemovable = requiredTotal - existingRemoved;
@@ -54,8 +60,8 @@ export default function RemovePartCreditModal({
   const installedQty = commitment.qty_installed ?? 0;
   const reservedFromStock = commitment.reserved_from_stock ?? 0;
   const coveredFromPO = commitment.covered_from_po ?? 0;
-  const unitCost = commitment._raw?.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
-  const unitRetail = commitment._raw?.unit_retail_snapshot ?? commitment.unit_retail ?? 0;
+  const unitCost = commitment.unit_cost_snapshot ?? commitment.unit_cost ?? 0;
+  const unitRetail = commitment.unit_retail_snapshot ?? commitment.unit_retail ?? 0;
 
   const isFullRemoval = (existingRemoved + qtyToRemove) >= requiredTotal;
 

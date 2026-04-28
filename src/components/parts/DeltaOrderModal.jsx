@@ -48,6 +48,12 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
     queryFn: () => base44.entities.Vendor.list(),
   });
 
+  // HARD GUARD (after hooks): Reject non-canonical commitment objects
+  if (!commitment || commitment.required_total === undefined) {
+    console.warn('[ModalGuard] Invalid commitment passed to DeltaOrderModal', commitment);
+    return null;
+  }
+
   // Calculate existing order quantities - use canonical fields with legacy fallback
   const existingOrdered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? 0;
   const existingReceived = commitment?.qty_received ?? 0; // legacy only

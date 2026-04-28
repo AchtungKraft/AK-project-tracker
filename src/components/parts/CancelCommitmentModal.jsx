@@ -29,7 +29,13 @@ export default function CancelCommitmentModal({
   const queryClient = useQueryClient();
   const [reason, setReason] = useState('');
   const [reduceQty, setReduceQty] = useState(false);
-  const [newQtyCommitted, setNewQtyCommitted] = useState(commitment.qty_installed || 0);
+  const [newQtyCommitted, setNewQtyCommitted] = useState(commitment?.qty_installed || 0);
+
+  // HARD GUARD (after hooks): Reject non-canonical commitment objects
+  if (!commitment || commitment.required_total === undefined) {
+    console.warn('[ModalGuard] Invalid commitment passed to CancelCommitmentModal', commitment);
+    return null;
+  }
 
   // CANONICAL: Use required_total, not qty_committed
   const canCancel = (commitment.qty_installed || 0) === 0;

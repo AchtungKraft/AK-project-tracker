@@ -168,6 +168,12 @@ export default function ReceiveInventoryModal({
     }
   });
   
+  // HARD GUARD (after hooks): If commitment is provided, it must be canonical
+  if (commitment && commitment.required_total === undefined) {
+    console.warn('[ModalGuard] Invalid commitment passed to ReceiveInventoryModal', commitment);
+    return null;
+  }
+
   const isReceiving = supplyAction.isPending || addStockMutation.isPending;
 
   const handleSubmit = () => {
@@ -190,7 +196,7 @@ export default function ReceiveInventoryModal({
   
   const handleConfirmedReceive = async () => {
     // PHASE: CRASH-PROOF INSTRUMENTATION
-    const orderLineItemIds = commitment?.order_line_item_ids || [];
+    const orderLineItemIds = commitment?.order_line_item_ids ?? commitment?._raw?.order_line_item_ids ?? [];
     const debugPayload = {
       timestamp: new Date().toISOString(),
       mode: commitment && orderLineItemIds[0] ? 'RECEIVE_PO' : 'ADD_STOCK',

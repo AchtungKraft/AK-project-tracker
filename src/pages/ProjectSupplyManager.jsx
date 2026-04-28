@@ -70,6 +70,7 @@ import { cn } from "@/lib/utils";
 import { Receipt, Download, ClipboardList, Truck as TruckIcon } from "lucide-react";
 import ReceivingGapDiagnosticsPanel from "@/components/supply/ReceivingGapDiagnosticsPanel";
 import IntegrityViolationSummary from "@/components/supply/IntegrityViolationSummary";
+import { resolveCanonicalCommitment, createModalGuard } from "@/components/supply/resolveCanonicalCommitment";
 
 /**
  * ProjectSupplyManager - Per-Project Execution
@@ -469,6 +470,46 @@ export default function ProjectSupplyManager() {
     }
   }, [hasQuantityViolations, actionsDisabledByIntegrity]);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CANONICAL DATA CONTRACT — Guarded modal setters
+  // All modal open actions MUST go through these guards.
+  // Diagnostic panels, floating action bars, and PSMGroupedCards
+  // may pass partial/minimal commitment refs — these guards resolve
+  // to the full enriched object or reject with a console warning.
+  // ═══════════════════════════════════════════════════════════════════
+  const guardedSetQtyManagerDrawer = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:qtyManager] Rejected:', incoming?.id || incoming); return; } setQtyManagerDrawer(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetReceiveModal = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:receive] Rejected:', incoming?.id || incoming); return; } setReceiveModal(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetInstallModal = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:install] Rejected:', incoming?.id || incoming); return; } setInstallModal(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetReverseInstallModal = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:reverseInstall] Rejected:', incoming?.id || incoming); return; } setReverseInstallModal(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetDeltaOrderCommitment = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:deltaOrder] Rejected:', incoming?.id || incoming); return; } setDeltaOrderCommitment(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetCancelModal = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:cancel] Rejected:', incoming?.id || incoming); return; } setCancelModal(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetRemoveCreditModal = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:removeCredit] Rejected:', incoming?.id || incoming); return; } setRemoveCreditModal(r); },
+    [enrichedCommitments]
+  );
+  const guardedSetPricingEditor = useCallback(
+    (incoming) => { const r = resolveCanonicalCommitment(incoming, enrichedCommitments); if (!r) { console.warn('[ModalGuard:pricingEditor] Rejected:', incoming?.id || incoming); return; } setPricingEditorCommitment(r); },
+    [enrichedCommitments]
+  );
+
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
     let filtered = enrichedCommitments;
@@ -737,8 +778,8 @@ export default function ProjectSupplyManager() {
 
   // === BLOCKED ITEM RESOLUTION HANDLERS ===
   const resolveVendor = (commitmentId) => {
-    const commitment = enrichedCommitments.find(c => c.id === commitmentId);
-    if (commitment) setVendorPickerCommitment(commitment);
+    const c = enrichedCommitments.find(c => c.id === commitmentId);
+    if (c) setVendorPickerCommitment(c);
   };
 
   const resolveBilling = (commitmentId) => {
@@ -749,7 +790,7 @@ export default function ProjectSupplyManager() {
 
   const resolveQty = (commitmentId) => {
     const commitment = enrichedCommitments.find(c => c.id === commitmentId);
-    if (commitment) setQtyManagerDrawer(commitment);
+    if (commitment) guardedSetQtyManagerDrawer(commitment);
   };
 
   const resolveInvariant = (commitmentId) => {
@@ -769,8 +810,8 @@ export default function ProjectSupplyManager() {
 
   // === PRICING ACTIONS ===
   const handleEditPricing = useCallback((commitment) => {
-    setPricingEditorCommitment(commitment);
-  }, []);
+    guardedSetPricingEditor(commitment);
+  }, [guardedSetPricingEditor]);
 
   const handleSyncCost = useCallback(async (commitment) => {
     try {
@@ -885,7 +926,7 @@ export default function ProjectSupplyManager() {
               </Button>
               <CoverageDiagnosticsPanel 
                 projectId={projectId}
-                onOpenCommitment={(c) => setQtyManagerDrawer(c)}
+                onOpenCommitment={guardedSetQtyManagerDrawer}
               />
             </div>
           </div>
@@ -896,8 +937,8 @@ export default function ProjectSupplyManager() {
               <CommitmentBillingDiagnostics projectId={projectId} />
               <ReceivingGapDiagnosticsPanel
                 projectId={projectId}
-                onReceive={setReceiveModal}
-                onManageQty={setQtyManagerDrawer}
+                onReceive={guardedSetReceiveModal}
+                onManageQty={guardedSetQtyManagerDrawer}
               />
               <div className="flex gap-2 flex-wrap">
                 <Button
@@ -1030,13 +1071,13 @@ export default function ProjectSupplyManager() {
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
-                onReceive={setReceiveModal}
-                onInstall={setInstallModal}
-                onReverseInstall={setReverseInstallModal}
-                onDeltaOrder={setDeltaOrderCommitment}
-                onManageQty={setQtyManagerDrawer}
-                onCancel={setCancelModal}
-                onRemoveCredit={setRemoveCreditModal}
+                onReceive={guardedSetReceiveModal}
+                onInstall={guardedSetInstallModal}
+                onReverseInstall={guardedSetReverseInstallModal}
+                onDeltaOrder={guardedSetDeltaOrderCommitment}
+                onManageQty={guardedSetQtyManagerDrawer}
+                onCancel={guardedSetCancelModal}
+                onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1096,13 +1137,13 @@ export default function ProjectSupplyManager() {
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
-                onReceive={setReceiveModal}
-                onInstall={setInstallModal}
-                onReverseInstall={setReverseInstallModal}
-                onDeltaOrder={setDeltaOrderCommitment}
-                onManageQty={setQtyManagerDrawer}
-                onCancel={setCancelModal}
-                onRemoveCredit={setRemoveCreditModal}
+                onReceive={guardedSetReceiveModal}
+                onInstall={guardedSetInstallModal}
+                onReverseInstall={guardedSetReverseInstallModal}
+                onDeltaOrder={guardedSetDeltaOrderCommitment}
+                onManageQty={guardedSetQtyManagerDrawer}
+                onCancel={guardedSetCancelModal}
+                onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1148,13 +1189,13 @@ export default function ProjectSupplyManager() {
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
-                onReceive={setReceiveModal}
-                onInstall={setInstallModal}
-                onReverseInstall={setReverseInstallModal}
-                onDeltaOrder={setDeltaOrderCommitment}
-                onManageQty={setQtyManagerDrawer}
-                onCancel={setCancelModal}
-                onRemoveCredit={setRemoveCreditModal}
+                onReceive={guardedSetReceiveModal}
+                onInstall={guardedSetInstallModal}
+                onReverseInstall={guardedSetReverseInstallModal}
+                onDeltaOrder={guardedSetDeltaOrderCommitment}
+                onManageQty={guardedSetQtyManagerDrawer}
+                onCancel={guardedSetCancelModal}
+                onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1200,13 +1241,13 @@ export default function ProjectSupplyManager() {
                 setSelectedItems={setSelectedItems}
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
-                onReceive={setReceiveModal}
-                onInstall={setInstallModal}
-                onReverseInstall={setReverseInstallModal}
-                onDeltaOrder={setDeltaOrderCommitment}
-                onManageQty={setQtyManagerDrawer}
-                onCancel={setCancelModal}
-                onRemoveCredit={setRemoveCreditModal}
+                onReceive={guardedSetReceiveModal}
+                onInstall={guardedSetInstallModal}
+                onReverseInstall={guardedSetReverseInstallModal}
+                onDeltaOrder={guardedSetDeltaOrderCommitment}
+                onManageQty={guardedSetQtyManagerDrawer}
+                onCancel={guardedSetCancelModal}
+                onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
                 onBatchPO={handleBulkPOPreview}
@@ -1364,9 +1405,10 @@ export default function ProjectSupplyManager() {
         <InstallPartModal
           requirement={{ 
             part_id: installModal.part_id, 
-            project_id: projectId,
+            project_id: installModal.project_id || projectId,
             commitment_id: installModal.id
           }}
+          commitment={installModal}
           part={installModal.part}
           onClose={() => setInstallModal(null)}
           onSuccess={() => {
@@ -1379,13 +1421,8 @@ export default function ProjectSupplyManager() {
       {reverseInstallModal && (
         <ReverseInstallationModal
           installedParts={[]}
-          commitment={{
-            id: reverseInstallModal.id,
-            commitment_status: reverseInstallModal.commitment_status,
-            qty_installed: reverseInstallModal.qty_installed,
-            part_id: reverseInstallModal.part_id,
-            project_id: reverseInstallModal.project_id,
-          }}
+          commitment={reverseInstallModal}
+          part={reverseInstallModal.part}
           onClose={() => setReverseInstallModal(null)}
           onSuccess={() => {
             invalidateSupply();

@@ -71,6 +71,12 @@ export default function ReverseInstallationModal({
     }
   });
 
+  // HARD GUARD (after hooks): commitment must be canonical if provided
+  if (commitment && commitment.required_total === undefined) {
+    console.warn('[ModalGuard] Invalid commitment passed to ReverseInstallationModal', commitment);
+    return null;
+  }
+
   const isValid = reason.trim().length > 0 && reversalType;
   const selectedTypeInfo = REVERSAL_TYPES.find(t => t.value === reversalType);
 
