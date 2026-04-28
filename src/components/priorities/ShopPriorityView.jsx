@@ -260,6 +260,13 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
         {overdueCount > 0 && (
           <span className="text-[9px] text-red-400 shrink-0">{overdueCount} overdue</span>
         )}
+        <button
+          onClick={() => window.open(`/personprintview?memberId=${memberId}`, '_blank')}
+          className="text-[9px] text-gray-600 hover:text-white transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-gray-800"
+          title="Print checklist"
+        >
+          <Printer className="w-3 h-3" />
+        </button>
       </div>
       {/* Project groups */}
       <div className="flex-1 overflow-y-auto px-0.5 py-0.5">
