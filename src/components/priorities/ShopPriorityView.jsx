@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus } from "lucide-react";
+import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus, Users, Layers } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
+import ProjectFirstView from "./ProjectFirstView";
 
 // ── urgency helpers ──
 function getSubBucket(task) {
@@ -276,6 +277,7 @@ export default function ShopPriorityView({
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showMine, setShowMine] = useState(false);
   const [createTaskContext, setCreateTaskContext] = useState(null); // { projectId, memberId }
+  const [groupMode, setGroupMode] = useState("assigned"); // "assigned" | "project"
 
   // Load all buckets for projects that have tasks
   const projectIds = useMemo(() => [...new Set(tasks.map(t => t.project_id))], [tasks]);
@@ -381,7 +383,7 @@ export default function ShopPriorityView({
     <div className="space-y-2">
       <ShopTeamSummaryBar tasks={tasks} teamMembers={teamMembers} onFilterByMember={handleFilterByMember} activeFilterId={filterByMemberId} />
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <button
           onClick={() => { setShowMine(v => !v); setFilterByMemberId(null); }}
           className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
@@ -395,6 +397,26 @@ export default function ShopPriorityView({
             ✕ Clear
           </button>
         )}
+
+        {/* Grouping toggle */}
+        <div className="ml-auto flex items-center bg-gray-800/60 border border-gray-700 rounded overflow-hidden">
+          <button
+            onClick={() => setGroupMode("assigned")}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium transition-colors ${
+              groupMode === "assigned" ? "bg-blue-600/30 text-blue-300" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            <Users className="w-3 h-3" /> Assigned
+          </button>
+          <button
+            onClick={() => setGroupMode("project")}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium transition-colors ${
+              groupMode === "project" ? "bg-blue-600/30 text-blue-300" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            <Layers className="w-3 h-3" /> Project
+          </button>
+        </div>
       </div>
 
       {filteredTasks.length === 0 ? (
@@ -402,7 +424,7 @@ export default function ShopPriorityView({
           <Flame className="w-7 h-7 text-red-500/20 mx-auto mb-1.5" />
           <p className="text-gray-600 text-xs">No priority tasks.</p>
         </div>
-      ) : (
+      ) : groupMode === "assigned" ? (
         <>
           {/* Unassigned queue — full width */}
           <UnassignedQueue tasks={unassignedTasks} sp={sp} />
@@ -426,6 +448,13 @@ export default function ShopPriorityView({
             </div>
           )}
         </>
+      ) : (
+        <ProjectFirstView
+          tasks={filteredTasks}
+          projects={projects}
+          sp={sp}
+          teamMembers={teamMembers}
+        />
       )}
 
       {createTaskContext && (
