@@ -34,6 +34,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
 import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
 import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
+import { resolveInstallState } from "./resolveInstallState";
 import ExecutionDataBlock from "./ExecutionDataBlock";
 import CoverageDebugPanel from "./CoverageDebugPanel";
 import EffectiveQtyBadge, { IntegrityViolationBadge } from "./EffectiveQtyBadge";
@@ -110,9 +111,10 @@ export function PSMSummaryStrip({ items, tab }) {
     const totalExposure = items.reduce((sum, i) => sum + (i.cost_at_risk ?? 0), 0);
     const inventoryCounts = getInventoryStateCounts(items, isOrderingContext);
     
-    const installReadyCount = items.filter(i => 
-      (i.available_to_install ?? 0) > 0 && i.allowed?.canInstall
-    ).length;
+    const installReadyCount = items.filter(i => {
+      const { is_ready_to_install } = resolveInstallState(i);
+      return is_ready_to_install && i.allowed?.canInstall;
+    }).length;
     
     const blockedCount = items.filter(i => i.block_reason_code).length;
 
@@ -634,10 +636,10 @@ export function PSMItemRow({
               </DropdownMenuItem>
             )}
             {/* CANONICAL: Install/Reverse Install — BLOCKED in ordering context when to_order > 0 */}
-            {!hideInstallActions && allowed?.canInstall && (
+            {!hideInstallActions && allowed?.canInstall && resolveInstallState(commitment).is_ready_to_install && (
               <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
                 <Wrench className="w-4 h-4 mr-2" />
-                Install ({Math.max(0, reservedProject - (commitment.qty_installed ?? 0))} available)
+                Install ({resolveInstallState(commitment).available_to_install} available)
               </DropdownMenuItem>
             )}
             {!hideInstallActions && allowed?.canReverseInstall && (
@@ -753,7 +755,7 @@ export function PSMGroupCard({
         const totalCov = (i.reserved_from_stock ?? 0) + (i.covered_from_po ?? 0) + (i.qty_installed ?? 0);
         return totalCov < effReq && (i.covered_from_po ?? 0) > 0;
       }
-      if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
+      if (tab === 'install') return resolveInstallState(i).is_ready_to_install && i.allowed?.canInstall;
       return true;
     }).length;
     const isOrderingContext = tab === 'buy';
@@ -1529,7 +1531,7 @@ function PSMGroupCardWithSubgroups({
     const totalMarginDelta = totalActualMargin - totalPlannedMargin;
     const readyCount = items.filter(i => {
       if (tab === 'buy') return i.allowed?.canCreatePO && (i.to_order_qty ?? 0) > 0;
-      if (tab === 'install') return i.available_to_install > 0 && i.allowed?.canInstall;
+      if (tab === 'install') return resolveInstallState(i).is_ready_to_install && i.allowed?.canInstall;
       return true;
     }).length;
     const isOrderingContext = tab === 'buy';

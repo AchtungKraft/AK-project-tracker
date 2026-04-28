@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ShoppingCart, Package, Wrench, CheckCircle2, AlertTriangle, Layers, Ban, AlertCircle } from "lucide-react";
 import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
+import { resolveInstallState } from "./resolveInstallState";
 import { cn } from "@/lib/utils";
 import { getActionExplanation, getBlockerStatus } from "./commitmentPriority";
 
@@ -48,11 +49,11 @@ export function resolveNextAction(commitment) {
   const totalCov = rfs + cfp + qi;
   const isFulfilled = totalCov >= effReq && effReq > 0;
   const gap = Math.max(0, effReq - rfs - cfp - qi);
-  const installable = Math.max(0, rfs - qi);
 
-  // INSTALL_READY: Has installable stock — only offer when installable > 0
-  if (installable > 0) {
-    return { action: 'INSTALL', reason: `${installable} ready to install`, qty: installable };
+  // CANONICAL: Use resolveInstallState for install readiness
+  const { available_to_install, is_ready_to_install } = resolveInstallState(commitment);
+  if (is_ready_to_install) {
+    return { action: 'INSTALL', reason: `${available_to_install} ready to install`, qty: available_to_install };
   }
 
   // COVERED but not fulfilled: Has PO coverage but commitment still needs more

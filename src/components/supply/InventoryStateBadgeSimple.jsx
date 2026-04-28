@@ -1,8 +1,9 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Package, AlertTriangle, CheckCircle2, Truck, Wrench } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle2, Truck, Wrench, CircleCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
+import { resolveInstallState } from "./resolveInstallState";
 
 /**
  * InventoryStateBadgeSimple - Build Management Focused Inventory State
@@ -17,6 +18,11 @@ import { resolveLifecycleState } from "./resolveCommitmentStateLocal";
  */
 
 const STATE_CONFIG = {
+  INSTALLED: {
+    label: "Installed",
+    color: "bg-gray-600/80 text-gray-200 border-gray-500",
+    Icon: CircleCheck,
+  },
   INSTALL_READY: {
     label: "Ready to Install",
     color: "bg-emerald-600/80 text-emerald-100 border-emerald-500",
@@ -75,23 +81,26 @@ function determineOrderingState(commitment) {
  * (i.e. coverage_qty >= effective_required)
  */
 function determineInventoryState(commitment) {
+  // CANONICAL: Use resolveInstallState as single source of truth for install readiness
+  const { is_fully_installed, is_ready_to_install } = resolveInstallState(commitment);
+  
+  // Fully installed → show INSTALLED, not INSTALL_READY
+  if (is_fully_installed) return 'INSTALLED';
+  
+  // Has units available to install → INSTALL_READY
+  if (is_ready_to_install) return 'INSTALL_READY';
+
   // PHASE 5: Prefer backend canonical flags over local resolution
   const backendFulfilled = commitment.commitment_fulfilled;
   const backendNeedsOrder = commitment.needs_order;
   
-  // If backend flags are present, use them as single source of truth
+  if (backendNeedsOrder === true) return 'NEEDS_ORDER';
+  
   if (backendFulfilled === true) {
-    const qi = commitment.qty_installed ?? 0;
-    const effReq = commitment.effective_required ?? (commitment.required_total ?? 0) - (commitment.qty_removed ?? 0);
-    if (qi >= effReq && effReq > 0) return 'INSTALL_READY'; // Installed
-    const rfs = commitment.reserved_from_stock ?? 0;
-    if (rfs >= effReq && effReq > 0) return 'INSTALL_READY';
-    return 'ORDERED'; // Covered by PO or stock, not yet installed
+    return 'ORDERED'; // Covered by PO or stock, not yet installable
   }
   
-  if (backendNeedsOrder === true) return 'NEEDS_ORDER';
   if (backendNeedsOrder === false && backendFulfilled === false) {
-    // Not fulfilled but doesn't need order — has PO coverage pending receive
     const ordered = commitment.covered_from_po ?? 0;
     if (ordered > 0) return 'ORDERED';
     const reserved = commitment.reserved_from_stock ?? 0;
@@ -99,20 +108,18 @@ function determineInventoryState(commitment) {
     return 'NEEDS_ORDER';
   }
 
-  // Fallback: backend fields not present — should not happen with canonical backend
-  // Use local resolver for DISPLAY ONLY, never for filtering/grouping
+  // Fallback: backend fields not present
   if (import.meta.env.DEV) {
     console.warn('[determineInventoryState] Missing backend canonical flags for', commitment.id || commitment.commitment_id);
   }
   const lifecycle = resolveLifecycleState(commitment);
-  if (lifecycle === 'INSTALLED') return 'INSTALL_READY';
+  if (lifecycle === 'INSTALLED') return 'INSTALLED';
   if (lifecycle === 'INSTALL_READY') return 'INSTALL_READY';
   if (lifecycle === 'COVERED') return 'ORDERED';
   
-  const reserved = commitment.reserved_from_stock ?? 0;
   const ordered = commitment.covered_from_po ?? 0;
-
   if (ordered > 0) return 'ORDERED';
+  const reserved = commitment.reserved_from_stock ?? 0;
   if (reserved > 0) return 'IN_STOCK';
   return 'NEEDS_ORDER';
 }
@@ -182,6 +189,7 @@ export function InventoryStateBadgeSimple({ commitment, compact = false, classNa
  * CANONICAL: Uses backend needs_order flag as the single truth for "Needs Order" count.
  */
 export function getInventoryStateCounts(items, isOrderingContext = false) {
+  let installed = 0;
   let installReady = 0;
   let inStock = 0;
   let ordered = 0;
@@ -197,17 +205,19 @@ export function getInventoryStateCounts(items, isOrderingContext = false) {
     }
     
     const state = determineContextAwareState(item, isOrderingContext);
-    if (state === 'INSTALL_READY') installReady++;
+    if (state === 'INSTALLED') installed++;
+    else if (state === 'INSTALL_READY') installReady++;
     else if (state === 'IN_STOCK') inStock++;
     else if (state === 'ORDERED') ordered++;
-    else if (state === 'NEEDS_ORDER') needsOrder++; // Fallback for items without backend flag
+    else if (state === 'NEEDS_ORDER') needsOrder++;
     else if (state === 'COVERED') covered++;
     else if (state === 'PARTIAL') partial++;
   });
   
   return {
+    installed,
     installReady,
-    inStock: inStock + covered,
+    inStock: inStock + covered + installed,
     ordered: ordered + partial,
     needsOrder,
     covered,

@@ -1,4 +1,5 @@
 import { resolveLifecycleState } from '@/components/supply/resolveCommitmentStateLocal';
+import { resolveInstallState } from '@/components/supply/resolveInstallState';
 
 /**
  * getAllowedCommitmentActions - Centralized lifecycle action gating
@@ -155,12 +156,11 @@ export function getAllowedCommitmentActions(commitment) {
     actions.canAllocate = true;
   }
 
-  // INSTALL - RESOLVER-ENFORCED: Only when lifecycle_state is INSTALL_READY
-  // reserved_from_stock must cover required_total for physical availability.
-  // This also passes if there are uninstalled reserved units (partial install scenarios).
-  if (uninstalled > 0 && (lifecycle === 'INSTALL_READY' || effectiveReserved > qty_installed)) {
+  // INSTALL - Uses resolveInstallState as single source of truth
+  const installState = resolveInstallState(commitment);
+  if (installState.is_ready_to_install) {
     actions.canInstall = true;
-    actions.installableQty = uninstalled;
+    actions.installableQty = installState.available_to_install;
   }
 
   // REVERSE INSTALL - only if has installed parts
@@ -360,9 +360,8 @@ export function getActionBlockReason(commitment, action) {
       return 'Cannot cancel in current state';
     },
     canInstall: () => {
-      const availableToInstall = commitment?.available_to_install ?? 
-        Math.max(0, (commitment?.reserved_from_stock ?? 0) - (commitment?.qty_installed ?? 0));
-      if (availableToInstall <= 0) return 'No parts available to install';
+      const { available_to_install } = resolveInstallState(commitment);
+      if (available_to_install <= 0) return 'No parts available to install';
       return 'Cannot install in current state';
     },
     canEdit: () => {
