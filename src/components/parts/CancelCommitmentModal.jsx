@@ -31,17 +31,6 @@ export default function CancelCommitmentModal({
   const [reduceQty, setReduceQty] = useState(false);
   const [newQtyCommitted, setNewQtyCommitted] = useState(commitment?.qty_installed || 0);
 
-  // HARD GUARD (after hooks): Reject non-canonical commitment objects
-  if (!commitment || commitment.required_total === undefined) {
-    console.warn('[ModalGuard] Invalid commitment passed to CancelCommitmentModal', commitment);
-    return null;
-  }
-
-  // CANONICAL: Use required_total, not qty_committed
-  const canCancel = (commitment.qty_installed || 0) === 0;
-  const canReduce = (commitment.qty_installed || 0) > 0;
-  const minQty = commitment.qty_installed || 0;
-
   const cancelMutation = useMutation({
     mutationFn: async () => {
       // Use CommitmentService for proper cancellation with credit handling
@@ -114,6 +103,15 @@ export default function CancelCommitmentModal({
       toast.error(`Failed to reduce: ${error.message}`);
     }
   });
+
+  // HARD GUARD (after ALL hooks)
+  if (!commitment || commitment.required_total === undefined) {
+    return null;
+  }
+
+  const canCancel = (commitment.qty_installed || 0) === 0;
+  const canReduce = (commitment.qty_installed || 0) > 0;
+  const minQty = commitment.qty_installed || 0;
 
   const handleSubmit = () => {
     if (reduceQty) {

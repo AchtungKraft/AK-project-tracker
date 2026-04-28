@@ -48,23 +48,6 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
     queryFn: () => base44.entities.Vendor.list(),
   });
 
-  // HARD GUARD (after hooks): Reject non-canonical commitment objects
-  if (!commitment || commitment.required_total === undefined) {
-    console.warn('[ModalGuard] Invalid commitment passed to DeltaOrderModal', commitment);
-    return null;
-  }
-
-  // Calculate existing order quantities - use canonical fields with legacy fallback
-  const existingOrdered = commitment?.covered_from_po ?? commitment?.qty_ordered ?? 0;
-  const existingReceived = commitment?.qty_received ?? 0; // legacy only
-  const pendingDelivery = existingOrdered; // covered_from_po = on_order (not yet installed)
-  const totalCommitted = commitment?.required_total ?? commitment?.qty_committed ?? 0;
-  const reserved = commitment?.reserved_from_stock ?? 0;
-  const remainingNeeded = Math.max(0, totalCommitted - reserved - existingOrdered);
-
-  // Validation
-  const canSubmit = deltaQty > 0 && unitCost > 0 && vendorId;
-
   const createDeltaOrderMutation = useMutation({
     mutationFn: async () => {
       return await CommitmentActions.createDeltaOrder({
@@ -92,6 +75,19 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
       toast.error('Failed to create delta order: ' + error.message);
     },
   });
+
+  // HARD GUARD (after ALL hooks)
+  if (!commitment || commitment.required_total === undefined) {
+    return null;
+  }
+
+  const existingOrdered = commitment.covered_from_po ?? commitment.qty_ordered ?? 0;
+  const existingReceived = commitment.qty_received ?? 0;
+  const pendingDelivery = existingOrdered;
+  const totalCommitted = commitment.required_total ?? commitment.qty_committed ?? 0;
+  const reserved = commitment.reserved_from_stock ?? 0;
+  const remainingNeeded = Math.max(0, totalCommitted - reserved - existingOrdered);
+  const canSubmit = deltaQty > 0 && unitCost > 0 && vendorId;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
