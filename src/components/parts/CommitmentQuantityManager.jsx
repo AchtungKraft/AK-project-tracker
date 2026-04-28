@@ -181,7 +181,7 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
   // Use canonical supply action dispatcher
   const mutation = useMutation({
     mutationFn: async ({ action_type, qty_delta, reason }) => {
-      if (!commitment) throw new Error('No commitment provided');
+      if (!commitment || commitment.required_total === undefined) throw new Error('No valid commitment provided');
       // Calculate new required_total based on action
       const currentRequired = commitment.required_total ?? commitment.qty_committed ?? 0;
       let newRequired;
@@ -736,58 +736,21 @@ export default function CommitmentQuantityManager({
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-gray-500">Current Qty</p>
-                    <p className="text-white">{impactPreview.current.required_total ?? impactPreview.current.qty_committed}</p>
+                    <p className="text-white">{impactPreview.old_qty ?? 0}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">New Qty</p>
-                    <p className="text-white font-bold">{impactPreview.proposed.required_total ?? impactPreview.proposed.qty_committed}</p>
+                    <p className="text-white font-bold">{impactPreview.new_qty ?? 0}</p>
                   </div>
                 </div>
 
-                {/* Financial impact */}
-                <div className="grid grid-cols-2 gap-2 text-sm border-t border-gray-800 pt-2">
-                  <div>
-                    <p className="text-gray-500">Retail Change</p>
-                    <p className={impactPreview.financialImpact.retail_delta >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {impactPreview.financialImpact.retail_delta >= 0 ? '+' : ''}
-                      ${impactPreview.financialImpact.retail_delta.toFixed(2)}
-                    </p>
+                {impactPreview.coverage_status && (
+                  <div className="text-xs text-gray-400">
+                    Coverage: <span className="text-white">{impactPreview.coverage_status}</span>
+                    {impactPreview.to_order > 0 && (
+                      <span className="text-red-400 ml-2">({impactPreview.to_order} to order)</span>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-gray-500">Margin Impact</p>
-                    <p className={impactPreview.financialImpact.margin_impact >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {impactPreview.financialImpact.margin_impact >= 0 ? '+' : ''}
-                      ${impactPreview.financialImpact.margin_impact.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Warnings */}
-                {impactPreview.warnings?.length > 0 && (
-                  <div className="flex items-start gap-2 text-yellow-400 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <div>{impactPreview.warnings.join(', ')}</div>
-                  </div>
-                )}
-
-                {/* Blocking issues */}
-                {impactPreview.blockingIssues?.length > 0 && (
-                  <div className="flex items-start gap-2 text-red-400 text-sm bg-red-900/20 p-2 rounded">
-                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <div>{impactPreview.blockingIssues.join(', ')}</div>
-                  </div>
-                )}
-
-                {/* Flags */}
-                {impactPreview.proposedFlags?.credit_required && (
-                  <Badge variant="outline" className="border-yellow-600 text-yellow-400">
-                    Credit Adjustment Required
-                  </Badge>
-                )}
-                {impactPreview.proposedFlags?.po_adjustment_required && (
-                  <Badge variant="outline" className="border-purple-600 text-purple-400">
-                    PO Adjustment Required
-                  </Badge>
                 )}
               </div>
             )}
