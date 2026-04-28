@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban } from "lucide-react";
+import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
+import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 
 // ── urgency helpers ──
 function getSubBucket(task) {
@@ -119,26 +121,81 @@ function UnassignedQueue({ tasks, sp }) {
   );
 }
 
-// ── project group inside a person column ──
-function ProjectGroup({ project, tasks, sp }) {
-  const [collapsed, setCollapsed] = useState(false);
+// ── bucket sub-group inside a project ──
+function BucketGroup({ bucketName, tasks, sp }) {
+  if (!tasks.length) return null;
   const { overdue, today, ready } = splitAndSort(tasks);
+  return (
+    <div className="mt-0.5">
+      <div className="text-[9px] font-medium text-gray-500 px-1 py-0.5 tracking-wide">— {bucketName} —</div>
+      <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
+      <UrgencyRows bucket="today" tasks={today} sp={sp} />
+      <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+    </div>
+  );
+}
+
+// ── project group inside a person column ──
+function ProjectGroup({ project, tasks, sp, memberId }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const buckets = sp.bucketsByProjectId?.[project.id] || [];
+  const hasBuckets = buckets.length > 0;
+
+  // Group tasks by bucket
+  const { bucketGroups, unbucketedTasks } = useMemo(() => {
+    if (!hasBuckets) return { bucketGroups: [], unbucketedTasks: tasks };
+    const byBucket = {};
+    const unbucketed = [];
+    tasks.forEach(t => {
+      if (t.kanban_bucket_id && buckets.find(b => b.id === t.kanban_bucket_id)) {
+        if (!byBucket[t.kanban_bucket_id]) byBucket[t.kanban_bucket_id] = [];
+        byBucket[t.kanban_bucket_id].push(t);
+      } else {
+        unbucketed.push(t);
+      }
+    });
+    const groups = buckets
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .filter(b => byBucket[b.id]?.length > 0)
+      .map(b => ({ bucket: b, tasks: byBucket[b.id] }));
+    return { bucketGroups: groups, unbucketedTasks: unbucketed };
+  }, [tasks, hasBuckets, buckets]);
+
+  const { overdue, today, ready } = splitAndSort(unbucketedTasks);
+
+  const handleAddTask = (e) => {
+    e.stopPropagation();
+    sp.onAddTask?.(project.id, memberId);
+  };
 
   return (
-    <div className="mt-1">
-      <button
-        onClick={() => setCollapsed(v => !v)}
-        className="flex items-center gap-1 w-full text-left px-0.5"
-      >
-        {collapsed
-          ? <ChevronRight className="w-2.5 h-2.5 text-gray-600" />
-          : <ChevronDown className="w-2.5 h-2.5 text-gray-600" />}
-        <span className="text-[11px] font-semibold text-gray-300 truncate flex-1">{project.name}</span>
-        <span className="text-[9px] text-gray-600 shrink-0">{tasks.length}</span>
-      </button>
+    <div className="mt-1.5">
+      <div className="flex items-center gap-1 w-full px-0.5">
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          className="flex items-center gap-1 flex-1 min-w-0 text-left"
+        >
+          {collapsed
+            ? <ChevronRight className="w-2.5 h-2.5 text-gray-600 shrink-0" />
+            : <ChevronDown className="w-2.5 h-2.5 text-gray-600 shrink-0" />}
+          <span className="text-[11px] font-semibold text-gray-300 truncate">{project.name}</span>
+          <span className="text-[9px] text-gray-600 shrink-0 ml-auto">{tasks.length}</span>
+        </button>
+        <button
+          onClick={handleAddTask}
+          className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-green-400 transition-colors shrink-0 px-1 py-0.5 rounded hover:bg-green-900/20"
+          title="Add task to this project"
+        >
+          <Plus className="w-2.5 h-2.5" />
+          <span className="hidden sm:inline">Task</span>
+        </button>
+      </div>
       <div className="border-b border-gray-700/30 mx-0.5 mt-px" />
       {!collapsed && (
         <div className="mt-px">
+          {bucketGroups.map(({ bucket, tasks: bTasks }) => (
+            <BucketGroup key={bucket.id} bucketName={bucket.name} tasks={bTasks} sp={sp} />
+          ))}
           <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
           <UrgencyRows bucket="today" tasks={today} sp={sp} />
           <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
@@ -149,7 +206,7 @@ function ProjectGroup({ project, tasks, sp }) {
 }
 
 // ── person column (primary board column) ──
-function PersonColumn({ name, initials, tasks, projects, sp }) {
+function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
   // Group tasks by project
   const projectGroups = useMemo(() => {
     const byProject = {};
@@ -183,7 +240,7 @@ function PersonColumn({ name, initials, tasks, projects, sp }) {
       {/* Project groups */}
       <div className="flex-1 overflow-y-auto px-0.5 py-0.5">
         {projectGroups.map(({ project, tasks: ptasks }) => (
-          <ProjectGroup key={project.id} project={project} tasks={ptasks} sp={sp} />
+          <ProjectGroup key={project.id} project={project} tasks={ptasks} sp={sp} memberId={memberId} />
         ))}
         {tasks.length === 0 && (
           <p className="text-[10px] text-gray-700 text-center py-4">No tasks</p>
@@ -202,6 +259,23 @@ export default function ShopPriorityView({
   const [filterByMemberId, setFilterByMemberId] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showMine, setShowMine] = useState(false);
+  const [createTaskContext, setCreateTaskContext] = useState(null); // { projectId, memberId }
+
+  // Load all buckets for projects that have tasks
+  const projectIds = useMemo(() => [...new Set(tasks.map(t => t.project_id))], [tasks]);
+  const { data: allBuckets = [] } = useQuery({
+    queryKey: ['shopBuckets', projectIds],
+    queryFn: () => base44.entities.ProjectKanbanBucket.list(),
+    enabled: projectIds.length > 0,
+  });
+  const bucketsByProjectId = useMemo(() => {
+    const m = {};
+    allBuckets.forEach(b => {
+      if (!m[b.project_id]) m[b.project_id] = [];
+      m[b.project_id].push(b);
+    });
+    return m;
+  }, [allBuckets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,10 +351,14 @@ export default function ShopPriorityView({
     setShowMine(false);
   }, []);
 
+  const handleAddTask = useCallback((projectId, memberId) => {
+    setCreateTaskContext({ projectId, memberId: memberId || null });
+  }, []);
+
   const sp = {
-    categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap,
+    categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap, bucketsByProjectId,
     onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
-    onAssign: handleAssign,
+    onAssign: handleAssign, onAddTask: handleAddTask,
   };
 
   return (
@@ -325,12 +403,22 @@ export default function ShopPriorityView({
                     tasks={col.tasks}
                     projects={projects}
                     sp={sp}
+                    memberId={col.id}
                   />
                 ))}
               </div>
             </div>
           )}
         </>
+      )}
+
+      {createTaskContext && (
+        <CreateTaskModal
+          projectId={createTaskContext.projectId}
+          defaultAssigneeId={createTaskContext.memberId}
+          defaultIsPriority={true}
+          onClose={() => setCreateTaskContext(null)}
+        />
       )}
     </div>
   );

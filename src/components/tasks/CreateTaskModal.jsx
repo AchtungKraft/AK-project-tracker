@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 
-export default function CreateTaskModal({ onClose, projectId }) {
+export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId, defaultBucketId, defaultIsPriority = false }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [taskData, setTaskData] = useState({
@@ -23,10 +23,12 @@ export default function CreateTaskModal({ onClose, projectId }) {
     description: "",
     project_id: projectId || "",
     category_id: "",
-    assigned_team_member_id: "",
+    assigned_team_member_id: defaultAssigneeId || "",
     status_id: "",
+    kanban_bucket_id: defaultBucketId || "",
     start_date: "",
     due_date: "",
+    is_priority: defaultIsPriority,
   });
 
   useEffect(() => {
@@ -42,6 +44,14 @@ export default function CreateTaskModal({ onClose, projectId }) {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
     enabled: !projectId,
+  });
+
+  // Load buckets for the selected project
+  const activeProjectId = taskData.project_id || projectId;
+  const { data: projectBuckets = [] } = useQuery({
+    queryKey: ['projectBuckets', activeProjectId],
+    queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: activeProjectId }),
+    enabled: !!activeProjectId,
   });
 
   const { data: userTeamMember } = useQuery({
@@ -65,6 +75,7 @@ export default function CreateTaskModal({ onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
       toast.success('Task created successfully');
       onClose();
     },
@@ -179,6 +190,26 @@ export default function CreateTaskModal({ onClose, projectId }) {
               teamMembers={teamMembers}
             />
           </div>
+
+          {projectBuckets.length > 0 && (
+            <div>
+              <Label className="text-gray-400">Bucket (optional)</Label>
+              <Select
+                value={taskData.kanban_bucket_id}
+                onValueChange={(value) => setTaskData({ ...taskData, kanban_bucket_id: value === "__none__" ? "" : value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="No bucket" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No bucket</SelectItem>
+                  {projectBuckets.sort((a, b) => (a.order || 0) - (b.order || 0)).map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
