@@ -172,9 +172,11 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
   };
 
   return (
-    <div className="mt-3 first:mt-1">
+    <div className="mt-4 first:mt-1">
+      {/* Top divider */}
+      <div className="border-t border-white/10" />
       {/* Project header */}
-      <div className="flex items-center gap-1.5 w-full">
+      <div className="flex items-center gap-1.5 w-full pt-1.5">
         <button
           onClick={() => setCollapsed(v => !v)}
           className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
@@ -197,7 +199,7 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
           <span className="hidden sm:inline">Task</span>
         </button>
       </div>
-      <div className="border-b border-gray-600/40 mt-0.5 mb-0.5" />
+      <div className="border-b border-white/10 mt-0.5 mb-0.5" />
       {!collapsed && (
         <div>
           {bucketGroups.map(({ bucket, tasks: bTasks }) => (
