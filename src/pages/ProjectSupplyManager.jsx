@@ -1445,11 +1445,15 @@ export default function ProjectSupplyManager() {
       {reverseInstallModal && (
         <SafeRenderBoundary context="Reverse Install Modal">
           <ReverseInstallationModal
-            installedParts={[]}
+            installedPart={{
+              id: reverseInstallModal.id,
+              qty_consumed: reverseInstallModal.qty_installed ?? 0,
+              unit_cost_at_install: reverseInstallModal.unit_cost ?? 0,
+              extended_cost: (reverseInstallModal.unit_cost ?? 0) * (reverseInstallModal.qty_installed ?? 0),
+            }}
             commitment={reverseInstallModal}
             part={reverseInstallModal.part}
             onClose={() => setReverseInstallModal(null)}
-            onSuccess={() => { setReverseInstallModal(null); handleModalSuccess(); }}
           />
         </SafeRenderBoundary>
       )}
