@@ -760,7 +760,7 @@ export default function CommitmentQuantityManager({
               onClick={handleExecute}
               disabled={
                 executeMutation.isPending || 
-                !impactPreview?.canProceed ||
+                !impactPreview ||
                 (activeAction === ACTION_TYPES.REALLOCATE_TO_PROJECT && !targetProjectId)
               }
               className="w-full bg-red-600 hover:bg-red-700"
