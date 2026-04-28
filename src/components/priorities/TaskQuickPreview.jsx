@@ -22,24 +22,26 @@ export default function TaskQuickPreview({
     : null;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-start gap-1 py-px">
       {/* Task content — click opens detail */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick(task)}>
         {children}
-        {/* Project label */}
-        {projectName && (
-          <div className="text-[10px] text-gray-500 truncate leading-tight">{projectName}</div>
-        )}
-        {/* Latest update */}
-        {latestComment && (
-          <div className="text-[10px] text-gray-600 truncate leading-tight">
-            💬 {latestComment.content}
+        {(projectName || latestComment) && (
+          <div className="pl-[22px] -mt-px space-y-0">
+            {projectName && (
+              <div className="text-[10px] text-gray-500 truncate leading-tight">{projectName}</div>
+            )}
+            {latestComment && (
+              <div className="text-[10px] text-gray-600 truncate leading-tight">
+                💬 {latestComment.content}
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Assign popover trigger */}
-      <div className="shrink-0" onClick={e => e.stopPropagation()}>
+      <div className="shrink-0 mt-0.5" onClick={e => e.stopPropagation()}>
         <Popover>
           <PopoverTrigger asChild>
             {assigned ? (
