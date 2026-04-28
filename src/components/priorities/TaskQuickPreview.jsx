@@ -1,4 +1,5 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { User } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -18,8 +19,34 @@ export default function TaskQuickPreview({
   const activeMembers = teamMembers.filter(tm => tm.active);
   const assigned = teamMembers.find(m => m.id === task.assigned_team_member_id);
 
+  // Hover description panel state
+  const [hoverVisible, setHoverVisible] = useState(false);
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
+  const hoverTimer = useRef(null);
+  const rowRef = useRef(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (!task.description) return;
+    hoverTimer.current = setTimeout(() => {
+      if (rowRef.current) {
+        const rect = rowRef.current.getBoundingClientRect();
+        const spaceRight = window.innerWidth - rect.right;
+        setPanelPos({
+          top: rect.top,
+          left: spaceRight > 300 ? rect.right + 8 : rect.left - 296,
+        });
+      }
+      setHoverVisible(true);
+    }, 200);
+  }, [task.description]);
+
+  const handleMouseLeave = useCallback(() => {
+    clearTimeout(hoverTimer.current);
+    setHoverVisible(false);
+  }, []);
+
   return (
-    <div className="group/row relative flex items-start gap-1 py-px">
+    <div ref={rowRef} className="relative flex items-start gap-1 py-px" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {/* Task content — click opens detail */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick(task)}>
         {children}
@@ -37,12 +64,16 @@ export default function TaskQuickPreview({
         )}
       </div>
 
-      {/* Hover description panel */}
-      {task.description && (
-        <div className="absolute z-50 left-full top-0 ml-2 w-72 rounded-md bg-neutral-900/95 border border-white/10 p-3 shadow-lg pointer-events-none opacity-0 group-hover/row:opacity-100 transition-opacity duration-150 delay-150">
+      {/* Hover description panel — portaled to body to escape overflow clipping */}
+      {hoverVisible && task.description && createPortal(
+        <div
+          className="fixed z-[9999] w-72 rounded-md bg-neutral-900/95 border border-white/10 p-3 shadow-lg pointer-events-none"
+          style={{ top: panelPos.top, left: panelPos.left }}
+        >
           <div className="text-xs font-medium text-white mb-1 line-clamp-1">{task.name}</div>
           <div className="text-xs text-white/70 leading-snug line-clamp-5 whitespace-pre-wrap">{task.description}</div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Assign popover trigger — icon only, hover reveals name */}
