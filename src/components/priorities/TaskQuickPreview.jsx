@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { MessageSquare, User, AlertTriangle } from "lucide-react";
+import { User } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function TaskQuickPreview({
@@ -17,9 +17,6 @@ export default function TaskQuickPreview({
 
   const activeMembers = teamMembers.filter(tm => tm.active);
   const assigned = teamMembers.find(m => m.id === task.assigned_team_member_id);
-  const initials = assigned
-    ? assigned.full_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
-    : null;
 
   return (
     <div className="flex items-start gap-1 py-px">
@@ -40,26 +37,25 @@ export default function TaskQuickPreview({
         )}
       </div>
 
-      {/* Assign popover trigger */}
-      <div className="shrink-0 mt-0.5" onClick={e => e.stopPropagation()}>
+      {/* Assign popover trigger — icon only, hover reveals name */}
+      <div className="shrink-0 mt-0.5 group/assign" onClick={e => e.stopPropagation()}>
         <Popover>
           <PopoverTrigger asChild>
-            {assigned ? (
-              <button
-                title={assigned.full_name}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-blue-400 hover:bg-blue-900/30 transition-colors"
-              >
-                <span>👤</span>
-                <span className="font-medium max-w-[60px] truncate">{assigned.full_name.split(" ")[0]}</span>
-              </button>
-            ) : (
-              <button
-                title="Assign"
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-yellow-500 hover:bg-yellow-900/20 transition-colors"
-              >
-                <span>👤</span>
-              </button>
-            )}
+            <button
+              title={assigned ? assigned.full_name : "Assign"}
+              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] transition-colors ${
+                assigned
+                  ? "text-gray-500 hover:bg-blue-900/30 hover:text-blue-400"
+                  : "text-yellow-600/60 hover:bg-yellow-900/20 hover:text-yellow-500"
+              }`}
+            >
+              <User className="w-3 h-3 shrink-0" />
+              {assigned && (
+                <span className="font-medium max-w-[60px] truncate opacity-0 group-hover/assign:opacity-100 transition-opacity text-gray-500">
+                  {assigned.full_name.split(" ")[0]}
+                </span>
+              )}
+            </button>
           </PopoverTrigger>
           <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
             <div className="space-y-px max-h-52 overflow-y-auto">
