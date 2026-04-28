@@ -30,10 +30,9 @@ export default function TaskQuickPreview({
     hoverTimer.current = setTimeout(() => {
       if (rowRef.current) {
         const rect = rowRef.current.getBoundingClientRect();
-        const spaceRight = window.innerWidth - rect.right;
         setPanelPos({
-          top: rect.top,
-          left: spaceRight > 300 ? rect.right + 8 : rect.left - 296,
+          top: rect.bottom + 4,
+          left: rect.left,
         });
       }
       setHoverVisible(true);
