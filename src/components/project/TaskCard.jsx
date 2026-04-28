@@ -133,11 +133,11 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
   return (
     <div
       className={cn(
-        "bg-gray-800/50 rounded-lg border hover:bg-gray-800/70 transition-all cursor-pointer group",
+        "rounded transition-all cursor-pointer group",
         task.is_priority 
-          ? 'border-red-500 border-2 shadow-lg shadow-red-500/20' 
-          : 'border-gray-700 hover:border-red-700/50',
-        isCompact ? "p-1.5" : "p-2"
+          ? 'bg-red-950/20 border-l-2 border-l-red-500' 
+          : 'hover:bg-gray-800/40',
+        isCompact ? "py-0.5 px-1" : "p-2"
       )}
     >
       <div className={cn("flex items-start", isCompact ? "gap-1.5" : "gap-2")}>
@@ -162,7 +162,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
               {task.name}
             </h4>
             {hasComments && (
-              <MessageSquare className={cn("text-blue-400 flex-shrink-0 mt-0.5", isCompact ? "w-3 h-3" : "w-3.5 h-3.5")} />
+              <MessageSquare className={cn("text-blue-400/60 flex-shrink-0 mt-0.5", isCompact ? "w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" : "w-3.5 h-3.5")} />
             )}
           </div>
           
@@ -175,16 +175,16 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
           )}
           
           <div className="flex items-center justify-between gap-1">
-            {assignedMember && (
-              <div className={cn("flex items-center gap-1 text-gray-400", isCompact ? "text-[10px]" : "text-xs")}>
-                <User className={isCompact ? "w-2.5 h-2.5 text-gray-500" : "w-3 h-3 text-gray-500"} />
-                <span className={isCompact ? "truncate max-w-16" : ""}>{assignedMember.full_name}</span>
+            {assignedMember && !isCompact && (
+              <div className="flex items-center gap-1 text-gray-400 text-xs">
+                <User className="w-3 h-3 text-gray-500" />
+                <span>{assignedMember.full_name}</span>
               </div>
             )}
             
-            {/* Inline Edit Controls - ALWAYS render when handlers provided */}
+            {/* Inline Edit Controls - show on hover in compact mode */}
             {hasInlineControls && (
-              <div className={cn("flex items-center", isCompact ? "gap-0" : "gap-1")}>
+              <div className={cn("flex items-center", isCompact ? "gap-0 opacity-0 group-hover:opacity-100 transition-opacity" : "gap-1")}>
                 {/* Priority Toggle */}
                 {onTogglePriority && (
                   <button

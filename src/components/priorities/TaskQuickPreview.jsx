@@ -48,16 +48,17 @@ export default function TaskQuickPreview({
             {assigned ? (
               <button
                 title={assigned.full_name}
-                className="w-6 h-6 rounded-full bg-blue-600/20 flex items-center justify-center text-[9px] font-bold text-blue-400 hover:bg-blue-600/40 transition-colors"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-blue-400 hover:bg-blue-900/30 transition-colors"
               >
-                {initials}
+                <span>👤</span>
+                <span className="font-medium max-w-[60px] truncate">{assigned.full_name.split(" ")[0]}</span>
               </button>
             ) : (
               <button
                 title="Assign"
-                className="w-6 h-6 rounded-full bg-yellow-900/30 flex items-center justify-center hover:bg-yellow-800/40 transition-colors"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-yellow-500 hover:bg-yellow-900/20 transition-colors"
               >
-                <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                <span>👤</span>
               </button>
             )}
           </PopoverTrigger>
