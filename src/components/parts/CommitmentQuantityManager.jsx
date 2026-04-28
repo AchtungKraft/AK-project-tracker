@@ -42,6 +42,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { normalizePreviewResponse, EMPTY_PREVIEW } from "@/components/supply/previewResponseAdapter";
 
 const ACTION_TYPES = {
   INCREASE_QTY: 'INCREASE_QTY',
@@ -436,16 +437,7 @@ export default function CommitmentQuantityManager({
       return response.data;
     },
     onSuccess: (data) => {
-      if (data.preview) {
-        setImpactPreview({
-          old_qty: data.preview.old_required,
-          new_qty: data.preview.new_required,
-          delta: data.preview.delta,
-          reserved: data.preview.new_reserved,
-          to_order: data.preview.to_order,
-          coverage_status: data.preview.coverage_status
-        });
-      }
+      setImpactPreview(normalizePreviewResponse(data));
     }
   });
 
@@ -736,20 +728,35 @@ export default function CommitmentQuantityManager({
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-gray-500">Current Qty</p>
-                    <p className="text-white">{impactPreview.old_qty ?? 0}</p>
+                    <p className="text-white">{impactPreview.current.qty}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">New Qty</p>
-                    <p className="text-white font-bold">{impactPreview.new_qty ?? 0}</p>
+                    <p className="text-white font-bold">{impactPreview.proposed.qty}</p>
                   </div>
                 </div>
 
-                {impactPreview.coverage_status && (
-                  <div className="text-xs text-gray-400">
-                    Coverage: <span className="text-white">{impactPreview.coverage_status}</span>
-                    {impactPreview.to_order > 0 && (
-                      <span className="text-red-400 ml-2">({impactPreview.to_order} to order)</span>
-                    )}
+                {impactPreview.delta.cost_total !== 0 && (
+                  <div className="grid grid-cols-2 gap-2 text-sm border-t border-gray-800 pt-2">
+                    <div>
+                      <p className="text-gray-500">Cost Delta</p>
+                      <p className={impactPreview.delta.cost_total >= 0 ? 'text-red-400' : 'text-green-400'}>
+                        {impactPreview.delta.cost_total >= 0 ? '+' : ''}${impactPreview.delta.cost_total.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Retail Delta</p>
+                      <p className={impactPreview.delta.retail_total >= 0 ? 'text-green-400' : 'text-red-400'}>
+                        {impactPreview.delta.retail_total >= 0 ? '+' : ''}${impactPreview.delta.retail_total.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {impactPreview.meta.warnings.length > 0 && (
+                  <div className="flex items-start gap-2 text-yellow-400 text-sm">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div>{impactPreview.meta.warnings.join(', ')}</div>
                   </div>
                 )}
               </div>
@@ -760,7 +767,7 @@ export default function CommitmentQuantityManager({
               onClick={handleExecute}
               disabled={
                 executeMutation.isPending || 
-                !impactPreview ||
+                !impactPreview?.canProceed ||
                 (activeAction === ACTION_TYPES.REALLOCATE_TO_PROJECT && !targetProjectId)
               }
               className="w-full bg-red-600 hover:bg-red-700"
