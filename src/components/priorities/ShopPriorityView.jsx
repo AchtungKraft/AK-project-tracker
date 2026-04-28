@@ -6,7 +6,7 @@ import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 
-// ── urgency ──
+// ── urgency helpers ──
 function getSubBucket(task) {
   if (!task.due_date) return "ready";
   const d = new Date();
@@ -36,7 +36,7 @@ function splitAndSort(tasks) {
   return { overdue: o, today: t, ready: r };
 }
 
-// ── task row (shared by queue + columns) ──
+// ── shared task row ──
 function ShopTaskRow({ task, sp, showProject }) {
   return (
     <TaskQuickPreview
@@ -65,7 +65,7 @@ function ShopTaskRow({ task, sp, showProject }) {
   );
 }
 
-// ── urgency label ──
+// ── urgency label + rows ──
 const URGENCY_LABEL = {
   overdue: { icon: AlertTriangle, text: "text-red-400", label: "OVERDUE" },
   today:   { icon: Zap,           text: "text-orange-300", label: "TODAY" },
@@ -92,7 +92,7 @@ function UrgencyRows({ bucket, tasks, sp, showProject }) {
   );
 }
 
-// ── unassigned queue (full-width, above columns) ──
+// ── unassigned queue (full-width, above people board) ──
 function UnassignedQueue({ tasks, sp }) {
   const { overdue, today, ready } = useMemo(() => splitAndSort(tasks), [tasks]);
   const overdueCount = overdue.length;
@@ -110,7 +110,7 @@ function UnassignedQueue({ tasks, sp }) {
           </span>
         )}
       </div>
-      <div className="max-h-48 overflow-y-auto space-y-0">
+      <div className="max-h-52 overflow-y-auto space-y-0">
         <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} showProject />
         <UrgencyRows bucket="today" tasks={today} sp={sp} showProject />
         <UrgencyRows bucket="ready" tasks={ready} sp={sp} showProject />
@@ -119,90 +119,85 @@ function UnassignedQueue({ tasks, sp }) {
   );
 }
 
-// ── person column ──
-function PersonColumn({ name, initials, tasks, sp }) {
-  const { overdue, today, ready } = useMemo(() => splitAndSort(tasks), [tasks]);
+// ── project group inside a person column ──
+function ProjectGroup({ project, tasks, sp }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const { overdue, today, ready } = splitAndSort(tasks);
   const overdueCount = overdue.length;
 
   return (
-    <div className="w-[280px] min-w-[280px] shrink-0 flex flex-col">
-      {/* Column header */}
-      <div className="flex items-center gap-1.5 px-1.5 py-1 border-b border-gray-800/50">
-        <div className="w-5 h-5 rounded-full bg-blue-600/20 flex items-center justify-center text-[9px] font-bold text-blue-400">
-          {initials}
-        </div>
-        <span className="text-xs font-medium text-gray-200 truncate">{name}</span>
-        <span className="text-[10px] text-gray-600 ml-auto">{tasks.length}</span>
+    <div className="mb-1.5">
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        className="flex items-center gap-1 w-full text-left py-0.5 px-0.5"
+      >
+        {collapsed
+          ? <ChevronRight className="w-2.5 h-2.5 text-gray-600" />
+          : <ChevronDown className="w-2.5 h-2.5 text-gray-600" />}
+        <FolderKanban className="w-3 h-3 text-red-500/60" />
+        <span className="text-[11px] font-semibold text-gray-200 truncate flex-1">{project.name}</span>
         {overdueCount > 0 && (
-          <span className="text-[9px] text-red-400 font-semibold">{overdueCount}!</span>
+          <span className="text-[9px] text-red-400 font-semibold shrink-0">{overdueCount}!</span>
         )}
-      </div>
-      {/* Tasks */}
-      <div className="flex-1 overflow-y-auto px-0.5 pb-1">
-        <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
-        <UrgencyRows bucket="today" tasks={today} sp={sp} />
-        <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
-        {tasks.length === 0 && (
-          <p className="text-[10px] text-gray-700 text-center py-3">No tasks</p>
-        )}
-      </div>
+        <span className="text-[9px] text-gray-600 shrink-0">{tasks.length}</span>
+      </button>
+      {project.client_name && !collapsed && (
+        <div className="text-[9px] text-gray-600 px-5 -mt-0.5 truncate">{project.client_name}</div>
+      )}
+      {!collapsed && (
+        <div className="pl-1 mt-0.5">
+          <UrgencyRows bucket="overdue" tasks={overdue} sp={sp} />
+          <UrgencyRows bucket="today" tasks={today} sp={sp} />
+          <UrgencyRows bucket="ready" tasks={ready} sp={sp} />
+        </div>
+      )}
     </div>
   );
 }
 
-// ── project section ──
-function ProjectSection({ project, projectTasks, teamMembers, sp }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  const { unassigned, memberColumns } = useMemo(() => {
-    const ua = [];
-    const byMember = {};
-    projectTasks.forEach(t => {
-      if (!t.assigned_team_member_id) { ua.push(t); return; }
-      if (!byMember[t.assigned_team_member_id]) byMember[t.assigned_team_member_id] = [];
-      byMember[t.assigned_team_member_id].push(t);
+// ── person column (primary board column) ──
+function PersonColumn({ name, initials, tasks, projects, sp }) {
+  // Group tasks by project
+  const projectGroups = useMemo(() => {
+    const byProject = {};
+    tasks.forEach(t => {
+      if (!byProject[t.project_id]) byProject[t.project_id] = [];
+      byProject[t.project_id].push(t);
     });
-    const cols = Object.entries(byMember)
-      .map(([id, tks]) => {
-        const tm = teamMembers.find(m => m.id === id);
-        const name = tm?.full_name || "Unknown";
-        return { id, name, initials: name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(), tasks: tks };
+    return Object.entries(byProject)
+      .map(([pid, ptasks]) => {
+        const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown" };
+        return { project, tasks: ptasks };
       })
       .sort((a, b) => b.tasks.length - a.tasks.length);
-    return { unassigned: ua, memberColumns: cols };
-  }, [projectTasks, teamMembers]);
+  }, [tasks, projects]);
 
-  const overdueTotal = projectTasks.filter(t => getSubBucket(t) === "overdue").length;
+  const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 
   return (
-    <div>
-      {/* Project header — minimal */}
-      <button onClick={() => setCollapsed(v => !v)} className="flex items-center gap-1.5 w-full py-1 text-left">
-        {collapsed ? <ChevronRight className="w-3 h-3 text-gray-600" /> : <ChevronDown className="w-3 h-3 text-gray-600" />}
-        <FolderKanban className="w-3.5 h-3.5 text-red-500/70" />
-        <span className="text-sm font-semibold text-white truncate">{project.name}</span>
-        {project.client_name && <span className="text-[11px] text-gray-500 truncate">— {project.client_name}</span>}
-        <span className="text-[11px] text-gray-600 ml-auto shrink-0">{projectTasks.length} tasks</span>
-        {overdueTotal > 0 && <span className="text-[10px] text-red-400 shrink-0">{overdueTotal} overdue</span>}
-      </button>
-
-      {!collapsed && (
-        <div className="mt-0.5 mb-3">
-          {/* Unassigned queue for this project */}
-          <UnassignedQueue tasks={unassigned} sp={{...sp, projectMap: null}} />
-
-          {/* Horizontal people columns */}
-          {memberColumns.length > 0 && (
-            <div className="overflow-x-auto">
-              <div className="flex gap-px min-w-min bg-gray-800/20 rounded">
-                {memberColumns.map(col => (
-                  <PersonColumn key={col.id} name={col.name} initials={col.initials} tasks={col.tasks} sp={sp} />
-                ))}
-              </div>
-            </div>
-          )}
+    <div className="min-w-[320px] w-[calc((100%-2rem)/3)] shrink-0 flex flex-col border border-gray-800/50 rounded-lg bg-gray-900/20">
+      {/* Person header */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-800/40">
+        <div className="w-6 h-6 rounded-full bg-blue-600/20 flex items-center justify-center text-[10px] font-bold text-blue-400">
+          {initials}
         </div>
-      )}
+        <span className="text-xs font-semibold text-white truncate">{name}</span>
+        <span className="text-[10px] text-gray-500 ml-auto shrink-0">{tasks.length} tasks</span>
+        {overdueCount > 0 && (
+          <span className="text-[9px] font-semibold text-red-400 bg-red-900/30 px-1 py-px rounded shrink-0">
+            {overdueCount} overdue
+          </span>
+        )}
+      </div>
+      {/* Project groups */}
+      <div className="flex-1 overflow-y-auto px-1 py-1">
+        {projectGroups.map(({ project, tasks: ptasks }) => (
+          <ProjectGroup key={project.id} project={project} tasks={ptasks} sp={sp} />
+        ))}
+        {tasks.length === 0 && (
+          <p className="text-[10px] text-gray-700 text-center py-4">No tasks</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -254,19 +249,31 @@ export default function ShopPriorityView({
     return result;
   }, [tasks, showMine, currentUserId, filterByMemberId]);
 
-  const projectGroups = useMemo(() => {
-    const byProject = {};
+  // Split into unassigned vs assigned, build person columns
+  const { unassignedTasks, peopleColumns } = useMemo(() => {
+    const unassigned = [];
+    const byMember = {};
+
     filteredTasks.forEach(t => {
-      if (!byProject[t.project_id]) byProject[t.project_id] = [];
-      byProject[t.project_id].push(t);
+      if (!t.assigned_team_member_id) {
+        unassigned.push(t);
+      } else {
+        if (!byMember[t.assigned_team_member_id]) byMember[t.assigned_team_member_id] = [];
+        byMember[t.assigned_team_member_id].push(t);
+      }
     });
-    return Object.entries(byProject)
-      .map(([pid, ptasks]) => {
-        const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown Project" };
-        return { project, tasks: ptasks };
+
+    const cols = Object.entries(byMember)
+      .map(([id, memberTasks]) => {
+        const tm = teamMembers.find(m => m.id === id);
+        const name = tm?.full_name || "Unknown";
+        const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+        return { id, name, initials, tasks: memberTasks };
       })
       .sort((a, b) => b.tasks.length - a.tasks.length);
-  }, [filteredTasks, projects]);
+
+    return { unassignedTasks: unassigned, peopleColumns: cols };
+  }, [filteredTasks, teamMembers]);
 
   const handleAssign = useCallback(async (task, memberId) => {
     if (!updateTaskMutation) return;
@@ -311,11 +318,28 @@ export default function ShopPriorityView({
           <p className="text-gray-600 text-xs">No priority tasks.</p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-800/40">
-          {projectGroups.map(({ project, tasks: ptasks }) => (
-            <ProjectSection key={project.id} project={project} projectTasks={ptasks} teamMembers={teamMembers} sp={sp} />
-          ))}
-        </div>
+        <>
+          {/* Unassigned queue — full width */}
+          <UnassignedQueue tasks={unassignedTasks} sp={sp} />
+
+          {/* People board — horizontal scroll, 3 columns visible */}
+          {peopleColumns.length > 0 && (
+            <div className="overflow-x-auto">
+              <div className="flex gap-3 min-w-max">
+                {peopleColumns.map(col => (
+                  <PersonColumn
+                    key={col.id}
+                    name={col.name}
+                    initials={col.initials}
+                    tasks={col.tasks}
+                    projects={projects}
+                    sp={sp}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
