@@ -1,16 +1,30 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * executeSupplyAction - Unified Supply Dispatcher
- * PHASE 1 CANONICAL ALIGNMENT:
- * - All logic uses canonical: required_total, reserved_from_stock, covered_from_po, qty_installed
- * - Deprecated fields written for compat ONLY, marked DEPRECATED_COMPAT
- * - Mismatch warnings logged
+ * ══════════════════════════════════════════════════════════════════════
+ * executeSupplyAction — CANONICAL SUPPLY DISPATCHER
+ * 
+ * This is the ONLY approved mutation path for supply lifecycle actions.
+ * All UI components, modals, and backend services MUST route here.
+ * Legacy services (commitmentService) are hard-deprecated for lifecycle ops.
+ *
+ * Every stock-affecting mutation follows this sequence:
+ *   1. Validate payload (fail loudly with actionable errors)
+ *   2. Mutate inventory (InventoryItem + physical_stock)
+ *   3. inlineRecompute(part_id)  — recalculate Part.physical_stock
+ *   4. inlineRebalance(part_id)  — redistribute reservations
+ *   5. Update commitment_status  — derive from quantity state
+ *   6. Write lifecycle events + audit logs
+ *
+ * CANONICAL FIELDS: required_total, reserved_from_stock, covered_from_po,
+ *   qty_installed, qty_removed
+ * DEPRECATED COMPAT: qty_committed, qty_reserved, qty_to_order (written
+ *   alongside canonical for backward compat only)
  *
  * PO INTEGRITY GUARDS (P0):
  * - PO creation: every line item MUST have unit_cost > 0
  * - PO deletion/cancellation: billing_status MUST be 'Not Invoiced'
- * Guards are inlined (no local imports in Deno deploy).
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 // ── PO INTEGRITY GUARDS (canonical — inlined from poValidationGuards.js) ──
@@ -756,7 +770,10 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
 
 async function install(ctx,commitment_ids,payload) {
   const {qty_to_install,location_id}=payload; const cid=commitment_ids?.[0];
-  if(!cid||qty_to_install===undefined) throw new Error('commitment_id and qty_to_install required');
+  // ── PAYLOAD VALIDATION (Phase 5) ──
+  if(!cid) throw new Error('INSTALL requires commitment_id (pass as commitment_ids[0])');
+  if(qty_to_install===undefined||qty_to_install===null) throw new Error('INSTALL requires payload.qty_to_install');
+  if(typeof qty_to_install!=='number'||qty_to_install<=0||!Number.isFinite(qty_to_install)) throw new Error(`INSTALL: qty_to_install must be a positive number, got ${qty_to_install}`);
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
   const cn=readCanonical(c,ctx);
@@ -784,7 +801,18 @@ async function install(ctx,commitment_ids,payload) {
   if(ctx.dry_run) return {preview:{commitment_id:cid,qty_installing:qty_to_install,installable,effective_required:cn.effective_required,qty_removed:cn.qty_removed,affects_stock:affStock}};
 
   const newInst=cn.qty_installed+qty_to_install, newRes=Math.max(0,cn.reserved_from_stock-qty_to_install);
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInst>=cn.effective_required?'installed':c.commitment_status,commitment_version:(c.commitment_version??0)+1});
+  // ── PHASE 6: Status derivation from quantity state after install ──
+  let newInstallStatus;
+  if (newInst >= cn.effective_required) {
+    newInstallStatus = 'installed';
+  } else if (newRes > 0) {
+    newInstallStatus = 'allocated';
+  } else if (cn.covered_from_po > 0) {
+    newInstallStatus = 'ordered';
+  } else {
+    newInstallStatus = c.commitment_status; // preserve current if no clear transition
+  }
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInstallStatus,commitment_version:(c.commitment_version??0)+1});
 
   if(affStock){
     const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id}); let rem=qty_to_install;
@@ -801,7 +829,10 @@ async function install(ctx,commitment_ids,payload) {
 
 async function reverseInstall(ctx,commitment_ids,payload) {
   const {qty_to_reverse,reason}=payload; const cid=commitment_ids?.[0];
-  if(!cid||qty_to_reverse===undefined) throw new Error('commitment_id and qty_to_reverse required');
+  // ── PAYLOAD VALIDATION (Phase 5) ──
+  if(!cid) throw new Error('REVERSE_INSTALL requires commitment_id (pass as commitment_ids[0])');
+  if(qty_to_reverse===undefined||qty_to_reverse===null) throw new Error('REVERSE_INSTALL requires payload.qty_to_reverse');
+  if(typeof qty_to_reverse!=='number'||qty_to_reverse<=0||!Number.isFinite(qty_to_reverse)) throw new Error(`REVERSE_INSTALL: qty_to_reverse must be a positive number, got ${qty_to_reverse}`);
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   const [part]=await ctx.base44.entities.Part.filter({id:c.part_id}); if(!part) throw new Error('Part not found');
   const cn=readCanonical(c,ctx);
@@ -809,7 +840,21 @@ async function reverseInstall(ctx,commitment_ids,payload) {
   const affStock=(c.supply_source_type??'VENDOR')!=='CLIENT_SUPPLIED';
   if(ctx.dry_run) return {preview:{commitment_id:cid,qty_reversing:qty_to_reverse,affects_stock:affStock}};
   const newInstalled = cn.qty_installed - qty_to_reverse;
-  const newStatus = newInstalled >= cn.effective_required ? 'installed' : 'allocated';
+  // ── PHASE 6: Status derivation from quantity state ──
+  // fully installed → 'installed'
+  // has reserved stock remaining → 'allocated'  
+  // has PO coverage but no stock → 'ordered'
+  // no coverage at all → 'planned'
+  let newStatus;
+  if (newInstalled >= cn.effective_required) {
+    newStatus = 'installed';
+  } else if (cn.reserved_from_stock > 0) {
+    newStatus = 'allocated';
+  } else if (cn.covered_from_po > 0) {
+    newStatus = 'ordered';
+  } else {
+    newStatus = 'planned';
+  }
   await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInstalled,commitment_status:newStatus,commitment_version:(c.commitment_version??0)+1});
   if(affStock){
     const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id});
@@ -819,11 +864,15 @@ async function reverseInstall(ctx,commitment_ids,payload) {
     ctx.mutations.push({entity:'Part',id:part.id,action:'REVERSE_INSTALL'});
   }
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'REVERSE_INSTALL'});
+  ctx.lifecycle_events.push({commitment_id:cid,event_type:'REVERSE_INSTALL',trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,actor_email:ctx.user.email,part_id:part.id,project_id:c.project_id,old_values:JSON.stringify({qty_installed:cn.qty_installed}),new_values:JSON.stringify({qty_installed:newInstalled,new_status:newStatus}),metadata:JSON.stringify({qty_reversed:qty_to_reverse,reason:reason||null,affects_stock:affStock}),event_date:ctx.timestamp});
   return {commitment_id:cid,qty_reversed:qty_to_reverse,new_installed:newInstalled,new_status:newStatus,part_id:part.id,project_id:c.project_id};
 }
 
 async function cancelCommitment(ctx,commitment_ids,payload) {
-  const {reason}=payload; const cid=commitment_ids?.[0]; if(!cid) throw new Error('commitment_id required');
+  const {reason}=payload; const cid=commitment_ids?.[0];
+  // ── PAYLOAD VALIDATION (Phase 5) ──
+  if(!cid) throw new Error('CANCEL_COMMITMENT requires commitment_id (pass as commitment_ids[0])');
+  if(!reason||typeof reason!=='string'||!reason.trim()) throw new Error('CANCEL_COMMITMENT requires payload.reason (non-empty string)');
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   if(c.commitment_status==='cancelled') throw new Error('Already cancelled');
   const cn=readCanonical(c,ctx);

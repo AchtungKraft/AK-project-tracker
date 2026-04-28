@@ -21,8 +21,9 @@ const REVERSAL_TYPES = [
 /**
  * ReverseInstallationModal - Reverse an installed part
  * 
- * Routes exclusively through CommitmentService.reverseInstalledPart()
- * No direct entity mutations allowed.
+ * Routes exclusively through executeSupplyAction(REVERSE_INSTALL)
+ * via the useSupplyAction hook. No direct entity mutations allowed.
+ * Legacy commitmentService.reverseInstalledPart is hard-deprecated.
  */
 export default function ReverseInstallationModal({ 
   installedPart, 

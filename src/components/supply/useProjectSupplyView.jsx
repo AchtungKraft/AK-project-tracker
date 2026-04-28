@@ -216,12 +216,23 @@ export function usePOReceivingView(orderId = null, filters = {}) {
 }
 
 /**
+ * ══════════════════════════════════════════════════════════════════════
  * useSupplyAction - Hook for executing supply mutations through dispatcher
  * 
- * All supply mutations MUST go through this hook.
+ * All supply mutations MUST go through this hook or useSupplyAction.js.
  * Components MUST NOT write to commitment/inventory entities directly.
+ * Legacy services (commitmentService.*) are hard-deprecated for lifecycle ops.
+ * 
+ * CANONICAL MUTATION ORDER (server-side):
+ *   1. Validate payload
+ *   2. Update inventory
+ *   3. inlineRecompute(part_id)
+ *   4. inlineRebalance(part_id)
+ *   5. Update commitment_status
+ *   6. Lifecycle events + audit
  * 
  * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh.
+ * ══════════════════════════════════════════════════════════════════════
  */
 export function useSupplyAction(options = {}) {
   const queryClient = useQueryClient();

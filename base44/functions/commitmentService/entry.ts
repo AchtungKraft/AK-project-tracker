@@ -1,36 +1,31 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 /**
- * CommitmentService - Core Domain Orchestrator with ATOMIC GUARANTEES
+ * ══════════════════════════════════════════════════════════════════════
+ * CommitmentService - LEGACY Domain Orchestrator
  * 
- * This service is the SINGLE source of truth for all commitment-related mutations.
- * All financial operations, pool management, and lifecycle changes MUST go through this service.
+ * ⚠️  DEPRECATION NOTICE (Phase 10 Hardening):
  * 
- * ATOMIC TRANSACTION GUARANTEES:
- * - All multi-entity mutations execute within transactional boundaries
- * - On failure: complete rollback, no partial updates
- * - Optimistic locking prevents concurrent modification conflicts
- * - Centralized recalculation prevents circular updates
- * 
- * Exposed Methods:
- * - addPartToProject(project_id, part_id, qty_committed, notes, source_surface) **CANONICAL ENTRY**
- * - createPO(commitment_id, vendor_id, unit_cost, qty)
- * - createDeltaOrder(commitment_id, vendor_id, unit_cost, qty)
- * - createBillingPool(project_id, pool_name, invoiced_amount)
- * - allocatePool(pool_id, commitment_id, amount)
- * - recordVendorInvoiceCharge(vendor_invoice_line_id)
- * - removeCommitment(commitment_id, reason)
- * - reverseInstalledPart(installed_part_id, reason)
- * - reversePoolAllocation(allocation_id, reason)
- * - reversePoolCharge(charge_id, reason)
- * 
- * Invariants enforced:
- * - BillingPool.balance = paid_amount - allocated_total - charges_total
- * - exposure_gap >= 0 OR properly tracked negative
- * - No negative qty_reserved
- * - Single credit pool per project
- * - Cost lock after vendor invoice
- * - Invoice lock after batch status change
+ *   Supply lifecycle mutations (install, reverse-install, receive,
+ *   allocate-stock, cancel-commitment) MUST route through:
+ *
+ *     executeSupplyAction  (the unified canonical dispatcher)
+ *
+ *   This service retains ONLY:
+ *     - Read-only recalculation helpers (_recalculatePool, etc.)
+ *     - Legacy billing-pool operations for non-forward projects
+ *     - addPartToProject (creation — not a lifecycle mutation)
+ *
+ *   The following actions throw a hard deprecation error:
+ *     - reverseInstalledPart → use executeSupplyAction(REVERSE_INSTALL)
+ *     - removeCommitment     → use executeSupplyAction(CANCEL_COMMITMENT)
+ *     - createPO             → use executeSupplyAction(CREATE_PO)
+ *     - createDeltaOrder     → use executeSupplyAction(ADJUST_REQUIRED)
+ *
+ *   These legacy methods bypassed inlineRecompute / inlineRebalance
+ *   and could silently corrupt Part.physical_stock, reserved_from_stock,
+ *   and commitment_status.
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 // ============================================================================
@@ -168,13 +163,28 @@ Deno.serve(async (req) => {
 
     let result;
     try {
+      // ══════════════════════════════════════════════════════════════
+      // HARD DEPRECATION GUARDS — Phase 10
+      // These actions MUST use executeSupplyAction instead.
+      // They bypassed inlineRecompute/inlineRebalance and could
+      // silently corrupt Part.physical_stock and reservation state.
+      // ══════════════════════════════════════════════════════════════
+      const DEPRECATED_ACTIONS = {
+        reverseInstalledPart: 'executeSupplyAction(REVERSE_INSTALL)',
+        removeCommitment: 'executeSupplyAction(CANCEL_COMMITMENT)',
+        createPO: 'executeSupplyAction(CREATE_PO)',
+        createDeltaOrder: 'executeSupplyAction(ADJUST_REQUIRED) with scope addition',
+      };
+      if (DEPRECATED_ACTIONS[action]) {
+        const replacement = DEPRECATED_ACTIONS[action];
+        const msg = `DEPRECATED: commitmentService.${action} is no longer allowed. ` +
+          `Use ${replacement} instead. This legacy path bypasses inventory recompute/rebalance ` +
+          `and will corrupt Part.physical_stock and commitment state.`;
+        console.error(`[HARD_DEPRECATION] ${msg}`);
+        return Response.json({ error: msg, deprecated: true, replacement }, { status: 400 });
+      }
+
       switch (action) {
-        case 'createPO':
-          result = await createPO(txn, params);
-          break;
-        case 'createDeltaOrder':
-          result = await createDeltaOrder(txn, params);
-          break;
         case 'createBillingPool':
           result = await createBillingPool(txn, params);
           break;
@@ -183,12 +193,6 @@ Deno.serve(async (req) => {
           break;
         case 'recordVendorInvoiceCharge':
           result = await recordVendorInvoiceCharge(txn, params);
-          break;
-        case 'removeCommitment':
-          result = await removeCommitment(txn, params);
-          break;
-        case 'reverseInstalledPart':
-          result = await reverseInstalledPart(txn, params);
           break;
         case 'recalculateExposure':
           result = await recalculateExposure(txn, params);

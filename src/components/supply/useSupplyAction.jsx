@@ -4,22 +4,27 @@ import { toast } from "sonner";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
- * useSupplyAction - Hook for executing canonical supply actions
+ * ══════════════════════════════════════════════════════════════════════
+ * useSupplyAction — Canonical Frontend Supply Mutation Hook
  * 
- * This is the ONLY way UI components should mutate supply state.
- * All actions go through executeSupplyAction dispatcher.
+ * This is the ONLY approved way for UI components to mutate supply state.
+ * All actions route through executeSupplyAction (the backend dispatcher).
+ * 
+ * ARCHITECTURE RULES:
+ *   1. Components MUST NOT write to PartCommitment, Part.physical_stock,
+ *      InventoryItem, or InstalledPart entities directly.
+ *   2. Legacy services (commitmentService.*) are hard-deprecated for
+ *      lifecycle mutations and will throw errors if called.
+ *   3. Every mutation triggers forceAppRefresh for deterministic UI update.
+ *   4. Recompute + rebalance happen server-side inside executeSupplyAction.
+ *      No frontend code should attempt to recompute inventory state.
  * 
  * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh
- * Guarantees immediate UI updates without stale cache drift
  * 
  * Usage:
- * const { adjustRequired, createPO, receive, install } = useSupplyAction();
- * 
- * await adjustRequired({ 
- *   project_id, 
- *   part_id, 
- *   required_total_set: 5 
- * });
+ *   const { install, reverseInstall, receive, cancelCommitment } = useSupplyAction();
+ *   await install(commitmentId, { qty_to_install: 2 });
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 export function useSupplyAction(options = {}) {
