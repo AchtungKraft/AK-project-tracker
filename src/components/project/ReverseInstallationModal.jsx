@@ -71,8 +71,12 @@ export default function ReverseInstallationModal({
     }
   };
 
-  // HARD GUARD (after hooks): commitment must be canonical if provided
-  if (commitment && commitment.required_total === undefined) {
+  // HARD GUARD (after hooks): required props must exist
+  if (!installedPart || !commitment) {
+    console.warn('[ModalGuard] Missing installedPart or commitment in ReverseInstallationModal');
+    return null;
+  }
+  if (commitment.required_total === undefined) {
     console.warn('[ModalGuard] Invalid commitment passed to ReverseInstallationModal', commitment);
     return null;
   }
