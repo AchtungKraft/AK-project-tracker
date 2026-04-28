@@ -30,6 +30,22 @@ export default function PersonPrintView() {
     queryFn: () => base44.entities.ProjectKanbanBucket.list(),
   });
 
+  const { data: statuses = [] } = useQuery({
+    queryKey: ["printStatuses"],
+    queryFn: () => base44.entities.StatusList.list(),
+  });
+
+  // Filter out completed tasks
+  const activeTasks = useMemo(() => {
+    const taskStatuses = statuses.filter(s => s.scope === "Task" && s.active);
+    const completedStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes("complete") || label.includes("done");
+    });
+    if (!completedStatus) return allTasks;
+    return allTasks.filter(t => t.status_id !== completedStatus.id);
+  }, [allTasks, statuses]);
+
   const projectMap = useMemo(() => {
     const m = {};
     projects.forEach((p) => { m[p.id] = p; });
@@ -45,7 +61,7 @@ export default function PersonPrintView() {
   // Group tasks: project → bucket → tasks sorted by due date
   const projectSections = useMemo(() => {
     const byProject = {};
-    allTasks.forEach((t) => {
+    activeTasks.forEach((t) => {
       const pid = t.project_id || "__none__";
       if (!byProject[pid]) byProject[pid] = [];
       byProject[pid].push(t);
@@ -102,7 +118,7 @@ export default function PersonPrintView() {
         return { project, tasks, bucketSections };
       })
       .sort((a, b) => b.tasks.length - a.tasks.length);
-  }, [allTasks, projectMap, allBuckets]);
+  }, [activeTasks, projectMap, allBuckets]);
 
   const formatDate = (d) => {
     if (!d) return "";
@@ -157,8 +173,8 @@ export default function PersonPrintView() {
           {member.full_name}
         </h1>
         <div className="text-xs text-gray-500 mb-6">
-          Priority Tasks • Printed {new Date().toLocaleDateString()}
-          {` • ${allTasks.length} task${allTasks.length !== 1 ? "s" : ""}`}
+          Priority Tasks (Active) • Printed {new Date().toLocaleDateString()}
+          {` • ${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""}`}
         </div>
 
         {/* Project sections */}
@@ -198,13 +214,13 @@ export default function PersonPrintView() {
           </div>
         ))}
 
-        {allTasks.length === 0 && (
-          <p className="text-gray-400 text-center py-8">No priority tasks for this person.</p>
+        {activeTasks.length === 0 && (
+          <p className="text-gray-400 text-center py-8">No active priority tasks for this person.</p>
         )}
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          {member.full_name} • {allTasks.length} priority tasks • {new Date().toLocaleDateString()}
+          {member.full_name} • {activeTasks.length} priority tasks • {new Date().toLocaleDateString()}
         </div>
       </div>
     </>

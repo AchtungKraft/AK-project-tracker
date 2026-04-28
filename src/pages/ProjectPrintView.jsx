@@ -30,13 +30,29 @@ export default function ProjectPrintView() {
     queryFn: () => base44.entities.TeamMember.list(),
   });
 
+  const { data: statuses = [] } = useQuery({
+    queryKey: ["printStatuses"],
+    queryFn: () => base44.entities.StatusList.list(),
+  });
+
+  // Filter out completed tasks
+  const activeTasks = useMemo(() => {
+    const taskStatuses = statuses.filter(s => s.scope === "Task" && s.active);
+    const completedStatus = taskStatuses.find(s => {
+      const label = s.label.toLowerCase();
+      return label.includes("complete") || label.includes("done");
+    });
+    if (!completedStatus) return allTasks;
+    return allTasks.filter(t => t.status_id !== completedStatus.id);
+  }, [allTasks, statuses]);
+
   // Sort buckets by order, group tasks
   const sections = useMemo(() => {
     const sortedBuckets = [...allBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
     const tasksByBucket = {};
     const unbucketed = [];
 
-    allTasks.forEach((t) => {
+    activeTasks.forEach((t) => {
       if (t.kanban_bucket_id && sortedBuckets.find((b) => b.id === t.kanban_bucket_id)) {
         if (!tasksByBucket[t.kanban_bucket_id]) tasksByBucket[t.kanban_bucket_id] = [];
         tasksByBucket[t.kanban_bucket_id].push(t);
@@ -63,7 +79,7 @@ export default function ProjectPrintView() {
     }
 
     return result;
-  }, [allTasks, allBuckets]);
+  }, [activeTasks, allBuckets]);
 
   const teamMap = useMemo(() => {
     const m = {};
@@ -124,7 +140,7 @@ export default function ProjectPrintView() {
           {project.name}
         </h1>
         <div className="text-xs text-gray-500 mb-6">
-          Priority Tasks • Printed {new Date().toLocaleDateString()}
+          Priority Tasks (Active) • Printed {new Date().toLocaleDateString()}
           {project.client_name && ` • ${project.client_name}`}
         </div>
 
@@ -165,13 +181,13 @@ export default function ProjectPrintView() {
           </div>
         ))}
 
-        {allTasks.length === 0 && (
-          <p className="text-gray-400 text-center py-8">No priority tasks for this project.</p>
+        {activeTasks.length === 0 && (
+          <p className="text-gray-400 text-center py-8">No active priority tasks for this project.</p>
         )}
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          {project.name} • {allTasks.length} priority tasks • {new Date().toLocaleDateString()}
+          {project.name} • {activeTasks.length} priority tasks • {new Date().toLocaleDateString()}
         </div>
       </div>
     </>
