@@ -4,48 +4,61 @@ import { createPageUrl } from "@/utils";
 import { FolderKanban, ChevronRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import InlineDueDatePicker from "./InlineDueDatePicker";
-import { ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
+import { ATTENTION_BADGE_CONFIG, getWaitingTimeLabel } from "./attentionHelpers";
 import { Badge } from "@/components/ui/badge";
 
 const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
-  overdue: 'border-l-red-500',
+  overdue: 'border-l-red-600',
   needs_review: 'border-l-amber-500',
   approved_recent: 'border-l-green-500',
 };
 
-export default function AttentionCard({ item, onUpdateDueDate }) {
-  const { request, project, type, isOverdue, lastActivityLabel } = item;
+export default function AttentionCard({ item, onUpdateDueDate, muted = false }) {
+  const { request, project, type, isOverdue, lastActor, lastActivityAt } = item;
   const config = ATTENTION_BADGE_CONFIG[type];
   const borderColor = BORDER_COLORS[type] || 'border-l-gray-500';
   const requestUrl = createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`;
 
-  // Get last comment snippet
+  // Comment snippet — always show something
   const snippet = request.lastClientComment?.content_fallback
     || request.lastClientComment?.body
     || null;
   const truncatedSnippet = snippet ? (snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet) : null;
 
+  // Waiting time label for needs_response
+  const waitingLabel = type === 'needs_response' && lastActivityAt
+    ? getWaitingTimeLabel(lastActivityAt)
+    : null;
+
+  const isNewClientActivity = lastActor === 'client' && type !== 'approved_recent';
+
   return (
-    <div className={`relative rounded-lg border border-l-[3px] ${borderColor} transition-all group min-h-[44px] ${
+    <div className={`relative rounded-lg border transition-all group min-h-[44px] ${
       isOverdue
-        ? 'bg-red-950/20 border-red-500/40'
-        : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'
+        ? 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500'
+        : `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'}`
     }`}>
       <div className="p-2.5 md:p-3">
         {/* Navigable content zone */}
         <Link to={requestUrl} className="block hover:opacity-90 transition-opacity">
-          {/* Top row: badge + project */}
-          <div className="flex items-center gap-2 mb-1.5">
+          {/* Top row: badges */}
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
             {config && (
               <Badge className={`${config.bgClass} ${config.textClass} ${config.borderClass} text-[10px] px-1.5 py-0`}>
                 {config.label}
               </Badge>
             )}
-            {isOverdue && type !== 'overdue' && (
-              <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-[10px] px-1.5 py-0">
-                Overdue
+            {isOverdue && (
+              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 font-semibold">
+                OVERDUE
               </Badge>
+            )}
+            {isNewClientActivity && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                NEW
+              </span>
             )}
           </div>
 
@@ -60,19 +73,17 @@ export default function AttentionCard({ item, onUpdateDueDate }) {
             <span className="truncate">{project?.name || 'Unknown Project'}</span>
           </div>
 
-          {/* Last comment snippet */}
-          {truncatedSnippet && (
-            <p className="text-xs text-gray-500 italic line-clamp-1 mb-1">
-              "{truncatedSnippet}"
-            </p>
-          )}
+          {/* Comment snippet — always present */}
+          <p className="text-xs text-gray-500 italic line-clamp-1 mb-1">
+            {truncatedSnippet ? `"${truncatedSnippet}"` : 'No recent message'}
+          </p>
 
-          {/* Activity label */}
-          {lastActivityLabel && (
-            <p className="text-[11px] text-gray-500">
-              {lastActivityLabel}
-            </p>
-          )}
+          {/* Activity / Waiting label */}
+          {waitingLabel ? (
+            <p className="text-[11px] text-red-400 font-medium">{waitingLabel}</p>
+          ) : item.lastActivityLabel ? (
+            <p className="text-[11px] text-gray-500">{item.lastActivityLabel}</p>
+          ) : null}
         </Link>
 
         {/* Action zone — outside Link */}
@@ -95,7 +106,8 @@ export default function AttentionCard({ item, onUpdateDueDate }) {
                 onDateChange={(date) => onUpdateDueDate(request.id, date)}
               />
             )}
-            <Link to={requestUrl} className="shrink-0">
+            <Link to={requestUrl} className="shrink-0 flex items-center gap-1">
+              <span className="text-xs text-gray-600 hidden group-hover:inline transition-opacity">Open</span>
               <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-red-400 transition-colors" />
             </Link>
           </div>

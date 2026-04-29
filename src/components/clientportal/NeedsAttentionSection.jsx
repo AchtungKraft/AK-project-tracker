@@ -1,33 +1,139 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle } from "lucide-react";
-import { buildAttentionList, groupByColumn, BOARD_COLUMNS } from "./attentionHelpers";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { buildAttentionList, groupByColumn, BOARD_COLUMNS, isRecentActivity } from "./attentionHelpers";
 import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
 
 /**
+ * Renders a single board column with optional Active/Backlog split and scroll cap.
+ */
+function BoardColumn({ col, items, onUpdateDueDate }) {
+  const isReviewColumn = col.key === 'needs_review';
+  const isCompletedColumn = col.key === 'completed';
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  // Split review column into active + backlog
+  const activeItems = isReviewColumn ? items.filter(isRecentActivity) : items;
+  const backlogItems = isReviewColumn ? items.filter(i => !isRecentActivity(i)) : [];
+
+  // Completed column: collapsed by default
+  if (isCompletedColumn) {
+    return (
+      <div className="space-y-2">
+        <AttentionColumnHeader {...col} count={items.length} />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowCompleted(prev => !prev)}
+          className="w-full text-xs text-green-400/70 hover:text-green-400 hover:bg-green-500/10 gap-1"
+        >
+          {showCompleted ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {showCompleted ? 'Hide Completed' : `Show ${items.length} Completed`}
+        </Button>
+        {showCompleted && (
+          <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
+            {items.length === 0 ? (
+              <EmptyState text={col.emptyText} />
+            ) : (
+              items.map(item => (
+                <AttentionCard key={item.requestId} item={item} onUpdateDueDate={onUpdateDueDate} muted />
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Review column with Active/Backlog split
+  if (isReviewColumn) {
+    return (
+      <div className="space-y-2">
+        <AttentionColumnHeader {...col} count={items.length} />
+        <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
+          {items.length === 0 ? (
+            <EmptyState text={col.emptyText} />
+          ) : (
+            <>
+              {activeItems.length > 0 && (
+                <div className="space-y-2">
+                  <SubSectionLabel label="Active" count={activeItems.length} color="amber" />
+                  {activeItems.map(item => (
+                    <AttentionCard key={item.requestId} item={item} onUpdateDueDate={onUpdateDueDate} />
+                  ))}
+                </div>
+              )}
+              {backlogItems.length > 0 && (
+                <div className="space-y-2">
+                  <SubSectionLabel label="Backlog" count={backlogItems.length} color="gray" />
+                  {backlogItems.map(item => (
+                    <AttentionCard key={item.requestId} item={item} onUpdateDueDate={onUpdateDueDate} muted />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Default column (Client Waiting)
+  return (
+    <div className="space-y-2">
+      <AttentionColumnHeader {...col} count={items.length} />
+      <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
+        {items.length === 0 ? (
+          <EmptyState text={col.emptyText} />
+        ) : (
+          items.map(item => (
+            <AttentionCard key={item.requestId} item={item} onUpdateDueDate={onUpdateDueDate} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SubSectionLabel({ label, count, color }) {
+  const colors = {
+    amber: 'text-amber-500/70 border-amber-500/20',
+    gray: 'text-gray-600 border-gray-700/30',
+  };
+  const c = colors[color] || colors.gray;
+  return (
+    <div className={`flex items-center gap-2 px-2 py-1 border-b ${c}`}>
+      <span className={`text-[10px] font-semibold uppercase tracking-wider ${c.split(' ')[0]}`}>{label}</span>
+      <span className="text-[10px] text-gray-600">{count}</span>
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <div className="text-center py-4 text-xs text-gray-600 italic">
+      {text}
+    </div>
+  );
+}
+
+/**
  * NeedsAttentionSection — Unified Action Queue + Task Board
- * 
- * Uses buildAttentionList as SINGLE source of truth for attention logic.
- * Displays a 3-column task board: Client Waiting | Needs Review | Completed
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
   onUpdateDueDate
 }) => {
-  // Build unified attention list from enriched project groups
-  const attentionItems = useMemo(() => {
-    return buildAttentionList(projectGroups);
-  }, [projectGroups]);
+  const attentionItems = useMemo(() => buildAttentionList(projectGroups), [projectGroups]);
+  const columnData = useMemo(() => groupByColumn(attentionItems), [attentionItems]);
 
-  // Group by board column
-  const columnData = useMemo(() => {
-    return groupByColumn(attentionItems);
-  }, [attentionItems]);
-
-  // Don't render if no attention items
   if (attentionItems.length === 0) return null;
+
+  // Count excluding completed for main badge
+  const actionableCount = attentionItems.filter(i => i.type !== 'approved_recent').length;
 
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
@@ -42,45 +148,20 @@ const NeedsAttentionSection = ({
             </CardTitle>
           </div>
           <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-sm md:text-lg px-2 py-0.5 md:py-1">
-            {attentionItems.length}
+            {actionableCount}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="p-2 md:p-4">
-        {/* 3-Column Task Board */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-          {BOARD_COLUMNS.map(col => {
-            const items = columnData[col.key] || [];
-            return (
-              <div key={col.key} className="space-y-2">
-                <AttentionColumnHeader
-                  label={col.label}
-                  subtitle={col.subtitle}
-                  count={items.length}
-                  headerBg={col.headerBg}
-                  headerBorder={col.headerBorder}
-                  headerText={col.headerText}
-                  countBg={col.countBg}
-                  countText={col.countText}
-                />
-                {items.length === 0 ? (
-                  <div className="text-center py-4 text-xs text-gray-600 italic">
-                    {col.emptyText}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {items.map(item => (
-                      <AttentionCard
-                        key={item.requestId}
-                        item={item}
-                        onUpdateDueDate={onUpdateDueDate}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {BOARD_COLUMNS.map(col => (
+            <BoardColumn
+              key={col.key}
+              col={col}
+              items={columnData[col.key] || []}
+              onUpdateDueDate={onUpdateDueDate}
+            />
+          ))}
         </div>
       </CardContent>
     </Card>

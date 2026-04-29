@@ -120,6 +120,26 @@ function formatActivityLabel(actor, date) {
 }
 
 /**
+ * Get urgency-focused waiting time label (for Client Waiting column)
+ */
+export function getWaitingTimeLabel(date) {
+  if (!date) return '';
+  const diff = Date.now() - new Date(date).getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours < 1) return 'Waiting <1h';
+  if (hours < 24) return `Waiting ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `Waiting ${days}d`;
+}
+
+/**
+ * Check if an attention item has recent activity (within 48h)
+ */
+export function isRecentActivity(item) {
+  return Date.now() - new Date(item.lastActivityAt).getTime() < 48 * 60 * 60 * 1000;
+}
+
+/**
  * Check if a request was approved recently (within last 48 hours)
  */
 function isRecentlyApproved(request) {
