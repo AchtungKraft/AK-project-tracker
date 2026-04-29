@@ -9,7 +9,7 @@
  */
 
 import { getRequestStateCanonical } from "./stateHelpers";
-import { buildFeedbackTimeline } from "./feedbackTimeline";
+import { buildFeedbackTimeline, getEventTimestamp, getTime } from "./feedbackTimeline";
 
 /**
  * Determine the request state based on posted_at + decisions (canonical).
@@ -65,15 +65,15 @@ export const getSortComparator = (mode) => {
         if (!a.due_date && !b.due_date) return 0;
         if (!a.due_date) return 1;
         if (!b.due_date) return -1;
-        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        return getTime(a.due_date) - getTime(b.due_date);
         
       case 'last_client_activity': {
-        const aClientDate = a.lastClientComment?.posted_at || a.lastClientComment?.created_date;
-        const bClientDate = b.lastClientComment?.posted_at || b.lastClientComment?.created_date;
+        const aClientDate = a.lastClientComment ? getEventTimestamp(a.lastClientComment) : null;
+        const bClientDate = b.lastClientComment ? getEventTimestamp(b.lastClientComment) : null;
         if (!aClientDate && !bClientDate) return 0;
         if (!aClientDate) return 1;
         if (!bClientDate) return -1;
-        return new Date(bClientDate).getTime() - new Date(aClientDate).getTime();
+        return getTime(bClientDate) - getTime(aClientDate);
       }
         
       case 'last_internal_activity': {
@@ -82,13 +82,11 @@ export const getSortComparator = (mode) => {
         if (!aInternalDate && !bInternalDate) return 0;
         if (!aInternalDate) return 1;
         if (!bInternalDate) return -1;
-        return new Date(bInternalDate).getTime() - new Date(aInternalDate).getTime();
+        return getTime(bInternalDate) - getTime(aInternalDate);
       }
         
       case 'oldest_waiting': {
-        const aDate = a.posted_at || a.created_date;
-        const bDate = b.posted_at || b.created_date;
-        return new Date(aDate).getTime() - new Date(bDate).getTime();
+        return getTime(getEventTimestamp(a)) - getTime(getEventTimestamp(b));
       }
         
       default:
@@ -129,12 +127,12 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
   const latestActivityActor = latestDisplayEvent?.actor || 'team';
   const latestActivityAt = latestDisplayEvent?.date || request.updated_date;
 
-  // Check for overdue — use consistent end-of-day logic
+  // Check for overdue — use consistent end-of-day logic (UTC)
   let isOverdue = false;
   if (request.due_date) {
     const due = new Date(request.due_date);
-    due.setHours(23, 59, 59, 999);
-    isOverdue = due < new Date();
+    due.setUTCHours(23, 59, 59, 999);
+    isOverdue = due.getTime() < Date.now();
   }
 
   // Derive canonical state for enrichment (single source of truth)
@@ -279,11 +277,10 @@ export const isRequestOverdue = (request, bucket) => {
   if (bucket === 'draft' || bucket === 'approved') return false;
   
   const due = new Date(request.due_date);
-  const now = new Date();
-  // Set to end of due day for comparison
-  due.setHours(23, 59, 59, 999);
+  // Set to end of due day UTC for consistent comparison
+  due.setUTCHours(23, 59, 59, 999);
   
-  return due < now;
+  return due.getTime() < Date.now();
 };
 
 /**
@@ -333,7 +330,7 @@ export const sortOverdueFirst = (requests, bucket) => {
     if (!a.due_date && b.due_date) return 1;
     // Then earliest date first
     if (a.due_date && b.due_date) {
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      return getTime(a.due_date) - getTime(b.due_date);
     }
     return 0;
   });

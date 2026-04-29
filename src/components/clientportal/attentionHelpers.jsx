@@ -7,6 +7,7 @@
 
 import { isRequestOverdue } from './lifecycleHelpers';
 import { getRequestStateCanonical } from './stateHelpers';
+import { getTime } from './feedbackTimeline';
 
 /**
  * Priority levels (lower = higher priority)
@@ -145,7 +146,7 @@ function formatActivityLabel(actor, date) {
  */
 export function getWaitingTimeLabel(date) {
   if (!date) return '';
-  const diff = Date.now() - new Date(date).getTime();
+  const diff = Date.now() - getTime(date);
   const hours = Math.floor(diff / (1000 * 60 * 60));
   if (hours < 1) return 'Waiting <1h';
   if (hours < 24) return `Waiting ${hours}h`;
@@ -157,7 +158,7 @@ export function getWaitingTimeLabel(date) {
  * Check if an attention item has recent activity (within 48h)
  */
 export function isRecentActivity(item) {
-  return Date.now() - new Date(item.lastActivityAt).getTime() < 48 * 60 * 60 * 1000;
+  return Date.now() - getTime(item.lastActivityAt) < 48 * 60 * 60 * 1000;
 }
 
 /**
@@ -168,7 +169,7 @@ function isRecentlyApproved(request, canonicalKey) {
   if (canonicalKey !== 'approved') return false;
   const approvalDate = request.approved_at || request.updated_date;
   if (!approvalDate) return false;
-  const diffHours = (Date.now() - new Date(approvalDate)) / 3600000;
+  const diffHours = (Date.now() - getTime(approvalDate)) / 3600000;
   return diffHours <= 48;
 }
 
@@ -205,7 +206,7 @@ export function buildAttentionList(projectGroups) {
   // Sort: priority asc, then most recent activity first (UTC numeric)
   return items.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
-    return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+    return getTime(b.lastActivityAt) - getTime(a.lastActivityAt);
   });
 }
 
@@ -223,8 +224,8 @@ function classifyRequest(request, project, canonicalState) {
   const lastActivityAt = request.latestActivityAt || request.updated_date;
   const isOverdue = request.isOverdue;
   const needsResponse = lastActor === 'client' && canonicalKey !== 'approved';
-  const lastActivityMs = new Date(lastActivityAt).getTime();
-  const hoursSinceLastActivity = Number.isFinite(lastActivityMs)
+  const lastActivityMs = getTime(lastActivityAt);
+  const hoursSinceLastActivity = lastActivityMs
     ? (Date.now() - lastActivityMs) / (1000 * 60 * 60)
     : 0;
 
@@ -321,7 +322,7 @@ function classifyRequest(request, project, canonicalState) {
 
   // Stale review indicator: in_review for >48h
   const isReviewStale = request.review_state === 'in_review' && request.review_started_at &&
-    ((Date.now() - new Date(request.review_started_at).getTime()) / (1000 * 60 * 60)) > 48;
+    ((Date.now() - getTime(request.review_started_at)) / (1000 * 60 * 60)) > 48;
 
   return {
     request,
@@ -349,7 +350,7 @@ export function groupByColumn(attentionItems) {
   // Follow-up sorted oldest-first (longest silence at top, UTC numeric)
   const followUp = attentionItems
     .filter(i => i.type === 'follow_up')
-    .sort((a, b) => new Date(a.lastActivityAt).getTime() - new Date(b.lastActivityAt).getTime());
+    .sort((a, b) => getTime(a.lastActivityAt) - getTime(b.lastActivityAt));
 
   return {
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),

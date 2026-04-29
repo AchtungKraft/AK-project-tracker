@@ -1,3 +1,8 @@
+// IMPORTANT:
+// All event ordering must use getEventTimestamp().
+// Do NOT directly use created_date, created_at, or decided_at for ordering.
+// This prevents timezone/order inconsistencies.
+
 /**
  * Feedback Timeline Builder — SINGLE SOURCE for event resolution.
  *
@@ -10,6 +15,7 @@
  * TIMESTAMP INVARIANT:
  * All dates are stored and compared as ISO-8601 UTC strings.
  * All parsing uses getTime() for numeric comparison — never locale-based.
+ * All external consumers must use getEventTimestamp() for raw records.
  *
  * IMPORTANT:
  * Do NOT filter timeline (allEvents) by posted_at.
@@ -17,10 +23,23 @@
  */
 
 /**
+ * CANONICAL timestamp resolver for any feedback record.
+ * Priority: posted_at → decided_at → created_at → created_date.
+ *
+ * All consumers MUST use this instead of reading timestamp fields directly.
+ * @param {Object} record – A comment, decision, request, or event
+ * @returns {string|null} ISO-8601 UTC timestamp, or null
+ */
+export function getEventTimestamp(record) {
+  if (!record) return null;
+  return record.posted_at || record.decided_at || record.created_at || record.created_date || null;
+}
+
+/**
  * Parse any date value into a UTC millisecond timestamp.
  * Returns 0 for null/undefined/invalid — sorts to the bottom.
  */
-function getTime(d) {
+export function getTime(d) {
   if (!d) return 0;
   const ms = new Date(d).getTime();
   return Number.isFinite(ms) ? ms : 0;
@@ -29,26 +48,10 @@ function getTime(d) {
 /**
  * Normalize a date to ISO-8601 UTC string, or null.
  */
-function normalizeDate(d) {
+export function normalizeDate(d) {
   if (!d) return null;
   const date = new Date(d);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-/**
- * Resolve the authoritative timestamp for a comment.
- * Prefers the server-assigned posted_at, falls back to created_date.
- */
-function commentTime(c) {
-  return c.posted_at || c.created_date;
-}
-
-/**
- * Resolve the authoritative timestamp for a decision.
- * Prefers decided_at, falls back to created_date.
- */
-function decisionTime(d) {
-  return d.decided_at || d.created_date;
 }
 
 /**
@@ -65,7 +68,7 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
   allEvents.push({
     kind: 'request_created',
     actor: 'team',
-    date: normalizeDate(request.created_date),
+    date: normalizeDate(getEventTimestamp(request) || request.created_date),
   });
 
   if (request.posted_at) {
@@ -77,26 +80,24 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
   }
 
   comments.forEach(c => {
-    const date = normalizeDate(commentTime(c));
     allEvents.push({
       kind: 'comment',
       actor: c.author_type === 'client_contact' ? 'client' : 'team',
-      date,
+      date: normalizeDate(getEventTimestamp(c)),
       comment: c,
     });
   });
 
-  // Sort decisions by decided_at before processing to guarantee stable ordering
+  // Sort decisions by canonical timestamp before processing to guarantee stable ordering
   const sortedDecisions = [...decisions].sort(
-    (a, b) => getTime(decisionTime(b)) - getTime(decisionTime(a))
+    (a, b) => getTime(getEventTimestamp(b)) - getTime(getEventTimestamp(a))
   );
 
   sortedDecisions.forEach(d => {
-    const date = normalizeDate(decisionTime(d));
     allEvents.push({
       kind: 'decision',
       actor: d.decided_by_type === 'client_contact' ? 'client' : 'team',
-      date,
+      date: normalizeDate(getEventTimestamp(d)),
       decision: d,
     });
   });

@@ -13,6 +13,7 @@
  */
 
 import { isStructuredReview } from "./reviewBehavior";
+import { getEventTimestamp, getTime } from "./feedbackTimeline";
 
 /**
  * @param {Object} request - The feedback request object
@@ -31,19 +32,18 @@ export function getRequestStateCanonical(request, decisions = [], attachments = 
     return { key: 'archived', label: 'Archived' };
   }
 
-  const postedAtMs = new Date(request.posted_at).getTime();
+  const postedAtMs = getTime(request.posted_at);
 
-  // Filter decisions to only those AFTER posted_at (numeric UTC comparison)
+  // Filter decisions to only those AFTER posted_at (numeric UTC comparison via canonical timestamp)
   const validDecisions = decisions.filter(d => {
     if (d.request_id && d.request_id !== request.id) return false;
-    const decisionMs = new Date(d.decided_at || d.created_date).getTime();
-    return decisionMs > postedAtMs;
+    return getTime(getEventTimestamp(d)) > postedAtMs;
   });
 
-  // Check request-level decisions first (sorted by UTC timestamp descending)
+  // Check request-level decisions first (sorted by canonical timestamp descending)
   const requestDecisions = validDecisions
     .filter(d => d.target_type === 'request')
-    .sort((a, b) => new Date(b.decided_at || b.created_date).getTime() - new Date(a.decided_at || a.created_date).getTime());
+    .sort((a, b) => getTime(getEventTimestamp(b)) - getTime(getEventTimestamp(a)));
 
   if (requestDecisions.length > 0) {
     const latest = requestDecisions[0];
